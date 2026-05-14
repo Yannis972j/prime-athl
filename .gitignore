@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Logs
+*.log
+backend/server.log
+backend/tunnel.log
+backend/ngrok.log
+
+# Database (ephemeral, recreated on deploy)
+backend/data.json
+backend/data.json.tmp
+
+# Local binaries
+backend/cloudflared.exe
+*.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Other folders NOT part of this repo
+ASCENSION JEU DE SOCIETE/
+PRIME ATHL APPLI/
+muscu/
+muscu-expo/
+coaching/
+.claude/
+
+# Generated assets
+*.tmp
+qr-data.txt
+
+# Personal notes
+design_content.txt
