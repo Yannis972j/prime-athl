@@ -2748,27 +2748,34 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         <div style={{marginBottom:10,padding:'8px 12px',borderRadius:10,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
       )}
 
-      <div style={{padding:12,borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-          <span style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Objectifs journaliers</span>
-          {saveStatus&&<span style={{fontSize:9,color:saveStatus==='saved'?T.good:saveStatus==='error'?T.danger:T.warn,fontWeight:700,letterSpacing:0.3}}>
-            {saveStatus==='saving'?'…':saveStatus==='saved'?'✓ Sauvegardé':'✗ Erreur'}
-          </span>}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
-          {[
-            {k:'dailyCalories',l:'kcal',c:'#ff6b00'},
-            {k:'dailyProtein',l:'P g',c:'#ff2e9a'},
-            {k:'dailyCarbs',l:'C g',c:'#4dd0ff'},
-            {k:'dailyFat',l:'L g',c:'#ffd84d'},
-          ].map(f=>(
-            <div key={f.k}>
-              <div style={{fontSize:9,color:f.c,fontWeight:700,textAlign:'center',marginBottom:4,letterSpacing:0.4,textTransform:'uppercase'}}>{f.l}</div>
-              <input type="number" inputMode="decimal" value={data[f.k]||0} onChange={e=>updField(f.k,+e.target.value||0)} style={{...num,fontSize:15}}/>
+      {/* Totaux auto-calculés depuis les aliments du jour actif */}
+      {(()=>{
+        const dayMeals=(data.days&&data.days[activeDay]&&data.days[activeDay].meals)||[];
+        const t=dayMeals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
+        return(
+          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(255,107,0,0.08),rgba(77,208,255,0.04))',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+              <span style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Total {activeDay} (somme des aliments)</span>
+              {saveStatus&&<span style={{fontSize:9,color:saveStatus==='saved'?T.good:saveStatus==='error'?T.danger:T.warn,fontWeight:700,letterSpacing:0.3,marginLeft:'auto'}}>
+                {saveStatus==='saving'?'…':saveStatus==='saved'?'✓ Sauvegardé':'✗ Erreur'}
+              </span>}
             </div>
-          ))}
-        </div>
-      </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
+              {[
+                {l:'kcal',v:Math.round(t.kcal),c:'#ff6b00'},
+                {l:'P g',v:Math.round(t.p),c:'#ff2e9a'},
+                {l:'C g',v:Math.round(t.c),c:'#4dd0ff'},
+                {l:'L g',v:Math.round(t.f),c:'#ffd84d'},
+              ].map(f=>(
+                <div key={f.l} style={{textAlign:'center'}}>
+                  <div style={{fontSize:9,color:f.c,fontWeight:700,marginBottom:4,letterSpacing:0.4,textTransform:'uppercase'}}>{f.l}</div>
+                  <div style={{padding:'8px 4px',borderRadius:8,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',fontSize:17,fontWeight:700,color:f.c,fontVariantNumeric:'tabular-nums'}}>{f.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Day selector */}
       <div style={{display:'flex',gap:4,marginBottom:10,overflowX:'auto',paddingBottom:4}}>
