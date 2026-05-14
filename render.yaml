@@ -1,0 +1,23 @@
+# Render.com deploy config — Prime Athl
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: prime-athl
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /Muscu.html
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MAIN_COACH_EMAIL
+        value: yannisgym972@gmail.com
+      # DB_PATH stays default → /opt/render/project/src/backend/data.json
+      # ⚠️ Free tier disk is EPHEMERAL — data resets at each redeploy.
+      # For persistence : add a Render Disk (1GB ~ $0.25/mo) and set DB_PATH=/data/data.json
