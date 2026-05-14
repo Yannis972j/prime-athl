@@ -16,7 +16,12 @@ const __dirname  = path.dirname(__filename);
 const PORT             = process.env.PORT       || 3001;
 const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random().toString(36).slice(2);
 const DB_PATH          = process.env.DB_PATH    || path.join(__dirname, 'data.json');
-const FRONTEND         = path.join(__dirname, '..', 'muscu');
+// Try multiple frontend paths (local dev, Render deploy)
+const FRONTEND_CANDIDATES = [
+  path.join(__dirname, 'public'),         // bundled inside backend (prod)
+  path.join(__dirname, '..', 'muscu'),    // local dev (sibling folder)
+];
+const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
 
 // ── JSON file DB ────────────────────────────────────
