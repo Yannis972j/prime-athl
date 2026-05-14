@@ -26,6 +26,10 @@
   @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,255,198,0.7),0 0 0 0 rgba(0,255,198,0.4)}70%{box-shadow:0 0 0 8px rgba(0,255,198,0),0 0 0 12px rgba(0,255,198,0)}100%{box-shadow:0 0 0 0 rgba(0,255,198,0),0 0 0 0 rgba(0,255,198,0)}}
   @keyframes countPop{0%{transform:scale(1)}25%{transform:scale(1.4)}50%{transform:scale(0.9)}100%{transform:scale(1)}}
+  @keyframes tabFadeIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+  .tab-content{animation:tabFadeIn 0.25s cubic-bezier(.34,1.56,.64,1)}
+  button,a{transition:transform 0.12s ease,box-shadow 0.12s ease,background 0.15s ease,opacity 0.15s ease}
+  button:active{transform:scale(0.97)}
   :root{--shimmer-state:running}
   input[type=number]{-moz-appearance:textfield}
   input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -1765,11 +1769,11 @@ const CONGRATS_MESSAGES=[
 function MotivationMarquee(){
   const items=[...MOTIVATION_QUOTES,...MOTIVATION_QUOTES];
   return(
-    <div style={{overflow:'hidden',whiteSpace:'nowrap',padding:'10px 0',borderRadius:12,background:'linear-gradient(90deg,rgba(255,107,0,0.06),rgba(255,46,154,0.04),rgba(77,208,255,0.06))',border:'1px solid rgba(255,255,255,0.06)',position:'relative'}}>
-      <div style={{position:'absolute',inset:0,background:'linear-gradient(90deg,rgba(6,6,10,0.95),transparent 8%,transparent 92%,rgba(6,6,10,0.95))',pointerEvents:'none',zIndex:1}}/>
-      <div style={{display:'inline-flex',animation:'marquee 38s linear infinite',willChange:'transform'}}>
+    <div style={{overflow:'hidden',whiteSpace:'nowrap',padding:'4px 0',position:'relative',opacity:0.7}}>
+      <div style={{position:'absolute',inset:0,background:'linear-gradient(90deg,rgba(6,6,10,1),transparent 6%,transparent 94%,rgba(6,6,10,1))',pointerEvents:'none',zIndex:1}}/>
+      <div style={{display:'inline-flex',animation:'marquee 50s linear infinite',willChange:'transform'}}>
         {items.map((q,i)=>(
-          <span key={i} style={{padding:'0 20px',fontSize:12,fontWeight:600,letterSpacing:0.2,backgroundImage:HOLO.irisHorizon,backgroundSize:'200% 100%',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',animation:'holoText 8s linear infinite'}}>
+          <span key={i} style={{padding:'0 16px',fontSize:10.5,fontWeight:600,letterSpacing:0.3,backgroundImage:HOLO.irisHorizon,backgroundSize:'200% 100%',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',animation:'holoText 8s linear infinite'}}>
             ✦ {q}
           </span>
         ))}
@@ -2595,7 +2599,10 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         setImportMsg('✗ Erreur de synchronisation backend');
         setTimeout(()=>setImportMsg(null),4500);
       }
-    },err=>alert('Erreur lecture Excel : '+err));
+    },err=>{
+      setImportMsg('✗ Erreur lecture Excel : '+err);
+      setTimeout(()=>setImportMsg(null),4500);
+    });
   };
 
   const handleExcelExport=()=>{
@@ -3336,10 +3343,6 @@ function CoachScreen({authToken,authUser}){
         <div>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Coaching</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>Mes athlètes</HoloText></div>
-          <div style={{fontSize:10,color:T.good,fontWeight:600,marginTop:5,display:'flex',alignItems:'center',gap:5,letterSpacing:0.3}}>
-            <span style={{width:6,height:6,borderRadius:3,background:T.good,boxShadow:`0 0 6px ${T.good}`}}/>
-            SYNC TEMPS RÉEL
-          </div>
         </div>
         <div style={{display:'flex',gap:6,flexShrink:0}}>
           <button onClick={load} disabled={loading} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:loading?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:loading?0.5:1}} title="Rafraîchir">
@@ -3800,7 +3803,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           </div>
         )}
         {!screen&&(
-          <div style={{height:'100%',overflow:'auto'}} key={tab}>
+          <div className="tab-content" style={{height:'100%',overflow:'auto'}} key={tab}>
             {tab==='programme'&&<HomeScreen workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram} onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')} onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll} refreshing={refreshing}/>}
             {tab==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={refreshAll} refreshing={refreshing}/>}
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
