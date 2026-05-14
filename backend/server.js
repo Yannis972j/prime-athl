@@ -385,6 +385,61 @@ app.post('/api/sessions', authRequired, (req, res) => {
   res.json({ id });
 });
 
+// ── Backup / Restore (main coach only) ──────────────
+app.get('/api/admin/backup', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="prime-athl-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.send(JSON.stringify(DATA, null, 2));
+  } catch (e) {
+    res.status(500).json({ error: 'backup_failed', detail: e.message });
+  }
+});
+
+app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  try {
+    const body = req.body;
+    if (!body || !body.users || !body.programs) {
+      return res.status(400).json({ error: 'invalid_backup_format' });
+    }
+    // Validate that the current main coach is still in the backup (security)
+    const mainBackup = Object.values(body.users).find(u => u.email === MAIN_COACH_EMAIL);
+    if (!mainBackup) return res.status(400).json({ error: 'main_coach_missing_in_backup' });
+
+    // Ensure DEFAULT_DB structure
+    DATA = {
+      users: body.users || {},
+      programs: body.programs || {},
+      sessions: body.sessions || {},
+      invites: body.invites || {},
+      nutritionPrograms: body.nutritionPrograms || {},
+      nutritionLogs: body.nutritionLogs || {},
+    };
+    persist();
+    res.json({ ok: true, counts: {
+      users: Object.keys(DATA.users).length,
+      programs: Object.keys(DATA.programs).length,
+      sessions: Object.keys(DATA.sessions).length,
+      nutritionPrograms: Object.keys(DATA.nutritionPrograms).length,
+    }});
+  } catch (e) {
+    console.error('restore', e);
+    res.status(500).json({ error: 'restore_failed', detail: e.message });
+  }
+});
+
+// Health endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    uptime: Math.round(process.uptime()),
+    users: Object.keys(DATA.users).length,
+    dbPath: DB_PATH,
+    persistent: DB_PATH.startsWith('/data'),
+    timestamp: Date.now(),
+  });
+});
+
 // ── Admin (main coach only) ─────────────────────────
 app.get('/api/admin/pending', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   const list = Object.values(DATA.users)
@@ -558,8 +613,24 @@ io.on('connection', (socket) => {
   socket.join('user:' + socket.user.id);
 });
 
+// Global error handlers — keep server alive on unexpected errors
+process.on('uncaughtException', err => {
+  console.error('uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason, p) => {
+  console.error('unhandledRejection:', reason);
+});
+
+// Express error middleware (catches sync errors in routes)
+app.use((err, req, res, next) => {
+  console.error('Express error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'server_error', detail: err.message });
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Prime Athl backend on http://0.0.0.0:${PORT}`);
   console.log(`Frontend served from ${FRONTEND}`);
   console.log(`DB file: ${DB_PATH}`);
+  console.log(`Persistent storage: ${DB_PATH.startsWith('/data') ? 'YES (Render Disk)' : 'NO (ephemeral)'}`);
 });

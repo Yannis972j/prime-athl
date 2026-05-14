@@ -1,0 +1,89 @@
+{"lvl":"info","msg":"no configuration paths supplied","t":"2026-05-12T18:37:54.5027019-04:00"}
+{"lvl":"info","msg":"using configuration at default config path","path":"C:\\Users\\User\\AppData\\Local\\ngrok\\ngrok.yml","t":"2026-05-12T18:37:55.4464263-04:00"}
+{"err":"\u003cnil\u003e","lvl":"info","msg":"open config file","path":"C:\\Users\\User\\AppData\\Local\\ngrok\\ngrok.yml","t":"2026-05-12T18:37:55.4475476-04:00"}
+{"enabled":false,"lvl":"info","msg":"FIPS 140 mode","t":"2026-05-12T18:37:55.4510044-04:00"}
+{"addr":"127.0.0.1:4040","allow_hosts":null,"lvl":"info","msg":"starting web service","obj":"web","t":"2026-05-12T18:37:55.7528532-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-12T18:37:57.0768667-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-12T18:37:57.0773753-04:00"}
+{"addr":"http://localhost:3001","lvl":"info","msg":"started tunnel","name":"command_line","obj":"tunnels","t":"2026-05-12T18:37:57.6645732-04:00","url":"https://leggings-bullseye-gents.ngrok-free.dev"}
+{"id":"3828de4df15287d3","lvl":"info","msg":"start","pg":"/api/tunnels","t":"2026-05-12T18:38:28.4519116-04:00"}
+{"dur":"1.9584ms","id":"3828de4df15287d3","lvl":"info","msg":"end","pg":"/api/tunnels","status":200,"t":"2026-05-12T18:38:28.4538704-04:00"}
+{"id":"a1e7de2c7329","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:9350","t":"2026-05-12T18:41:39.7430919-04:00"}
+{"id":"81fe6c15658a","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:9356","t":"2026-05-12T18:41:43.2703197-04:00"}
+{"id":"d92a4875da46","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:24484","t":"2026-05-12T18:41:48.0709276-04:00"}
+{"id":"d16f524d12e0","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:58266","t":"2026-05-12T18:43:36.3628923-04:00"}
+{"id":"5c6648310ce5","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:58266","t":"2026-05-12T18:43:38.584284-04:00"}
+{"id":"1386fd26b25f","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60838","t":"2026-05-12T18:47:31.654017-04:00"}
+{"id":"d534687ea722","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60838","t":"2026-05-12T18:47:32.3206178-04:00"}
+{"id":"62e5c1df519a","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60838","t":"2026-05-12T18:47:32.3206178-04:00"}
+{"id":"cacf42cdee75","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60838","t":"2026-05-12T18:47:32.3301511-04:00"}
+{"id":"d87a749cd649","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60838","t":"2026-05-12T18:47:32.3301511-04:00"}
+{"id":"7c671c43d104","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:60848","t":"2026-05-12T18:47:32.5020697-04:00"}
+{"id":"4c7d3bcd16dc","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:43938","t":"2026-05-12T18:47:33.2056105-04:00"}
+{"id":"bbef7d24ec69","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40278","t":"2026-05-12T18:54:01.0446831-04:00"}
+{"id":"bdaa0d106b5a","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40292","t":"2026-05-12T18:54:01.683556-04:00"}
+{"id":"1bc188f89ea3","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:02.7362024-04:00"}
+{"id":"8803b7559df9","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.1456101-04:00"}
+{"id":"a3c345bc50c0","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.1491149-04:00"}
+{"id":"aeeb66944a32","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.5107766-04:00"}
+{"id":"43c4fce2f463","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.5117992-04:00"}
+{"id":"ff219cf37220","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.5147986-04:00"}
+{"id":"1ce6d5429623","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:40302","t":"2026-05-12T18:54:04.5455961-04:00"}
+{"id":"4581ae3161f3","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:43544","t":"2026-05-12T18:54:04.7470481-04:00"}
+{"id":"46b86f402f1b","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:43554","t":"2026-05-12T18:54:06.5493591-04:00"}
+{"err":"dial tcp [::1]:3001: connectex: No connection could be made because the target machine actively refused it.","id":"a02e0cd9f18a","lvl":"warn","msg":"failed to open private leg","privaddr":"localhost:3001","t":"2026-05-12T18:54:20.9461595-04:00"}
+{"err":"dial tcp [::1]:3001: connectex: No connection could be made because the target machine actively refused it.","id":"21a2f21c5788","lvl":"warn","msg":"failed to open private leg","privaddr":"localhost:3001","t":"2026-05-12T18:54:21.5835741-04:00"}
+{"err":"dial tcp [::1]:3001: connectex: No connection could be made because the target machine actively refused it.","id":"7a1671278a4f","lvl":"warn","msg":"failed to open private leg","privaddr":"localhost:3001","t":"2026-05-12T18:54:22.3305765-04:00"}
+{"err":"dial tcp [::1]:3001: connectex: No connection could be made because the target machine actively refused it.","id":"25da6166e306","lvl":"warn","msg":"failed to open private leg","privaddr":"localhost:3001","t":"2026-05-12T18:54:25.7746095-04:00"}
+{"err":"dial tcp [::1]:3001: connectex: No connection could be made because the target machine actively refused it.","id":"ace78518e91b","lvl":"warn","msg":"failed to open private leg","privaddr":"localhost:3001","t":"2026-05-12T18:54:26.6889495-04:00"}
+{"id":"2b5bbc1774ce","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:15382","t":"2026-05-12T19:00:23.9454334-04:00"}
+{"id":"5d172bb7452b","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:35638","t":"2026-05-12T19:00:48.0286297-04:00"}
+{"id":"e5eccc9a2679","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:35644","t":"2026-05-12T19:00:48.7362356-04:00"}
+{"id":"b1211d8a6d05","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:34240","t":"2026-05-12T19:03:11.6773369-04:00"}
+{"id":"a31bda9e9763","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:45000","t":"2026-05-12T19:10:13.7324768-04:00"}
+{"id":"efb0871aed4a","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"178.132.107.221:13732","t":"2026-05-12T20:24:20.2718592-04:00"}
+{"err":"read tcp 10.5.0.2:52023-\u003e3.125.92.105:443: wsarecv: An established connection was aborted by the software in your host machine.","id":"dc8f51952dc8","lvl":"eror","msg":"session closed, starting reconnect loop","obj":"csess","t":"2026-05-12T20:35:21.2812524-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: i/o timeout","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-12T20:35:31.309621-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-12T20:35:33.9836296-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-12T20:35:33.9846343-04:00"}
+{"clientid":"f775c38a4314b001aed4f61c8d9ace77","id":"b4e8bf63f2d8","lvl":"eror","msg":"heartbeat timeout, terminating session","obj":"csess","t":"2026-05-12T20:35:39.582336-04:00"}
+{"id":"4c67b8cafb45","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"217.216.124.63:31346","t":"2026-05-12T20:35:56.7057943-04:00"}
+{"err":"read tcp 10.5.0.2:58785-\u003e3.125.92.105:443: wsarecv: An established connection was aborted by the software in your host machine.","id":"dc8f51952dc8","lvl":"eror","msg":"session closed, starting reconnect loop","obj":"csess","t":"2026-05-12T20:36:40.7262502-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: i/o timeout","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-12T20:36:50.7280766-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-12T20:36:52.99458-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-12T20:36:52.99458-04:00"}
+{"clientid":"f775c38a4314b001aed4f61c8d9ace77","id":"47515292c5e9","lvl":"eror","msg":"heartbeat timeout, terminating session","obj":"csess","t":"2026-05-12T20:36:58.4525423-04:00"}
+{"id":"fa7e373a1426","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:60546","t":"2026-05-12T20:50:55.5919302-04:00"}
+{"id":"fa8476e3451d","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:7988","t":"2026-05-12T21:19:30.102986-04:00"}
+{"id":"6efe00fc9e8a","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:57096","t":"2026-05-12T21:40:59.8489714-04:00"}
+{"id":"6daab5585319","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:52970","t":"2026-05-12T21:57:00.2231434-04:00"}
+{"id":"9a3928389dd4","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:55198","t":"2026-05-12T22:18:56.6910732-04:00"}
+{"id":"f7115625dc83","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:54088","t":"2026-05-12T23:22:04.1848345-04:00"}
+{"id":"9c0d0402bad1","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:7814","t":"2026-05-12T23:35:16.7188942-04:00"}
+{"id":"a64b61a722a2","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:29878","t":"2026-05-12T23:39:00.3335758-04:00"}
+{"id":"42c4e19231a9","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:8644","t":"2026-05-12T23:48:56.3842778-04:00"}
+{"id":"c95f3e337953","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"45.84.137.189:31284","t":"2026-05-12T23:54:25.7187459-04:00"}
+{"id":"c1f2088f192b","l":"127.0.0.1:3001","lvl":"info","msg":"join connections","obj":"join","r":"188.115.100.254:53238","t":"2026-05-13T00:18:24.7306271-04:00"}
+{"clientid":"f775c38a4314b001aed4f61c8d9ace77","id":"d168607c0cd0","lvl":"eror","msg":"heartbeat timeout, terminating session","obj":"csess","t":"2026-05-13T07:59:34.6132041-04:00"}
+{"err":"session closed","id":"dc8f51952dc8","lvl":"eror","msg":"session closed, starting reconnect loop","obj":"csess","t":"2026-05-13T07:59:34.6137178-04:00"}
+{"err":"Post \"https://update.ngrok-agent.com/check\": context deadline exceeded","lvl":"warn","msg":"failed to check for update","obj":"updater","t":"2026-05-13T07:59:39.5200229-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-13T07:59:44.091545-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-13T07:59:44.6065434-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-13T07:59:45.6261555-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-13T07:59:47.6274338-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-13T20:21:36.5656999-04:00"}
+{"err":"Post \"https://update.ngrok-agent.com/check\": context deadline exceeded","lvl":"warn","msg":"failed to check for update","obj":"updater","t":"2026-05-13T20:21:44.9094173-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-13T20:21:54.13537-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-13T20:21:54.13537-04:00"}
+{"clientid":"f775c38a4314b001aed4f61c8d9ace77","id":"3ebe87045f50","lvl":"eror","msg":"heartbeat timeout, terminating session","obj":"csess","t":"2026-05-14T03:48:36.5406034-04:00"}
+{"err":"session closed","id":"dc8f51952dc8","lvl":"eror","msg":"session closed, starting reconnect loop","obj":"csess","t":"2026-05-14T03:48:36.5411188-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-14T03:48:43.9671993-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-14T03:48:43.968202-04:00"}
+{"err":"Post \"https://update.ngrok-agent.com/check\": context deadline exceeded","lvl":"warn","msg":"failed to check for update","obj":"updater","t":"2026-05-14T03:48:51.8093985-04:00"}
+{"clientid":"f775c38a4314b001aed4f61c8d9ace77","id":"1a12035acbf5","lvl":"eror","msg":"heartbeat timeout, terminating session","obj":"csess","t":"2026-05-14T10:11:56.6294148-04:00"}
+{"err":"session closed","id":"dc8f51952dc8","lvl":"eror","msg":"session closed, starting reconnect loop","obj":"csess","t":"2026-05-14T10:11:56.6304174-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: i/o timeout","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-14T10:12:06.6344621-04:00"}
+{"err":"failed to dial ngrok server with address \"connect.ngrok-agent.com:443\": dial tcp: lookup connect.ngrok-agent.com: no such host","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-05-14T10:12:12.9382603-04:00"}
+{"err":"Post \"https://update.ngrok-agent.com/check\": context deadline exceeded","lvl":"warn","msg":"failed to check for update","obj":"updater","t":"2026-05-14T10:12:14.2111374-04:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-05-14T10:12:16.1015535-04:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-05-14T10:12:16.1015535-04:00"}
