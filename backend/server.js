@@ -101,6 +101,10 @@ const mainCoachOnly = (req, res, next) => {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
+app.get('/', (req, res) => res.redirect('/Muscu.html'));
+
 app.use(express.static(FRONTEND));
 
 // ── Auth ────────────────────────────────────────────
