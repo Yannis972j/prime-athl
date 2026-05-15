@@ -850,6 +850,21 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
     <input type="number" value={val} min="0" step="0.5" onChange={e=>onChange(parseFloat(e.target.value)||0)}
       style={{width:w,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,color:T.text,fontSize:17,fontWeight:700,padding:'4px 6px',fontFamily:'inherit',textAlign:'center',outline:'none',boxSizing:'border-box'}}/>
   );
+  // Stepper compact (−/+ pour ajuster poids ou reps rapidement, plus fluide qu'un clavier numérique)
+  const Stepper=({value,onChange,step=1,suffix,target,minus=true,plus=true,disabled})=>(
+    <div style={{display:'inline-flex',alignItems:'center',gap:4,background:disabled?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.05)',border:`1px solid ${disabled?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.1)'}`,borderRadius:11,padding:'3px 4px',height:36,opacity:disabled?0.6:1}}>
+      {minus&&(
+        <button onClick={e=>{e.stopPropagation();onChange(Math.max(0,(parseFloat(value)||0)-step));}} disabled={disabled} style={{width:24,height:24,borderRadius:7,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:16,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>−</button>
+      )}
+      <input type="number" value={value} min="0" step={step} disabled={disabled} onChange={e=>onChange(parseFloat(e.target.value)||0)}
+        style={{width:38,background:'transparent',border:'none',color:T.text,fontSize:16,fontWeight:700,padding:0,fontFamily:'inherit',textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+      {target&&<span style={{fontSize:11,color:T.textFaint,fontWeight:600,marginLeft:-2,marginRight:1}}>/{target}</span>}
+      {suffix&&<span style={{fontSize:10,color:T.textFaint,fontWeight:600,marginRight:2}}>{suffix}</span>}
+      {plus&&(
+        <button onClick={e=>{e.stopPropagation();onChange((parseFloat(value)||0)+step);}} disabled={disabled} style={{width:24,height:24,borderRadius:7,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:16,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>+</button>
+      )}
+    </div>
+  );
 
   if(editMode){
     const localW={...workout,exercises};
@@ -942,8 +957,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
       </div>
 
       {/* content */}
-      <div style={{flex:1,overflow:'auto',padding:'0 18px 130px'}}>
-        <HoloCard intense padding={0} style={{marginBottom:14}}>
+      <div style={{flex:1,overflow:'auto',padding:'0 16px 130px'}}>
+        <div style={{position:'relative',borderRadius:22,marginBottom:14,background:'linear-gradient(160deg,rgba(28,28,40,0.95),rgba(12,12,18,0.95))',border:'1px solid rgba(255,255,255,0.06)',boxShadow:'0 24px 60px rgba(0,0,0,0.45)',overflow:'hidden'}}>
           {(()=>{const u=exerciseImageURL(ex.name);return u?(
             <div style={{position:'relative',height:170,overflow:'hidden',borderTopLeftRadius:21,borderTopRightRadius:21}}>
               <img src={u} alt="" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block',filter:'saturate(1.1) contrast(1.05)'}} onError={e=>{e.currentTarget.parentElement.style.display='none';}}/>
@@ -986,46 +1001,46 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 );
               })()}
 
-              {/* set rows */}
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {/* set rows — compact horizontal avec steppers tactiles */}
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
                   const prevSet=prevByName[ex.name]&&prevByName[ex.name].sets[i];
                   const flash=setFlash&&setFlash.exId===ex.id&&setFlash.si===i?setFlash.fb:null;
+                  const repsDisplay=s.reps||(isNext?'':s.target||'');
                   return(
                     <div key={i}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 8px 8px 12px',borderRadius:14,background:s.done?'rgba(217,119,87,0.08)':isNext?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.02)',border:`1px solid ${s.done?'rgba(217,119,87,0.25)':isNext?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,boxShadow:isNext?'0 0 0 3px rgba(217,119,87,0.08)':'none'}}>
-                        <div style={{width:26,height:26,borderRadius:7,background:s.done?T.accent:'rgba(255,255,255,0.06)',color:s.done?'#000':T.textDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>
-                          {s.done?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 6px 6px 10px',borderRadius:14,background:s.done?'linear-gradient(135deg,rgba(217,119,87,0.10),rgba(124,196,161,0.04))':isNext?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.02)',border:`1px solid ${s.done?'rgba(217,119,87,0.20)':isNext?'rgba(217,119,87,0.35)':'rgba(255,255,255,0.06)'}`,transition:'all 0.25s ease'}}>
+                        {/* Numéro de set */}
+                        <div style={{width:28,height:28,borderRadius:9,background:s.done?T.accent:isNext?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.05)',color:s.done?'#fff':isNext?T.accent:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+                          {s.done?<Icon name="check" size={14} stroke="#fff" strokeWidth={2.8}/>:i+1}
                         </div>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:2}}>Poids</div>
-                          {numIn(s.weight,v=>updSet(currentEx,i,{weight:v}),64)}
-                          <span style={{fontSize:10,color:T.textFaint,marginLeft:4}}>kg</span>
-                        </div>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:2}}>Reps</div>
-                          {numIn(s.reps||(isNext?s.target:s.target),v=>updSet(currentEx,i,{reps:v}),48)}
-                          {s.target&&<span style={{fontSize:10,color:T.textFaint,marginLeft:4}}>/{s.target}</span>}
-                        </div>
+                        {/* Poids */}
+                        <Stepper value={s.weight} onChange={v=>updSet(currentEx,i,{weight:v})} step={2.5} suffix="kg" disabled={s.done}/>
+                        <span style={{color:T.textFaint,fontWeight:600,fontSize:13}}>×</span>
+                        {/* Reps */}
+                        <Stepper value={repsDisplay} onChange={v=>updSet(currentEx,i,{reps:v})} step={1} target={s.target} disabled={s.done}/>
+                        <div style={{flex:1}}/>
+                        {/* Action droite : check / volume */}
                         {!s.done?(
-                          <button onClick={()=>validateSet(i)} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none'}}>
-                            <Icon name="check" size={17} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.6:2}/>
+                          <button onClick={()=>validateSet(i)} style={{width:44,height:40,borderRadius:12,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 6px 18px rgba(217,119,87,0.45)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                            <Icon name="check" size={18} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
                           </button>
                         ):(
-                          <div style={{width:44,textAlign:'center',fontSize:11,color:T.accent,fontWeight:700,flexShrink:0}}>
-                            {Math.round(s.weight*(s.reps||0))}<span style={{fontSize:9,opacity:0.7}}>kg</span>
-                          </div>
+                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler la validation" style={{minWidth:48,height:36,padding:'0 8px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:10,color:T.accent,fontWeight:700,fontSize:11,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:0,lineHeight:1}}>
+                            <span style={{fontSize:12,fontVariantNumeric:'tabular-nums'}}>{Math.round(s.weight*(s.reps||0))}</span>
+                            <span style={{fontSize:8,opacity:0.65,fontWeight:600,marginTop:1}}>kg</span>
+                          </button>
                         )}
                       </div>
                       {/* prev hint OR live feedback flash */}
                       {flash?(
-                        <div style={{margin:'4px 12px 0 46px',padding:'4px 10px',borderRadius:8,background:flash.bg,border:`1px solid ${flash.color}33`,color:flash.color,fontSize:11,fontWeight:700,letterSpacing:0.2,animation:'celebrationPop 0.5s ease'}}>
+                        <div style={{margin:'3px 12px 0 46px',padding:'4px 10px',borderRadius:8,background:flash.bg,border:`1px solid ${flash.color}33`,color:flash.color,fontSize:11,fontWeight:700,letterSpacing:0.2,animation:'celebrationPop 0.5s ease'}}>
                           {flash.label}
                         </div>
                       ):prevSet&&!s.done?(
-                        <div style={{margin:'3px 12px 0 46px',fontSize:10,color:T.textFaint,fontWeight:500}}>
-                          ↺ Dernière : {prevSet.weight||'?'} kg × {prevSet.reps||'?'} reps
+                        <div style={{margin:'2px 12px 0 46px',fontSize:10,color:T.textFaint,fontWeight:500,display:'flex',alignItems:'center',gap:4}}>
+                          <span style={{opacity:0.6}}>↺ Dernière</span> <span style={{color:T.textDim,fontWeight:600}}>{prevSet.weight||'?'} kg × {prevSet.reps||'?'} reps</span>
                         </div>
                       ):null}
                     </div>
@@ -1049,12 +1064,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 const last=ex.sets[ex.sets.length-1];
                 updSet(currentEx,ex.sets.length,undefined);
                 setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,{weight:last?.weight||20,reps:0,done:false,target:last?.target||10}]}));
-              }} style={{width:'100%',marginTop:10,height:36,border:'1px dashed rgba(255,255,255,0.15)',borderRadius:12,background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                <Icon name="plus" size={13} stroke={T.textDim}/> Ajouter une série
+              }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'all 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(217,119,87,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
+                <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
               </button>
+              {/* Supprimer la dernière série (UX : on garde au moins 1 set) */}
+              {ex.sets.length>1&&(
+                <button onClick={()=>{
+                  if(!confirm('Supprimer la dernière série ?'))return;
+                  setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,-1)}));
+                }} style={{width:'100%',marginTop:4,height:26,border:'none',borderRadius:8,background:'transparent',color:T.textFaint,fontSize:10,fontWeight:600,cursor:'pointer',opacity:0.55,letterSpacing:0.3}}>− Retirer la dernière</button>
+              )}
             </div>
           </div>
-        </HoloCard>
+        </div>
 
         {/* nav buttons */}
         <div style={{display:'flex',gap:10,marginBottom:18}}>
