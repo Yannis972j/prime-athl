@@ -1919,19 +1919,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             <HoloText>{profile&&profile.firstName?profile.firstName:'Athlète'}</HoloText> 👋
           </div>
         </div>
-        <div style={{display:'flex',gap:6,flexShrink:0}}>
-          {onRefresh&&(
-            <button onClick={onRefresh} disabled={refreshing} style={{width:36,height:36,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:refreshing?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:refreshing?0.5:1}}>
-              <Icon name="refresh" size={15} stroke={T.textDim} style={{animation:refreshing?'holoShift 1s linear infinite':'none'}}/>
-            </button>
-          )}
-          {/* Import Excel seulement si pas de coach (athlète autonome) */}
-          {(!profile||!profile.coachId)&&(
-            <button onClick={()=>fileRef.current.click()} style={{height:36,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
-              📥 Excel
-            </button>
-          )}
-        </div>
+        {/* Bouton import affiché uniquement pour athlètes autonomes (sans coach) */}
+        {(!profile||!profile.coachId)&&(
+          <button onClick={()=>fileRef.current.click()} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.025)',color:T.textDim,fontSize:11,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+            📥 Importer séance
+          </button>
+        )}
       </div>
 
       <div style={{marginBottom:16}}><MotivationMarquee/></div>
@@ -1940,26 +1933,18 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
         <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
       )}
 
-      {/* Resume in-progress workout */}
+      {/* Resume in-progress workout (compact) */}
       {inProgress&&(
-        <HoloCard intense padding={0} style={{marginBottom:18}}>
-          <div style={{padding:18,position:'relative'}}>
-            <div style={{position:'absolute',top:-30,right:-30,width:160,height:160,background:HOLO.iris,opacity:0.3,filter:'blur(38px)',borderRadius:'50%',pointerEvents:'none'}}/>
-            <div style={{position:'relative'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><Pill>● Reprendre</Pill><span style={{fontSize:11,color:T.textDim,fontWeight:600}}>{workout.exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0)}/{workout.exercises.reduce((s,e)=>s+e.sets.length,0)} séries</span></div>
-              <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5}}>{workout.name}</div>
-              {workout.muscles&&<div style={{fontSize:13,color:T.textDim,marginTop:4}}>{workout.muscles}</div>}
-              <div style={{display:'flex',gap:10,marginTop:14}}>
-                <button onClick={onResume} style={{flex:1,height:48,border:'none',borderRadius:14,cursor:'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 8px 24px rgba(217,119,87,0.4)'}}>
-                  <Icon name="play" size={16} stroke="#fff"/>Reprendre
-                </button>
-                <button onClick={onEdit} style={{width:48,height:48,border:'1px solid rgba(217,119,87,0.35)',borderRadius:14,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <Icon name="edit" size={16} stroke={T.accent}/>
-                </button>
-              </div>
-            </div>
+        <div onClick={onResume} style={{marginBottom:14,padding:'10px 12px',borderRadius:12,background:'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',border:'1px solid rgba(217,119,87,0.25)',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:32,height:32,borderRadius:9,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Icon name="play" size={14} stroke="#fff"/>
           </div>
-        </HoloCard>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:10,color:T.accent,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Reprendre · {workout.exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0)}/{workout.exercises.reduce((s,e)=>s+e.sets.length,0)}</div>
+            <div style={{fontSize:13,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{workout.name}</div>
+          </div>
+          <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+        </div>
       )}
 
       {/* Empty state */}
@@ -1978,7 +1963,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               <div style={{fontSize:18,fontWeight:700,marginBottom:6}}>Importe ton programme</div>
               <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:20,maxWidth:280,margin:'0 auto 20px'}}>Charge ton fichier Excel pour démarrer tes séances en 1 tap.</div>
               <button onClick={()=>fileRef.current.click()} style={{height:48,padding:'0 26px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.4)',display:'inline-flex',alignItems:'center',gap:8}}>
-                <span style={{fontSize:16}}>📥</span> Choisir le fichier
+                <span style={{fontSize:16}}>📥</span> Importer séance
               </button>
             </>
           )}
@@ -2189,14 +2174,9 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             </div>
           )}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-          <button onClick={()=>{load();if(globalRefresh)globalRefresh();}} disabled={globalRefreshing} style={{width:36,height:36,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:globalRefreshing?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:globalRefreshing?0.5:1}}>
-            <Icon name="refresh" size={15} stroke={T.textDim} style={{animation:globalRefreshing?'holoShift 1s linear infinite':'none'}}/>
-          </button>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Score</div>
-            <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,color:score>=80?T.good:score>=50?T.warn:T.danger,lineHeight:1}}>{score}<span style={{fontSize:13,color:T.textDim,fontWeight:500}}>%</span></div>
-          </div>
+        <div style={{textAlign:'right',flexShrink:0}}>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:500,letterSpacing:0.4,textTransform:'uppercase'}}>Score</div>
+          <div style={{fontSize:28,fontWeight:600,letterSpacing:-0.6,color:score>=80?T.good:score>=50?T.warn:T.danger,lineHeight:1}}>{score}<span style={{fontSize:13,color:T.textDim,fontWeight:400}}>%</span></div>
         </div>
       </div>
 
@@ -2754,11 +2734,11 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
       {/* Excel I/O buttons */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
-        <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(124,168,196,0.4)',background:'rgba(124,168,196,0.08)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-          <span style={{fontSize:13}}>📥</span> Importer Excel
+        <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+          <span style={{fontSize:13}}>📥</span> Importer plan nutrition
         </button>
-        <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(124,196,161,0.4)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-          <span style={{fontSize:13}}>📤</span> Download nutrition
+        <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+          <span style={{fontSize:13}}>📤</span> Exporter
         </button>
       </div>
       {importMsg&&(
@@ -2934,6 +2914,56 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 }
 
 // ── Coach Nutrition Mirror (read-only view of athlete's daily progress) ──
+// Coach reads athlete's program (read-only mirror)
+function CoachProgramMirror({athleteData}){
+  const programData=athleteData&&athleteData.program&&athleteData.program.data||{};
+  const sheetNames=Object.keys(programData);
+  const[activeSheet,setActiveSheet]=React.useState(sheetNames[sheetNames.length-1]||null);
+  if(sheetNames.length===0)return null;
+  const sheet=activeSheet||sheetNames[sheetNames.length-1];
+  const days=programData[sheet]||{};
+  const DAY_ORDER=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const sortedDays=Object.keys(days).sort((a,b)=>DAY_ORDER.indexOf(a)-DAY_ORDER.indexOf(b));
+  return(
+    <div style={{marginBottom:14}}>
+      {sheetNames.length>1&&(
+        <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
+          {sheetNames.map(name=>(
+            <button key={name} onClick={()=>setActiveSheet(name)} style={{flexShrink:0,height:28,padding:'0 11px',borderRadius:9,border:sheet===name?'1px solid transparent':'1px solid rgba(255,255,255,0.08)',background:sheet===name?T.accentSoft:'rgba(255,255,255,0.025)',color:sheet===name?T.accent:T.textDim,fontSize:10,fontWeight:600,cursor:'pointer',letterSpacing:0.3}}>{name}</button>
+          ))}
+        </div>
+      )}
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {sortedDays.map(dayName=>{
+          const d=days[dayName];
+          const exCount=(d.exercises||[]).length;
+          return(
+            <div key={dayName} style={{padding:11,borderRadius:11,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:6}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{dayName}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.category}</div>
+                </div>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,flexShrink:0}}>{exCount} exo</div>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                {(d.exercises||[]).slice(0,4).map((ex,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:T.textDim}}>
+                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.1)':'rgba(217,119,87,0.08)',color:ex.style==='SUPERSET'?'#7ca8c4':T.accent}}>{i+1}</div>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
+                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]&&ex.sets[0].target||'?'}</span>
+                  </div>
+                ))}
+                {exCount>4&&<div style={{fontSize:10,color:T.textFaint,paddingLeft:23}}>+{exCount-4} exo</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CoachNutritionMirror({athleteId,athleteName,authToken}){
   const[data,setData]=React.useState(null);
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
@@ -3371,17 +3401,18 @@ function CoachScreen({authToken,authUser}){
           </div>
         </GlassCard>
 
-        {/* Program section — gros bouton import direct */}
-        <SectionHeader title="Programme musculation" right={a.program?.assignedAt?<span style={{fontSize:10,color:T.textFaint}}>maj {new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}</span>:null}/>
-        <button onClick={()=>fileRef.current.click()} style={{width:'100%',marginBottom:18,padding:14,borderRadius:14,border:`1px solid ${programDays>0?'rgba(124,196,161,0.3)':'rgba(217,119,87,0.4)'}`,background:programDays>0?'rgba(124,196,161,0.06)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.08))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',boxShadow:programDays===0?'0 6px 18px rgba(217,119,87,0.2)':'none'}}>
-          <div style={{width:42,height:42,borderRadius:12,background:programDays>0?'rgba(124,196,161,0.18)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>
-            {programDays>0?'✓':'📥'}
+        {/* Program section — bouton import + miroir séance de l'athlète */}
+        <SectionHeader title="Séance" right={a.program?.assignedAt?<span style={{fontSize:10,color:T.textFaint}}>maj {new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}</span>:null}/>
+        <button onClick={()=>fileRef.current.click()} style={{width:'100%',marginBottom:12,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(217,119,87,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+          <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(217,119,87,0.12)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
+            {programDays>0?'📋':'📥'}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:700}}>{programDays>0?`${programMonths} mois · ${programDays} jours assignés`:'Importer un programme Excel'}</div>
-            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{programDays>0?'Tape pour remplacer · sync temps réel':'L\'athlète recevra le programme instantanément'}</div>
+            <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer séance'}</div>
+            <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?'Tape pour remplacer le programme Excel':'Excel du programme musculation'}</div>
           </div>
         </button>
+        {programDays>0&&<CoachProgramMirror athleteData={a}/>}
 
         {/* Nutrition — 2 modes, défaut = miroir si plan, sinon édition */}
         <SectionHeader title="Nutrition" right={nutriDetail&&nutriDetail.plan?(
