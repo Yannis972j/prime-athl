@@ -89,6 +89,39 @@ if (USE_GIST && Object.keys(DATA.users).length === 0) {
   }
 }
 
+// ── Main-coach bootstrap ───────────────────────────
+// Garantit que le compte coach principal existe TOUJOURS et avec le mot de passe défini en env.
+// Plus jamais besoin de recréer le compte après un déploiement.
+const MAIN_COACH_PASSWORD = process.env.MAIN_COACH_PASSWORD || '';
+async function ensureMainCoach() {
+  if (!MAIN_COACH_PASSWORD) {
+    console.warn('[bootstrap] MAIN_COACH_PASSWORD not set → skip main-coach bootstrap');
+    return;
+  }
+  let main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
+  const hash = await bcrypt.hash(MAIN_COACH_PASSWORD, 10);
+  if (!main) {
+    const id = 'main-coach-' + Math.random().toString(36).slice(2, 8);
+    main = {
+      id, email: MAIN_COACH_EMAIL, passwordHash: hash,
+      role: 'coach', coachId: null,
+      firstName: '', lastName: '', height: '', weight: '', objective: '',
+      prSquat: '', prBench: '', prDeadlift: '',
+      createdAt: Date.now(), status: 'active', isMainCoach: true,
+    };
+    DATA.users[id] = main;
+    console.log('[bootstrap] Main coach CREATED:', MAIN_COACH_EMAIL);
+  } else {
+    main.passwordHash = hash;
+    main.role = 'coach';
+    main.status = 'active';
+    main.isMainCoach = true;
+    console.log('[bootstrap] Main coach password REFRESHED:', MAIN_COACH_EMAIL);
+  }
+  try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
+}
+await ensureMainCoach();
+
 let saveTimer = null;
 let gistSaveTimer = null;
 let saving = false;
@@ -591,6 +624,17 @@ app.post('/api/nutrition/validate/:mealId', authRequired, (req, res) => {
   // Notify coach
   if (u.coachId) io.to('user:' + u.coachId).emit('nutrition-meal-validated', { athleteId: u.id, mealId, validated: newVal, date: today });
   res.json({ ok: true, validated: newVal, date: today });
+});
+
+// User imports / updates their OWN nutrition plan (coach for himself, or athlete without coach)
+app.put('/api/my-nutrition', authRequired, (req, res) => {
+  const plan = req.body && req.body.plan ? req.body.plan : null;
+  if (!plan) return res.status(400).json({ error: 'plan_required' });
+  const ts = Date.now();
+  DATA.nutritionPrograms[req.user.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts };
+  persist();
+  io.to('user:' + req.user.id).emit('nutrition-updated', { plan, assignedAt: ts });
+  res.json({ ok: true, assignedAt: ts });
 });
 
 // Coach assigns / updates nutrition plan
