@@ -23,6 +23,7 @@
   @keyframes holoText{0%{background-position:0% 50%}100%{background-position:200% 50%}}
   @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   @keyframes celebrationPop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.02);opacity:1}100%{transform:scale(1);opacity:1}}
+  @keyframes imgFade{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
   @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,184,108,0.5)}70%{box-shadow:0 0 0 10px rgba(255,184,108,0)}100%{box-shadow:0 0 0 0 rgba(255,184,108,0)}}
   @keyframes countPop{0%{transform:scale(1)}40%{transform:scale(1.15)}100%{transform:scale(1)}}
@@ -852,16 +853,16 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   );
   // Stepper compact (−/+ pour ajuster poids ou reps rapidement, plus fluide qu'un clavier numérique)
   const Stepper=({value,onChange,step=1,suffix,target,minus=true,plus=true,disabled})=>(
-    <div style={{display:'inline-flex',alignItems:'center',gap:4,background:disabled?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.05)',border:`1px solid ${disabled?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.1)'}`,borderRadius:11,padding:'3px 4px',height:36,opacity:disabled?0.6:1}}>
+    <div style={{display:'inline-flex',alignItems:'center',gap:2,background:disabled?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.05)',border:`1px solid ${disabled?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.1)'}`,borderRadius:9,padding:'2px 3px',height:30,opacity:disabled?0.6:1}}>
       {minus&&(
-        <button onClick={e=>{e.stopPropagation();onChange(Math.max(0,(parseFloat(value)||0)-step));}} disabled={disabled} style={{width:24,height:24,borderRadius:7,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:16,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>−</button>
+        <button onClick={e=>{e.stopPropagation();onChange(Math.max(0,(parseFloat(value)||0)-step));}} disabled={disabled} style={{width:22,height:22,borderRadius:6,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:15,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>−</button>
       )}
       <input type="number" value={value} min="0" step={step} disabled={disabled} onChange={e=>onChange(parseFloat(e.target.value)||0)}
-        style={{width:38,background:'transparent',border:'none',color:T.text,fontSize:16,fontWeight:700,padding:0,fontFamily:'inherit',textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
-      {target&&<span style={{fontSize:11,color:T.textFaint,fontWeight:600,marginLeft:-2,marginRight:1}}>/{target}</span>}
-      {suffix&&<span style={{fontSize:10,color:T.textFaint,fontWeight:600,marginRight:2}}>{suffix}</span>}
+        style={{width:34,background:'transparent',border:'none',color:T.text,fontSize:14,fontWeight:700,padding:0,fontFamily:'inherit',textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+      {target&&<span style={{fontSize:10,color:T.textFaint,fontWeight:600,marginLeft:-2,marginRight:1}}>/{target}</span>}
+      {suffix&&<span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginRight:1}}>{suffix}</span>}
       {plus&&(
-        <button onClick={e=>{e.stopPropagation();onChange((parseFloat(value)||0)+step);}} disabled={disabled} style={{width:24,height:24,borderRadius:7,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:16,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>+</button>
+        <button onClick={e=>{e.stopPropagation();onChange((parseFloat(value)||0)+step);}} disabled={disabled} style={{width:22,height:22,borderRadius:6,border:'none',background:'transparent',color:T.textDim,cursor:disabled?'default':'pointer',fontSize:15,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1}}>+</button>
       )}
     </div>
   );
@@ -928,7 +929,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   }
 
   return(
-    <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative'}}>
+    <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
+      {/* Image de l'exercice en arrière-plan global (fade vers le bas) */}
+      {(()=>{const u=exerciseImageURL(ex.name);return u?(
+        <div key={ex.id||ex.name} style={{position:'absolute',inset:0,zIndex:0,overflow:'hidden',pointerEvents:'none'}}>
+          <img src={u} alt="" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center top',filter:'saturate(0.95) contrast(1.05) brightness(0.55)',animation:'imgFade 0.45s ease'}} onError={e=>{e.currentTarget.style.display='none';}}/>
+          <div style={{position:'absolute',inset:0,background:`linear-gradient(180deg,rgba(6,6,10,0.35) 0%,rgba(6,6,10,0.70) 35%,${T.bg} 80%)`}}/>
+        </div>
+      ):null;})()}
       {/* header */}
       <div style={{padding:'6px 18px 12px',background:`linear-gradient(180deg,${T.bg} 60%,transparent)`,position:'relative',zIndex:5}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6}}>
@@ -957,38 +965,25 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
       </div>
 
       {/* content */}
-      <div style={{flex:1,overflow:'auto',padding:'0 16px 130px'}}>
-        <div style={{position:'relative',borderRadius:22,marginBottom:14,background:'linear-gradient(160deg,rgba(28,28,40,0.95),rgba(12,12,18,0.95))',border:'1px solid rgba(255,255,255,0.06)',boxShadow:'0 24px 60px rgba(0,0,0,0.45)',overflow:'hidden'}}>
-          {(()=>{const u=exerciseImageURL(ex.name);return u?(
-            <div style={{position:'relative',height:170,overflow:'hidden',borderTopLeftRadius:21,borderTopRightRadius:21}}>
-              <img src={u} alt="" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block',filter:'saturate(1.1) contrast(1.05)'}} onError={e=>{e.currentTarget.parentElement.style.display='none';}}/>
-              <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg,rgba(6,6,10,0.15) 0%,rgba(6,6,10,0.55) 60%,rgba(20,20,28,0.98) 100%)'}}/>
-              <div style={{position:'absolute',top:14,left:14,right:14,display:'flex',alignItems:'center',gap:8}}>
+      <div style={{flex:1,overflow:'auto',padding:'0 14px 110px',position:'relative',zIndex:1}}>
+        <div style={{position:'relative',borderRadius:18,marginBottom:10,background:'rgba(14,14,20,0.55)',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)',border:'1px solid rgba(255,255,255,0.06)',boxShadow:'0 12px 30px rgba(0,0,0,0.4)',overflow:'hidden'}}>
+          <div style={{padding:'12px 14px 14px',position:'relative'}}>
+            <div style={{position:'relative'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                 <Pill>EN COURS</Pill>
                 <span style={{fontSize:11,color:'#fff',fontWeight:600,textShadow:'0 1px 4px rgba(0,0,0,0.8)'}}>{ex.muscle}</span>
               </div>
-            </div>
-          ):null;})()}
-          <div style={{padding:18,position:'relative'}}>
-            <div style={{position:'absolute',top:-30,right:-30,width:160,height:160,background:HOLO.iris,opacity:0.35,filter:'blur(38px)',borderRadius:'50%',pointerEvents:'none'}}/>
-            <div style={{position:'relative'}}>
-              {!exerciseImageURL(ex.name)&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                  <Pill>EN COURS</Pill>
-                  <span style={{fontSize:11,color:T.textDim,fontWeight:600}}>{ex.muscle}</span>
-                </div>
-              )}
-              <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5,lineHeight:1.1,marginBottom:6}}>{ex.name}</div>
+              <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,marginBottom:4,textShadow:'0 1px 6px rgba(0,0,0,0.6)'}}>{ex.name}</div>
 
               {/* Coach line: previous performance + PR */}
               {(()=>{
                 const prev=prevByName[ex.name];
                 const pr=prByName[ex.name];
-                if(!prev&&!pr)return <div style={{fontSize:11,color:T.textFaint,marginBottom:14,fontStyle:'italic'}}>1re fois sur cet exercice — donne le ton 🔥</div>;
+                if(!prev&&!pr)return <div style={{fontSize:10,color:T.textFaint,marginBottom:8,fontStyle:'italic'}}>1re fois sur cet exercice — donne le ton 🔥</div>;
                 return(
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
                     {prev&&(
-                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(124,168,196,0.10)',border:'1px solid rgba(124,168,196,0.3)',color:'#7ca8c4',fontSize:11,fontWeight:600}}>
+                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:999,background:'rgba(124,168,196,0.10)',border:'1px solid rgba(124,168,196,0.3)',color:'#7ca8c4',fontSize:10,fontWeight:600}}>
                         ↺ Dernière : {prev.sets.map(s=>`${s.weight||'?'}×${s.reps||'?'}`).slice(0,3).join(' · ')} <span style={{opacity:0.6}}>· {prev.dateStr}</span>
                       </div>
                     )}
@@ -1002,47 +997,56 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               })()}
 
               {/* set rows — compact horizontal avec steppers tactiles */}
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
                   const prevSet=prevByName[ex.name]&&prevByName[ex.name].sets[i];
                   const flash=setFlash&&setFlash.exId===ex.id&&setFlash.si===i?setFlash.fb:null;
                   const repsDisplay=s.reps||(isNext?'':s.target||'');
+                  const showRest=isNext&&restSeconds>0;
                   return(
                     <div key={i}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 6px 6px 10px',borderRadius:14,background:s.done?'linear-gradient(135deg,rgba(217,119,87,0.10),rgba(124,196,161,0.04))':isNext?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.02)',border:`1px solid ${s.done?'rgba(217,119,87,0.20)':isNext?'rgba(217,119,87,0.35)':'rgba(255,255,255,0.06)'}`,transition:'all 0.25s ease'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 5px 4px 8px',borderRadius:12,background:s.done?'rgba(217,119,87,0.07)':isNext?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.025)',border:`1px solid ${s.done?'rgba(217,119,87,0.18)':isNext?'rgba(217,119,87,0.32)':'rgba(255,255,255,0.06)'}`,transition:'all 0.25s ease'}}>
                         {/* Numéro de set */}
-                        <div style={{width:28,height:28,borderRadius:9,background:s.done?T.accent:isNext?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.05)',color:s.done?'#fff':isNext?T.accent:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
-                          {s.done?<Icon name="check" size={14} stroke="#fff" strokeWidth={2.8}/>:i+1}
+                        <div style={{width:24,height:24,borderRadius:7,background:s.done?T.accent:isNext?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.05)',color:s.done?'#fff':isNext?T.accent:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+                          {s.done?<Icon name="check" size={12} stroke="#fff" strokeWidth={2.8}/>:i+1}
                         </div>
                         {/* Poids */}
                         <Stepper value={s.weight} onChange={v=>updSet(currentEx,i,{weight:v})} step={2.5} suffix="kg" disabled={s.done}/>
-                        <span style={{color:T.textFaint,fontWeight:600,fontSize:13}}>×</span>
+                        <span style={{color:T.textFaint,fontWeight:600,fontSize:11}}>×</span>
                         {/* Reps */}
                         <Stepper value={repsDisplay} onChange={v=>updSet(currentEx,i,{reps:v})} step={1} target={s.target} disabled={s.done}/>
                         <div style={{flex:1}}/>
+                        {/* Chrono inline si série active ET repos en cours */}
+                        {showRest&&(
+                          <button onClick={()=>setRestSeconds(0)} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:6,padding:'0 8px',height:30,borderRadius:9,border:'1px solid rgba(217,119,87,0.4)',background:'linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.10))',color:T.accent,cursor:'pointer',flexShrink:0}}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" style={{transform:'rotate(-90deg)',flexShrink:0}}>
+                              <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.4"/>
+                              <circle cx="12" cy="12" r="10" fill="none" stroke="#d97757" strokeWidth="2.4" strokeLinecap="round"
+                                strokeDasharray={2*Math.PI*10} strokeDashoffset={2*Math.PI*10*(1-(restTotal-restSeconds)/restTotal)}
+                                style={{transition:'stroke-dashoffset 1s linear'}}/>
+                            </svg>
+                            <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums',letterSpacing:0.2}}>{fmt(restSeconds)}</span>
+                          </button>
+                        )}
                         {/* Action droite : check / volume */}
                         {!s.done?(
-                          <button onClick={()=>validateSet(i)} style={{width:44,height:40,borderRadius:12,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 6px 18px rgba(217,119,87,0.45)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
-                            <Icon name="check" size={18} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
+                          <button onClick={()=>validateSet(i)} style={{width:38,height:34,borderRadius:10,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                            <Icon name="check" size={16} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
                           </button>
                         ):(
-                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler la validation" style={{minWidth:48,height:36,padding:'0 8px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:10,color:T.accent,fontWeight:700,fontSize:11,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:0,lineHeight:1}}>
-                            <span style={{fontSize:12,fontVariantNumeric:'tabular-nums'}}>{Math.round(s.weight*(s.reps||0))}</span>
-                            <span style={{fontSize:8,opacity:0.65,fontWeight:600,marginTop:1}}>kg</span>
+                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler" style={{minWidth:42,height:32,padding:'0 6px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:9,color:T.accent,fontWeight:700,fontSize:10,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1}}>
+                            <span style={{fontSize:11,fontVariantNumeric:'tabular-nums'}}>{Math.round(s.weight*(s.reps||0))}</span>
+                            <span style={{fontSize:7,opacity:0.65,fontWeight:600,marginTop:1}}>kg</span>
                           </button>
                         )}
                       </div>
-                      {/* prev hint OR live feedback flash */}
-                      {flash?(
-                        <div style={{margin:'3px 12px 0 46px',padding:'4px 10px',borderRadius:8,background:flash.bg,border:`1px solid ${flash.color}33`,color:flash.color,fontSize:11,fontWeight:700,letterSpacing:0.2,animation:'celebrationPop 0.5s ease'}}>
+                      {/* feedback flash */}
+                      {flash&&(
+                        <div style={{margin:'2px 10px 0 38px',padding:'3px 8px',borderRadius:7,background:flash.bg,border:`1px solid ${flash.color}33`,color:flash.color,fontSize:10,fontWeight:700,letterSpacing:0.2,animation:'celebrationPop 0.5s ease'}}>
                           {flash.label}
                         </div>
-                      ):prevSet&&!s.done?(
-                        <div style={{margin:'2px 12px 0 46px',fontSize:10,color:T.textFaint,fontWeight:500,display:'flex',alignItems:'center',gap:4}}>
-                          <span style={{opacity:0.6}}>↺ Dernière</span> <span style={{color:T.textDim,fontWeight:600}}>{prevSet.weight||'?'} kg × {prevSet.reps||'?'} reps</span>
-                        </div>
-                      ):null}
+                      )}
                     </div>
                   );
                 })}
@@ -1109,33 +1113,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
         </div>
       </div>
 
-      {/* rest timer */}
+      {/* Rest +30s discret (le chrono principal est inline près de la série active) */}
       {restSeconds>0&&(
-        <div style={{position:'absolute',left:12,right:12,bottom:12,borderRadius:22,padding:1,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite',zIndex:30,boxShadow:'0 -10px 30px rgba(0,0,0,0.5)'}}>
-          <div style={{borderRadius:21,padding:'14px 16px',background:'linear-gradient(160deg,rgba(40,28,32,0.96),rgba(14,14,20,0.98))',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',display:'flex',alignItems:'center',gap:14}}>
-            <div style={{position:'relative',width:80,height:80,flexShrink:0}}>
-              <svg width="80" height="80" viewBox="0 0 84 84" style={{transform:'rotate(-90deg)'}}>
-                <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#d97757"/><stop offset="50%" stopColor="#c97586"/><stop offset="100%" stopColor="#8e6cb6"/></linearGradient></defs>
-                <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6"/>
-                <circle cx="42" cy="42" r="36" fill="none" stroke="url(#rg)" strokeWidth="6" strokeLinecap="round"
-                  strokeDasharray={2*Math.PI*36} strokeDashoffset={2*Math.PI*36*(1-(restTotal-restSeconds)/restTotal)}
-                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 6px rgba(217,119,87,0.6))'}}/>
-              </svg>
-              <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                <div style={{fontSize:8,color:T.textDim,fontWeight:600,textTransform:'uppercase'}}>Repos</div>
-                <div style={{fontSize:20,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{fmt(restSeconds)}</div>
-              </div>
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3}}>Prochaine série</div>
-              <div style={{fontSize:13,fontWeight:700,marginTop:4,lineHeight:1.2}}>Préparation — série {ex.sets.findIndex(s=>!s.done)+1}</div>
-              <div style={{display:'flex',gap:6,marginTop:10}}>
-                <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+30s</button>
-                <button onClick={()=>setRestSeconds(0)} style={{flex:1,height:32,borderRadius:10,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Passer</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <button onClick={()=>setRestSeconds(s=>s+30)} style={{position:'absolute',right:14,bottom:14,height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
       )}
     </div>
   );
