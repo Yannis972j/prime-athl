@@ -1755,72 +1755,67 @@ function ProfileScreen({profile,onChange,onLogout}){
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
   const initials=((profile.firstName||'')[0]||'')+((profile.lastName||'')[0]||'')||'PA';
   const objectives=['Hypertrophie','Force','Perte de poids','Endurance'];
+  const inp={width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid '+T.border,borderRadius:9,color:T.text,fontSize:13,fontWeight:500,padding:'7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box',minWidth:0};
 
   return(
-    <div style={{padding:'18px 18px 100px',color:T.text}}>
-      <div style={{marginBottom:16}}>
-        <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Athlète</div>
-        <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}>Profil</div>
+    <div style={{padding:'14px 16px 90px',color:T.text}}>
+      {/* Header compact : avatar + identité + role inline */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+        <div style={{width:52,height:52,borderRadius:26,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 16s linear infinite',flexShrink:0}}>
+          <div style={{width:'100%',height:'100%',borderRadius:24.5,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:600,color:'#fff'}}>{initials.toUpperCase()}</div>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase'}}>{profile.role==='coach'?(profile.isMainCoach?'Coach principal':'Coach'):'Athlète'}</div>
+          <div style={{fontSize:16,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:-0.2}}>{fullName||'Sans nom'}</div>
+          <div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.email}</div>
+        </div>
       </div>
 
-      <HoloCard intense padding={0} style={{marginBottom:18}}>
-        <div style={{padding:22,display:'flex',flexDirection:'column',alignItems:'center',position:'relative'}}>
-          <div style={{position:'absolute',inset:0,background:'radial-gradient(circle at 50% 0%,rgba(217,119,87,0.25),transparent 60%)',pointerEvents:'none',borderRadius:21}}/>
-          <div style={{position:'relative',zIndex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
-            <div style={{width:80,height:80,borderRadius:40,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-              <div style={{width:'100%',height:'100%',borderRadius:38,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:700,color:'#fff'}}>{initials.toUpperCase()}</div>
+      {/* Identité (4 champs en grid 2x2) */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+        <input style={inp} value={profile.firstName||''} onChange={e=>upd('firstName',e.target.value)} placeholder="Prénom"/>
+        <input style={inp} value={profile.lastName||''} onChange={e=>upd('lastName',e.target.value)} placeholder="Nom"/>
+        <div style={{position:'relative'}}>
+          <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.height||''} onChange={e=>upd('height',e.target.value)} placeholder="Taille"/>
+          <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>cm</span>
+        </div>
+        <div style={{position:'relative'}}>
+          <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.weight||''} onChange={e=>upd('weight',e.target.value)} placeholder="Poids"/>
+          <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>kg</span>
+        </div>
+      </div>
+
+      {/* Objectif — chips compactes */}
+      <div style={{display:'flex',gap:4,marginBottom:12,flexWrap:'wrap'}}>
+        {objectives.map(o=>(
+          <button key={o} onClick={()=>upd('objective',o)} style={{flex:'1 1 auto',height:28,padding:'0 9px',borderRadius:7,border:profile.objective===o?'1px solid transparent':'1px solid '+T.border,background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.025)',color:profile.objective===o?T.accent:T.textDim,fontSize:10.5,fontWeight:profile.objective===o?700:500,cursor:'pointer',letterSpacing:0.2,whiteSpace:'nowrap'}}>{o}</button>
+        ))}
+      </div>
+
+      {/* PR — grid 3 colonnes (au lieu de stack vertical) */}
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Records personnels</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:14}}>
+        {[
+          {k:'prSquat',l:'Squat'},
+          {k:'prBench',l:'Bench'},
+          {k:'prDeadlift',l:'SDT'},
+        ].map(p=>(
+          <div key={p.k} style={{padding:8,borderRadius:9,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border}}>
+            <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:3,textAlign:'center'}}>{p.l}</div>
+            <div style={{position:'relative'}}>
+              <input style={{...inp,paddingRight:22,padding:'5px 22px 5px 6px',fontSize:14,fontWeight:600,textAlign:'center',background:'transparent',border:'none'}} type="number" inputMode="decimal" value={profile[p.k]||''} onChange={e=>upd(p.k,e.target.value)} placeholder="—"/>
+              <span style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',fontSize:9,color:T.textFaint,pointerEvents:'none'}}>kg</span>
             </div>
-            <div style={{fontSize:18,fontWeight:700,marginTop:12,minHeight:24}}>{fullName||'—'}</div>
-            <div style={{fontSize:12,color:T.textDim,marginTop:2}}>{profile.objective||'Aucun objectif'}</div>
           </div>
-        </div>
-      </HoloCard>
-
-      <SectionHeader title="Identité"/>
-      <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:18}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <ProfileField label="Prénom" value={profile.firstName} onChange={e=>upd('firstName',e.target.value)}/>
-          <ProfileField label="Nom" value={profile.lastName} onChange={e=>upd('lastName',e.target.value)}/>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <ProfileField label="Taille" value={profile.height} onChange={e=>upd('height',e.target.value)} suffix="cm" type="number" inputMode="decimal"/>
-          <ProfileField label="Poids" value={profile.weight} onChange={e=>upd('weight',e.target.value)} suffix="kg" type="number" inputMode="decimal"/>
-        </div>
-        <div>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Objectif</div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {objectives.map(o=>(
-              <button key={o} onClick={()=>upd('objective',o)} style={{height:34,padding:'0 12px',borderRadius:10,border:profile.objective===o?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.03)',color:profile.objective===o?T.accent:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>{o}</button>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
-
-      <SectionHeader title="Records personnels (PR)"/>
-      <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:24}}>
-        <ProfileField label="Squat" value={profile.prSquat} onChange={e=>upd('prSquat',e.target.value)} suffix="kg" type="number" inputMode="decimal"/>
-        <ProfileField label="Développé couché" value={profile.prBench} onChange={e=>upd('prBench',e.target.value)} suffix="kg" type="number" inputMode="decimal"/>
-        <ProfileField label="Soulevé de terre" value={profile.prDeadlift} onChange={e=>upd('prDeadlift',e.target.value)} suffix="kg" type="number" inputMode="decimal"/>
-      </div>
-
-      <SectionHeader title="Compte"/>
-      <GlassCard padding={14} style={{marginBottom:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <Icon name="user" size={18} stroke={T.textDim}/>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:11,color:T.textFaint,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase'}}>
-              {profile.role==='coach'?(profile.isMainCoach?'Coach principal':'Coach'):'Athlète'}
-            </div>
-            <div style={{fontSize:13,fontWeight:600,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.email}</div>
-          </div>
-        </div>
-      </GlassCard>
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
       <InstallPrompt/>
-      <button onClick={onLogout} style={{width:'100%',height:46,borderRadius:14,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-        <Icon name="x" size={16} stroke={T.danger}/> Se déconnecter
+
+      <button onClick={onLogout} style={{width:'100%',height:38,borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3}}>
+        <Icon name="x" size={13} stroke={T.danger}/> Se déconnecter
       </button>
     </div>
   );
