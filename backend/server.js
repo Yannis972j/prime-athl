@@ -9,6 +9,7 @@ import http from 'http';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
+import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -66,7 +67,7 @@ async function gistSave() {
   } catch (e) { console.error('Gist save error:', e.message); }
 }
 
-// Boot: try local file first, fallback to Gist if local is empty
+// Boot: Postgres > local file > Gist
 let DATA = (() => {
   try {
     const raw = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -75,8 +76,30 @@ let DATA = (() => {
   } catch { return structuredClone(DEFAULT_DB); }
 })();
 
-if (USE_GIST && Object.keys(DATA.users).length === 0) {
-  // Local is empty → try to restore from Gist
+// Postgres : source de vérité prioritaire
+const USE_PG = pgEnabled();
+if (USE_PG) {
+  try {
+    await pgInit();
+    const pgData = await pgLoad();
+    if (pgData && Object.keys(pgData.users || {}).length > 0) {
+      DATA = pgData;
+      for (const k of Object.keys(DEFAULT_DB)) if (!DATA[k]) DATA[k] = structuredClone(DEFAULT_DB[k]);
+      console.log('[boot] Loaded from Postgres :', Object.keys(DATA.users).length, 'users');
+    } else if (Object.keys(DATA.users).length > 0) {
+      // 1re migration : on a un local mais pas encore de PG
+      await pgSave(DATA);
+      console.log('[boot] Migrated local data to Postgres');
+    } else {
+      console.log('[boot] Postgres empty, starting fresh');
+    }
+  } catch (e) {
+    console.error('[boot] Postgres init failed:', e.message);
+  }
+}
+
+// Fallback Gist (uniquement si pas de Postgres ET local vide)
+if (!USE_PG && USE_GIST && Object.keys(DATA.users).length === 0) {
   console.log('Local empty, restoring from Gist...');
   const restored = await gistFetch();
   if (restored && Object.keys(restored.users || {}).length > 0) {
@@ -124,8 +147,10 @@ await ensureMainCoach();
 
 let saveTimer = null;
 let gistSaveTimer = null;
+let pgSaveTimer = null;
 let saving = false;
 function persist() {
+  // Save local file (fast, sync-safe)
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     if (saving) return;
@@ -137,11 +162,33 @@ function persist() {
     } catch (e) { console.error('persist error:', e); }
     saving = false;
   }, 200);
-  // Backup to Gist (debounced to 8s to limit API calls)
-  if (USE_GIST) {
+  // Postgres : debounce 2s, source de vérité durable
+  if (USE_PG) {
+    if (pgSaveTimer) clearTimeout(pgSaveTimer);
+    pgSaveTimer = setTimeout(() => {
+      pgSave(DATA).catch(e => console.error('[pg] save error:', e.message));
+    }, 2000);
+  }
+  // Gist : ne tourne que si PAS de Postgres (legacy fallback)
+  if (!USE_PG && USE_GIST) {
     if (gistSaveTimer) clearTimeout(gistSaveTimer);
     gistSaveTimer = setTimeout(() => { gistSave(); }, 8000);
   }
+}
+
+// ── Daily auto-backup (Postgres uniquement) ─────────
+if (USE_PG) {
+  const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 backup par 24h
+  const KEEP_BACKUPS = 30; // 30 jours d'historique
+  const runBackup = async () => {
+    try {
+      const b = await pgBackup(DATA, 'auto-daily');
+      await pgRotateBackups(KEEP_BACKUPS);
+      console.log('[backup] Snapshot taken id=' + (b && b.id) + ' (keep last ' + KEEP_BACKUPS + ')');
+    } catch (e) { console.error('[backup] error:', e.message); }
+  };
+  setInterval(runBackup, BACKUP_INTERVAL_MS);
+  setTimeout(runBackup, 5 * 60 * 1000); // 1er backup 5 min après le boot (le temps que le serveur soit stable)
 }
 
 // ── Helpers ─────────────────────────────────────────
@@ -560,10 +607,62 @@ app.get('/api/health', (req, res) => {
     uptime: Math.round(process.uptime()),
     users: Object.keys(DATA.users).length,
     dbPath: DB_PATH,
-    persistent: DB_PATH.startsWith('/data') || USE_GIST,
-    storage: USE_GIST ? 'gist' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral'),
+    persistent: USE_PG || DB_PATH.startsWith('/data') || USE_GIST,
+    storage: USE_PG ? 'postgres' : (USE_GIST ? 'gist' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral')),
     timestamp: Date.now(),
   });
+});
+
+// ── Postgres backups (main coach only) ──────────────
+app.get('/api/admin/pg-backups', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
+  if (!USE_PG) return res.status(400).json({ error: 'pg_not_configured' });
+  try { res.json({ backups: await pgListBackups(60) }); }
+  catch (e) { res.status(500).json({ error: 'list_failed', detail: e.message }); }
+});
+
+// Take a manual snapshot now
+app.post('/api/admin/pg-backup', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
+  if (!USE_PG) return res.status(400).json({ error: 'pg_not_configured' });
+  try {
+    const b = await pgBackup(DATA, 'manual');
+    await pgRotateBackups(30);
+    res.json({ ok: true, id: b.id, created_at: b.created_at });
+  } catch (e) { res.status(500).json({ error: 'backup_failed', detail: e.message }); }
+});
+
+// Restore from a specific backup id
+app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
+  if (!USE_PG) return res.status(400).json({ error: 'pg_not_configured' });
+  try {
+    const b = await pgGetBackup(parseInt(req.params.id, 10));
+    if (!b) return res.status(404).json({ error: 'backup_not_found' });
+    const body = b.data;
+    if (!body || !body.users) return res.status(400).json({ error: 'invalid_backup_format' });
+    const mainBackup = Object.values(body.users).find(u => u.email === MAIN_COACH_EMAIL);
+    if (!mainBackup) return res.status(400).json({ error: 'main_coach_missing_in_backup' });
+    DATA = {
+      users: body.users || {},
+      programs: body.programs || {},
+      sessions: body.sessions || {},
+      invites: body.invites || {},
+      nutritionPrograms: body.nutritionPrograms || {},
+      nutritionLogs: body.nutritionLogs || {},
+    };
+    persist();
+    res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
+  } catch (e) { res.status(500).json({ error: 'restore_failed', detail: e.message }); }
+});
+
+// Download a backup as JSON file
+app.get('/api/admin/pg-backup/:id', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
+  if (!USE_PG) return res.status(400).json({ error: 'pg_not_configured' });
+  try {
+    const b = await pgGetBackup(parseInt(req.params.id, 10));
+    if (!b) return res.status(404).json({ error: 'backup_not_found' });
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="prime-athl-backup-${b.id}.json"`);
+    res.send(JSON.stringify(b.data, null, 2));
+  } catch (e) { res.status(500).json({ error: 'download_failed', detail: e.message }); }
 });
 
 // Manual backup trigger (main coach only)
