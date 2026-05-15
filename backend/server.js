@@ -409,6 +409,40 @@ app.post('/api/coach/athletes/:id/reset', authRequired, coachOnly, (req, res) =>
   res.json({ ok: true, profile: p });
 });
 
+// Coach deletes athlete's program (Excel import wipe)
+app.delete('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  delete DATA.programs[req.params.athleteId];
+  persist();
+  io.to('user:' + req.params.athleteId).emit('program-updated', { data: {}, assignedAt: null });
+  res.json({ ok: true });
+});
+
+// Coach deletes athlete's nutrition plan
+app.delete('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  delete DATA.nutritionPrograms[req.params.athleteId];
+  persist();
+  io.to('user:' + req.params.athleteId).emit('nutrition-updated', { plan: null, assignedAt: null });
+  res.json({ ok: true });
+});
+
+// User deletes their OWN program / nutrition (coach for himself)
+app.delete('/api/my-program', authRequired, (req, res) => {
+  delete DATA.programs[req.user.id];
+  persist();
+  io.to('user:' + req.user.id).emit('program-updated', { data: {}, assignedAt: null });
+  res.json({ ok: true });
+});
+app.delete('/api/my-nutrition', authRequired, (req, res) => {
+  delete DATA.nutritionPrograms[req.user.id];
+  persist();
+  io.to('user:' + req.user.id).emit('nutrition-updated', { plan: null, assignedAt: null });
+  res.json({ ok: true });
+});
+
 app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });

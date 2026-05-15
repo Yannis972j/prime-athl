@@ -437,9 +437,13 @@ const DEFAULT_WORKOUT={
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError) {
   const reader = new FileReader();
+  reader.onerror = () => onError('Lecture du fichier impossible');
   reader.onload = ev => {
     try {
-      const wb = XLSX.read(ev.target.result, {type:'binary', raw:true});
+      if (typeof XLSX === 'undefined') { onError('Librairie Excel non chargée (SheetJS). Recharge la page.'); return; }
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array', raw:true, cellDates:false});
+      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) { onError('Fichier Excel vide ou illisible'); return; }
       const programs = {};
       const DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
       const uid = () => Math.random().toString(36).slice(2);
@@ -549,11 +553,11 @@ function parseYannisExcel(file, onSuccess, onError) {
         if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
       });
 
-      if (!Object.keys(programs).length) { onError('Aucun programme détecté.'); return; }
+      if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
       onSuccess(programs);
-    } catch(e) { onError(e.message); }
+    } catch(e) { onError('Excel invalide : ' + (e.message || e)); }
   };
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function excelExport(workout) {
@@ -2196,7 +2200,14 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition · Aujourd'hui</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>{profile&&profile.firstName?profile.firstName:'Mon plan'}</HoloText></div>
           {isCoach&&(
-            <button onClick={()=>fileRef.current.click()} style={{marginTop:8,padding:'6px 12px',borderRadius:9,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:0.3}}>↻ Réimporter plan nutrition</button>
+            <div style={{display:'flex',gap:6,marginTop:8}}>
+              <button onClick={()=>fileRef.current.click()} style={{padding:'6px 12px',borderRadius:9,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:0.3}}>↻ Réimporter</button>
+              <button onClick={async()=>{
+                if(!confirm('Supprimer ton plan nutrition importé ?'))return;
+                try{await apiCall('/api/my-nutrition',{method:'DELETE'});setImportMsg('✓ Supprimé');await load();setTimeout(()=>setImportMsg(null),2500);}
+                catch(e){setImportMsg('✗ '+(e.message||e));setTimeout(()=>setImportMsg(null),5000);}
+              }} style={{padding:'6px 12px',borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:0.3}}>✕ Supprimer</button>
+            </div>
           )}
           {streak>0&&(
             <div style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,padding:'4px 10px',borderRadius:999,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.3)'}}>
@@ -2457,10 +2468,14 @@ function exportNutritionExcel(plan,athleteName){
 // Parse: 7 sheets → days dict
 function parseNutritionExcel(file,onSuccess,onError){
   const reader=new FileReader();
+  reader.onerror=()=>onError('Lecture du fichier impossible');
   reader.onload=ev=>{
     try{
-      const wb=XLSX.read(ev.target.result,{type:'binary',raw:true});
-      const normLabel=s=>String(s||'').trim().toUpperCase().replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+      if(typeof XLSX==='undefined'){onError('Librairie Excel non chargée. Recharge la page.');return;}
+      const data=new Uint8Array(ev.target.result);
+      const wb=XLSX.read(data,{type:'array',raw:true,cellDates:false});
+      if(!wb||!wb.SheetNames||wb.SheetNames.length===0){onError('Fichier Excel vide ou illisible');return;}
+      const normLabel=s=>String(s||'').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
       const findMeal=lbl=>{
         const n=normLabel(lbl);
         return NUTRI_MEAL_TEMPLATES.find(m=>normLabel(m.label)===n);
@@ -2562,10 +2577,11 @@ function parseNutritionExcel(file,onSuccess,onError){
         dailyFat:Math.round(sums.f/denom),
         days,
         _itemsImported:nbItems,
+        _sheetsFound:upperSheetNames.map(s=>s.orig).join(', '),
       });
-    }catch(e){onError(e.message);}
+    }catch(e){onError('Excel invalide : '+(e.message||e));}
   };
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 }
 
 // ── Nutrition Editor (coach) ──────────────────────────────
@@ -2764,12 +2780,23 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" style={{display:'none'}} onChange={handleExcelImport}/>
 
       {/* Excel I/O buttons */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:6,marginBottom:10}}>
         <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📥</span> Importer plan nutrition
         </button>
         <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📤</span> Exporter
+        </button>
+        <button onClick={async()=>{
+          if(!confirm(`Supprimer le plan nutrition de ${athleteName} ?`))return;
+          try{
+            await apiCall('/api/coach/nutrition/'+athleteId,{method:'DELETE'});
+            setData(normalizePlan(null));
+            setImportMsg('✓ Plan nutrition supprimé');setTimeout(()=>setImportMsg(null),3000);
+            if(onSaved)onSaved();
+          }catch(e){setImportMsg('✗ '+(e.message||e));setTimeout(()=>setImportMsg(null),5000);}
+        }} title="Supprimer le plan nutrition" style={{width:42,height:38,borderRadius:11,border:'1px solid rgba(217,119,87,0.25)',background:'rgba(217,119,87,0.06)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Icon name="trash" size={15} stroke={T.accent}/>
         </button>
       </div>
       {importMsg&&(
@@ -3400,41 +3427,72 @@ function CoachScreen({authToken,authUser}){
 
         {msg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
-        {/* Profile compact : tout tient sur une seule page */}
-        <GlassCard padding={10} style={{marginBottom:14}}>
-          <div style={{fontSize:10,color:T.textFaint,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
-            <Icon name="user" size={11} stroke={T.textFaint}/>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{a.email}</span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-            <ProfileField label="Prénom" value={a.firstName} onChange={e=>patchAthlete({firstName:e.target.value})}/>
-            <ProfileField label="Nom" value={a.lastName} onChange={e=>patchAthlete({lastName:e.target.value})}/>
-            <ProfileField label="Taille" value={a.height} onChange={e=>patchAthlete({height:e.target.value})} suffix="cm" type="number" inputMode="decimal"/>
-            <ProfileField label="Poids" value={a.weight} onChange={e=>patchAthlete({weight:e.target.value})} suffix="kg" type="number" inputMode="decimal"/>
-          </div>
-          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
-            {['Hypertrophie','Force','Perte de poids','Endurance'].map(o=>(
-              <button key={o} onClick={()=>patchAthlete({objective:o})} style={{flex:'1 1 calc(50% - 2px)',height:26,padding:'0 8px',borderRadius:7,border:a.objective===o?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:a.objective===o?T.accentSoft:'rgba(255,255,255,0.03)',color:a.objective===o?T.accent:T.textDim,fontSize:10,fontWeight:600,cursor:'pointer'}}>{o}</button>
-            ))}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:5}}>
-            <ProfileField label="Squat" value={a.prSquat} onChange={e=>patchAthlete({prSquat:e.target.value})} suffix="kg" type="number" inputMode="decimal"/>
-            <ProfileField label="Bench" value={a.prBench} onChange={e=>patchAthlete({prBench:e.target.value})} suffix="kg" type="number" inputMode="decimal"/>
-            <ProfileField label="SDT" value={a.prDeadlift} onChange={e=>patchAthlete({prDeadlift:e.target.value})} suffix="kg" type="number" inputMode="decimal"/>
-          </div>
-        </GlassCard>
+        {/* Profile compact : tout uniformisé sur une seule page */}
+        {(()=>{
+          const F=({label,value,onChange,suffix,type='text'})=>(
+            <div style={{display:'flex',flexDirection:'column',gap:2}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</div>
+              <div style={{display:'flex',alignItems:'center',gap:3,height:30,padding:'0 8px',borderRadius:8,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <input type={type} inputMode={type==='number'?'decimal':undefined} value={value||''} onChange={onChange}
+                  style={{flex:1,minWidth:0,width:'100%',background:'transparent',border:'none',color:T.text,fontSize:12,fontWeight:600,outline:'none',fontFamily:'inherit',padding:0}}
+                  placeholder="—"/>
+                {suffix&&<span style={{fontSize:10,color:T.textDim,fontWeight:600,flexShrink:0}}>{suffix}</span>}
+              </div>
+            </div>
+          );
+          return(
+            <GlassCard padding={10} style={{marginBottom:12}}>
+              <div style={{fontSize:10,color:T.textFaint,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
+                <Icon name="user" size={11} stroke={T.textFaint}/>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{a.email}</span>
+              </div>
+              {/* Tous les champs uniformisés en grille 2 colonnes — nom, prenom, taille, poids */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                <F label="Prénom" value={a.firstName} onChange={e=>patchAthlete({firstName:e.target.value})}/>
+                <F label="Nom" value={a.lastName} onChange={e=>patchAthlete({lastName:e.target.value})}/>
+                <F label="Taille" value={a.height} onChange={e=>patchAthlete({height:e.target.value})} suffix="cm" type="number"/>
+                <F label="Poids" value={a.weight} onChange={e=>patchAthlete({weight:e.target.value})} suffix="kg" type="number"/>
+              </div>
+              {/* PR — squat, bench, sdt — mêmes inputs que poids/taille */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
+                <F label="Squat" value={a.prSquat} onChange={e=>patchAthlete({prSquat:e.target.value})} suffix="kg" type="number"/>
+                <F label="Bench" value={a.prBench} onChange={e=>patchAthlete({prBench:e.target.value})} suffix="kg" type="number"/>
+                <F label="SDT" value={a.prDeadlift} onChange={e=>patchAthlete({prDeadlift:e.target.value})} suffix="kg" type="number"/>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4}}>
+                {['Hypertrophie','Force','Perte','Endurance'].map((o,i)=>{
+                  const full=['Hypertrophie','Force','Perte de poids','Endurance'][i];
+                  return(
+                    <button key={o} onClick={()=>patchAthlete({objective:full})} style={{height:26,padding:'0 4px',borderRadius:7,border:a.objective===full?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:a.objective===full?T.accentSoft:'rgba(255,255,255,0.03)',color:a.objective===full?T.accent:T.textDim,fontSize:10,fontWeight:600,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o}</button>
+                  );
+                })}
+              </div>
+            </GlassCard>
+          );
+        })()}
 
         {/* Program section — bouton import + miroir séance de l'athlète */}
         <SectionHeader title="Séance" right={a.program?.assignedAt?<span style={{fontSize:10,color:T.textFaint}}>maj {new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}</span>:null}/>
-        <button onClick={()=>fileRef.current.click()} style={{width:'100%',marginBottom:12,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(217,119,87,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
-          <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(217,119,87,0.12)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
-            {programDays>0?'📋':'📥'}
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer séance'}</div>
-            <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?'Tape pour remplacer le programme Excel':'Excel du programme musculation'}</div>
-          </div>
-        </button>
+        <div style={{display:'flex',gap:6,marginBottom:12}}>
+          <button onClick={()=>fileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(217,119,87,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+            <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(217,119,87,0.12)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
+              {programDays>0?'📋':'📥'}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer séance'}</div>
+              <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?'Tape pour remplacer le programme Excel':'Excel du programme musculation'}</div>
+            </div>
+          </button>
+          {programDays>0&&(
+            <button onClick={async()=>{
+              if(!confirm(`Supprimer le programme importé pour ${a.firstName||a.email.split('@')[0]} ?`))return;
+              try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}
+              catch(e){flash('✗ '+(e.message||e));}
+            }} title="Supprimer le programme" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(217,119,87,0.25)',background:'rgba(217,119,87,0.06)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <Icon name="trash" size={16} stroke={T.accent}/>
+            </button>
+          )}
+        </div>
         {programDays>0&&<CoachProgramMirror athleteData={a}/>}
 
         {/* Nutrition — 2 modes, défaut = miroir si plan, sinon édition */}
