@@ -14,22 +14,24 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
   html,body,#root{height:100%;margin:0}
-  body{font-family:'Space Grotesk',-apple-system,system-ui,sans-serif;background:#06060a;color:#f5f5f7;-webkit-font-smoothing:antialiased}
+  body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#0a0a0e;color:#f0f0f2;-webkit-font-smoothing:antialiased;letter-spacing:-0.011em;font-feature-settings:'ss01','cv11'}
   ::-webkit-scrollbar{width:0;height:0}
   @keyframes holoShift{0%{background-position:0% 50%}100%{background-position:200% 50%}}
   @keyframes holoText{0%{background-position:0% 50%}100%{background-position:200% 50%}}
   @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-  @keyframes celebrationPop{0%{transform:scale(0.6);opacity:0}50%{transform:scale(1.05);opacity:1}100%{transform:scale(1);opacity:1}}
+  @keyframes celebrationPop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.02);opacity:1}100%{transform:scale(1);opacity:1}}
   @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,255,198,0.7),0 0 0 0 rgba(0,255,198,0.4)}70%{box-shadow:0 0 0 8px rgba(0,255,198,0),0 0 0 12px rgba(0,255,198,0)}100%{box-shadow:0 0 0 0 rgba(0,255,198,0),0 0 0 0 rgba(0,255,198,0)}}
-  @keyframes countPop{0%{transform:scale(1)}25%{transform:scale(1.4)}50%{transform:scale(0.9)}100%{transform:scale(1)}}
-  @keyframes tabFadeIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
-  .tab-content{animation:tabFadeIn 0.25s cubic-bezier(.34,1.56,.64,1)}
-  button,a{transition:transform 0.12s ease,box-shadow 0.12s ease,background 0.15s ease,opacity 0.15s ease}
-  button:active{transform:scale(0.97)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,184,108,0.5)}70%{box-shadow:0 0 0 10px rgba(255,184,108,0)}100%{box-shadow:0 0 0 0 rgba(255,184,108,0)}}
+  @keyframes countPop{0%{transform:scale(1)}40%{transform:scale(1.15)}100%{transform:scale(1)}}
+  @keyframes tabFadeIn{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
+  @keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
+  .tab-content{animation:tabFadeIn 0.35s cubic-bezier(.16,1,.3,1)}
+  button,a{transition:transform 0.18s cubic-bezier(.16,1,.3,1),box-shadow 0.18s ease,background 0.2s ease,opacity 0.18s ease,border-color 0.2s ease}
+  button:active{transform:scale(0.98)}
+  button:hover:not(:disabled){opacity:0.92}
   :root{--shimmer-state:running}
   input[type=number]{-moz-appearance:textfield}
   input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -45,15 +47,30 @@
 <script type="text/babel">
 
 // ── shared ──────────────────────────────────────────────
+// Refined warm palette — luxury, less neon
 const HOLO={
-  iris:'conic-gradient(from 210deg at 50% 50%,#ff6b00 0%,#ff2e9a 18%,#b94dff 36%,#4dd0ff 55%,#00ffc6 70%,#ffd84d 85%,#ff6b00 100%)',
-  irisHorizon:'linear-gradient(90deg,#ff6b00,#ff2e9a,#b94dff,#4dd0ff,#00ffc6)',
+  // Subtle warm radial (was rainbow conic) — gives soft amber glow
+  iris:'radial-gradient(circle at 30% 30%,#ff9a4a 0%,#d97757 35%,#3a2418 70%,#0a0a0e 100%)',
+  // Single warm horizontal sweep (was rainbow)
+  irisHorizon:'linear-gradient(90deg,#d97757 0%,#ff9a4a 50%,#d97757 100%)',
 };
 const T={
-  bg:'#06060a',bgRaise:'#0d0d14',border:'rgba(255,255,255,0.08)',
-  text:'#f5f5f7',textDim:'rgba(245,245,247,0.62)',textFaint:'rgba(245,245,247,0.38)',
-  accent:'#ff6b00',accentSoft:'rgba(255,107,0,0.16)',
-  good:'#00ffc6',warn:'#ffd84d',danger:'#ff2e9a',
+  bg:'#0a0a0e',
+  bgRaise:'#13131a',
+  border:'rgba(255,255,255,0.06)',
+  text:'#f0f0f2',
+  textDim:'rgba(240,240,242,0.58)',
+  textFaint:'rgba(240,240,242,0.32)',
+  accent:'#d97757',                        // warm cognac (was bright #d97757)
+  accentSoft:'rgba(217,119,87,0.12)',
+  accentBright:'#ff9a4a',                  // brighter only for hover/active states
+  good:'#7cc4a1',                          // muted sage (was neon mint)
+  warn:'#e6c269',                          // muted gold (was bright yellow)
+  danger:'#c97586',                        // muted rose (was hot pink)
+  // Macro colors — muted versions
+  macroP:'#c97586',                        // bordeaux rose (was #c97586)
+  macroC:'#7ca8c4',                        // steel blue (was #7ca8c4)
+  macroL:'#c2a042',                        // gold (was #c2a042)
 };
 
 // ── Exercise images (free-exercise-db on GitHub) ────────────
@@ -147,8 +164,8 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
 function HoloCard({children,intense=false,style={},onClick,padding=18}){
   return(
     <div onClick={onClick} style={{position:'relative',borderRadius:22,padding:1,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 12s linear infinite',cursor:onClick?'pointer':'default',...style}}>
-      <div style={{position:'relative',borderRadius:21,background:intense?'linear-gradient(160deg,rgba(255,107,0,0.12),rgba(20,20,28,0.92) 60%)':'linear-gradient(160deg,rgba(28,28,40,0.95),rgba(12,12,18,0.95))',padding,overflow:'hidden'}}>
-        <div style={{position:'absolute',inset:0,pointerEvents:'none',background:'radial-gradient(120% 80% at 0% 0%,rgba(255,107,0,0.10),transparent 40%),radial-gradient(120% 80% at 100% 100%,rgba(77,208,255,0.06),transparent 50%)'}}/>
+      <div style={{position:'relative',borderRadius:21,background:intense?'linear-gradient(160deg,rgba(217,119,87,0.12),rgba(20,20,28,0.92) 60%)':'linear-gradient(160deg,rgba(28,28,40,0.95),rgba(12,12,18,0.95))',padding,overflow:'hidden'}}>
+        <div style={{position:'absolute',inset:0,pointerEvents:'none',background:'radial-gradient(120% 80% at 0% 0%,rgba(217,119,87,0.10),transparent 40%),radial-gradient(120% 80% at 100% 100%,rgba(124,168,196,0.06),transparent 50%)'}}/>
         <div style={{position:'relative'}}>{children}</div>
       </div>
     </div>
@@ -157,7 +174,7 @@ function HoloCard({children,intense=false,style={},onClick,padding=18}){
 
 function GlassCard({children,style={},onClick,padding=16,accent=false}){
   return(
-    <div onClick={onClick} style={{position:'relative',borderRadius:20,padding,background:accent?'linear-gradient(160deg,rgba(255,107,0,0.18),rgba(255,46,154,0.06) 60%,rgba(20,20,28,0.6))':'linear-gradient(160deg,rgba(28,28,40,0.8),rgba(14,14,20,0.8))',border:`1px solid ${accent?'rgba(255,107,0,0.35)':T.border}`,boxShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',cursor:onClick?'pointer':'default',...style}}>{children}</div>
+    <div onClick={onClick} style={{position:'relative',borderRadius:20,padding,background:accent?'linear-gradient(160deg,rgba(217,119,87,0.18),rgba(201,117,134,0.06) 60%,rgba(20,20,28,0.6))':'linear-gradient(160deg,rgba(28,28,40,0.8),rgba(14,14,20,0.8))',border:`1px solid ${accent?'rgba(217,119,87,0.35)':T.border}`,boxShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',cursor:onClick?'pointer':'default',...style}}>{children}</div>
   );
 }
 
@@ -607,24 +624,24 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
             <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Modifier</div>
             <div style={{fontSize:15,fontWeight:700}}>Séance</div>
           </div>
-          <button onClick={onClose} style={{height:34,padding:'0 14px',borderRadius:17,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+          <button onClick={onClose} style={{height:34,padding:'0 14px',borderRadius:17,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
             Terminer
           </button>
         </div>
 
         {/* Excel import / export row */}
         <div style={{display:'flex',gap:8,marginTop:14}}>
-          <button onClick={()=>fileRef.current.click()} style={{flex:1,height:38,borderRadius:12,border:'1px solid rgba(77,208,255,0.4)',background:'rgba(77,208,255,0.08)',color:'#4dd0ff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          <button onClick={()=>fileRef.current.click()} style={{flex:1,height:38,borderRadius:12,border:'1px solid rgba(124,168,196,0.4)',background:'rgba(124,168,196,0.08)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
             <span style={{fontSize:15}}>📥</span> Importer Excel
           </button>
-          <button onClick={()=>excelExport(workout)} style={{flex:1,height:38,borderRadius:12,border:'1px solid rgba(0,255,198,0.4)',background:'rgba(0,255,198,0.08)',color:T.good,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          <button onClick={()=>excelExport(workout)} style={{flex:1,height:38,borderRadius:12,border:'1px solid rgba(124,196,161,0.4)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
             <span style={{fontSize:15}}>📤</span> Exporter Excel
           </button>
         </div>
 
         {/* import feedback */}
         {importMsg && (
-          <div style={{marginTop:8,padding:'8px 12px',borderRadius:10,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>
+          <div style={{marginTop:8,padding:'8px 12px',borderRadius:10,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>
             {importMsg}
           </div>
         )}
@@ -654,7 +671,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
                   <input style={inpStyle('100%',15)} value={ex.name} onChange={e=>updEx(ei,{name:e.target.value})} placeholder="Nom de l'exercice"/>
                   <input style={{...inpStyle('100%',12),marginTop:6,fontWeight:500,color:T.textDim}} value={ex.muscle} onChange={e=>updEx(ei,{muscle:e.target.value})} placeholder="Groupe musculaire"/>
                 </div>
-                <button onClick={()=>delEx(ei)} style={{width:34,height:34,borderRadius:10,border:'1px solid rgba(255,46,154,0.3)',background:'rgba(255,46,154,0.08)',color:T.danger,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2}}>
+                <button onClick={()=>delEx(ei)} style={{width:34,height:34,borderRadius:10,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:T.danger,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2}}>
                   <Icon name="trash" size={15} stroke={T.danger}/>
                 </button>
               </div>
@@ -694,7 +711,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
         ))}
 
         {/* add exercise */}
-        <button onClick={addEx} style={{width:'100%',height:52,borderRadius:16,border:'1px dashed rgba(255,107,0,0.4)',background:'rgba(255,107,0,0.04)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button onClick={addEx} style={{width:'100%',height:52,borderRadius:16,border:'1px dashed rgba(217,119,87,0.4)',background:'rgba(217,119,87,0.04)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           <Icon name="plus" size={18} stroke={T.accent}/>
           Ajouter un exercice
         </button>
@@ -706,17 +723,17 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
 // ── Session Screen ────────────────────────────────────────
 // Coach intelligence : returns {label,type,color,bg} for a validated set
 function coachFeedback({reps,weight,target},prevSet,isNewPR){
-  if(isNewPR)return{label:'🏆 Nouveau PR',type:'pr',color:'#ffd84d',bg:'rgba(255,216,77,0.16)'};
+  if(isNewPR)return{label:'🏆 Nouveau PR',type:'pr',color:'#c2a042',bg:'rgba(194,160,66,0.16)'};
   if(prevSet){
     const dr=(reps||0)-(prevSet.reps||0);
     const dw=(weight||0)-(prevSet.weight||0);
-    if(dr>0)return{label:`+${dr} rep${dr>1?'s':''} 💪`,type:'up',color:'#00ffc6',bg:'rgba(0,255,198,0.14)'};
-    if(dr===0&&dw>0)return{label:`Même perf à +${dw}kg ✨`,type:'up',color:'#00ffc6',bg:'rgba(0,255,198,0.14)'};
-    if(dr<0)return{label:`${dr} rep${dr<-1?'s':''}, t'as pas baissé la garde`,type:'down',color:'#ffd84d',bg:'rgba(255,216,77,0.12)'};
-    if(dw<0)return{label:`Même perf à -${-dw}kg`,type:'neutral',color:'#4dd0ff',bg:'rgba(77,208,255,0.12)'};
-    return{label:'Même perf qu\'avant ➝ pousse + la prochaine',type:'neutral',color:'#4dd0ff',bg:'rgba(77,208,255,0.12)'};
+    if(dr>0)return{label:`+${dr} rep${dr>1?'s':''} 💪`,type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
+    if(dr===0&&dw>0)return{label:`Même perf à +${dw}kg ✨`,type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
+    if(dr<0)return{label:`${dr} rep${dr<-1?'s':''}, t'as pas baissé la garde`,type:'down',color:'#c2a042',bg:'rgba(194,160,66,0.12)'};
+    if(dw<0)return{label:`Même perf à -${-dw}kg`,type:'neutral',color:'#7ca8c4',bg:'rgba(124,168,196,0.12)'};
+    return{label:'Même perf qu\'avant ➝ pousse + la prochaine',type:'neutral',color:'#7ca8c4',bg:'rgba(124,168,196,0.12)'};
   }
-  if(target&&reps>=target)return{label:'🎯 Objectif validé',type:'up',color:'#00ffc6',bg:'rgba(0,255,198,0.14)'};
+  if(target&&reps>=target)return{label:'🎯 Objectif validé',type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
   return null;
 }
 
@@ -844,7 +861,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
 
   if(showCelebration){
     const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-    const confettiColors=['#ff6b00','#ff2e9a','#b94dff','#4dd0ff','#00ffc6','#ffd84d'];
+    const confettiColors=['#d97757','#c97586','#8e6cb6','#7ca8c4','#7cc4a1','#c2a042'];
     return(
       <div style={{height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,position:'relative',overflow:'hidden',color:T.text}}>
         {/* confetti */}
@@ -882,7 +899,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           </div>
           <div style={{display:'flex',gap:10,justifyContent:'center'}}>
             <button onClick={()=>setShowCelebration(false)} style={{height:46,padding:'0 18px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>Continuer</button>
-            <button onClick={finishAndClose} style={{height:46,padding:'0 26px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(255,107,0,0.4)',display:'flex',alignItems:'center',gap:6}}>
+            <button onClick={finishAndClose} style={{height:46,padding:'0 26px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.4)',display:'flex',alignItems:'center',gap:6}}>
               <Icon name="check" size={16} stroke="#fff" strokeWidth={2.4}/> Terminer
             </button>
           </div>
@@ -903,7 +920,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
             <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{workout.name}</div>
             <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',letterSpacing:-0.2,marginTop:1}}>{fmt(sessionTime)}</div>
           </div>
-          <button onClick={()=>setEditMode(true)} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(255,107,0,0.35)',background:T.accentSoft,color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <button onClick={()=>setEditMode(true)} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(217,119,87,0.35)',background:T.accentSoft,color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <Icon name="edit" size={16} stroke={T.accent}/>
           </button>
         </div>
@@ -911,7 +928,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
         <div style={{display:'flex',gap:4,marginTop:14}}>
           {exercises.map((e,i)=>{
             const done=e.sets.every(s=>s.done);const active=i===currentEx;const partial=e.sets.some(s=>s.done)&&!done;
-            return <div key={i} style={{flex:1,height:3,borderRadius:2,background:done?T.accent:active?'transparent':partial?'rgba(255,107,0,0.4)':'rgba(255,255,255,0.08)',backgroundImage:active?HOLO.irisHorizon:'none',backgroundSize:'200% 100%',animation:active?'holoText 4s linear infinite':'none'}}/>;
+            return <div key={i} style={{flex:1,height:3,borderRadius:2,background:done?T.accent:active?'transparent':partial?'rgba(217,119,87,0.4)':'rgba(255,255,255,0.08)',backgroundImage:active?HOLO.irisHorizon:'none',backgroundSize:'200% 100%',animation:active?'holoText 4s linear infinite':'none'}}/>;
           })}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',marginTop:8,fontSize:11,color:T.textDim,fontWeight:600}}>
@@ -952,12 +969,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 return(
                   <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
                     {prev&&(
-                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(77,208,255,0.10)',border:'1px solid rgba(77,208,255,0.3)',color:'#4dd0ff',fontSize:11,fontWeight:600}}>
+                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(124,168,196,0.10)',border:'1px solid rgba(124,168,196,0.3)',color:'#7ca8c4',fontSize:11,fontWeight:600}}>
                         ↺ Dernière : {prev.sets.map(s=>`${s.weight||'?'}×${s.reps||'?'}`).slice(0,3).join(' · ')} <span style={{opacity:0.6}}>· {prev.dateStr}</span>
                       </div>
                     )}
                     {pr&&(
-                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(255,216,77,0.12)',border:'1px solid rgba(255,216,77,0.3)',color:'#ffd84d',fontSize:11,fontWeight:700}}>
+                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(194,160,66,0.12)',border:'1px solid rgba(194,160,66,0.3)',color:'#c2a042',fontSize:11,fontWeight:700}}>
                         🏆 PR {pr.weight}×{pr.reps}
                       </div>
                     )}
@@ -973,7 +990,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                   const flash=setFlash&&setFlash.exId===ex.id&&setFlash.si===i?setFlash.fb:null;
                   return(
                     <div key={i}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 8px 8px 12px',borderRadius:14,background:s.done?'rgba(255,107,0,0.08)':isNext?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.02)',border:`1px solid ${s.done?'rgba(255,107,0,0.25)':isNext?'rgba(255,107,0,0.3)':'rgba(255,255,255,0.06)'}`,boxShadow:isNext?'0 0 0 3px rgba(255,107,0,0.08)':'none'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 8px 8px 12px',borderRadius:14,background:s.done?'rgba(217,119,87,0.08)':isNext?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.02)',border:`1px solid ${s.done?'rgba(217,119,87,0.25)':isNext?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,boxShadow:isNext?'0 0 0 3px rgba(217,119,87,0.08)':'none'}}>
                         <div style={{width:26,height:26,borderRadius:7,background:s.done?T.accent:'rgba(255,255,255,0.06)',color:s.done?'#000':T.textDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>
                           {s.done?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
                         </div>
@@ -988,7 +1005,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                           {s.target&&<span style={{fontSize:10,color:T.textFaint,marginLeft:4}}>/{s.target}</span>}
                         </div>
                         {!s.done?(
-                          <button onClick={()=>validateSet(i)} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#ff6b00,#ff2e9a)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(255,107,0,0.4)':'none'}}>
+                          <button onClick={()=>validateSet(i)} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none'}}>
                             <Icon name="check" size={17} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.6:2}/>
                           </button>
                         ):(
@@ -1040,7 +1057,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           <button disabled={currentEx===0} onClick={()=>setCurrentEx(i=>Math.max(0,i-1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:currentEx===0?T.textFaint:T.text,fontSize:13,fontWeight:600,cursor:currentEx===0?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===0?0.4:1}}>
             <Icon name="chevronLeft" size={15}/>Précédent
           </button>
-          <button disabled={currentEx===exercises.length-1} onClick={()=>setCurrentEx(i=>Math.min(exercises.length-1,i+1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(255,107,0,0.4)',background:T.accentSoft,color:T.accent,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===exercises.length-1?0.4:1}}>
+          <button disabled={currentEx===exercises.length-1} onClick={()=>setCurrentEx(i=>Math.min(exercises.length-1,i+1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(217,119,87,0.4)',background:T.accentSoft,color:T.accent,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===exercises.length-1?0.4:1}}>
             Suivant<Icon name="chevronRight" size={15} stroke={T.accent}/>
           </button>
         </div>
@@ -1051,7 +1068,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           {exercises.map((e,i)=>{
             const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
             return(
-              <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?'rgba(255,107,0,0.3)':'rgba(255,255,255,0.06)'}`,background:isActive?'rgba(255,107,0,0.06)':'rgba(255,255,255,0.025)',cursor:'pointer'}}>
+              <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,background:isActive?'rgba(217,119,87,0.06)':'rgba(255,255,255,0.025)',cursor:'pointer'}}>
                 <div style={{width:28,height:28,borderRadius:8,background:isDone?T.accent:isActive?'transparent':'rgba(255,255,255,0.06)',backgroundImage:isActive?HOLO.iris:'none',backgroundSize:'200% 200%',animation:isActive?'holoShift 6s linear infinite':'none',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
                   {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
                 </div>
@@ -1072,11 +1089,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           <div style={{borderRadius:21,padding:'14px 16px',background:'linear-gradient(160deg,rgba(40,28,32,0.96),rgba(14,14,20,0.98))',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',display:'flex',alignItems:'center',gap:14}}>
             <div style={{position:'relative',width:80,height:80,flexShrink:0}}>
               <svg width="80" height="80" viewBox="0 0 84 84" style={{transform:'rotate(-90deg)'}}>
-                <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#ff6b00"/><stop offset="50%" stopColor="#ff2e9a"/><stop offset="100%" stopColor="#b94dff"/></linearGradient></defs>
+                <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#d97757"/><stop offset="50%" stopColor="#c97586"/><stop offset="100%" stopColor="#8e6cb6"/></linearGradient></defs>
                 <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6"/>
                 <circle cx="42" cy="42" r="36" fill="none" stroke="url(#rg)" strokeWidth="6" strokeLinecap="round"
                   strokeDasharray={2*Math.PI*36} strokeDashoffset={2*Math.PI*36*(1-(restTotal-restSeconds)/restTotal)}
-                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 6px rgba(255,107,0,0.6))'}}/>
+                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 6px rgba(217,119,87,0.6))'}}/>
               </svg>
               <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
                 <div style={{fontSize:8,color:T.textDim,fontWeight:600,textTransform:'uppercase'}}>Repos</div>
@@ -1088,7 +1105,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               <div style={{fontSize:13,fontWeight:700,marginTop:4,lineHeight:1.2}}>Préparation — série {ex.sets.findIndex(s=>!s.done)+1}</div>
               <div style={{display:'flex',gap:6,marginTop:10}}>
                 <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+30s</button>
-                <button onClick={()=>setRestSeconds(0)} style={{flex:1,height:32,borderRadius:10,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Passer</button>
+                <button onClick={()=>setRestSeconds(0)} style={{flex:1,height:32,borderRadius:10,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Passer</button>
               </div>
             </div>
           </div>
@@ -1111,7 +1128,7 @@ function DashboardScreen({workout,onStart,onEdit,onTab}){
           <div style={{fontSize:13,color:T.textDim,fontWeight:500}}>Vendredi 10 mai</div>
           <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,marginTop:2,lineHeight:1.1}}>Salut, <HoloText>Léo</HoloText></div>
         </div>
-        <div style={{width:44,height:44,borderRadius:22,background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:16,boxShadow:'0 6px 20px rgba(255,107,0,0.45)'}}>L</div>
+        <div style={{width:44,height:44,borderRadius:22,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:16,boxShadow:'0 6px 20px rgba(217,119,87,0.45)'}}>L</div>
       </div>
 
       <HoloCard intense padding={0} style={{marginBottom:18}}>
@@ -1131,10 +1148,10 @@ function DashboardScreen({workout,onStart,onEdit,onTab}){
               <StatBox label="Durée" value="~55" suffix="min"/>
             </div>
             <div style={{display:'flex',gap:10,marginTop:20}}>
-              <button onClick={onStart} style={{flex:1,height:50,border:'none',borderRadius:15,cursor:'pointer',background:'linear-gradient(135deg,#ff6b00,#ff2e9a 80%)',color:'#fff',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 10px 30px rgba(255,107,0,0.4)'}}>
+              <button onClick={onStart} style={{flex:1,height:50,border:'none',borderRadius:15,cursor:'pointer',background:'linear-gradient(135deg,#d97757,#c97586 80%)',color:'#fff',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 10px 30px rgba(217,119,87,0.4)'}}>
                 <Icon name="play" size={17} stroke="#fff"/>Commencer
               </button>
-              <button onClick={onEdit} style={{width:50,height:50,border:'1px solid rgba(255,107,0,0.35)',borderRadius:15,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <button onClick={onEdit} style={{width:50,height:50,border:'1px solid rgba(217,119,87,0.35)',borderRadius:15,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Icon name="edit" size={18} stroke={T.accent}/>
               </button>
             </div>
@@ -1187,7 +1204,7 @@ function DayCell({day,state,active}){
   const isDone=state===1,isToday=state===2||active,isMissed=state===0;
   return(<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,flex:1}}>
     <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4}}>{day}</div>
-    <div style={{width:34,height:34,borderRadius:12,background:isToday?'transparent':isDone?'rgba(255,107,0,0.18)':isMissed?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.03)',border:isToday?'1.5px solid rgba(255,107,0,0.6)':isDone?'1px solid rgba(255,107,0,0.35)':'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{width:34,height:34,borderRadius:12,background:isToday?'transparent':isDone?'rgba(217,119,87,0.18)':isMissed?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.03)',border:isToday?'1.5px solid rgba(217,119,87,0.6)':isDone?'1px solid rgba(217,119,87,0.35)':'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center'}}>
       {isDone&&<Icon name="check" size={16} stroke={T.accent} strokeWidth={2.4}/>}
       {isToday&&<div style={{width:6,height:6,borderRadius:3,background:HOLO.irisHorizon,backgroundSize:'200% 100%',animation:'holoText 4s linear infinite'}}/>}
       {isMissed&&<Icon name="x" size={14} stroke={T.textFaint} strokeWidth={2}/>}
@@ -1201,7 +1218,7 @@ function MiniBarChart({data}){
     {data.map((v,i)=>(
       <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%'}}>
         <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end'}}>
-          <div style={{width:'100%',height:`${Math.max(4,(v/max)*100)}%`,background:v===0?'rgba(255,255,255,0.06)':i===5?HOLO.irisHorizon:'linear-gradient(180deg,rgba(255,107,0,0.7),rgba(255,107,0,0.25))',borderRadius:5}}/>
+          <div style={{width:'100%',height:`${Math.max(4,(v/max)*100)}%`,background:v===0?'rgba(255,255,255,0.06)':i===5?HOLO.irisHorizon:'linear-gradient(180deg,rgba(217,119,87,0.7),rgba(217,119,87,0.25))',borderRadius:5}}/>
         </div>
         <div style={{fontSize:9,color:T.textFaint,fontWeight:600}}>{['L','M','M','J','V','S','D'][i]}</div>
       </div>
@@ -1211,10 +1228,10 @@ function MiniBarChart({data}){
 
 // ── Programs ──────────────────────────────────────────────
 const PROGRAMS=[
-  {id:'ppl',name:'Push / Pull / Legs',days:6,weeks:8,level:'Intermédiaire',active:true,progress:0.42,week:3,splits:['Push','Pull','Legs','Push','Pull','Legs'],tag:'HYPERTROPHIE',accentA:'#ff6b00',accentB:'#ff2e9a'},
-  {id:'ul',name:'Upper / Lower',days:4,weeks:12,level:'Intermédiaire',active:false,splits:['Upper','Lower','Upper','Lower'],tag:'FORCE + HYPERTROPHIE',accentA:'#4dd0ff',accentB:'#b94dff'},
-  {id:'sbd',name:'Powerlifting · 5/3/1',days:4,weeks:16,level:'Avancé',active:false,splits:['Squat','Bench','Deadlift','OHP'],tag:'FORCE',accentA:'#ffd84d',accentB:'#ff6b00'},
-  {id:'fb',name:'Full Body Express',days:3,weeks:6,level:'Débutant',active:false,splits:['FB-A','FB-B','FB-C'],tag:'CONDITIONNEMENT',accentA:'#00ffc6',accentB:'#4dd0ff'},
+  {id:'ppl',name:'Push / Pull / Legs',days:6,weeks:8,level:'Intermédiaire',active:true,progress:0.42,week:3,splits:['Push','Pull','Legs','Push','Pull','Legs'],tag:'HYPERTROPHIE',accentA:'#d97757',accentB:'#c97586'},
+  {id:'ul',name:'Upper / Lower',days:4,weeks:12,level:'Intermédiaire',active:false,splits:['Upper','Lower','Upper','Lower'],tag:'FORCE + HYPERTROPHIE',accentA:'#7ca8c4',accentB:'#8e6cb6'},
+  {id:'sbd',name:'Powerlifting · 5/3/1',days:4,weeks:16,level:'Avancé',active:false,splits:['Squat','Bench','Deadlift','OHP'],tag:'FORCE',accentA:'#c2a042',accentB:'#d97757'},
+  {id:'fb',name:'Full Body Express',days:3,weeks:6,level:'Débutant',active:false,splits:['FB-A','FB-B','FB-C'],tag:'CONDITIONNEMENT',accentA:'#7cc4a1',accentB:'#7ca8c4'},
 ];
 
 function ProgramsScreen({onOpen,importedPrograms,onLoadDay,onImportPrograms}){
@@ -1258,12 +1275,12 @@ function ProgramsScreen({onOpen,importedPrograms,onLoadDay,onImportPrograms}){
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleFile}/>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6,marginBottom:14}}>
         <div><div style={{fontSize:13,color:T.textDim,fontWeight:500}}>Bibliothèque</div><div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,lineHeight:1.1}}>Programmes</div></div>
-        <button onClick={()=>fileRef.current.click()} style={{height:40,padding:'0 14px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 6px 18px rgba(255,107,0,0.4)'}}>
+        <button onClick={()=>fileRef.current.click()} style={{height:40,padding:'0 14px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 6px 18px rgba(217,119,87,0.4)'}}>
           <span style={{fontSize:14}}>📥</span> Excel
         </button>
       </div>
       {importMsg&&(
-        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>
+        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>
           {importMsg}
         </div>
       )}
@@ -1293,14 +1310,14 @@ function ProgramsScreen({onOpen,importedPrograms,onLoadDay,onImportPrograms}){
                       <div style={{fontSize:15,fontWeight:700}}>{dayName}</div>
                       <div style={{fontSize:11,color:T.textFaint,marginTop:2,fontWeight:500}}>{d.category}</div>
                     </div>
-                    <button onClick={()=>loadDay(dayName)} style={{height:32,padding:'0 16px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 12px rgba(255,107,0,0.35)'}}>
+                    <button onClick={()=>loadDay(dayName)} style={{height:32,padding:'0 16px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 12px rgba(217,119,87,0.35)'}}>
                       Charger
                     </button>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
                     {d.exercises.slice(0,5).map((ex,i)=>(
                       <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div style={{width:20,height:20,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(77,208,255,0.12)':'rgba(255,107,0,0.10)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(77,208,255,0.25)':'rgba(255,107,0,0.2)'}`,color:ex.style==='SUPERSET'?'#4dd0ff':T.accent}}>
+                        <div style={{width:20,height:20,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.12)':'rgba(217,119,87,0.10)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(124,168,196,0.25)':'rgba(217,119,87,0.2)'}`,color:ex.style==='SUPERSET'?'#7ca8c4':T.accent}}>
                           {i+1}
                         </div>
                         <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
@@ -1463,7 +1480,7 @@ function StatsScreen({history,profile}){
             {prs.map((pr,i)=>(
               <GlassCard key={pr.k} padding={14}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{width:38,height:38,borderRadius:11,background:i===0?HOLO.iris:'rgba(255,107,0,0.12)',backgroundSize:'200% 200%',animation:i===0?'holoShift 8s linear infinite':'none',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:i===0?'0 4px 14px rgba(255,107,0,0.35)':'none'}}>
+                  <div style={{width:38,height:38,borderRadius:11,background:i===0?HOLO.iris:'rgba(217,119,87,0.12)',backgroundSize:'200% 200%',animation:i===0?'holoShift 8s linear infinite':'none',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:i===0?'0 4px 14px rgba(217,119,87,0.35)':'none'}}>
                     <Icon name={i===0?'flame':'trending'} size={17} stroke={i===0?'#fff':T.accent}/>
                   </div>
                   <div style={{flex:1,fontSize:14,fontWeight:600}}>{pr.n}</div>
@@ -1528,17 +1545,17 @@ function VolumeAreaChart({data}){
       <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <defs>
           <linearGradient id="vgArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ff6b00" stopOpacity="0.55"/>
-            <stop offset="100%" stopColor="#ff6b00" stopOpacity="0"/>
+            <stop offset="0%" stopColor="#d97757" stopOpacity="0.55"/>
+            <stop offset="100%" stopColor="#d97757" stopOpacity="0"/>
           </linearGradient>
           <linearGradient id="vgLine" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#ff6b00"/>
-            <stop offset="50%" stopColor="#ff2e9a"/>
-            <stop offset="100%" stopColor="#4dd0ff"/>
+            <stop offset="0%" stopColor="#d97757"/>
+            <stop offset="50%" stopColor="#c97586"/>
+            <stop offset="100%" stopColor="#7ca8c4"/>
           </linearGradient>
         </defs>
         <path d={`${d} L ${w} ${h} L 0 ${h} Z`} fill="url(#vgArea)"/>
-        <path d={d} fill="none" stroke="url(#vgLine)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(255,107,0,0.5))'}}/>
+        <path d={d} fill="none" stroke="url(#vgLine)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(217,119,87,0.5))'}}/>
       </svg>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
         <span>il y a 30j</span><span>aujourd'hui</span>
@@ -1553,9 +1570,9 @@ function MiniAreaChart(){
   const d=pts.map((p,i)=>`${i===0?'M':'L'} ${i*step} ${h-(p/max)*h*0.85-8}`).join(' ');
   return(<div style={{marginTop:12}}>
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ff6b00" stopOpacity="0.6"/><stop offset="100%" stopColor="#ff6b00" stopOpacity="0"/></linearGradient><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#ff6b00"/><stop offset="40%" stopColor="#ff2e9a"/><stop offset="80%" stopColor="#b94dff"/><stop offset="100%" stopColor="#4dd0ff"/></linearGradient></defs>
+      <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d97757" stopOpacity="0.6"/><stop offset="100%" stopColor="#d97757" stopOpacity="0"/></linearGradient><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#d97757"/><stop offset="40%" stopColor="#c97586"/><stop offset="80%" stopColor="#8e6cb6"/><stop offset="100%" stopColor="#7ca8c4"/></linearGradient></defs>
       <path d={d+` L ${w} ${h} L 0 ${h} Z`} fill="url(#vg)"/>
-      <path d={d} fill="none" stroke="url(#lg)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(255,107,0,0.6))'}}/>
+      <path d={d} fill="none" stroke="url(#lg)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(217,119,87,0.6))'}}/>
     </svg>
     <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}><span>10 avr</span><span>20 avr</span><span>30 avr</span><span>10 mai</span></div>
   </div>);
@@ -1568,10 +1585,10 @@ function ProgressChart(){
   return(<div>
     <div style={{display:'flex',alignItems:'baseline',gap:6,marginBottom:4}}><span style={{fontSize:22,fontWeight:700}}>85<span style={{fontSize:13,color:T.textDim,fontWeight:500,marginLeft:2}}>kg × 5</span></span><span style={{fontSize:11,color:T.good,fontWeight:700,marginLeft:'auto'}}>+15kg / 12 sem</span></div>
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#4dd0ff"/><stop offset="50%" stopColor="#ff6b00"/><stop offset="100%" stopColor="#ff2e9a"/></linearGradient></defs>
+      <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#7ca8c4"/><stop offset="50%" stopColor="#d97757"/><stop offset="100%" stopColor="#c97586"/></linearGradient></defs>
       {[0.25,0.5,0.75].map(t=><line key={t} x1="0" y1={h*t} x2={w} y2={h*t} stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4"/>)}
-      <path d={d} fill="none" stroke="url(#pg)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 6px rgba(255,107,0,0.5))'}}/>
-      {pts.map((p,i)=><circle key={i} cx={i*step} cy={h-((p-min)/(max-min))*h*0.8-10} r={i===pts.length-1?5:3} fill={i===pts.length-1?'#fff':'#ff6b00'} stroke={i===pts.length-1?'#ff6b00':'none'} strokeWidth="2"/>)}
+      <path d={d} fill="none" stroke="url(#pg)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 6px rgba(217,119,87,0.5))'}}/>
+      {pts.map((p,i)=><circle key={i} cx={i*step} cy={h-((p-min)/(max-min))*h*0.8-10} r={i===pts.length-1?5:3} fill={i===pts.length-1?'#fff':'#d97757'} stroke={i===pts.length-1?'#d97757':'none'} strokeWidth="2"/>)}
     </svg>
   </div>);
 }
@@ -1634,21 +1651,21 @@ function BackupRestoreCard(){
   return(
     <div style={{marginBottom:10}}>
       <SectionHeader title="Sauvegarde des données" right={<span style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3}}>COACH PRINCIPAL</span>}/>
-      <div style={{padding:12,borderRadius:12,background:'rgba(77,208,255,0.06)',border:'1px solid rgba(77,208,255,0.2)'}}>
+      <div style={{padding:12,borderRadius:12,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.2)'}}>
         <div style={{fontSize:11,color:T.textDim,marginBottom:10,lineHeight:1.5}}>
           💡 Render Free efface les données à chaque redéploiement. Télécharge une sauvegarde avant chaque mise à jour, restaure-la ensuite.
         </div>
         <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={handleRestore}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-          <button onClick={download} disabled={busy} style={{height:38,borderRadius:10,border:'1px solid rgba(0,255,198,0.35)',background:'rgba(0,255,198,0.08)',color:T.good,fontSize:11,fontWeight:700,cursor:busy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:busy?0.5:1}}>
+          <button onClick={download} disabled={busy} style={{height:38,borderRadius:10,border:'1px solid rgba(124,196,161,0.35)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:11,fontWeight:700,cursor:busy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:busy?0.5:1}}>
             📥 Sauvegarder
           </button>
-          <button onClick={()=>fileRef.current.click()} disabled={busy} style={{height:38,borderRadius:10,border:'1px solid rgba(77,208,255,0.35)',background:'rgba(77,208,255,0.08)',color:'#4dd0ff',fontSize:11,fontWeight:700,cursor:busy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:busy?0.5:1}}>
+          <button onClick={()=>fileRef.current.click()} disabled={busy} style={{height:38,borderRadius:10,border:'1px solid rgba(124,168,196,0.35)',background:'rgba(124,168,196,0.08)',color:'#7ca8c4',fontSize:11,fontWeight:700,cursor:busy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:busy?0.5:1}}>
             📤 Restaurer
           </button>
         </div>
         {msg&&(
-          <div style={{marginTop:8,padding:'8px 11px',borderRadius:9,background:msg.type==='good'?'rgba(0,255,198,0.12)':'rgba(255,46,154,0.1)',border:`1px solid ${msg.type==='good'?'rgba(0,255,198,0.3)':'rgba(255,46,154,0.3)'}`,color:msg.type==='good'?T.good:T.danger,fontSize:11,fontWeight:600,textAlign:'center'}}>{msg.text}</div>
+          <div style={{marginTop:8,padding:'8px 11px',borderRadius:9,background:msg.type==='good'?'rgba(124,196,161,0.12)':'rgba(201,117,134,0.1)',border:`1px solid ${msg.type==='good'?'rgba(124,196,161,0.3)':'rgba(201,117,134,0.3)'}`,color:msg.type==='good'?T.good:T.danger,fontSize:11,fontWeight:600,textAlign:'center'}}>{msg.text}</div>
         )}
       </div>
     </div>
@@ -1682,7 +1699,7 @@ function InstallPrompt(){
 
   if(standalone){
     return(
-      <div style={{padding:'10px 14px',borderRadius:11,background:'rgba(0,255,198,0.08)',border:'1px solid rgba(0,255,198,0.25)',color:T.good,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+      <div style={{padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.08)',border:'1px solid rgba(124,196,161,0.25)',color:T.good,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
         <span style={{fontSize:14}}>✓</span> App installée — tu utilises Prime Athl en mode standalone
       </div>
     );
@@ -1690,8 +1707,8 @@ function InstallPrompt(){
 
   return(
     <>
-      <button onClick={install} style={{width:'100%',padding:'14px 16px',borderRadius:14,border:'1px solid rgba(77,208,255,0.35)',background:'linear-gradient(160deg,rgba(77,208,255,0.10),rgba(185,77,255,0.06))',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:12,marginBottom:10,textAlign:'left'}}>
-        <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#4dd0ff,#b94dff)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(77,208,255,0.3)'}}>
+      <button onClick={install} style={{width:'100%',padding:'14px 16px',borderRadius:14,border:'1px solid rgba(124,168,196,0.35)',background:'linear-gradient(160deg,rgba(124,168,196,0.10),rgba(185,77,255,0.06))',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:12,marginBottom:10,textAlign:'left'}}>
+        <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#7ca8c4,#8e6cb6)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(124,168,196,0.3)'}}>
           <Icon name="plus" size={16} stroke="#fff" strokeWidth={2.4}/>
         </div>
         <div style={{flex:1}}>
@@ -1721,10 +1738,10 @@ function InstallPrompt(){
                   <li>✨ Icône Prime Athl installée</li>
                 </ol>
               )}
-              <div style={{padding:12,marginTop:14,borderRadius:11,background:'rgba(255,216,77,0.08)',border:'1px solid rgba(255,216,77,0.25)',fontSize:11,color:T.warn,fontWeight:600}}>
+              <div style={{padding:12,marginTop:14,borderRadius:11,background:'rgba(194,160,66,0.08)',border:'1px solid rgba(194,160,66,0.25)',fontSize:11,color:T.warn,fontWeight:600}}>
                 💡 <b>Astuce</b> : une fois installée, fais un appui long sur l'icône → menu raccourcis (Séance · Stats · Profil · Coach)
               </div>
-              <button onClick={()=>setShowIOSHint(false)} style={{width:'100%',marginTop:16,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>OK, compris</button>
+              <button onClick={()=>setShowIOSHint(false)} style={{width:'100%',marginTop:16,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>OK, compris</button>
             </div>
           </div>
         </div>
@@ -1748,10 +1765,10 @@ function ProfileScreen({profile,onChange,onLogout}){
 
       <HoloCard intense padding={0} style={{marginBottom:18}}>
         <div style={{padding:22,display:'flex',flexDirection:'column',alignItems:'center',position:'relative'}}>
-          <div style={{position:'absolute',inset:0,background:'radial-gradient(circle at 50% 0%,rgba(255,107,0,0.25),transparent 60%)',pointerEvents:'none',borderRadius:21}}/>
+          <div style={{position:'absolute',inset:0,background:'radial-gradient(circle at 50% 0%,rgba(217,119,87,0.25),transparent 60%)',pointerEvents:'none',borderRadius:21}}/>
           <div style={{position:'relative',zIndex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
             <div style={{width:80,height:80,borderRadius:40,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-              <div style={{width:'100%',height:'100%',borderRadius:38,background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:700,color:'#fff'}}>{initials.toUpperCase()}</div>
+              <div style={{width:'100%',height:'100%',borderRadius:38,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,fontWeight:700,color:'#fff'}}>{initials.toUpperCase()}</div>
             </div>
             <div style={{fontSize:18,fontWeight:700,marginTop:12,minHeight:24}}>{fullName||'—'}</div>
             <div style={{fontSize:12,color:T.textDim,marginTop:2}}>{profile.objective||'Aucun objectif'}</div>
@@ -1802,7 +1819,7 @@ function ProfileScreen({profile,onChange,onLogout}){
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
       <InstallPrompt/>
-      <button onClick={onLogout} style={{width:'100%',height:46,borderRadius:14,border:'1px solid rgba(255,46,154,0.3)',background:'rgba(255,46,154,0.08)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+      <button onClick={onLogout} style={{width:'100%',height:46,borderRadius:14,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
         <Icon name="x" size={16} stroke={T.danger}/> Se déconnecter
       </button>
     </div>
@@ -1837,12 +1854,12 @@ const CONGRATS_MESSAGES=[
 function MotivationMarquee(){
   const items=[...MOTIVATION_QUOTES,...MOTIVATION_QUOTES];
   return(
-    <div style={{overflow:'hidden',whiteSpace:'nowrap',padding:'4px 0',position:'relative',opacity:0.7}}>
-      <div style={{position:'absolute',inset:0,background:'linear-gradient(90deg,rgba(6,6,10,1),transparent 6%,transparent 94%,rgba(6,6,10,1))',pointerEvents:'none',zIndex:1}}/>
-      <div style={{display:'inline-flex',animation:'marquee 50s linear infinite',willChange:'transform'}}>
+    <div style={{overflow:'hidden',whiteSpace:'nowrap',padding:'2px 0',position:'relative',opacity:0.45}}>
+      <div style={{position:'absolute',inset:0,background:'linear-gradient(90deg,rgba(10,10,14,1),transparent 8%,transparent 92%,rgba(10,10,14,1))',pointerEvents:'none',zIndex:1}}/>
+      <div style={{display:'inline-flex',animation:'marquee 90s linear infinite',willChange:'transform'}}>
         {items.map((q,i)=>(
-          <span key={i} style={{padding:'0 16px',fontSize:10.5,fontWeight:600,letterSpacing:0.3,backgroundImage:HOLO.irisHorizon,backgroundSize:'200% 100%',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',animation:'holoText 8s linear infinite'}}>
-            ✦ {q}
+          <span key={i} style={{padding:'0 22px',fontSize:10,fontWeight:400,letterSpacing:0.5,color:'rgba(240,240,242,0.5)',fontStyle:'italic'}}>
+            — {q}
           </span>
         ))}
       </div>
@@ -1920,7 +1937,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
       <div style={{marginBottom:16}}><MotivationMarquee/></div>
 
       {importMsg&&(
-        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
+        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
       )}
 
       {/* Resume in-progress workout */}
@@ -1933,10 +1950,10 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5}}>{workout.name}</div>
               {workout.muscles&&<div style={{fontSize:13,color:T.textDim,marginTop:4}}>{workout.muscles}</div>}
               <div style={{display:'flex',gap:10,marginTop:14}}>
-                <button onClick={onResume} style={{flex:1,height:48,border:'none',borderRadius:14,cursor:'pointer',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 8px 24px rgba(255,107,0,0.4)'}}>
+                <button onClick={onResume} style={{flex:1,height:48,border:'none',borderRadius:14,cursor:'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 8px 24px rgba(217,119,87,0.4)'}}>
                   <Icon name="play" size={16} stroke="#fff"/>Reprendre
                 </button>
-                <button onClick={onEdit} style={{width:48,height:48,border:'1px solid rgba(255,107,0,0.35)',borderRadius:14,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <button onClick={onEdit} style={{width:48,height:48,border:'1px solid rgba(217,119,87,0.35)',borderRadius:14,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
                   <Icon name="edit" size={16} stroke={T.accent}/>
                 </button>
               </div>
@@ -1960,7 +1977,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             <>
               <div style={{fontSize:18,fontWeight:700,marginBottom:6}}>Importe ton programme</div>
               <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:20,maxWidth:280,margin:'0 auto 20px'}}>Charge ton fichier Excel pour démarrer tes séances en 1 tap.</div>
-              <button onClick={()=>fileRef.current.click()} style={{height:48,padding:'0 26px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(255,107,0,0.4)',display:'inline-flex',alignItems:'center',gap:8}}>
+              <button onClick={()=>fileRef.current.click()} style={{height:48,padding:'0 26px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.4)',display:'inline-flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:16}}>📥</span> Choisir le fichier
               </button>
             </>
@@ -1996,7 +2013,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                             <Icon name="edit" size={12} stroke={T.textFaint}/>
                           </button>
                         )}
-                        <div style={{width:42,height:42,borderRadius:12,background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 14px rgba(255,107,0,0.4)'}}>
+                        <div style={{width:42,height:42,borderRadius:12,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 14px rgba(217,119,87,0.4)'}}>
                           <Icon name="play" size={16} stroke="#fff"/>
                         </div>
                       </div>
@@ -2004,7 +2021,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                     <div style={{display:'flex',flexDirection:'column',gap:5}}>
                       {d.exercises.slice(0,5).map((ex,i)=>(
                         <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{width:18,height:18,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(77,208,255,0.12)':'rgba(255,107,0,0.10)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(77,208,255,0.25)':'rgba(255,107,0,0.2)'}`,color:ex.style==='SUPERSET'?'#4dd0ff':T.accent}}>{i+1}</div>
+                          <div style={{width:18,height:18,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.12)':'rgba(217,119,87,0.10)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(124,168,196,0.25)':'rgba(217,119,87,0.2)'}`,color:ex.style==='SUPERSET'?'#7ca8c4':T.accent}}>{i+1}</div>
                           <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
                           <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}</span>
                         </div>
@@ -2032,7 +2049,7 @@ function mealStatus(meal, nowHM){
   return'past';
 }
 
-function CircleGauge({value,max,size=120,color='#ff6b00',label,suffix=''}){
+function CircleGauge({value,max,size=120,color='#d97757',label,suffix=''}){
   const pct=Math.max(0,Math.min(1,max>0?value/max:0));
   const r=size/2-8;
   const c=2*Math.PI*r;
@@ -2166,7 +2183,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition · Aujourd'hui</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>{profile&&profile.firstName?profile.firstName:'Mon plan'}</HoloText></div>
           {streak>0&&(
-            <div style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,padding:'4px 10px',borderRadius:999,background:'rgba(255,107,0,0.12)',border:'1px solid rgba(255,107,0,0.3)'}}>
+            <div style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,padding:'4px 10px',borderRadius:999,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.3)'}}>
               <span style={{fontSize:13}}>🔥</span>
               <span style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:0.3}}>{streak} JOUR{streak>1?'S':''} D'AFFILÉE</span>
             </div>
@@ -2191,7 +2208,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           const isCurDay=d===todayDayName();
           const active=d===viewDay;
           return(
-            <button key={d} onClick={()=>setViewDay(d)} style={{flexShrink:0,height:42,padding:'0 11px',borderRadius:12,border:active?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:active?(isCurDay?'linear-gradient(135deg,rgba(255,107,0,0.18),rgba(255,46,154,0.12))':T.accentSoft):'rgba(255,255,255,0.03)',color:active?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,minWidth:46,position:'relative'}}>
+            <button key={d} onClick={()=>setViewDay(d)} style={{flexShrink:0,height:42,padding:'0 11px',borderRadius:12,border:active?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:active?(isCurDay?'linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.12))':T.accentSoft):'rgba(255,255,255,0.03)',color:active?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,minWidth:46,position:'relative'}}>
               <span>{d.slice(0,3)}</span>
               <span style={{fontSize:8,color:isCurDay?T.accent:T.textFaint,fontWeight:600}}>{isCurDay?'AUJ.':hasContent?'•':''}</span>
             </button>
@@ -2203,7 +2220,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
       <HoloCard intense padding={0} style={{marginBottom:14}}>
         <div style={{padding:'18px',position:'relative',display:'flex',alignItems:'center',gap:14}}>
           <div style={{position:'absolute',top:-30,right:-30,width:160,height:160,background:HOLO.iris,opacity:0.3,filter:'blur(38px)',borderRadius:'50%',pointerEvents:'none'}}/>
-          <CircleGauge value={totals.kcal} max={dayTargets.kcal} size={130} color="#ff6b00" label="KCAL"/>
+          <CircleGauge value={totals.kcal} max={dayTargets.kcal} size={130} color="#d97757" label="KCAL"/>
           <div style={{flex:1,position:'relative'}}>
             <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{isToday?'Repas validés':'Plan '+viewDay}</div>
             <div style={{fontSize:24,fontWeight:700,marginTop:2,letterSpacing:-0.4}}>{isToday?validatedCount:totalMeals}<span style={{fontSize:14,color:T.textDim,fontWeight:500}}>/{totalMeals}</span></div>
@@ -2220,9 +2237,9 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
       {/* Macros gauges */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:18}}>
         {[
-          {label:'Protéines',val:totals.p,max:dayTargets.p,color:'#ff2e9a',short:'P'},
-          {label:'Glucides',val:totals.c,max:dayTargets.c,color:'#4dd0ff',short:'C'},
-          {label:'Lipides',val:totals.f,max:dayTargets.f,color:'#ffd84d',short:'L'},
+          {label:'Protéines',val:totals.p,max:dayTargets.p,color:'#c97586',short:'P'},
+          {label:'Glucides',val:totals.c,max:dayTargets.c,color:'#7ca8c4',short:'C'},
+          {label:'Lipides',val:totals.f,max:dayTargets.f,color:'#c2a042',short:'L'},
         ].map(m=>(
           <GlassCard key={m.label} padding={10}>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
@@ -2244,10 +2261,10 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             // Total du plan (tout ce qui est prévu)
             const planTotal=meals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
             const macros=[
-              {l:'kcal',planV:Math.round(planTotal.kcal),consoV:Math.round(totals.kcal),c:'#ff6b00'},
-              {l:'Protéines',planV:Math.round(planTotal.p),consoV:Math.round(totals.p),c:'#ff2e9a',unit:'g'},
-              {l:'Glucides',planV:Math.round(planTotal.c),consoV:Math.round(totals.c),c:'#4dd0ff',unit:'g'},
-              {l:'Lipides',planV:Math.round(planTotal.f),consoV:Math.round(totals.f),c:'#ffd84d',unit:'g'},
+              {l:'kcal',planV:Math.round(planTotal.kcal),consoV:Math.round(totals.kcal),c:'#d97757'},
+              {l:'Protéines',planV:Math.round(planTotal.p),consoV:Math.round(totals.p),c:'#c97586',unit:'g'},
+              {l:'Glucides',planV:Math.round(planTotal.c),consoV:Math.round(totals.c),c:'#7ca8c4',unit:'g'},
+              {l:'Lipides',planV:Math.round(planTotal.f),consoV:Math.round(totals.f),c:'#c2a042',unit:'g'},
             ];
             return(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -2283,26 +2300,26 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           const statusColors={now:T.accent,later:T.textFaint,past:T.danger};
           const statusLabels={now:'⏰ MAINTENANT',later:'à venir',past:'passé'};
           return(
-            <div key={m.id} style={{position:'relative',borderRadius:14,overflow:'hidden',border:`1px solid ${validated?'rgba(0,255,198,0.4)':status==='now'?'rgba(255,107,0,0.4)':T.border}`,background:validated?'rgba(0,255,198,0.06)':status==='now'?'rgba(255,107,0,0.04)':'rgba(255,255,255,0.025)',transition:'all 0.3s'}}>
+            <div key={m.id} style={{position:'relative',borderRadius:14,overflow:'hidden',border:`1px solid ${validated?'rgba(124,196,161,0.4)':status==='now'?'rgba(217,119,87,0.4)':T.border}`,background:validated?'rgba(124,196,161,0.06)':status==='now'?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.025)',transition:'all 0.3s'}}>
               <div onClick={()=>setExpandedMeal(isExpanded?null:m.id)} style={{padding:14,cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
                 <div style={{fontSize:28,opacity:validated?0.5:1,transition:'opacity 0.3s'}}>{m.emoji}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2}}>
-                    <span style={{fontSize:14,fontWeight:700,textDecoration:validated?'line-through':'none',textDecorationColor:'rgba(0,255,198,0.5)'}}>{m.label}</span>
-                    {!validated&&status==='now'&&<span style={{fontSize:8,color:T.accent,fontWeight:700,letterSpacing:0.5,padding:'2px 7px',borderRadius:6,background:'rgba(255,107,0,0.15)',border:'1px solid rgba(255,107,0,0.35)'}}>NOW</span>}
+                    <span style={{fontSize:14,fontWeight:700,textDecoration:validated?'line-through':'none',textDecorationColor:'rgba(124,196,161,0.5)'}}>{m.label}</span>
+                    {!validated&&status==='now'&&<span style={{fontSize:8,color:T.accent,fontWeight:700,letterSpacing:0.5,padding:'2px 7px',borderRadius:6,background:'rgba(217,119,87,0.15)',border:'1px solid rgba(217,119,87,0.35)'}}>NOW</span>}
                   </div>
                   <div style={{fontSize:11,color:T.textFaint,fontWeight:500,marginTop:2}}>{m.timeStart}-{m.timeEnd}</div>
                   {m.items&&m.items.length>0&&(
                     <div style={{display:'flex',gap:5,marginTop:6,flexWrap:'wrap'}}>
-                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(255,107,0,0.14)',color:'#ff6b00',border:'1px solid rgba(255,107,0,0.25)'}}>{Math.round(mm.kcal)} kcal</span>
-                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(255,46,154,0.12)',color:'#ff2e9a',border:'1px solid rgba(255,46,154,0.25)'}}>P {Math.round(mm.p)}g</span>
-                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(77,208,255,0.12)',color:'#4dd0ff',border:'1px solid rgba(77,208,255,0.25)'}}>C {Math.round(mm.c)}g</span>
-                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(255,216,77,0.12)',color:'#ffd84d',border:'1px solid rgba(255,216,77,0.25)'}}>L {Math.round(mm.f)}g</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(217,119,87,0.14)',color:'#d97757',border:'1px solid rgba(217,119,87,0.25)'}}>{Math.round(mm.kcal)} kcal</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(201,117,134,0.12)',color:'#c97586',border:'1px solid rgba(201,117,134,0.25)'}}>P {Math.round(mm.p)}g</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(124,168,196,0.12)',color:'#7ca8c4',border:'1px solid rgba(124,168,196,0.25)'}}>C {Math.round(mm.c)}g</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'rgba(194,160,66,0.12)',color:'#c2a042',border:'1px solid rgba(194,160,66,0.25)'}}>L {Math.round(mm.f)}g</span>
                     </div>
                   )}
                 </div>
                 {isToday?(
-                  <button onClick={e=>{e.stopPropagation();toggleMeal(m.id);}} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:validated?'linear-gradient(135deg,#00ffc6,#4dd0ff)':status==='now'?'linear-gradient(135deg,#ff6b00,#ff2e9a)':'rgba(255,255,255,0.06)',color:validated?'#000':status==='now'?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:validated?'0 4px 14px rgba(0,255,198,0.4)':status==='now'?'0 4px 14px rgba(255,107,0,0.4)':'none',animation:validated?'celebrationPop 0.5s ease':'none'}}>
+                  <button onClick={e=>{e.stopPropagation();toggleMeal(m.id);}} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:validated?'linear-gradient(135deg,#7cc4a1,#7ca8c4)':status==='now'?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:validated?'#000':status==='now'?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:validated?'0 4px 14px rgba(124,196,161,0.4)':status==='now'?'0 4px 14px rgba(217,119,87,0.4)':'none',animation:validated?'celebrationPop 0.5s ease':'none'}}>
                     <Icon name="check" size={17} stroke={validated?'#000':status==='now'?'#fff':T.textFaint} strokeWidth={2.6}/>
                   </button>
                 ):(
@@ -2321,9 +2338,9 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                           </div>
                           <div style={{fontSize:10,color:T.textDim,textAlign:'right',display:'flex',gap:8,alignItems:'center'}}>
                             <span>{it.kcal||0} kcal</span>
-                            <span style={{color:'#ff2e9a'}}>P{it.p||0}</span>
-                            <span style={{color:'#4dd0ff'}}>C{it.c||0}</span>
-                            <span style={{color:'#ffd84d'}}>L{it.f||0}</span>
+                            <span style={{color:'#c97586'}}>P{it.p||0}</span>
+                            <span style={{color:'#7ca8c4'}}>C{it.c||0}</span>
+                            <span style={{color:'#c2a042'}}>L{it.f||0}</span>
                           </div>
                         </div>
                       ))}
@@ -2332,7 +2349,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                     <div style={{fontSize:12,color:T.textFaint,padding:'10px 0',fontStyle:'italic',textAlign:'center'}}>Aucun aliment renseigné pour ce repas</div>
                   )}
                   {m.note&&(
-                    <div style={{marginTop:10,padding:'8px 12px',borderRadius:10,background:'rgba(255,216,77,0.06)',border:'1px solid rgba(255,216,77,0.25)',fontSize:11,color:T.warn,lineHeight:1.4}}>
+                    <div style={{marginTop:10,padding:'8px 12px',borderRadius:10,background:'rgba(194,160,66,0.06)',border:'1px solid rgba(194,160,66,0.25)',fontSize:11,color:T.warn,lineHeight:1.4}}>
                       💡 {m.note}
                     </div>
                   )}
@@ -2737,15 +2754,15 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
       {/* Excel I/O buttons */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
-        <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(77,208,255,0.4)',background:'rgba(77,208,255,0.08)',color:'#4dd0ff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(124,168,196,0.4)',background:'rgba(124,168,196,0.08)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
           <span style={{fontSize:13}}>📥</span> Importer Excel
         </button>
-        <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(0,255,198,0.4)',background:'rgba(0,255,198,0.08)',color:T.good,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(124,196,161,0.4)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
           <span style={{fontSize:13}}>📤</span> Download nutrition
         </button>
       </div>
       {importMsg&&(
-        <div style={{marginBottom:10,padding:'8px 12px',borderRadius:10,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
+        <div style={{marginBottom:10,padding:'8px 12px',borderRadius:10,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
       )}
 
       {/* Totaux auto-calculés depuis les aliments du jour actif */}
@@ -2753,7 +2770,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         const dayMeals=(data.days&&data.days[activeDay]&&data.days[activeDay].meals)||[];
         const t=dayMeals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
         return(
-          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(255,107,0,0.08),rgba(77,208,255,0.04))',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
+          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(217,119,87,0.08),rgba(124,168,196,0.04))',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
               <span style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Total {activeDay} (somme des aliments)</span>
               {saveStatus&&<span style={{fontSize:9,color:saveStatus==='saved'?T.good:saveStatus==='error'?T.danger:T.warn,fontWeight:700,letterSpacing:0.3,marginLeft:'auto'}}>
@@ -2762,10 +2779,10 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
               {[
-                {l:'kcal',v:Math.round(t.kcal),c:'#ff6b00'},
-                {l:'P g',v:Math.round(t.p),c:'#ff2e9a'},
-                {l:'C g',v:Math.round(t.c),c:'#4dd0ff'},
-                {l:'L g',v:Math.round(t.f),c:'#ffd84d'},
+                {l:'kcal',v:Math.round(t.kcal),c:'#d97757'},
+                {l:'P g',v:Math.round(t.p),c:'#c97586'},
+                {l:'C g',v:Math.round(t.c),c:'#7ca8c4'},
+                {l:'L g',v:Math.round(t.f),c:'#c2a042'},
               ].map(f=>(
                 <div key={f.l} style={{textAlign:'center'}}>
                   <div style={{fontSize:9,color:f.c,fontWeight:700,marginBottom:4,letterSpacing:0.4,textTransform:'uppercase'}}>{f.l}</div>
@@ -2797,7 +2814,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       <div style={{display:'flex',gap:4,marginBottom:10,flexWrap:'wrap'}}>
         <span style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.3,padding:'6px 4px'}}>Copier depuis :</span>
         {DAYS_OF_WEEK.filter(d=>d!==activeDay&&(data.days[d]&&data.days[d].meals||[]).some(m=>(m.items||[]).length>0)).slice(0,4).map(d=>(
-          <button key={d} onClick={()=>copyFromDay(d)} style={{height:24,padding:'0 8px',borderRadius:7,border:'1px solid rgba(77,208,255,0.3)',background:'rgba(77,208,255,0.06)',color:'#4dd0ff',fontSize:10,fontWeight:700,cursor:'pointer'}}>
+          <button key={d} onClick={()=>copyFromDay(d)} style={{height:24,padding:'0 8px',borderRadius:7,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(124,168,196,0.06)',color:'#7ca8c4',fontSize:10,fontWeight:700,cursor:'pointer'}}>
             ← {d.slice(0,3)}
           </button>
         ))}
@@ -2814,17 +2831,17 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         const totalItems=dayMeals.reduce((s,m)=>s+(m.items||[]).length,0);
         if(totalItems===0)return null;
         return(
-          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(255,107,0,0.06),rgba(77,208,255,0.04))',border:'1px solid rgba(255,255,255,0.08)',marginBottom:12}}>
+          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(217,119,87,0.06),rgba(124,168,196,0.04))',border:'1px solid rgba(255,255,255,0.08)',marginBottom:12}}>
             <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span>Aperçu {activeDay} · total des repas</span>
               <span style={{fontSize:9,color:T.textFaint}}>{totalItems} aliments</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
               {[
-                {l:'kcal',v:totals.kcal,t:data.dailyCalories,c:'#ff6b00'},
-                {l:'P',v:totals.p,t:data.dailyProtein,c:'#ff2e9a'},
-                {l:'C',v:totals.c,t:data.dailyCarbs,c:'#4dd0ff'},
-                {l:'L',v:totals.f,t:data.dailyFat,c:'#ffd84d'},
+                {l:'kcal',v:totals.kcal,t:data.dailyCalories,c:'#d97757'},
+                {l:'P',v:totals.p,t:data.dailyProtein,c:'#c97586'},
+                {l:'C',v:totals.c,t:data.dailyCarbs,c:'#7ca8c4'},
+                {l:'L',v:totals.f,t:data.dailyFat,c:'#c2a042'},
               ].map(g=>{
                 const pct=g.t>0?Math.min(1,g.v/g.t):0;
                 const over=g.t>0&&g.v>g.t*1.05;
@@ -2857,10 +2874,10 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
                   <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{m.timeStart}-{m.timeEnd} · {m.items.length} item{m.items.length>1?'s':''}</div>
                   {m.items.length>0&&(
                     <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,107,0,0.14)',color:'#ff6b00'}}>{Math.round(mm.kcal)}kcal</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,46,154,0.12)',color:'#ff2e9a'}}>P{Math.round(mm.p)}</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(77,208,255,0.12)',color:'#4dd0ff'}}>C{Math.round(mm.c)}</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,216,77,0.12)',color:'#ffd84d'}}>L{Math.round(mm.f)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(217,119,87,0.14)',color:'#d97757'}}>{Math.round(mm.kcal)}kcal</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(201,117,134,0.12)',color:'#c97586'}}>P{Math.round(mm.p)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(124,168,196,0.12)',color:'#7ca8c4'}}>C{Math.round(mm.c)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(194,160,66,0.12)',color:'#c2a042'}}>L{Math.round(mm.f)}</span>
                     </div>
                   )}
                 </div>
@@ -2888,18 +2905,18 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
                           <div style={{display:'flex',gap:6,marginBottom:6}}>
                             <input value={it.name||''} onChange={e=>updItem(m.id,idx,{name:e.target.value})} placeholder="Aliment" style={{...inp,flex:2}}/>
                             <input type="number" inputMode="decimal" value={it.qty||0} onChange={e=>updItem(m.id,idx,{qty:+e.target.value||0})} placeholder="qty" style={{...num,flex:1}}/>
-                            <button onClick={()=>delItem(m.id,idx)} style={{width:32,borderRadius:8,border:'1px solid rgba(255,46,154,0.3)',background:'rgba(255,46,154,0.06)',color:T.danger,cursor:'pointer',fontSize:14}}>×</button>
+                            <button onClick={()=>delItem(m.id,idx)} style={{width:32,borderRadius:8,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,cursor:'pointer',fontSize:14}}>×</button>
                           </div>
                           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:5}}>
-                            <div><div style={{fontSize:8,color:'#ff6b00',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>KCAL</div><input type="number" inputMode="decimal" value={it.kcal||0} onChange={e=>updItem(m.id,idx,{kcal:+e.target.value||0})} style={num}/></div>
-                            <div><div style={{fontSize:8,color:'#ff2e9a',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>P</div><input type="number" inputMode="decimal" value={it.p||0} onChange={e=>updItem(m.id,idx,{p:+e.target.value||0})} style={num}/></div>
-                            <div><div style={{fontSize:8,color:'#4dd0ff',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>C</div><input type="number" inputMode="decimal" value={it.c||0} onChange={e=>updItem(m.id,idx,{c:+e.target.value||0})} style={num}/></div>
-                            <div><div style={{fontSize:8,color:'#ffd84d',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>L</div><input type="number" inputMode="decimal" value={it.f||0} onChange={e=>updItem(m.id,idx,{f:+e.target.value||0})} style={num}/></div>
+                            <div><div style={{fontSize:8,color:'#d97757',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>KCAL</div><input type="number" inputMode="decimal" value={it.kcal||0} onChange={e=>updItem(m.id,idx,{kcal:+e.target.value||0})} style={num}/></div>
+                            <div><div style={{fontSize:8,color:'#c97586',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>P</div><input type="number" inputMode="decimal" value={it.p||0} onChange={e=>updItem(m.id,idx,{p:+e.target.value||0})} style={num}/></div>
+                            <div><div style={{fontSize:8,color:'#7ca8c4',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>C</div><input type="number" inputMode="decimal" value={it.c||0} onChange={e=>updItem(m.id,idx,{c:+e.target.value||0})} style={num}/></div>
+                            <div><div style={{fontSize:8,color:'#c2a042',fontWeight:700,textAlign:'center',marginBottom:2,letterSpacing:0.4}}>L</div><input type="number" inputMode="decimal" value={it.f||0} onChange={e=>updItem(m.id,idx,{f:+e.target.value||0})} style={num}/></div>
                           </div>
                         </div>
                       ))}
                     </div>
-                    <button onClick={()=>addItem(m.id)} style={{width:'100%',marginTop:6,height:34,border:'1px dashed rgba(255,107,0,0.4)',borderRadius:10,background:'transparent',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter un aliment</button>
+                    <button onClick={()=>addItem(m.id)} style={{width:'100%',marginTop:6,height:34,border:'1px dashed rgba(217,119,87,0.4)',borderRadius:10,background:'transparent',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter un aliment</button>
                   </div>
 
                   <div style={{marginTop:10}}>
@@ -2994,7 +3011,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
   return(
     <div>
       {/* live sync badge */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'7px 11px',borderRadius:10,background:'rgba(0,255,198,0.06)',border:'1px solid rgba(0,255,198,0.25)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'7px 11px',borderRadius:10,background:'rgba(124,196,161,0.06)',border:'1px solid rgba(124,196,161,0.25)'}}>
         <span style={{width:7,height:7,borderRadius:4,background:T.good,boxShadow:`0 0 8px ${T.good}`,animation:justUpdated?'pulse 1.4s ease':'none'}}/>
         <span style={{fontSize:10,color:T.good,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase'}}>MIROIR LIVE · vue {athleteName}</span>
         {justUpdated&&<span style={{fontSize:10,color:T.good,fontWeight:700,marginLeft:'auto'}}>↻ mis à jour</span>}
@@ -3004,7 +3021,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)'}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           {streak>0&&(
-            <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:999,background:'rgba(255,107,0,0.12)',border:'1px solid rgba(255,107,0,0.3)'}}>
+            <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 9px',borderRadius:999,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.3)'}}>
               <span style={{fontSize:11}}>🔥</span>
               <span style={{fontSize:10,color:T.accent,fontWeight:700,letterSpacing:0.3}}>{streak}j</span>
             </div>
@@ -3025,7 +3042,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
           const isCurDay=d===todayDayName();
           const active=d===viewDay;
           return(
-            <button key={d} onClick={()=>setViewDay(d)} style={{flexShrink:0,height:38,padding:'0 10px',borderRadius:11,border:active?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:active?(isCurDay?'linear-gradient(135deg,rgba(255,107,0,0.18),rgba(255,46,154,0.12))':T.accentSoft):'rgba(255,255,255,0.03)',color:active?T.accent:T.textDim,fontSize:10,fontWeight:700,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,minWidth:42}}>
+            <button key={d} onClick={()=>setViewDay(d)} style={{flexShrink:0,height:38,padding:'0 10px',borderRadius:11,border:active?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:active?(isCurDay?'linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.12))':T.accentSoft):'rgba(255,255,255,0.03)',color:active?T.accent:T.textDim,fontSize:10,fontWeight:700,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,minWidth:42}}>
               <span>{d.slice(0,3)}</span>
               <span style={{fontSize:7,color:isCurDay?T.accent:T.textFaint,fontWeight:600}}>{isCurDay?'AUJ.':hasContent?'•':''}</span>
             </button>
@@ -3036,7 +3053,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
       {/* Big gauge */}
       <HoloCard padding={0} style={{marginBottom:10}}>
         <div style={{padding:14,display:'flex',alignItems:'center',gap:12}}>
-          <CircleGauge value={totals.kcal} max={dayTargets.kcal} size={110} color="#ff6b00" label="KCAL"/>
+          <CircleGauge value={totals.kcal} max={dayTargets.kcal} size={110} color="#d97757" label="KCAL"/>
           <div style={{flex:1}}>
             <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>{isToday?'Aujourd\'hui':'Plan '+viewDay}</div>
             <div style={{fontSize:20,fontWeight:700,marginTop:2}}>{Math.round(totals.kcal)}<span style={{fontSize:12,color:T.textDim,fontWeight:500}}>/{Math.round(dayTargets.kcal)} kcal</span></div>
@@ -3048,9 +3065,9 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
       {/* Macros */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
         {[
-          {l:'P',val:totals.p,max:dayTargets.p,c:'#ff2e9a'},
-          {l:'C',val:totals.c,max:dayTargets.c,c:'#4dd0ff'},
-          {l:'L',val:totals.f,max:dayTargets.f,c:'#ffd84d'},
+          {l:'P',val:totals.p,max:dayTargets.p,c:'#c97586'},
+          {l:'C',val:totals.c,max:dayTargets.c,c:'#7ca8c4'},
+          {l:'L',val:totals.f,max:dayTargets.f,c:'#c2a042'},
         ].map(m=>(
           <GlassCard key={m.l} padding={8}>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
@@ -3069,25 +3086,25 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
           const status=isToday?mealStatus(m,nowHM):'later';
           const isOpen=expandedMeal===m.id;
           return(
-            <div key={m.id} style={{borderRadius:12,overflow:'hidden',border:`1px solid ${validated?'rgba(0,255,198,0.4)':status==='now'?'rgba(255,107,0,0.3)':T.border}`,background:validated?'rgba(0,255,198,0.06)':'rgba(255,255,255,0.025)'}}>
+            <div key={m.id} style={{borderRadius:12,overflow:'hidden',border:`1px solid ${validated?'rgba(124,196,161,0.4)':status==='now'?'rgba(217,119,87,0.3)':T.border}`,background:validated?'rgba(124,196,161,0.06)':'rgba(255,255,255,0.025)'}}>
               <div onClick={()=>setExpandedMeal(isOpen?null:m.id)} style={{padding:10,cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
                 <div style={{fontSize:22,opacity:validated?0.5:1}}>{m.emoji}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,textDecoration:validated?'line-through':'none',textDecorationColor:'rgba(0,255,198,0.5)'}}>{m.label}</div>
+                  <div style={{fontSize:13,fontWeight:700,textDecoration:validated?'line-through':'none',textDecorationColor:'rgba(124,196,161,0.5)'}}>{m.label}</div>
                   <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>
                     {m.timeStart}-{m.timeEnd}
                     {validated&&log.validatedAt[m.id]&&<span style={{color:T.good,marginLeft:6}}>✓ {new Date(log.validatedAt[m.id]).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>}
                   </div>
                   {m.items&&m.items.length>0&&(
                     <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,107,0,0.14)',color:'#ff6b00'}}>{Math.round(mm.kcal)}kcal</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,46,154,0.12)',color:'#ff2e9a'}}>P{Math.round(mm.p)}</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(77,208,255,0.12)',color:'#4dd0ff'}}>C{Math.round(mm.c)}</span>
-                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(255,216,77,0.12)',color:'#ffd84d'}}>L{Math.round(mm.f)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(217,119,87,0.14)',color:'#d97757'}}>{Math.round(mm.kcal)}kcal</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(201,117,134,0.12)',color:'#c97586'}}>P{Math.round(mm.p)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(124,168,196,0.12)',color:'#7ca8c4'}}>C{Math.round(mm.c)}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(194,160,66,0.12)',color:'#c2a042'}}>L{Math.round(mm.f)}</span>
                     </div>
                   )}
                 </div>
-                <div style={{width:34,height:34,borderRadius:10,background:validated?'rgba(0,255,198,0.18)':'rgba(255,255,255,0.03)',color:validated?T.good:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <div style={{width:34,height:34,borderRadius:10,background:validated?'rgba(124,196,161,0.18)':'rgba(255,255,255,0.03)',color:validated?T.good:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   {validated?<Icon name="check" size={14} stroke={T.good} strokeWidth={2.6}/>:<span style={{fontSize:8,fontWeight:700,letterSpacing:0.3}}>—</span>}
                 </div>
               </div>
@@ -3320,7 +3337,7 @@ function CoachScreen({authToken,authUser}){
           </button>
         </div>
 
-        {msg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
+        {msg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
         {/* Profile editable by coach */}
         <SectionHeader title="Profil de l'athlète" right={<span style={{fontSize:10,color:T.textFaint}}>modifiable</span>}/>
@@ -3356,8 +3373,8 @@ function CoachScreen({authToken,authUser}){
 
         {/* Program section — gros bouton import direct */}
         <SectionHeader title="Programme musculation" right={a.program?.assignedAt?<span style={{fontSize:10,color:T.textFaint}}>maj {new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}</span>:null}/>
-        <button onClick={()=>fileRef.current.click()} style={{width:'100%',marginBottom:18,padding:14,borderRadius:14,border:`1px solid ${programDays>0?'rgba(0,255,198,0.3)':'rgba(255,107,0,0.4)'}`,background:programDays>0?'rgba(0,255,198,0.06)':'linear-gradient(135deg,rgba(255,107,0,0.12),rgba(255,46,154,0.08))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',boxShadow:programDays===0?'0 6px 18px rgba(255,107,0,0.2)':'none'}}>
-          <div style={{width:42,height:42,borderRadius:12,background:programDays>0?'rgba(0,255,198,0.18)':'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>
+        <button onClick={()=>fileRef.current.click()} style={{width:'100%',marginBottom:18,padding:14,borderRadius:14,border:`1px solid ${programDays>0?'rgba(124,196,161,0.3)':'rgba(217,119,87,0.4)'}`,background:programDays>0?'rgba(124,196,161,0.06)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.08))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',boxShadow:programDays===0?'0 6px 18px rgba(217,119,87,0.2)':'none'}}>
+          <div style={{width:42,height:42,borderRadius:12,background:programDays>0?'rgba(124,196,161,0.18)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>
             {programDays>0?'✓':'📥'}
           </div>
           <div style={{flex:1,minWidth:0}}>
@@ -3398,7 +3415,7 @@ function CoachScreen({authToken,authUser}){
             {sessions.slice(0,20).map(s=>(
               <GlassCard key={s.id} padding={12}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:32,height:32,borderRadius:9,background:'rgba(255,107,0,0.12)',border:'1px solid rgba(255,107,0,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
+                  <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
                     <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
                   </div>
                   <div style={{flex:1,minWidth:0}}>
@@ -3419,14 +3436,14 @@ function CoachScreen({authToken,authUser}){
           {showDangerZone?'▴ Masquer':'⋯ Plus d\'options'}
         </button>
         {showDangerZone&&(
-          <div style={{marginTop:8,padding:12,borderRadius:12,background:'rgba(255,216,77,0.04)',border:'1px solid rgba(255,216,77,0.2)',display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{marginTop:8,padding:12,borderRadius:12,background:'rgba(194,160,66,0.04)',border:'1px solid rgba(194,160,66,0.2)',display:'flex',flexDirection:'column',gap:6}}>
             <div style={{fontSize:10,color:T.warn,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>⚠ Actions irréversibles</div>
-            <button onClick={()=>resetAthlete({profile:true},'le profil')} style={{height:34,borderRadius:9,border:'1px solid rgba(255,216,77,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Réinitialiser le profil</button>
-            <button onClick={()=>resetAthlete({program:true},'le programme')} style={{height:34,borderRadius:9,border:'1px solid rgba(255,216,77,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer le programme</button>
-            <button onClick={()=>resetAthlete({history:true},"l'historique")} style={{height:34,borderRadius:9,border:'1px solid rgba(255,216,77,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer l'historique ({sessions.length})</button>
-            <button onClick={()=>resetAthlete({profile:true,program:true,history:true},'TOUTES les données')} style={{height:36,borderRadius:9,border:'1px solid rgba(255,46,154,0.4)',background:'rgba(255,46,154,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>🔥 Tout réinitialiser</button>
+            <button onClick={()=>resetAthlete({profile:true},'le profil')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Réinitialiser le profil</button>
+            <button onClick={()=>resetAthlete({program:true},'le programme')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer le programme</button>
+            <button onClick={()=>resetAthlete({history:true},"l'historique")} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer l'historique ({sessions.length})</button>
+            <button onClick={()=>resetAthlete({profile:true,program:true,history:true},'TOUTES les données')} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.4)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>🔥 Tout réinitialiser</button>
             <div style={{height:1,background:'rgba(255,255,255,0.06)',margin:'4px 0'}}/>
-            <button onClick={()=>removeAthlete(a)} style={{height:36,borderRadius:9,border:'1px solid rgba(255,46,154,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Détacher l'athlète (compte préservé)</button>
+            <button onClick={()=>removeAthlete(a)} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Détacher l'athlète (compte préservé)</button>
           </div>
         )}
       </div>
@@ -3447,23 +3464,23 @@ function CoachScreen({authToken,authUser}){
           <button onClick={load} disabled={loading} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:loading?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:loading?0.5:1}} title="Rafraîchir">
             <Icon name="refresh" size={15} stroke={T.textDim} style={{animation:loading?'holoShift 1s linear infinite':'none'}}/>
           </button>
-          <button onClick={generateInvite} style={{height:40,padding:'0 14px',borderRadius:13,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 6px 18px rgba(255,107,0,0.4)'}}>
+          <button onClick={generateInvite} style={{height:40,padding:'0 14px',borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 6px 18px rgba(217,119,87,0.4)'}}>
             <Icon name="plus" size={14} stroke="#fff" strokeWidth={2.4}/> Code invitation
           </button>
         </div>
       </div>
 
-      {msg&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(0,255,198,0.12)',border:'1px solid rgba(0,255,198,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
+      {msg&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
       {/* Pending approval requests (main coach only) */}
       {isMain&&pending.length>0&&(
         <div style={{marginBottom:18}}>
-          <SectionHeader title="Demandes en attente" right={<span style={{fontSize:11,color:T.warn,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'rgba(255,216,77,0.12)',border:'1px solid rgba(255,216,77,0.35)'}}>{pending.length}</span>}/>
+          <SectionHeader title="Demandes en attente" right={<span style={{fontSize:11,color:T.warn,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'rgba(194,160,66,0.12)',border:'1px solid rgba(194,160,66,0.35)'}}>{pending.length}</span>}/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {pending.map(p=>(
-              <div key={p.id} style={{padding:12,borderRadius:14,background:'rgba(255,216,77,0.06)',border:'1px solid rgba(255,216,77,0.3)'}}>
+              <div key={p.id} style={{padding:12,borderRadius:14,background:'rgba(194,160,66,0.06)',border:'1px solid rgba(194,160,66,0.3)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                  <div style={{width:38,height:38,borderRadius:19,background:'linear-gradient(135deg,#ffd84d,#ff6b00)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
+                  <div style={{width:38,height:38,borderRadius:19,background:'linear-gradient(135deg,#c2a042,#d97757)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
                     {(p.email[0]||'').toUpperCase()}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
@@ -3476,10 +3493,10 @@ function CoachScreen({authToken,authUser}){
                   </div>
                 </div>
                 <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>approveUser(p)} style={{flex:2,height:36,borderRadius:10,border:'none',background:'linear-gradient(135deg,#00ffc6,#4dd0ff)',color:'#000',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  <button onClick={()=>approveUser(p)} style={{flex:2,height:36,borderRadius:10,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
                     <Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/> Approuver
                   </button>
-                  <button onClick={()=>rejectUser(p)} style={{flex:1,height:36,borderRadius:10,border:'1px solid rgba(255,46,154,0.3)',background:'rgba(255,46,154,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                  <button onClick={()=>rejectUser(p)} style={{flex:1,height:36,borderRadius:10,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                     Rejeter
                   </button>
                 </div>
@@ -3492,10 +3509,10 @@ function CoachScreen({authToken,authUser}){
       {/* Available athletes (no coach) — recoverable */}
       {available.length>0&&(
         <div style={{marginBottom:18}}>
-          <button onClick={()=>setShowAvailable(s=>!s)} style={{width:'100%',padding:'10px 14px',borderRadius:12,border:'1px solid rgba(77,208,255,0.3)',background:'rgba(77,208,255,0.06)',color:'#4dd0ff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:8,letterSpacing:0.3}}>
-            <Icon name="users" size={14} stroke="#4dd0ff"/>
+          <button onClick={()=>setShowAvailable(s=>!s)} style={{width:'100%',padding:'10px 14px',borderRadius:12,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(124,168,196,0.06)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:8,letterSpacing:0.3}}>
+            <Icon name="users" size={14} stroke="#7ca8c4"/>
             <span style={{flex:1,textAlign:'left'}}>{available.length} athlète{available.length>1?'s':''} disponible{available.length>1?'s':''} à récupérer</span>
-            <Icon name={showAvailable?'chevronLeft':'chevronRight'} size={14} stroke="#4dd0ff" style={{transform:showAvailable?'rotate(90deg)':'rotate(0deg)',transition:'transform 0.2s'}}/>
+            <Icon name={showAvailable?'chevronLeft':'chevronRight'} size={14} stroke="#7ca8c4" style={{transform:showAvailable?'rotate(90deg)':'rotate(0deg)',transition:'transform 0.2s'}}/>
           </button>
           {showAvailable&&(
             <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8}}>
@@ -3504,7 +3521,7 @@ function CoachScreen({authToken,authUser}){
                 return(
                   <GlassCard key={a.id} padding={12}>
                     <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:36,height:36,borderRadius:18,background:'linear-gradient(135deg,#4dd0ff,#b94dff)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>
+                      <div style={{width:36,height:36,borderRadius:18,background:'linear-gradient(135deg,#7ca8c4,#8e6cb6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>
                         {((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
@@ -3516,7 +3533,7 @@ function CoachScreen({authToken,authUser}){
                           {a.hasProgram&&<><span>·</span><span style={{color:T.accent}}>a un prog</span></>}
                         </div>
                       </div>
-                      <button onClick={()=>claimAthlete(a)} style={{height:34,padding:'0 12px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#4dd0ff,#b94dff)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 12px rgba(77,208,255,0.35)'}}>
+                      <button onClick={()=>claimAthlete(a)} style={{height:34,padding:'0 12px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#7ca8c4,#8e6cb6)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 12px rgba(124,168,196,0.35)'}}>
                         + Récupérer
                       </button>
                     </div>
@@ -3534,7 +3551,7 @@ function CoachScreen({authToken,authUser}){
           <SectionHeader title="Codes en attente" right={<span style={{fontSize:10,color:T.textFaint}}>{unusedInvites.length}</span>}/>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             {unusedInvites.slice(0,8).map(i=>(
-              <button key={i.code} onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(i.code).catch(()=>{});flash('✓ Code copié');}} style={{height:32,padding:'0 11px',borderRadius:9,border:'1px solid rgba(77,208,255,0.3)',background:'rgba(77,208,255,0.06)',color:'#4dd0ff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'JetBrains Mono,ui-monospace,monospace',letterSpacing:0.5}}>
+              <button key={i.code} onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(i.code).catch(()=>{});flash('✓ Code copié');}} style={{height:32,padding:'0 11px',borderRadius:9,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(124,168,196,0.06)',color:'#7ca8c4',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'JetBrains Mono,ui-monospace,monospace',letterSpacing:0.5}}>
                 {i.code}
               </button>
             ))}
@@ -3553,7 +3570,7 @@ function CoachScreen({authToken,authUser}){
           </div>
           <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Aucun athlète</div>
           <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,maxWidth:300,margin:'0 auto 18px'}}>Génère un code d'invitation et envoie-le à ton athlète. Quand il s'inscrit avec ce code, il apparaît ici automatiquement.</div>
-          <button onClick={generateInvite} style={{height:46,padding:'0 22px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(255,107,0,0.4)'}}>
+          <button onClick={generateInvite} style={{height:46,padding:'0 22px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.4)'}}>
             + Générer un code
           </button>
         </div>
@@ -3566,7 +3583,7 @@ function CoachScreen({authToken,authUser}){
               <GlassCard key={a.id} padding={14} onClick={()=>openDetail(a)} style={{cursor:'pointer',transition:'transform 0.2s',transform:isNew?'scale(1.01)':'scale(1)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
                   <div style={{width:42,height:42,borderRadius:21,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite',flexShrink:0,position:'relative'}}>
-                    <div style={{width:'100%',height:'100%',borderRadius:19.5,background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff'}}>
+                    <div style={{width:'100%',height:'100%',borderRadius:19.5,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff'}}>
                       {((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
                     </div>
                     {isNew&&<div style={{position:'absolute',top:-2,right:-2,width:12,height:12,borderRadius:6,background:T.good,boxShadow:'0 0 8px '+T.good,border:'2px solid #06060a',animation:'pulse 1.4s ease infinite'}}/>}
@@ -3581,8 +3598,8 @@ function CoachScreen({authToken,authUser}){
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,marginRight:4,flexShrink:0}}>
                     <div style={{
                       minWidth:34,height:34,padding:'0 8px',borderRadius:10,
-                      background:isNew?'rgba(0,255,198,0.18)':a.sessionCount>0?'rgba(255,107,0,0.12)':'rgba(255,255,255,0.04)',
-                      border:'1px solid '+(isNew?'rgba(0,255,198,0.5)':a.sessionCount>0?'rgba(255,107,0,0.3)':'rgba(255,255,255,0.08)'),
+                      background:isNew?'rgba(124,196,161,0.18)':a.sessionCount>0?'rgba(217,119,87,0.12)':'rgba(255,255,255,0.04)',
+                      border:'1px solid '+(isNew?'rgba(124,196,161,0.5)':a.sessionCount>0?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.08)'),
                       color:isNew?T.good:a.sessionCount>0?T.accent:T.textFaint,
                       fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',
                       display:'flex',alignItems:'center',justifyContent:'center',
@@ -3639,10 +3656,10 @@ function AuthScreen({onLogin,onSignup}){
 
   if(pendingMsg){
     return(
-      <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1a0a18 0%,#06060a 60%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
+      <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
         <div style={{maxWidth:380,width:'100%',textAlign:'center'}}>
           <div style={{width:72,height:72,margin:'0 auto 16px',borderRadius:20,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#ffd84d,#ff6b00)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36}}>⏳</div>
+            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#c2a042,#d97757)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36}}>⏳</div>
           </div>
           <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Demande envoyée</div>
           <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.5,marginBottom:12}}><HoloText>En attente d'approbation</HoloText></div>
@@ -3660,12 +3677,12 @@ function AuthScreen({onLogin,onSignup}){
   const inputStyle={width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:T.text,fontSize:15,fontWeight:500,padding:'13px 14px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'};
 
   return(
-    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1a0a18 0%,#06060a 60%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
+    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
       <div style={{width:'100%',maxWidth:380}}>
         {/* Logo */}
         <div style={{textAlign:'center',marginBottom:28}}>
           <div style={{width:72,height:72,margin:'0 auto 14px',borderRadius:20,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center'}}>
               <Icon name="dumbbell" size={32} stroke="#fff" strokeWidth={2}/>
             </div>
           </div>
@@ -3676,7 +3693,7 @@ function AuthScreen({onLogin,onSignup}){
         {/* Tab toggle */}
         <div style={{display:'flex',padding:3,background:'rgba(255,255,255,0.04)',borderRadius:12,border:'1px solid rgba(255,255,255,0.06)',marginBottom:18}}>
           {['login','signup'].map(m=>(
-            <button key={m} type="button" onClick={()=>{setMode(m);setErr(null);}} style={{flex:1,height:38,border:'none',borderRadius:10,background:mode===m?'rgba(255,107,0,0.16)':'transparent',color:mode===m?T.accent:T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>{m==='login'?'Se connecter':'S\'inscrire'}</button>
+            <button key={m} type="button" onClick={()=>{setMode(m);setErr(null);}} style={{flex:1,height:38,border:'none',borderRadius:10,background:mode===m?'rgba(217,119,87,0.16)':'transparent',color:mode===m?T.accent:T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>{m==='login'?'Se connecter':'S\'inscrire'}</button>
           ))}
         </div>
 
@@ -3705,10 +3722,10 @@ function AuthScreen({onLogin,onSignup}){
           )}
 
           {err&&(
-            <div style={{padding:'11px 14px',borderRadius:11,background:'rgba(255,46,154,0.1)',border:'1px solid rgba(255,46,154,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>
+            <div style={{padding:'11px 14px',borderRadius:11,background:'rgba(201,117,134,0.1)',border:'1px solid rgba(201,117,134,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>
           )}
 
-          <button type="submit" disabled={loading} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#ff6b00,#ff2e9a)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(255,107,0,0.4)',opacity:loading?0.7:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          <button type="submit" disabled={loading} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(217,119,87,0.4)',opacity:loading?0.7:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             {loading?'…':(mode==='login'?'Se connecter':'Créer mon compte')}
           </button>
         </form>
@@ -3724,7 +3741,7 @@ function AuthScreen({onLogin,onSignup}){
 // ── Splash ────────────────────────────────────────────────
 function Splash(){
   return(
-    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1a0a18 0%,#06060a 60%)',display:'flex',alignItems:'center',justifyContent:'center',color:T.text}}>
+    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',color:T.text}}>
       <div style={{textAlign:'center'}}>
         <div style={{width:60,height:60,margin:'0 auto 14px',borderRadius:18,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 4s linear infinite',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <Icon name="dumbbell" size={28} stroke="#fff" strokeWidth={2}/>
@@ -3880,7 +3897,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const inner=(
     <div style={{height:'100%',width:'100%',display:'flex',flexDirection:'column',position:'relative',paddingTop:isMobile?'env(safe-area-inset-top)':54}}>
       {saveFlash&&(
-        <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(0,255,198,0.18)',border:'1px solid rgba(0,255,198,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(0,255,198,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
+        <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(124,196,161,0.18)',border:'1px solid rgba(124,196,161,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(124,196,161,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
           ✓ Sync cloud
         </div>
       )}
@@ -3916,12 +3933,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   );
 
   if(isMobile){
-    return <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1a0a18 0%,#06060a 60%)',color:T.text}}>{inner}</div>;
+    return <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',color:T.text}}>{inner}</div>;
   }
 
   return(
-    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1a0a18 0%,#06060a 60%)',display:'flex',alignItems:'center',justifyContent:'center',padding:24,boxSizing:'border-box'}}>
-      <div style={{position:'fixed',top:'20%',left:'50%',transform:'translate(-50%,-50%)',width:600,height:600,pointerEvents:'none',background:'radial-gradient(circle,rgba(255,107,0,0.18),rgba(255,46,154,0.10) 30%,rgba(77,208,255,0.06) 60%,transparent 75%)',filter:'blur(60px)',zIndex:0}}/>
+    <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:24,boxSizing:'border-box'}}>
+      <div style={{position:'fixed',top:'20%',left:'50%',transform:'translate(-50%,-50%)',width:600,height:600,pointerEvents:'none',background:'radial-gradient(circle,rgba(217,119,87,0.18),rgba(201,117,134,0.10) 30%,rgba(124,168,196,0.06) 60%,transparent 75%)',filter:'blur(60px)',zIndex:0}}/>
       <div style={{position:'relative',zIndex:1}}>
         <IOSDevice dark width={402} height={874}>{inner}</IOSDevice>
       </div>
@@ -3944,7 +3961,7 @@ function BottomTabBar({tab,onTab,role}){
   ];
   return(
     <div style={{padding:'8px 12px max(8px, env(safe-area-inset-bottom)) 12px',background:'linear-gradient(180deg,transparent,rgba(6,6,10,0.92) 40%)'}}>
-      <div style={{borderRadius:24,padding:1,background:'linear-gradient(160deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04) 50%,rgba(255,107,0,0.15))',boxShadow:'0 -10px 30px rgba(0,0,0,0.4)'}}>
+      <div style={{borderRadius:24,padding:1,background:'linear-gradient(160deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04) 50%,rgba(217,119,87,0.15))',boxShadow:'0 -10px 30px rgba(0,0,0,0.4)'}}>
         <div style={{borderRadius:23,background:'linear-gradient(180deg,rgba(20,20,28,0.92),rgba(10,10,16,0.96))',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',height:60,display:'flex',alignItems:'center'}}>
           {items.map(it=>{
             const active=tab===it.id;
