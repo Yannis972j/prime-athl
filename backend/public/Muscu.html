@@ -727,54 +727,11 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
 }
 
 // ── Session Screen ────────────────────────────────────────
-// Coach intelligence : returns {label,type,color,bg} for a validated set
-function coachFeedback({reps,weight,target},prevSet,isNewPR){
-  if(isNewPR)return{label:'🏆 Nouveau PR',type:'pr',color:'#c2a042',bg:'rgba(194,160,66,0.16)'};
-  if(prevSet){
-    const dr=(reps||0)-(prevSet.reps||0);
-    const dw=(weight||0)-(prevSet.weight||0);
-    if(dr>0)return{label:`+${dr} rep${dr>1?'s':''} 💪`,type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
-    if(dr===0&&dw>0)return{label:`Même perf à +${dw}kg ✨`,type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
-    if(dr<0)return{label:`${dr} rep${dr<-1?'s':''}, t'as pas baissé la garde`,type:'down',color:'#c2a042',bg:'rgba(194,160,66,0.12)'};
-    if(dw<0)return{label:`Même perf à -${-dw}kg`,type:'neutral',color:'#7ca8c4',bg:'rgba(124,168,196,0.12)'};
-    return{label:'Même perf qu\'avant ➝ pousse + la prochaine',type:'neutral',color:'#7ca8c4',bg:'rgba(124,168,196,0.12)'};
-  }
-  if(target&&reps>=target)return{label:'🎯 Objectif validé',type:'up',color:'#7cc4a1',bg:'rgba(124,196,161,0.14)'};
-  return null;
-}
 
 function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveSession,history,firstName}){
   const[showCelebration,setShowCelebration]=React.useState(false);
   const congratsMsg=React.useMemo(()=>CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)],[]);
-  const[setFlash,setSetFlash]=React.useState(null); // {exId, si, feedback}
-  const flashTimerRef=React.useRef(null);
 
-  // Map: exercise name → last session's exercise data (newest first wins)
-  const prevByName=React.useMemo(()=>{
-    const m={};
-    for(const h of(history||[])){
-      const dateStr=new Date(h.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
-      for(const ex of(h.exercises||[])){
-        if(!m[ex.name])m[ex.name]={sets:ex.sets||[],date:h.date,dateStr,sessionName:h.name};
-      }
-    }
-    return m;
-  },[history]);
-
-  // Map: exercise name → best (highest e1rm) over all history
-  const prByName=React.useMemo(()=>{
-    const m={};
-    for(const h of(history||[])){
-      for(const ex of(h.exercises||[])){
-        for(const s of(ex.sets||[])){
-          const e1rm=(s.weight||0)*(1+(s.reps||0)/30);
-          if(e1rm<=0)continue;
-          if(!m[ex.name]||e1rm>m[ex.name].e1rm){m[ex.name]={weight:s.weight,reps:s.reps,e1rm};}
-        }
-      }
-    }
-    return m;
-  },[history]);
   const finishAndClose=()=>{
     if(onSaveSession){
       const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -817,17 +774,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   const validateSet=si=>{
     const rest=ex.restSeconds||90;
     const set=ex.sets[si];
-    const prev=prevByName[ex.name];
-    const prevSet=prev&&prev.sets&&prev.sets[si];
-    const e1rm=(set.weight||0)*(1+(set.reps||0)/30);
-    const oldPR=prByName[ex.name];
-    const isNewPR=e1rm>0&&(!oldPR||e1rm>oldPR.e1rm+0.5);
-    const fb=coachFeedback(set,prevSet,isNewPR);
-    if(fb){
-      setSetFlash({exId:ex.id,si,fb});
-      if(flashTimerRef.current)clearTimeout(flashTimerRef.current);
-      flashTimerRef.current=setTimeout(()=>setSetFlash(null),3500);
-    }
     updSet(currentEx,si,{done:true});
     setRestSeconds(rest);setRestTotal(rest);
   };
@@ -998,33 +944,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 )}
               </div>
 
-              {/* Coach line: previous performance + PR */}
-              {(()=>{
-                const prev=prevByName[ex.name];
-                const pr=prByName[ex.name];
-                if(!prev&&!pr)return <div style={{fontSize:10,color:T.textFaint,marginBottom:8,fontStyle:'italic'}}>1re fois sur cet exercice — donne le ton 🔥</div>;
-                return(
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                    {prev&&(
-                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:999,background:'rgba(124,168,196,0.10)',border:'1px solid rgba(124,168,196,0.3)',color:'#7ca8c4',fontSize:10,fontWeight:600}}>
-                        ↺ Dernière : {prev.sets.map(s=>`${s.weight||'?'}×${s.reps||'?'}`).slice(0,3).join(' · ')} <span style={{opacity:0.6}}>· {prev.dateStr}</span>
-                      </div>
-                    )}
-                    {pr&&(
-                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:999,background:'rgba(194,160,66,0.12)',border:'1px solid rgba(194,160,66,0.3)',color:'#c2a042',fontSize:11,fontWeight:700}}>
-                        🏆 PR {pr.weight}×{pr.reps}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
 
               {/* set rows — compact horizontal avec steppers tactiles */}
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
-                  const prevSet=prevByName[ex.name]&&prevByName[ex.name].sets[i];
-                  const flash=setFlash&&setFlash.exId===ex.id&&setFlash.si===i?setFlash.fb:null;
                   const repsDisplay=s.reps||(isNext?'':s.target||'');
                   return(
                     <div key={i}>
@@ -1051,12 +975,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                           </button>
                         )}
                       </div>
-                      {/* feedback flash */}
-                      {flash&&(
-                        <div style={{margin:'2px 10px 0 38px',padding:'3px 8px',borderRadius:7,background:flash.bg,border:`1px solid ${flash.color}33`,color:flash.color,fontSize:10,fontWeight:700,letterSpacing:0.2,animation:'celebrationPop 0.5s ease'}}>
-                          {flash.label}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1189,11 +1107,6 @@ function DashboardScreen({workout,onStart,onEdit,onTab}){
           <div style={{display:'flex',alignItems:'center',gap:6,color:T.warn,marginBottom:8}}><Icon name="flame" size={16} stroke={T.warn}/><span style={{fontSize:11,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Série</span></div>
           <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,lineHeight:1}}>12</div>
           <div style={{fontSize:12,color:T.textDim,marginTop:4}}>jours consécutifs</div>
-        </GlassCard>
-        <GlassCard padding={14}>
-          <div style={{display:'flex',alignItems:'center',gap:6,color:T.good,marginBottom:8}}><Icon name="trending" size={16} stroke={T.good}/><span style={{fontSize:11,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>PR récent</span></div>
-          <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,lineHeight:1}}>85<span style={{fontSize:16,color:T.textDim,marginLeft:4}}>kg</span></div>
-          <div style={{fontSize:12,color:T.textDim,marginTop:4}}>Bench · +2,5kg</div>
         </GlassCard>
       </div>
 
@@ -1424,13 +1337,6 @@ function StatsScreen({history,profile}){
     if(diff>=0&&diff<30) dailyVol[29-diff]+=h.totalVolume||0;
   });
 
-  // PRs from profile
-  const prs=[
-    {n:'Squat',v:profile.prSquat,k:'prSquat'},
-    {n:'Développé couché',v:profile.prBench,k:'prBench'},
-    {n:'Soulevé de terre',v:profile.prDeadlift,k:'prDeadlift'},
-  ].filter(p=>p.v);
-
   // Muscle distribution
   const muscleVol={};
   history.forEach(h=>(h.exercises||[]).forEach(ex=>{
@@ -1489,24 +1395,6 @@ function StatsScreen({history,profile}){
         </>
       )}
 
-      {prs.length>0&&(
-        <>
-          <SectionHeader title="Records personnels"/>
-          <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:18}}>
-            {prs.map((pr,i)=>(
-              <GlassCard key={pr.k} padding={14}>
-                <div style={{display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{width:38,height:38,borderRadius:11,background:i===0?HOLO.iris:'rgba(217,119,87,0.12)',backgroundSize:'200% 200%',animation:i===0?'holoShift 8s linear infinite':'none',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:i===0?'0 4px 14px rgba(217,119,87,0.35)':'none'}}>
-                    <Icon name={i===0?'flame':'trending'} size={17} stroke={i===0?'#fff':T.accent}/>
-                  </div>
-                  <div style={{flex:1,fontSize:14,fontWeight:600}}>{pr.n}</div>
-                  <div style={{fontSize:20,fontWeight:700}}>{pr.v}<span style={{fontSize:12,color:T.textDim,fontWeight:500,marginLeft:3}}>kg</span></div>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        </>
-      )}
 
       {muscleArr.length>0&&(
         <>
@@ -1808,23 +1696,6 @@ function ProfileScreen({profile,onChange,onLogout}){
         ))}
       </div>
 
-      {/* PR — grid 3 colonnes (au lieu de stack vertical) */}
-      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Records personnels</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:14}}>
-        {[
-          {k:'prSquat',l:'Squat'},
-          {k:'prBench',l:'Bench'},
-          {k:'prDeadlift',l:'SDT'},
-        ].map(p=>(
-          <div key={p.k} style={{padding:8,borderRadius:9,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border}}>
-            <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:3,textAlign:'center'}}>{p.l}</div>
-            <div style={{position:'relative'}}>
-              <input style={{...inp,paddingRight:22,padding:'5px 22px 5px 6px',fontSize:14,fontWeight:600,textAlign:'center',background:'transparent',border:'none'}} type="number" inputMode="decimal" value={profile[p.k]||''} onChange={e=>upd(p.k,e.target.value)} placeholder="—"/>
-              <span style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',fontSize:9,color:T.textFaint,pointerEvents:'none'}}>kg</span>
-            </div>
-          </div>
-        ))}
-      </div>
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
@@ -3437,12 +3308,6 @@ function CoachScreen({authToken,authUser}){
                 <F label="Taille" value={a.height} onChange={e=>patchAthlete({height:e.target.value})} suffix="cm" type="number"/>
                 <F label="Poids" value={a.weight} onChange={e=>patchAthlete({weight:e.target.value})} suffix="kg" type="number"/>
               </div>
-              {/* PR — squat, bench, sdt — mêmes inputs que poids/taille */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:6}}>
-                <F label="Squat" value={a.prSquat} onChange={e=>patchAthlete({prSquat:e.target.value})} suffix="kg" type="number"/>
-                <F label="Bench" value={a.prBench} onChange={e=>patchAthlete({prBench:e.target.value})} suffix="kg" type="number"/>
-                <F label="SDT" value={a.prDeadlift} onChange={e=>patchAthlete({prDeadlift:e.target.value})} suffix="kg" type="number"/>
-              </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4}}>
                 {['Hypertrophie','Force','Perte','Endurance'].map((o,i)=>{
                   const full=['Hypertrophie','Force','Perte de poids','Endurance'][i];
@@ -3921,7 +3786,7 @@ function Splash(){
 }
 
 // ── App ───────────────────────────────────────────────────
-const DEFAULT_PROFILE={firstName:'',lastName:'',height:'',weight:'',objective:'Hypertrophie',prSquat:'',prBench:'',prDeadlift:''};
+const DEFAULT_PROFILE={firstName:'',lastName:'',height:'',weight:'',objective:'Hypertrophie'};
 
 function App(){
   const auth=useAuth();
