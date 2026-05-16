@@ -3286,10 +3286,11 @@ function CoachScreen({authToken,authUser}){
   },[isMain]);
   React.useEffect(()=>{load();},[load]);
 
-  const approveUser=async(p)=>{
+  const approveUser=async(p,role='athlete')=>{
+    if(role==='coach'&&!confirm(`Promouvoir ${p.email} en COACH ?\n\nIl pourra créer ses propres athlètes et gérer leurs programmes.`))return;
     try{
-      await apiCall('/api/admin/approve/'+p.id,{method:'POST'});
-      flash(`✓ ${p.email} approuvé`);
+      await apiCall('/api/admin/approve/'+p.id,{method:'POST',body:{role}});
+      flash(role==='coach'?`✓ ${p.email} promu coach`:`✓ ${p.email} ajouté comme athlète`);
       load();
     }catch(e){alert('Erreur: '+e.message);}
   };
@@ -3609,18 +3610,23 @@ function CoachScreen({authToken,authUser}){
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.email}</div>
-                    <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>
-                      {p.role==='coach'?'🎯 Coach':'💪 Athlète'}
-                      {' · '}
-                      {timeAgo(p.createdAt)}
+                    <div style={{fontSize:11,color:T.textFaint,marginTop:1,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                      <span>Demandé : {p.requestedRole==='coach'?'🎯 Coach':'💪 Athlète'}</span>
+                      <span>·</span>
+                      <span>{timeAgo(p.createdAt)}</span>
                     </div>
                   </div>
                 </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>approveUser(p)} style={{flex:2,height:36,borderRadius:10,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                    <Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/> Approuver
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <button onClick={()=>approveUser(p,'athlete')} style={{flex:'1 1 auto',height:36,borderRadius:10,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,minWidth:120}}>
+                    <Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/> Accepter athlète
                   </button>
-                  <button onClick={()=>rejectUser(p)} style={{flex:1,height:36,borderRadius:10,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                  {p.requestedRole==='coach'&&(
+                    <button onClick={()=>approveUser(p,'coach')} title="Promouvoir en coach (il pourra créer des athlètes)" style={{flex:'1 1 auto',height:36,borderRadius:10,border:'1px solid rgba(217,119,87,0.4)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,minWidth:120}}>
+                      🎯 Promouvoir coach
+                    </button>
+                  )}
+                  <button onClick={()=>rejectUser(p)} style={{flex:'0 0 auto',height:36,padding:'0 12px',borderRadius:10,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                     Rejeter
                   </button>
                 </div>

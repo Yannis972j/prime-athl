@@ -221,6 +221,7 @@ const profileOf = u => u && {
   status: u.status || 'active',
   isMainCoach: !!u.isMainCoach,
   onboardedAt: u.onboardedAt || null,
+  requestedRole: u.requestedRole || u.role || 'athlete',
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -350,7 +351,11 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     const lowEmail = email.toLowerCase();
     if (findUserByEmail(lowEmail)) return res.status(400).json({ error: 'email_already_used' });
 
-    let userRole = role === 'coach' ? 'coach' : 'athlete';
+    // SECURITE : tout inscrit hors coach principal naît ATHLETE.
+    // Le rôle "coach" demandé est conservé dans requestedRole pour info, mais ne donne aucun privilège.
+    // Seul le coach principal peut promouvoir un athlète en coach via /api/admin/approve avec {role:'coach'}.
+    const requestedRole = role === 'coach' ? 'coach' : 'athlete';
+    let userRole = 'athlete';
     let coachId  = null;
     const isMain = lowEmail === MAIN_COACH_EMAIL;
 
@@ -376,6 +381,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       createdAt: Date.now(),
       status, isMainCoach: isMain,
       loginFails: [], lockedUntil: null,
+      requestedRole, // ce qu'il a coché à l'inscription (pour info coach principal)
     };
     DATA.users[id] = u;
     persist();
@@ -907,14 +913,20 @@ app.get('/api/admin/pending', authRequired, coachOnly, mainCoachOnly, (req, res)
 app.post('/api/admin/approve/:userId', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   const u = DATA.users[req.params.userId];
   if (!u) return res.status(404).json({ error: 'not_found' });
+  // Le coach principal choisit explicitement le rôle final (athlete par défaut).
+  // Si {role:'coach'} est passé, l'utilisateur est promu coach. Sinon il reste athlete.
+  const targetRole = req.body && req.body.role === 'coach' ? 'coach' : 'athlete';
   u.status = 'active';
-  // Auto-claim : si c'est un athlète sans coach, on le rattache directement au coach principal qui approuve
-  // → plus de doublon "Approuver" puis "Récupérer"
-  if (u.role === 'athlete' && !u.coachId) {
+  u.role = targetRole;
+  // Si athlete sans coach → rattaché au coach principal qui approuve
+  if (targetRole === 'athlete' && !u.coachId) {
     u.coachId = req.user.id;
   }
+  // Si promu coach → libéré de tout coachId, devient autonome
+  if (targetRole === 'coach') {
+    u.coachId = null;
+  }
   persist();
-  // Tell anyone listening (the now-active user can be notified to retry login)
   io.to('user:' + u.id).emit('account-approved', { profile: profileOf(u) });
   io.to('user:' + u.id).emit('my-profile-updated', { profile: profileOf(u) });
   res.json({ ok: true, profile: profileOf(u) });
