@@ -2090,23 +2090,20 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
     const file=e.target.files[0];
     if(!file)return;
     e.target.value='';
-    setImportMsg(`⏳ Lecture de ${file.name}...`);
-    try{
-      parseNutritionExcel(file,async planParsed=>{
-        try{
-          if(!planParsed._itemsImported){
-            setImportMsg('✗ 0 aliment détecté. Vérifie le format Excel.');
-            setTimeout(()=>setImportMsg(null),6000);return;
-          }
-          const norm=normalizePlan(planParsed);
-          setImportMsg(`⏳ ${planParsed._itemsImported} aliments · sauvegarde...`);
-          await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:norm}});
-          setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`);
-          await load();
-          setTimeout(()=>setImportMsg(null),3500);
-        }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),6000);}
-      },err=>{setImportMsg('✗ Lecture Excel : '+err);setTimeout(()=>setImportMsg(null),6000);});
-    }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),6000);}
+    setImportMsg('⏳ Import en cours...');
+    parseNutritionExcel(file,async planParsed=>{
+      try{
+        if(!planParsed._itemsImported){
+          setImportMsg('✗ 0 aliment détecté');
+          setTimeout(()=>setImportMsg(null),5000);return;
+        }
+        const norm=normalizePlan(planParsed);
+        await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:norm}});
+        setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`);
+        await load();
+        setTimeout(()=>setImportMsg(null),3000);
+      }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),5000);}
+    },err=>{setImportMsg('✗ '+err);setTimeout(()=>setImportMsg(null),5000);});
   };
 
   const load=React.useCallback(async()=>{
@@ -2695,46 +2692,34 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
   const handleExcelImport=e=>{
     const file=e.target.files[0];
-    if(!file){setImportMsg('✗ Aucun fichier sélectionné');setTimeout(()=>setImportMsg(null),4000);return;}
+    if(!file)return;
     e.target.value='';
-    setImportMsg(`⏳ Lecture de ${file.name} (${Math.round(file.size/1024)} KB)...`);
-    try{
-      parseNutritionExcel(file,async plan=>{
-        try{
-          setImportMsg(`✓ Lecture OK · ${plan._itemsImported||0} aliments détectés · sauvegarde en cours...`);
-          if(!plan._itemsImported||plan._itemsImported===0){
-            setImportMsg('✗ 0 aliment détecté. Vérifie le format : 7 feuilles LUNDI→DIMANCHE + colonnes REPAS/PRODUITS/QUANTITE/CALORIE/PROTEINE/GLUCIDE/LIPIDE');
-            setTimeout(()=>setImportMsg(null),8000);
-            return;
-          }
-          const norm=normalizePlan(plan);
-          setData(norm);
-          const firstFilledDay=findFirstFilledDay(norm);
-          setActiveDay(firstFilledDay);
-          setOpenMeal(findFirstFilledMeal(norm,firstFilledDay));
-          lastSyncedRef.current=norm;
-          const ok=await saveImmediate(norm);
-          if(ok){
-            setImportMsg(`✓ ${plan._itemsImported} aliments importés · synchronisé chez l'athlète`);
-          }else{
-            setImportMsg('✗ Sauvegarde backend échouée (vérifie ta connexion)');
-          }
-          setTimeout(()=>setImportMsg(null),5000);
-        }catch(ex){
-          setImportMsg('✗ Erreur traitement : '+(ex.message||ex));
-          setTimeout(()=>setImportMsg(null),8000);
-          console.error('handleExcelImport processing error:',ex);
+    setImportMsg('⏳ Import en cours...');
+    parseNutritionExcel(file,async plan=>{
+      try{
+        if(!plan._itemsImported){
+          setImportMsg('✗ 0 aliment détecté. Vérifie le format Excel (7 feuilles LUNDI→DIMANCHE).');
+          setTimeout(()=>setImportMsg(null),6000);
+          return;
         }
-      },err=>{
-        setImportMsg('✗ Erreur lecture Excel : '+err);
-        setTimeout(()=>setImportMsg(null),8000);
-        console.error('parseNutritionExcel error:',err);
-      });
-    }catch(ex){
-      setImportMsg('✗ Erreur critique : '+(ex.message||ex));
-      setTimeout(()=>setImportMsg(null),8000);
-      console.error('handleExcelImport critical error:',ex);
-    }
+        const norm=normalizePlan(plan);
+        setData(norm);
+        const firstFilledDay=findFirstFilledDay(norm);
+        setActiveDay(firstFilledDay);
+        setOpenMeal(findFirstFilledMeal(norm,firstFilledDay));
+        lastSyncedRef.current=norm;
+        const ok=await saveImmediate(norm);
+        setImportMsg(ok?`✓ ${plan._itemsImported} aliments importés`:'✗ Échec sauvegarde');
+        setTimeout(()=>setImportMsg(null),3500);
+      }catch(ex){
+        setImportMsg('✗ '+(ex.message||ex));
+        setTimeout(()=>setImportMsg(null),6000);
+        console.error('handleExcelImport:',ex);
+      }
+    },err=>{
+      setImportMsg('✗ '+err);
+      setTimeout(()=>setImportMsg(null),6000);
+    });
   };
 
   const handleExcelExport=()=>{
@@ -3358,33 +3343,19 @@ function CoachScreen({authToken,authUser}){
 
   const handleExcel=e=>{
     const file=e.target.files[0];
-    if(!file){flash('✗ Aucun fichier sélectionné');return;}
-    if(!selected){flash('✗ Aucun athlète sélectionné');return;}
+    if(!file||!selected)return;
     e.target.value='';
-    flash(`⏳ Lecture de ${file.name}...`);
-    try{
-      parseYannisExcel(file,async data=>{
-        try{
-          const nS=Object.keys(data).length;
-          const nD=Object.values(data).reduce((s,d)=>s+Object.keys(d).length,0);
-          if(nD===0){flash('✗ 0 jour détecté dans le fichier');return;}
-          flash(`⏳ ${nS} mois · ${nD} jours détectés · sauvegarde...`);
-          await apiCall('/api/coach/program/'+selected.id,{method:'PUT',body:{data}});
-          flash(`✓ Programme assigné (${nS} mois · ${nD} jours)`);
-          reloadDetail(selected.id);
-          load();
-        }catch(ex){
-          flash('✗ Erreur backend : '+(ex.message||ex));
-          console.error('handleExcel backend error:',ex);
-        }
-      },err=>{
-        flash('✗ Erreur lecture Excel : '+err);
-        console.error('parseYannisExcel error:',err);
-      });
-    }catch(ex){
-      flash('✗ Erreur critique : '+(ex.message||ex));
-      console.error('handleExcel critical error:',ex);
-    }
+    flash('⏳ Import en cours...');
+    parseYannisExcel(file,async data=>{
+      try{
+        const nD=Object.values(data).reduce((s,d)=>s+Object.keys(d).length,0);
+        if(nD===0){flash('✗ Aucun jour détecté');return;}
+        await apiCall('/api/coach/program/'+selected.id,{method:'PUT',body:{data}});
+        flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
+        reloadDetail(selected.id);
+        load();
+      }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleExcel:',ex);}
+    },err=>flash('✗ '+err));
   };
 
   // Optimistic patch of athlete profile

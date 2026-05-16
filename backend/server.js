@@ -40,49 +40,10 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
 
-// ── JSON file DB + optional Gist cloud backup ───────
+// ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
 const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {} };
-const GIST_ID      = process.env.GIST_ID || '';
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
-const USE_GIST     = !!(GIST_ID && GITHUB_TOKEN);
 
-async function gistFetch() {
-  if (!USE_GIST) return null;
-  try {
-    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: { Authorization: `token ${GITHUB_TOKEN}`, 'User-Agent': 'prime-athl', 'Accept': 'application/vnd.github+json' }
-    });
-    if (!r.ok) { console.error('Gist fetch HTTP', r.status); return null; }
-    const gist = await r.json();
-    const file = Object.values(gist.files || {})[0];
-    if (!file || !file.content) return null;
-    try {
-      const parsed = JSON.parse(file.content);
-      console.log('Loaded data from Gist:', Object.keys(parsed.users || {}).length, 'users');
-      return parsed;
-    } catch (e) { console.error('Gist JSON parse error:', e.message); return null; }
-  } catch (e) { console.error('Gist fetch error:', e.message); return null; }
-}
-
-async function gistSave() {
-  if (!USE_GIST) return;
-  try {
-    const r1 = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: { Authorization: `token ${GITHUB_TOKEN}`, 'User-Agent': 'prime-athl' }
-    });
-    if (!r1.ok) { console.error('Gist save: get failed', r1.status); return; }
-    const gist = await r1.json();
-    const filename = Object.keys(gist.files || {})[0] || 'data.json';
-    const r2 = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      method: 'PATCH',
-      headers: { Authorization: `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'prime-athl' },
-      body: JSON.stringify({ files: { [filename]: { content: JSON.stringify(DATA, null, 2) } } })
-    });
-    if (!r2.ok) console.error('Gist save HTTP', r2.status);
-  } catch (e) { console.error('Gist save error:', e.message); }
-}
-
-// Boot: Postgres > local file > Gist
+// Boot : Postgres > fichier local
 let DATA = (() => {
   try {
     const raw = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -91,7 +52,6 @@ let DATA = (() => {
   } catch { return structuredClone(DEFAULT_DB); }
 })();
 
-// Postgres : source de vérité prioritaire
 const USE_PG = pgEnabled();
 if (USE_PG) {
   try {
@@ -102,7 +62,6 @@ if (USE_PG) {
       for (const k of Object.keys(DEFAULT_DB)) if (!DATA[k]) DATA[k] = structuredClone(DEFAULT_DB[k]);
       console.log('[boot] Loaded from Postgres :', Object.keys(DATA.users).length, 'users');
     } else if (Object.keys(DATA.users).length > 0) {
-      // 1re migration : on a un local mais pas encore de PG
       await pgSave(DATA);
       console.log('[boot] Migrated local data to Postgres');
     } else {
@@ -110,20 +69,6 @@ if (USE_PG) {
     }
   } catch (e) {
     console.error('[boot] Postgres init failed:', e.message);
-  }
-}
-
-// Fallback Gist (uniquement si pas de Postgres ET local vide)
-if (!USE_PG && USE_GIST && Object.keys(DATA.users).length === 0) {
-  console.log('Local empty, restoring from Gist...');
-  const restored = await gistFetch();
-  if (restored && Object.keys(restored.users || {}).length > 0) {
-    DATA = restored;
-    for (const k of Object.keys(DEFAULT_DB)) if (!DATA[k]) DATA[k] = structuredClone(DEFAULT_DB[k]);
-    try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
-    console.log('Restored from Gist:', Object.keys(DATA.users).length, 'users');
-  } else {
-    console.log('Gist empty or unreachable, starting fresh');
   }
 }
 
@@ -161,11 +106,10 @@ async function ensureMainCoach() {
 await ensureMainCoach();
 
 let saveTimer = null;
-let gistSaveTimer = null;
 let pgSaveTimer = null;
 let saving = false;
 function persist() {
-  // Save local file (fast, sync-safe)
+  // Sauvegarde fichier local (rapide, sync-safe)
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     if (saving) return;
@@ -183,11 +127,6 @@ function persist() {
     pgSaveTimer = setTimeout(() => {
       pgSave(DATA).catch(e => console.error('[pg] save error:', e.message));
     }, 2000);
-  }
-  // Gist : ne tourne que si PAS de Postgres (legacy fallback)
-  if (!USE_PG && USE_GIST) {
-    if (gistSaveTimer) clearTimeout(gistSaveTimer);
-    gistSaveTimer = setTimeout(() => { gistSave(); }, 8000);
   }
 }
 
@@ -836,8 +775,8 @@ app.get('/api/health', (req, res) => {
     uptime: Math.round(process.uptime()),
     users: Object.keys(DATA.users).length,
     dbPath: DB_PATH,
-    persistent: USE_PG || DB_PATH.startsWith('/data') || USE_GIST,
-    storage: USE_PG ? 'postgres' : (USE_GIST ? 'gist' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral')),
+    persistent: USE_PG || DB_PATH.startsWith('/data'),
+    storage: USE_PG ? 'postgres' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral'),
     timestamp: Date.now(),
   });
 });
@@ -892,13 +831,6 @@ app.get('/api/admin/pg-backup/:id', authRequired, coachOnly, mainCoachOnly, asyn
     res.setHeader('Content-Disposition', `attachment; filename="prime-athl-backup-${b.id}.json"`);
     res.send(JSON.stringify(b.data, null, 2));
   } catch (e) { res.status(500).json({ error: 'download_failed', detail: e.message }); }
-});
-
-// Manual backup trigger (main coach only)
-app.post('/api/admin/gist-sync', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
-  if (!USE_GIST) return res.status(400).json({ error: 'gist_not_configured' });
-  await gistSave();
-  res.json({ ok: true });
 });
 
 // ── Admin (main coach only) ─────────────────────────
