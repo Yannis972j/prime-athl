@@ -908,9 +908,15 @@ app.post('/api/admin/approve/:userId', authRequired, coachOnly, mainCoachOnly, (
   const u = DATA.users[req.params.userId];
   if (!u) return res.status(404).json({ error: 'not_found' });
   u.status = 'active';
+  // Auto-claim : si c'est un athlète sans coach, on le rattache directement au coach principal qui approuve
+  // → plus de doublon "Approuver" puis "Récupérer"
+  if (u.role === 'athlete' && !u.coachId) {
+    u.coachId = req.user.id;
+  }
   persist();
   // Tell anyone listening (the now-active user can be notified to retry login)
   io.to('user:' + u.id).emit('account-approved', { profile: profileOf(u) });
+  io.to('user:' + u.id).emit('my-profile-updated', { profile: profileOf(u) });
   res.json({ ok: true, profile: profileOf(u) });
 });
 
