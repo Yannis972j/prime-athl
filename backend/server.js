@@ -7,6 +7,9 @@ import cors from 'cors';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
@@ -15,7 +18,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const PORT             = process.env.PORT       || 3001;
+const NODE_ENV         = process.env.NODE_ENV   || 'development';
+const IS_PROD          = NODE_ENV === 'production';
+// JWT_SECRET : obligatoire en prod, sinon on refuse de démarrer (sécurité)
+if (IS_PROD && !process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET env var required in production');
+  process.exit(1);
+}
 const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random().toString(36).slice(2);
+// Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev).
+const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const DB_PATH          = process.env.DB_PATH    || path.join(__dirname, 'data.json');
 // Try multiple frontend paths (local dev, Render deploy)
 const FRONTEND_CANDIDATES = [
@@ -213,10 +225,14 @@ const findUserByEmail = email => Object.values(DATA.users).find(u => u.email ===
 
 // ── Middleware ──────────────────────────────────────
 const authRequired = (req, res, next) => {
+  // Accept token from httpOnly cookie OR Bearer header (rétro-compat)
+  const cookieToken = req.cookies && req.cookies.pa_token;
   const h = req.headers.authorization;
-  if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'no_token' });
+  const headerToken = h && h.startsWith('Bearer ') ? h.slice(7) : null;
+  const token = cookieToken || headerToken;
+  if (!token) return res.status(401).json({ error: 'no_token' });
   try {
-    req.user = verify(h.slice(7));
+    req.user = verify(token);
     const u = DATA.users[req.user.id];
     if (!u) return res.status(401).json({ error: 'user_not_found' });
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
@@ -237,20 +253,93 @@ const mainCoachOnly = (req, res, next) => {
 
 // ── App ─────────────────────────────────────────────
 const app = express();
-app.use(cors());
+app.set('trust proxy', 1); // Render / proxies → req.ip vrai
+
+// Helmet : en-têtes de sécurité (XSS, clickjacking, etc.)
+app.use(helmet({
+  contentSecurityPolicy: false, // Inline scripts (Babel standalone) – on désactive le CSP pour l'instant
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS : strict en prod (liste blanche), permissif en dev
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // requêtes mobiles / same-origin
+    if (CORS_ORIGINS.length === 0) return cb(null, true); // dev
+    if (CORS_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS blocked'), false);
+  },
+  credentials: true,
+}));
+
 app.use(express.json({ limit: '50mb' }));
+app.use(cookieParser());
+
+// Rate-limit global doux (anti-DDOS basique) — 600 req / 5 min / IP
+const globalLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests' },
+});
+app.use('/api/', globalLimiter);
+
+// Rate-limit serré sur les endpoints d'authentification
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // 10 tentatives / 15 min / IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // ne pénalise pas les login réussis
+  message: { error: 'too_many_auth_attempts', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
+});
 
 // Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
 app.get('/', (req, res) => res.redirect('/Muscu.html'));
 
 app.use(express.static(FRONTEND));
 
+// Helper : pose un cookie httpOnly avec le JWT (en plus du Bearer renvoyé en JSON)
+function setAuthCookie(res, token) {
+  res.cookie('pa_token', token, {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: IS_PROD ? 'lax' : 'lax',
+    maxAge: 60 * 24 * 60 * 60 * 1000, // 60 jours, comme le JWT
+    path: '/',
+  });
+}
+function clearAuthCookie(res) {
+  res.clearCookie('pa_token', { path: '/' });
+}
+
 // ── Auth ────────────────────────────────────────────
-app.post('/api/auth/signup', async (req, res) => {
+// Verrouillage de compte : max 5 échecs / 15 min
+const LOCK_THRESHOLD = 5;
+const LOCK_WINDOW_MS = 15 * 60 * 1000;
+function recordLoginFailure(user) {
+  if (!user) return;
+  const now = Date.now();
+  user.loginFails = (user.loginFails || []).filter(t => now - t < LOCK_WINDOW_MS);
+  user.loginFails.push(now);
+  if (user.loginFails.length >= LOCK_THRESHOLD) {
+    user.lockedUntil = now + LOCK_WINDOW_MS;
+  }
+}
+function isLocked(user) {
+  return user && user.lockedUntil && user.lockedUntil > Date.now();
+}
+function clearLoginFailures(user) {
+  if (user) { user.loginFails = []; user.lockedUntil = null; }
+}
+
+app.post('/api/auth/signup', authLimiter, async (req, res) => {
   try {
     const { email, password, role, inviteCode: ic } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_password_required' });
-    if (password.length < 6)  return res.status(400).json({ error: 'password_too_short' });
+    if (password.length < 8)  return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
 
     const lowEmail = email.toLowerCase();
     if (findUserByEmail(lowEmail)) return res.status(400).json({ error: 'email_already_used' });
@@ -273,13 +362,14 @@ app.post('/api/auth/signup', async (req, res) => {
     if (isMain) userRole = 'coach';
 
     const id = uid();
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12); // 10 → 12 (plus résistant)
     const u = {
       id, email: lowEmail, passwordHash, role: userRole, coachId,
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(),
       status, isMainCoach: isMain,
+      loginFails: [], lockedUntil: null,
     };
     DATA.users[id] = u;
     persist();
@@ -293,20 +383,41 @@ app.post('/api/auth/signup', async (req, res) => {
     if (status === 'pending') {
       return res.json({ pending: true, message: "Demande envoyée. En attente d'approbation du coach principal." });
     }
-    res.json({ token: sign({ id: u.id, role: u.role }), user: profileOf(u) });
+    const token = sign({ id: u.id, role: u.role });
+    setAuthCookie(res, token);
+    res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'signup_failed' }); }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     const u = findUserByEmail((email || '').toLowerCase());
-    if (!u) return res.status(401).json({ error: 'invalid_credentials' });
+    // Réponse identique en temps constant si user inconnu (anti-énumération)
+    if (!u) { await bcrypt.compare(password || '', '$2a$12$dummyhashdummyhashdummyhashdummyhashdummyhashdumm'); return res.status(401).json({ error: 'invalid_credentials' }); }
+    if (isLocked(u)) {
+      const mins = Math.ceil((u.lockedUntil - Date.now()) / 60000);
+      return res.status(429).json({ error: 'account_locked', detail: `Compte verrouillé. Réessaie dans ${mins} min.` });
+    }
     const ok = await bcrypt.compare(password, u.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    if (!ok) {
+      recordLoginFailure(u);
+      persist();
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
-    res.json({ token: sign({ id: u.id, role: u.role }), user: profileOf(u) });
+    clearLoginFailures(u);
+    persist();
+    const token = sign({ id: u.id, role: u.role });
+    setAuthCookie(res, token);
+    res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'login_failed' }); }
+});
+
+// Logout : efface le cookie httpOnly
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({ ok: true });
 });
 
 // ── Profile ─────────────────────────────────────────
