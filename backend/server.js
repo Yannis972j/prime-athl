@@ -300,7 +300,9 @@ const authLimiter = rateLimit({
 });
 
 // Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
-app.get('/', (req, res) => res.redirect('/Muscu.html'));
+// Root = landing page (index.html). L'app vit sur /Muscu.html.
+// Le express.static plus bas servira automatiquement /index.html sur "/", mais on garde un fallback explicite :
+app.get('/app', (req, res) => res.redirect('/Muscu.html'));
 
 app.use(express.static(FRONTEND));
 

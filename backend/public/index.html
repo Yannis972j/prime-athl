@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="theme-color" content="#0a0a0e"/>
+<title>Prime Athl — La salle, en mieux suivie.</title>
+<meta name="description" content="Plateforme coach-athlète : programmes Excel, plans nutrition, suivi temps réel des séances. Pensée pour la salle de sport."/>
+<meta property="og:title" content="Prime Athl — La salle, en mieux suivie."/>
+<meta property="og:description" content="Programme, nutrition, séance, synchronisés entre toi et ton coach. En direct."/>
+<meta property="og:type" content="website"/>
+<link rel="manifest" href="/manifest.webmanifest"/>
+<link rel="apple-touch-icon" href="/icon-192.png"/>
+<link rel="preconnect" href="https://rsms.me"/>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+<style>
+:root{
+  --bg:#0a0a0e; --bg-2:#13131a; --bg-3:#1a1a24;
+  --text:#f4f1ed; --dim:#a8a097; --faint:#6e655c;
+  --line:rgba(255,255,255,0.06);
+  --line-2:rgba(255,255,255,0.10);
+  --accent:#d97757;
+  --rose:#c97586;
+  --steel:#7ca8c4;
+  --gold:#c2a042;
+  --sage:#7cc4a1;
+  --grad:linear-gradient(135deg,#d97757 0%,#c97586 50%,#8e6cb6 100%);
+  --grad-soft:linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.10),rgba(142,108,182,0.08));
+  --shadow-card:0 30px 80px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.04) inset;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;font-feature-settings:'cv11','ss03'}
+body{overflow-x:hidden;line-height:1.5}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;border:none;cursor:pointer;background:transparent;color:inherit}
+img{display:block;max-width:100%}
+
+/* ── Animations ──────────────────────────────── */
+@keyframes shift{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes pulse{0%,100%{opacity:0.6;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── Layout ──────────────────────────────────── */
+.container{width:100%;max-width:1180px;margin:0 auto;padding:0 24px}
+.section{padding:96px 0;position:relative}
+.section-sm{padding:64px 0}
+
+/* ── Header ─────────────────────────────────── */
+.header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,14,0.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.header-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
+.logo{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-0.3px;font-size:17px}
+.logo-mark{width:34px;height:34px;border-radius:10px;padding:2px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite}
+.logo-mark>div{width:100%;height:100%;border-radius:8px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px}
+.nav-links{display:flex;align-items:center;gap:32px}
+.nav-links a{font-size:13px;font-weight:500;color:var(--dim);transition:color 0.2s}
+.nav-links a:hover{color:var(--text)}
+.btn-cta{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 18px;border-radius:12px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;color:#fff;font-size:13px;font-weight:700;letter-spacing:0.1px;box-shadow:0 8px 24px rgba(217,119,87,0.35);transition:transform 0.15s ease,box-shadow 0.15s ease}
+.btn-cta:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(217,119,87,0.45)}
+.btn-cta-lg{height:54px;padding:0 28px;font-size:14.5px;border-radius:14px}
+.btn-ghost{display:inline-flex;align-items:center;gap:7px;height:54px;padding:0 22px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid var(--line-2);color:var(--text);font-size:14px;font-weight:600;transition:all 0.2s}
+.btn-ghost:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.16)}
+
+@media(max-width:720px){.nav-links{display:none}.nav-links.cta-only{display:flex;gap:0}.nav-links.cta-only a:not(.btn-cta){display:none}}
+
+/* ── Hero ───────────────────────────────────── */
+.hero{padding:140px 0 80px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-20%;right:-10%;width:60%;height:80%;background:radial-gradient(ellipse,rgba(217,119,87,0.18) 0%,transparent 55%);filter:blur(40px);pointer-events:none;z-index:0}
+.hero::after{content:'';position:absolute;bottom:-30%;left:-15%;width:55%;height:75%;background:radial-gradient(ellipse,rgba(124,168,196,0.10) 0%,transparent 60%);filter:blur(50px);pointer-events:none;z-index:0}
+.hero-inner{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr 1fr;gap:80px;align-items:center}
+@media(max-width:920px){.hero-inner{grid-template-columns:1fr;gap:60px}}
+.hero-pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 8px;border-radius:999px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.30);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:0.3px;margin-bottom:22px;animation:fadeUp 0.6s ease both}
+.hero-pill-dot{width:6px;height:6px;border-radius:3px;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
+.hero h1{font-size:clamp(38px,5.5vw,68px);font-weight:800;letter-spacing:-2px;line-height:1.05;margin-bottom:22px;animation:fadeUp 0.7s ease 0.05s both}
+.gradient-text{background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 8s linear infinite}
+.hero p{font-size:18px;color:var(--dim);max-width:540px;margin-bottom:36px;line-height:1.6;animation:fadeUp 0.7s ease 0.15s both}
+.hero-ctas{display:flex;gap:12px;flex-wrap:wrap;animation:fadeUp 0.7s ease 0.25s both}
+.hero-meta{display:flex;gap:32px;margin-top:42px;animation:fadeUp 0.7s ease 0.35s both}
+@media(max-width:520px){.hero-meta{gap:20px}}
+.hero-meta-item{display:flex;flex-direction:column}
+.hero-meta-item strong{font-size:22px;font-weight:800;letter-spacing:-0.5px;background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 10s linear infinite}
+.hero-meta-item span{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-top:2px}
+
+/* ── Phone mockup ──────────────────────────── */
+.phone-wrap{position:relative;display:flex;justify-content:center;animation:fadeUp 0.8s ease 0.3s both}
+.phone{width:280px;height:580px;border-radius:42px;padding:8px;background:linear-gradient(160deg,#2a2a32,#13131a);box-shadow:0 50px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05) inset,0 30px 60px rgba(217,119,87,0.15);position:relative;animation:floatY 6s ease-in-out infinite}
+.phone-screen{width:100%;height:100%;border-radius:34px;background:radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 60%);overflow:hidden;position:relative;display:flex;flex-direction:column;padding:32px 18px 22px}
+.phone-notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:110px;height:24px;border-radius:14px;background:#000;z-index:5}
+.phone-time{position:absolute;top:18px;left:32px;font-size:13px;font-weight:700;color:#fff;letter-spacing:-0.2px}
+.phone-status{position:absolute;top:20px;right:32px;display:flex;align-items:center;gap:5px;color:#fff}
+.phone-bars{display:flex;gap:1.5px;align-items:flex-end}
+.phone-bars span{width:2.5px;background:#fff;border-radius:1px}
+.phone-bars span:nth-child(1){height:5px}.phone-bars span:nth-child(2){height:7px}.phone-bars span:nth-child(3){height:9px}.phone-bars span:nth-child(4){height:11px}
+.phone-batt{width:22px;height:11px;border-radius:3px;border:1px solid rgba(255,255,255,0.5);position:relative;padding:1px}
+.phone-batt::after{content:'';display:block;width:100%;height:100%;background:#fff;border-radius:1px}
+/* Phone content */
+.pc-head{display:flex;align-items:center;justify-content:space-between;margin-top:30px;margin-bottom:18px}
+.pc-back{width:34px;height:34px;border-radius:17px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+.pc-title{text-align:center}
+.pc-title-sub{font-size:10px;color:var(--dim);font-weight:600;letter-spacing:0.4px;text-transform:uppercase}
+.pc-title-main{font-size:14px;font-weight:700;color:#fff;margin-top:1px}
+.pc-edit{width:34px;height:34px;border-radius:17px;background:rgba(217,119,87,0.12);border:1px solid rgba(217,119,87,0.3);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:12px}
+.pc-progress{display:flex;gap:3px;margin-bottom:8px}
+.pc-progress span{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)}
+.pc-progress span.done{background:var(--accent)}
+.pc-progress span.active{background:var(--grad)}
+.pc-meta{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);font-weight:600;margin-bottom:16px}
+.pc-ex{flex:1;border-radius:14px;background:rgba(14,14,20,0.85);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.08);padding:14px 12px;position:relative;overflow:hidden}
+.pc-ex::before{content:'';position:absolute;top:-30%;right:-30%;width:120%;height:80%;background:radial-gradient(ellipse,rgba(217,119,87,0.20) 0%,transparent 60%);filter:blur(20px)}
+.pc-ex-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(217,119,87,0.18);border:1px solid rgba(217,119,87,0.35);color:var(--accent);font-size:8px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;position:relative}
+.pc-ex-title{font-size:16px;font-weight:700;color:#fff;margin-top:4px;margin-bottom:3px;position:relative}
+.pc-ex-prev{font-size:8px;color:var(--steel);background:rgba(124,168,196,0.10);border:1px solid rgba(124,168,196,0.3);padding:2px 6px;border-radius:999px;display:inline-block;margin-bottom:8px;position:relative}
+.pc-set{display:flex;align-items:center;gap:5px;padding:4px 5px 4px 7px;border-radius:9px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);margin-bottom:5px;position:relative}
+.pc-set.done{background:rgba(217,119,87,0.07);border-color:rgba(217,119,87,0.18)}
+.pc-set.active{background:rgba(217,119,87,0.04);border-color:rgba(217,119,87,0.35)}
+.pc-set-num{width:18px;height:18px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--faint);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pc-set.done .pc-set-num{background:var(--accent);color:#fff}
+.pc-set.active .pc-set-num{background:rgba(217,119,87,0.18);color:var(--accent)}
+.pc-stepper{display:inline-flex;align-items:center;gap:2px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;height:22px;padding:0 4px;font-size:10px;font-weight:700;color:#fff}
+.pc-stepper-sm{font-size:7px;color:var(--faint);font-weight:600}
+.pc-x{color:var(--faint);font-size:9px;font-weight:600}
+.pc-check{margin-left:auto;width:26px;height:24px;border-radius:7px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center}
+.pc-set.active .pc-check{background:var(--grad);box-shadow:0 4px 10px rgba(217,119,87,0.4)}
+.pc-set.done .pc-check{color:var(--accent);background:transparent;border:1px solid rgba(217,119,87,0.18);font-size:8px;font-weight:700}
+
+/* ── Stats bar ─────────────────────────────── */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:48px;padding:36px 40px;border-radius:24px;background:linear-gradient(160deg,rgba(28,28,40,0.65),rgba(14,14,20,0.65));border:1px solid var(--line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+@media(max-width:720px){.stats-bar{grid-template-columns:repeat(2,1fr);gap:28px;padding:28px}}
+.stat-item{text-align:center}
+.stat-item strong{font-size:32px;font-weight:800;letter-spacing:-1px;display:block;line-height:1}
+.stat-item span{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-top:8px;display:block}
+.stat-num-1{background:linear-gradient(135deg,#d97757,#c97586);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat-num-2{background:linear-gradient(135deg,#7ca8c4,#8e6cb6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat-num-3{background:linear-gradient(135deg,#7cc4a1,#c2a042);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat-num-4{background:linear-gradient(135deg,#c2a042,#d97757);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ── Section heading ───────────────────────── */
+.eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
+.section-title{font-size:clamp(30px,4vw,46px);font-weight:800;letter-spacing:-1.2px;line-height:1.1;margin-bottom:18px}
+.section-sub{font-size:17px;color:var(--dim);max-width:640px;line-height:1.6;margin-bottom:60px}
+.section-head{text-align:center;max-width:760px;margin:0 auto 60px}
+.section-head .section-sub{margin:0 auto}
+
+/* ── Features grid ─────────────────────────── */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:920px){.features{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.features{grid-template-columns:1fr}}
+.feature{padding:28px;border-radius:20px;background:linear-gradient(160deg,rgba(28,28,40,0.6),rgba(14,14,20,0.6));border:1px solid var(--line);transition:all 0.3s ease;position:relative;overflow:hidden}
+.feature:hover{transform:translateY(-4px);border-color:rgba(217,119,87,0.25);box-shadow:0 20px 40px rgba(0,0,0,0.4)}
+.feature::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle at center,rgba(217,119,87,0.08) 0%,transparent 50%);opacity:0;transition:opacity 0.3s ease;pointer-events:none}
+.feature:hover::before{opacity:1}
+.feature-icon{width:46px;height:46px;border-radius:12px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.20);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:22px;margin-bottom:18px;position:relative}
+.feature h3{font-size:18px;font-weight:700;letter-spacing:-0.3px;margin-bottom:8px;position:relative}
+.feature p{font-size:14px;color:var(--dim);line-height:1.6;position:relative}
+
+/* ── Audience split (Coach / Athlète) ─────── */
+.audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:760px){.audience{grid-template-columns:1fr}}
+.audience-card{padding:38px 32px;border-radius:24px;position:relative;overflow:hidden;border:1px solid var(--line-2)}
+.audience-coach{background:linear-gradient(160deg,rgba(217,119,87,0.10),rgba(20,20,28,0.85))}
+.audience-athlete{background:linear-gradient(160deg,rgba(124,168,196,0.10),rgba(20,20,28,0.85))}
+.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:18px}
+.audience-coach .audience-tag{background:rgba(217,119,87,0.15);color:var(--accent);border:1px solid rgba(217,119,87,0.3)}
+.audience-athlete .audience-tag{background:rgba(124,168,196,0.15);color:var(--steel);border:1px solid rgba(124,168,196,0.3)}
+.audience-card h3{font-size:26px;font-weight:800;letter-spacing:-0.6px;margin-bottom:12px}
+.audience-card p{font-size:14.5px;color:var(--dim);line-height:1.6;margin-bottom:24px}
+.audience-list{list-style:none;display:flex;flex-direction:column;gap:12px}
+.audience-list li{display:flex;align-items:flex-start;gap:11px;font-size:14px;color:var(--text);line-height:1.5}
+.audience-list li::before{content:'';flex-shrink:0;width:18px;height:18px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+.audience-coach .audience-list li::before{background:rgba(217,119,87,0.18);color:var(--accent);content:'✓'}
+.audience-athlete .audience-list li::before{background:rgba(124,168,196,0.18);color:var(--steel);content:'✓'}
+
+/* ── Steps ──────────────────────────────────── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
+@media(max-width:760px){.steps{grid-template-columns:1fr}}
+.step{padding:28px;border-radius:20px;background:rgba(28,28,40,0.4);border:1px solid var(--line);position:relative}
+.step-num{position:absolute;top:-18px;left:24px;width:36px;height:36px;border-radius:10px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;box-shadow:0 6px 16px rgba(217,119,87,0.4)}
+.step h3{font-size:18px;font-weight:700;letter-spacing:-0.3px;margin:14px 0 8px}
+.step p{font-size:14px;color:var(--dim);line-height:1.6}
+
+/* ── Showcase (preview boxes) ───────────────── */
+.showcase{display:grid;grid-template-columns:1.2fr 1fr;gap:60px;align-items:center}
+@media(max-width:840px){.showcase{grid-template-columns:1fr;gap:40px}}
+.showcase-list{display:flex;flex-direction:column;gap:18px}
+.showcase-item{padding:22px 24px;border-radius:16px;background:rgba(28,28,40,0.4);border:1px solid var(--line);transition:all 0.25s ease;cursor:pointer}
+.showcase-item:hover{border-color:rgba(217,119,87,0.30);background:rgba(217,119,87,0.04)}
+.showcase-item h4{font-size:16px;font-weight:700;margin-bottom:6px;letter-spacing:-0.2px}
+.showcase-item p{font-size:13.5px;color:var(--dim);line-height:1.55}
+.showcase-image{aspect-ratio:1/1.5;max-width:340px;margin:0 auto;border-radius:32px;background:linear-gradient(160deg,#1d1410,#0a0a0e);border:1px solid var(--line-2);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:13px;position:relative;overflow:hidden;box-shadow:var(--shadow-card)}
+.showcase-image::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 0%,rgba(217,119,87,0.10) 0%,transparent 55%)}
+
+/* ── FAQ ──────────────────────────────────── */
+.faq{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.faq-item{border-radius:14px;background:rgba(28,28,40,0.5);border:1px solid var(--line);overflow:hidden;transition:all 0.25s}
+.faq-item:hover{border-color:var(--line-2)}
+.faq-q{width:100%;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;font-size:15.5px;font-weight:600;text-align:left;color:var(--text);transition:color 0.2s}
+.faq-q:hover{color:var(--accent)}
+.faq-q-icon{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px;font-weight:700;flex-shrink:0;margin-left:16px;transition:transform 0.25s ease}
+.faq-item.open .faq-q-icon{transform:rotate(45deg);background:rgba(217,119,87,0.18);color:var(--accent)}
+.faq-a{padding:0 24px;max-height:0;overflow:hidden;transition:max-height 0.3s ease,padding 0.3s ease;color:var(--dim);font-size:14px;line-height:1.65}
+.faq-item.open .faq-a{padding:0 24px 20px;max-height:300px}
+
+/* ── Final CTA ─────────────────────────────── */
+.final-cta{text-align:center;padding:72px 32px;border-radius:32px;background:linear-gradient(160deg,rgba(217,119,87,0.12),rgba(20,20,28,0.95));border:1px solid rgba(217,119,87,0.20);position:relative;overflow:hidden}
+.final-cta::before{content:'';position:absolute;top:-40%;right:-20%;width:60%;height:120%;background:radial-gradient(ellipse,rgba(217,119,87,0.20),transparent 60%);filter:blur(40px);pointer-events:none}
+.final-cta::after{content:'';position:absolute;bottom:-40%;left:-20%;width:55%;height:120%;background:radial-gradient(ellipse,rgba(142,108,182,0.15),transparent 60%);filter:blur(40px);pointer-events:none}
+.final-cta>*{position:relative}
+.final-cta h2{font-size:clamp(28px,3.5vw,42px);font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:14px}
+.final-cta p{font-size:17px;color:var(--dim);max-width:520px;margin:0 auto 30px;line-height:1.6}
+
+/* ── Footer ──────────────────────────────── */
+.footer{padding:60px 0 36px;border-top:1px solid var(--line);margin-top:60px}
+.footer-inner{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;justify-content:space-between}
+.footer-brand{max-width:280px}
+.footer-brand p{font-size:13px;color:var(--dim);line-height:1.6;margin-top:12px}
+.footer-cols{display:flex;gap:60px;flex-wrap:wrap}
+.footer-col h5{font-size:11px;color:var(--faint);font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:14px}
+.footer-col a{display:block;font-size:13.5px;color:var(--dim);font-weight:500;margin-bottom:9px;transition:color 0.2s}
+.footer-col a:hover{color:var(--text)}
+.footer-bottom{margin-top:44px;padding-top:24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--faint)}
+</style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────── -->
+<header class="header">
+  <div class="container header-inner">
+    <a href="#" class="logo">
+      <div class="logo-mark"><div>PA</div></div>
+      Prime Athl
+    </a>
+    <nav class="nav-links">
+      <a href="#fonctions">Fonctionnalités</a>
+      <a href="#qui">Pour qui</a>
+      <a href="#etapes">Étapes</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn-cta" href="/Muscu.html">Lancer l'app →</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ── Hero ───────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-pill"><span class="hero-pill-dot"></span> Coach · Athlète · Synchronisé en direct</div>
+        <h1>La salle, <span class="gradient-text">en mieux suivie.</span></h1>
+        <p>Prime Athl relie les coachs et leurs athlètes : programmes Excel, plans nutrition, séries validées, historique, le tout synchronisé en temps réel. Pensé pour la salle, pas pour un bureau.</p>
+        <div class="hero-ctas">
+          <a class="btn-cta btn-cta-lg" href="/Muscu.html">
+            Accéder à l'application
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </a>
+          <a class="btn-ghost" href="#fonctions">Voir les fonctionnalités</a>
+        </div>
+        <div class="hero-meta">
+          <div class="hero-meta-item"><strong>0,3 s</strong><span>Sync coach ↔ athlète</span></div>
+          <div class="hero-meta-item"><strong>100 %</strong><span>Mobile-first</span></div>
+          <div class="hero-meta-item"><strong>Excel</strong><span>Import natif</span></div>
+        </div>
+      </div>
+
+      <!-- Mockup téléphone -->
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <div class="phone-time">9:41</div>
+          <div class="phone-status">
+            <div class="phone-bars"><span></span><span></span><span></span><span></span></div>
+            <div class="phone-batt"></div>
+          </div>
+          <div class="phone-screen">
+            <div class="pc-head">
+              <div class="pc-back">‹</div>
+              <div class="pc-title">
+                <div class="pc-title-sub">Lundi</div>
+                <div class="pc-title-main">1:15</div>
+              </div>
+              <div class="pc-edit">✎</div>
+            </div>
+            <div class="pc-progress">
+              <span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="active"></span><span></span><span></span><span></span>
+            </div>
+            <div class="pc-meta"><span>Exercice 6/9</span><span>17/35 · 4 250 kg</span></div>
+
+            <div class="pc-ex">
+              <div class="pc-ex-pill">● Pectoraux</div>
+              <div class="pc-ex-title">Développé couché</div>
+              <div class="pc-ex-prev">↺ Dernière : 80×8 · 80×7 · 80×6</div>
+
+              <div class="pc-set done">
+                <div class="pc-set-num">✓</div>
+                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
+                <span class="pc-x">×</span>
+                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
+                <div class="pc-check">640<br/>kg</div>
+              </div>
+              <div class="pc-set done">
+                <div class="pc-set-num">✓</div>
+                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
+                <span class="pc-x">×</span>
+                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
+                <div class="pc-check">640<br/>kg</div>
+              </div>
+              <div class="pc-set active">
+                <div class="pc-set-num">3</div>
+                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
+                <span class="pc-x">×</span>
+                <span class="pc-stepper">− 7 <span class="pc-stepper-sm">/8</span> +</span>
+                <div class="pc-check" style="color:#fff">✓</div>
+              </div>
+              <div class="pc-set">
+                <div class="pc-set-num">4</div>
+                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
+                <span class="pc-x">×</span>
+                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
+                <div class="pc-check">✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats bar ──────────────────────────── -->
+<section class="section-sm">
+  <div class="container">
+    <div class="stats-bar">
+      <div class="stat-item"><strong class="stat-num-1">9</strong><span>Exercices / séance</span></div>
+      <div class="stat-item"><strong class="stat-num-2">7</strong><span>Jours suivis</span></div>
+      <div class="stat-item"><strong class="stat-num-3">4</strong><span>Macros calculés</span></div>
+      <div class="stat-item"><strong class="stat-num-4">∞</strong><span>Historique gardé</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ─────────────────────────── -->
+<section class="section" id="fonctions">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Fonctionnalités</div>
+      <h2 class="section-title">Tout ce qu'il faut, <span class="gradient-text">rien de plus.</span></h2>
+      <p class="section-sub">Pas de stats vides, pas de gadgets. Chaque écran sert un usage précis à la salle ou à la maison.</p>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">📥</div>
+        <h3>Import Excel natif</h3>
+        <p>Glisse ton fichier de programme ou de plan nutrition. Détection auto des jours, exercices, séries, repos, calories, macros. Pas de saisie manuelle.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <h3>Sync temps réel</h3>
+        <p>Le coach modifie une séance → l'athlète voit la mise à jour dans la seconde. Validations de repas, séries terminées, tout remonte instantanément.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💪</div>
+        <h3>Séance fluide</h3>
+        <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, image de l'exercice en arrière-plan, suggestion intelligente basée sur la dernière performance.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🥗</div>
+        <h3>Nutrition macro</h3>
+        <p>Plan par jour de la semaine, validation repas par repas, somme automatique kcal/protéines/glucides/lipides. Streak de jours validés affiché.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3>Historique complet</h3>
+        <p>Toutes les séances passées, volume total, courbes de progression. Le coach voit l'évolution de chaque athlète, sans effort.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔒</div>
+        <h3>Auth durcie</h3>
+        <p>Mots de passe bcrypt 12 rounds, verrouillage anti brute-force, cookies httpOnly, reset par email. Sécurité au niveau d'une vraie app SaaS.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Audience ──────────────────────────── -->
+<section class="section" id="qui">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Pour qui</div>
+      <h2 class="section-title">Une app, <span class="gradient-text">deux usages.</span></h2>
+      <p class="section-sub">Coach ou athlète, chacun voit l'écran adapté à son rôle. Pas de mode unique mal taillé pour les deux.</p>
+    </div>
+
+    <div class="audience">
+      <div class="audience-card audience-coach">
+        <span class="audience-tag">🎯 Coach</span>
+        <h3>Suis tous tes athlètes depuis un seul écran.</h3>
+        <p>Tu importes leurs programmes Excel, tu vois leurs séances validées en direct, leur progression et leurs macros du jour.</p>
+        <ul class="audience-list">
+          <li>Liste des athlètes avec dernière séance + volume</li>
+          <li>Édition à distance du profil et du programme</li>
+          <li>Miroir séance + nutrition de chaque athlète</li>
+          <li>Notifications quand une demande arrive</li>
+          <li>Codes d'invitation pour rattacher rapidement</li>
+        </ul>
+      </div>
+
+      <div class="audience-card audience-athlete">
+        <span class="audience-tag">💪 Athlète</span>
+        <h3>Ta séance, ton plan, dans ta poche.</h3>
+        <p>Tu vois ce que ton coach a préparé, tu valides tes séries et tes repas. Pas de chargement, pas de friction.</p>
+        <ul class="audience-list">
+          <li>Reprends la séance du jour en un tap</li>
+          <li>Chronomètre automatique entre les séries</li>
+          <li>Macros agrégés en temps réel selon les repas validés</li>
+          <li>Historique de toutes tes séances</li>
+          <li>Profil partagé avec ton coach (poids, PR, objectif)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Steps ──────────────────────────────── -->
+<section class="section" id="etapes">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Comment ça marche</div>
+      <h2 class="section-title">Trois étapes, <span class="gradient-text">c'est parti.</span></h2>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Inscription</h3>
+        <p>Crée ton compte coach ou athlète en 30 secondes. Si tu es athlète, ton coach te file un code pour vous lier directement.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Import</h3>
+        <p>Le coach importe l'Excel du programme et du plan nutrition. L'athlète les reçoit instantanément, prêts à être suivis.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Suivi quotidien</h3>
+        <p>L'athlète valide ses séries à la salle, ses repas dans la journée. Le coach voit tout en direct. La progression se fait toute seule.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ────────────────────────────────── -->
+<section class="section" id="faq">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Questions fréquentes</div>
+      <h2 class="section-title">Avant de te lancer.</h2>
+    </div>
+
+    <div class="faq">
+      <div class="faq-item">
+        <button class="faq-q">C'est gratuit ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Oui, totalement. L'app est en bêta gratuite. Aucune carte demandée, aucune fonctionnalité bridée. Quand un modèle économique sera défini, les utilisateurs actuels seront prévenus largement en avance.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Je peux utiliser l'app sans coach ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Oui. Tu peux importer toi-même ton programme Excel et ton plan nutrition, puis t'auto-suivre. Si tu trouves un coach plus tard, il pourra reprendre la main sans que tu perdes ton historique.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">À quel format doivent être les fichiers Excel ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Programme : feuilles par mois avec colonnes Jour / Exercice / Charge / Séries / Répétitions / Repos. Nutrition : 7 feuilles (Lundi à Dimanche) avec colonnes Repas / Produits / Quantité / Calorie / Protéine / Glucide / Lipide. Tout est détecté automatiquement, l'ordre des colonnes importe peu.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Mes données sont-elles en sécurité ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Oui. Mots de passe hashés avec bcrypt 12 rounds, données stockées dans Postgres (Neon, infra EU), backups quotidiens automatiques avec 30 jours d'historique, JWT signé avec un secret fort, cookies httpOnly, rate-limiting anti brute-force, headers de sécurité Helmet.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">L'app marche-t-elle hors-ligne ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">L'app est une PWA : tu peux l'installer sur ton téléphone comme une vraie app. La séance en cours est sauvegardée localement, donc si tu perds le réseau à la salle, tu peux continuer à valider tes séries. La sync se fait dès que le réseau revient.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Sur quels appareils ça tourne ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Tout navigateur moderne : iPhone (Safari), Android (Chrome), Mac, PC. Pas besoin d'installer quoi que ce soit — un simple lien. Pour la meilleure expérience sur téléphone, ajoute l'app à ton écran d'accueil depuis le menu du navigateur.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Final CTA ────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="final-cta">
+      <h2>Prêt à <span class="gradient-text">arrêter de noter ses séries sur un carnet</span> ?</h2>
+      <p>Crée ton compte en 30 secondes. Pas de carte, pas de questions, pas d'engagement.</p>
+      <a class="btn-cta btn-cta-lg" href="/Muscu.html">
+        Lancer Prime Athl
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────── -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="#" class="logo">
+          <div class="logo-mark"><div>PA</div></div>
+          Prime Athl
+        </a>
+        <p>Plateforme coach-athlète pour la salle de sport. Programmes, nutrition, suivi en direct.</p>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h5>Produit</h5>
+          <a href="#fonctions">Fonctionnalités</a>
+          <a href="#qui">Pour qui</a>
+          <a href="#etapes">Comment ça marche</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="footer-col">
+          <h5>Application</h5>
+          <a href="/Muscu.html">Lancer l'app</a>
+          <a href="/Muscu.html">Se connecter</a>
+          <a href="/Muscu.html">Créer un compte</a>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <a href="mailto:yannisjanvier@gmail.com">Email</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>© <span id="year"></span> Prime Athl. Tous droits réservés.</div>
+      <div>Made with care — Inter font · React · Postgres · Render</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// FAQ accordion
+document.querySelectorAll('.faq-q').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const item = btn.parentElement;
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+    if (!wasOpen) item.classList.add('open');
+  });
+});
+// Année dynamique
+document.getElementById('year').textContent = new Date().getFullYear();
+// Smooth scroll pour les liens d'ancres
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const id = a.getAttribute('href');
+    if (id.length > 1) {
+      const target = document.querySelector(id);
+      if (target) { e.preventDefault(); target.scrollIntoView({behavior:'smooth',block:'start'}); }
+    }
+  });
+});
+</script>
+
+</body>
+</html>
