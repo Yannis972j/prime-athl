@@ -28,6 +28,9 @@ if (IS_PROD && !process.env.JWT_SECRET) {
 const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random().toString(36).slice(2);
 // Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev).
 const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
+const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
+const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 const DB_PATH          = process.env.DB_PATH    || path.join(__dirname, 'data.json');
 // Try multiple frontend paths (local dev, Render deploy)
 const FRONTEND_CANDIDATES = [
@@ -217,6 +220,7 @@ const profileOf = u => u && {
   createdAt: u.createdAt,
   status: u.status || 'active',
   isMainCoach: !!u.isMainCoach,
+  onboardedAt: u.onboardedAt || null,
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -417,6 +421,112 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 // Logout : efface le cookie httpOnly
 app.post('/api/auth/logout', (req, res) => {
   clearAuthCookie(res);
+  res.json({ ok: true });
+});
+
+// ── Reset password ──────────────────────────────────
+import crypto from 'crypto';
+const RESET_TTL_MS = 60 * 60 * 1000; // 1h
+const hashToken = t => crypto.createHash('sha256').update(t).digest('hex');
+
+async function sendResetEmail(toEmail, link) {
+  if (!RESEND_API_KEY) {
+    console.log(`[reset] (no RESEND_API_KEY) Lien pour ${toEmail} : ${link}`);
+    return { sent: false, reason: 'no_provider' };
+  }
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [toEmail],
+        subject: 'Prime Athl — Réinitialise ton mot de passe',
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
+            <h1 style="font-size:22px;margin:0 0 12px;color:#d97757;">Prime Athl</h1>
+            <p>Tu as demandé à réinitialiser ton mot de passe.</p>
+            <p style="margin:24px 0;">
+              <a href="${link}" style="display:inline-block;padding:12px 24px;background:#d97757;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">Choisir un nouveau mot de passe</a>
+            </p>
+            <p style="font-size:12px;color:#666;">Ce lien est valable 1 heure. Si tu n'es pas à l'origine de cette demande, ignore ce message.</p>
+            <p style="font-size:11px;color:#999;margin-top:24px;">Lien complet : <br>${link}</p>
+          </div>`,
+      }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error('[resend] HTTP', r.status, txt);
+      return { sent: false, reason: 'provider_error' };
+    }
+    return { sent: true };
+  } catch (e) {
+    console.error('[resend] error:', e.message);
+    return { sent: false, reason: 'network' };
+  }
+}
+
+// Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+  const email = (req.body?.email || '').toLowerCase().trim();
+  if (!email) return res.status(400).json({ error: 'email_required' });
+  const u = findUserByEmail(email);
+  if (u) {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    u.resetTokenHash = hashToken(rawToken);
+    u.resetTokenExpiry = Date.now() + RESET_TTL_MS;
+    persist();
+    const link = `${PUBLIC_URL}/Muscu.html?reset=${rawToken}`;
+    const r = await sendResetEmail(u.email, link);
+    console.log(`[reset] generated for ${u.email} sent=${r.sent}`);
+  } else {
+    // Délai constant pour ne pas révéler l'existence du compte
+    await new Promise(r => setTimeout(r, 250));
+  }
+  res.json({ ok: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
+});
+
+// Application du nouveau mot de passe
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'token_password_required' });
+    if (password.length < 8) return res.status(400).json({ error: 'password_too_short' });
+    const tokenHash = hashToken(token);
+    const u = Object.values(DATA.users).find(x => x.resetTokenHash === tokenHash);
+    if (!u) return res.status(400).json({ error: 'invalid_or_expired_token' });
+    if (!u.resetTokenExpiry || u.resetTokenExpiry < Date.now()) {
+      u.resetTokenHash = null; u.resetTokenExpiry = null;
+      persist();
+      return res.status(400).json({ error: 'invalid_or_expired_token' });
+    }
+    u.passwordHash = await bcrypt.hash(password, 12);
+    u.resetTokenHash = null;
+    u.resetTokenExpiry = null;
+    u.loginFails = [];
+    u.lockedUntil = null;
+    persist();
+    const newToken = sign({ id: u.id, role: u.role });
+    setAuthCookie(res, newToken);
+    res.json({ ok: true, token: newToken, user: profileOf(u) });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'reset_failed' }); }
+});
+
+// Admin : liste des resets en cours (utile si aucun provider email configuré, pour donner le lien manuellement)
+app.get('/api/admin/active-resets', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  const now = Date.now();
+  const list = Object.values(DATA.users)
+    .filter(u => u.resetTokenHash && u.resetTokenExpiry > now)
+    .map(u => ({ email: u.email, expiresAt: u.resetTokenExpiry, expiresInMin: Math.round((u.resetTokenExpiry - now) / 60000) }));
+  res.json({ resets: list, hasEmailProvider: !!RESEND_API_KEY });
+});
+
+// ── Marqueur d'onboarding ───────────────────────────
+app.post('/api/me/onboarded', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  u.onboardedAt = Date.now();
+  persist();
   res.json({ ok: true });
 });
 

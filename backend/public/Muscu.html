@@ -24,6 +24,7 @@
   @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   @keyframes celebrationPop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.02);opacity:1}100%{transform:scale(1);opacity:1}}
   @keyframes imgFade{0%{opacity:0;transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
+  @keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
   @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,184,108,0.5)}70%{box-shadow:0 0 0 10px rgba(255,184,108,0)}100%{box-shadow:0 0 0 0 rgba(255,184,108,0)}}
   @keyframes countPop{0%{transform:scale(1)}40%{transform:scale(1.15)}100%{transform:scale(1)}}
@@ -3746,16 +3747,25 @@ function CoachScreen({authToken,authUser}){
 const AUTH_ERR_FR={
   invalid_credentials:'Email ou mot de passe incorrect',
   email_already_used:'Cet email est déjà utilisé',
-  password_too_short:'Mot de passe trop court (6 caractères minimum)',
+  password_too_short:'Mot de passe trop court (8 caractères minimum)',
   invite_invalid:'Code coach invalide ou déjà utilisé',
   email_password_required:'Email et mot de passe requis',
   no_token:'Session expirée, reconnecte-toi',
   pending_approval:'⏳ Compte en attente d\'approbation du coach principal',
   main_coach_only:'Réservé au coach principal',
+  invalid_email:'Email invalide',
+  invalid_or_expired_token:'Lien expiré ou déjà utilisé. Refais une demande.',
+  token_password_required:'Champs manquants',
+  email_required:'Entre ton email',
+  account_locked:'Trop de tentatives. Compte verrouillé temporairement.',
+  too_many_auth_attempts:'Trop de tentatives. Réessaie dans 15 minutes.',
+  too_many_requests:'Trop de requêtes. Patiente un peu.',
 };
 
 function AuthScreen({onLogin,onSignup}){
-  const[mode,setMode]=React.useState('login');
+  // Si l'URL contient ?reset=TOKEN → on bascule directement sur l'écran de réinitialisation
+  const resetTokenFromUrl=(()=>{try{return new URLSearchParams(window.location.search).get('reset');}catch{return null;}})();
+  const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
   const[email,setEmail]=React.useState('');
   const[password,setPassword]=React.useState('');
   const[role,setRole]=React.useState('athlete');
@@ -3763,6 +3773,33 @@ function AuthScreen({onLogin,onSignup}){
   const[err,setErr]=React.useState(null);
   const[loading,setLoading]=React.useState(false);
   const[pendingMsg,setPendingMsg]=React.useState(null);
+  const[infoMsg,setInfoMsg]=React.useState(null);
+
+  // Demande de réinitialisation : envoie un email avec le lien (ou log côté serveur)
+  const submitForgot=async e=>{
+    if(e&&e.preventDefault)e.preventDefault();
+    setErr(null);setInfoMsg(null);setLoading(true);
+    try{
+      const r=await apiCall('/api/auth/forgot-password',{method:'POST',body:{email:email.trim().toLowerCase()},noAuth:true});
+      setInfoMsg(r.message||'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.');
+    }catch(ex){setErr(AUTH_ERR_FR[ex.message]||ex.message||'Erreur');}
+    setLoading(false);
+  };
+
+  // Applique le nouveau mot de passe avec le token reçu
+  const submitReset=async e=>{
+    if(e&&e.preventDefault)e.preventDefault();
+    setErr(null);setLoading(true);
+    try{
+      if(password.length<8){setErr('Mot de passe trop court (8 minimum)');setLoading(false);return;}
+      const r=await apiCall('/api/auth/reset-password',{method:'POST',body:{token:resetTokenFromUrl,password},noAuth:true});
+      // Token valide → on est reconnecté
+      localStorage.setItem('pa_token',r.token);
+      window.history.replaceState({},'',window.location.pathname);
+      window.location.reload();
+    }catch(ex){setErr(AUTH_ERR_FR[ex.message]||ex.message||'Lien invalide ou expiré');}
+    setLoading(false);
+  };
 
   const submit=async e=>{
     if(e&&e.preventDefault)e.preventDefault();
@@ -3799,6 +3836,8 @@ function AuthScreen({onLogin,onSignup}){
 
   const inputStyle={width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:T.text,fontSize:15,fontWeight:500,padding:'13px 14px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'};
 
+  const titleByMode={login:'Connexion',signup:'Créer un compte',forgot:'Mot de passe oublié',reset:'Nouveau mot de passe'};
+
   return(
     <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
       <div style={{width:'100%',maxWidth:380}}>
@@ -3810,9 +3849,33 @@ function AuthScreen({onLogin,onSignup}){
             </div>
           </div>
           <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Prime Athl</div>
-          <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.6,marginTop:4}}><HoloText>{mode==='login'?'Connexion':'Créer un compte'}</HoloText></div>
+          <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.6,marginTop:4}}><HoloText>{titleByMode[mode]}</HoloText></div>
         </div>
 
+        {/* ── Forgot password ── */}
+        {mode==='forgot'&&(
+          <form onSubmit={submitForgot} style={{display:'flex',flexDirection:'column',gap:11}}>
+            <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:2,textAlign:'center'}}>Entre ton email, on t'envoie un lien pour choisir un nouveau mot de passe.</div>
+            <input style={inputStyle} type="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+            {err&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(201,117,134,0.1)',border:'1px solid rgba(201,117,134,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>}
+            {infoMsg&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(124,196,161,0.10)',border:'1px solid rgba(124,196,161,0.30)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{infoMsg}</div>}
+            <button type="submit" disabled={loading} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(217,119,87,0.4)',opacity:loading?0.7:1}}>{loading?'…':'Envoyer le lien'}</button>
+            <button type="button" onClick={()=>{setMode('login');setErr(null);setInfoMsg(null);}} style={{height:38,marginTop:4,border:'none',background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>← Retour à la connexion</button>
+          </form>
+        )}
+
+        {/* ── Reset (via lien email) ── */}
+        {mode==='reset'&&(
+          <form onSubmit={submitReset} style={{display:'flex',flexDirection:'column',gap:11}}>
+            <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:2,textAlign:'center'}}>Choisis ton nouveau mot de passe (8 caractères minimum).</div>
+            <input style={inputStyle} type="password" autoComplete="new-password" placeholder="Nouveau mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required minLength={8}/>
+            {err&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(201,117,134,0.1)',border:'1px solid rgba(201,117,134,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>}
+            <button type="submit" disabled={loading||!resetTokenFromUrl} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(217,119,87,0.4)',opacity:loading?0.7:1}}>{loading?'…':'Valider'}</button>
+            {!resetTokenFromUrl&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginTop:4}}>Aucun token. Ouvre le lien reçu par email.</div>}
+          </form>
+        )}
+
+        {(mode==='login'||mode==='signup')&&(<>
         {/* Tab toggle */}
         <div style={{display:'flex',padding:3,background:'rgba(255,255,255,0.04)',borderRadius:12,border:'1px solid rgba(255,255,255,0.06)',marginBottom:18}}>
           {['login','signup'].map(m=>(
@@ -3822,7 +3885,7 @@ function AuthScreen({onLogin,onSignup}){
 
         <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:11}}>
           <input style={inputStyle} type="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
-          <input style={inputStyle} type="password" autoComplete={mode==='login'?'current-password':'new-password'} placeholder={mode==='login'?'Mot de passe':'Mot de passe (6 min)'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='signup'?6:undefined}/>
+          <input style={inputStyle} type="password" autoComplete={mode==='login'?'current-password':'new-password'} placeholder={mode==='login'?'Mot de passe':'Mot de passe (8 min)'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='signup'?8:undefined}/>
 
           {mode==='signup'&&(
             <>
@@ -3851,7 +3914,11 @@ function AuthScreen({onLogin,onSignup}){
           <button type="submit" disabled={loading} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(217,119,87,0.4)',opacity:loading?0.7:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             {loading?'…':(mode==='login'?'Se connecter':'Créer mon compte')}
           </button>
+          {mode==='login'&&(
+            <button type="button" onClick={()=>{setMode('forgot');setErr(null);setInfoMsg(null);}} style={{height:32,marginTop:2,border:'none',background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',textAlign:'center'}}>Mot de passe oublié ?</button>
+          )}
         </form>
+        </>)}
 
         <div style={{fontSize:10,color:T.textFaint,textAlign:'center',marginTop:24,letterSpacing:0.3}}>
           ● BACKEND : {API_BASE||'same origin'}
@@ -3886,7 +3953,50 @@ function App(){
   return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.token}/>;
 }
 
+// Onboarding modal pour la 1re connexion (apparait si user n'a pas encore d'onboardedAt)
+function OnboardingModal({user,onClose}){
+  const[step,setStep]=React.useState(0);
+  const isCoach=user.role==='coach';
+  const steps=isCoach?[
+    {emoji:'👋',title:'Bienvenue Coach',body:"Tu peux gérer tes athlètes, leur envoyer un programme Excel et un plan nutrition. Tout est synchronisé en temps réel."},
+    {emoji:'📥',title:'Importe leurs programmes',body:"Onglet Coach → choisis un athlète → importe un Excel pour la séance ou la nutrition. L'athlète le reçoit instantanément."},
+    {emoji:'📲',title:"Code d'invitation",body:"Génère un code dans l'onglet Coach pour rattacher un nouvel athlète à toi. Sinon, tu peux aussi récupérer un athlète orphelin déjà inscrit."},
+  ]:[
+    {emoji:'👋',title:'Bienvenue',body:"Prime Athl te suit à la salle : programme du jour, séries, nutrition, historique. Tout reste sur ton compte."},
+    {emoji:'💪',title:'Ta séance',body:"Onglet Programme : tape ✓ après chaque série, le chrono de repos démarre tout seul. Tu peux ajuster poids et reps avec les boutons − / +."},
+    {emoji:'🥗',title:'Ta nutrition',body:"Onglet Nutrition : valide chaque repas dans la journée pour suivre tes macros en temps réel. Ton coach voit ta progression."},
+  ];
+  const cur=steps[step];
+  const finish=async()=>{try{await apiCall('/api/me/onboarded',{method:'POST'});}catch(e){}onClose();};
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(6,6,10,0.85)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,animation:'fadeIn 0.3s ease'}}>
+      <div style={{maxWidth:380,width:'100%',padding:1,borderRadius:24,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 12s linear infinite',boxShadow:'0 30px 80px rgba(0,0,0,0.6)'}}>
+        <div style={{borderRadius:23,padding:'28px 24px 20px',background:'linear-gradient(160deg,rgba(28,28,40,0.98),rgba(12,12,18,0.98))',textAlign:'center',color:T.text}}>
+          <div style={{fontSize:54,marginBottom:10,animation:'celebrationPop 0.45s ease'}}>{cur.emoji}</div>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Étape {step+1} / {steps.length}</div>
+          <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.4,marginBottom:10}}><HoloText>{cur.title}</HoloText></div>
+          <div style={{fontSize:14,color:T.textDim,lineHeight:1.55,marginBottom:24}}>{cur.body}</div>
+          {/* Dots */}
+          <div style={{display:'flex',justifyContent:'center',gap:6,marginBottom:18}}>
+            {steps.map((_,i)=>(
+              <div key={i} style={{width:i===step?22:6,height:6,borderRadius:3,background:i===step?T.accent:'rgba(255,255,255,0.15)',transition:'all 0.3s ease'}}/>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>← Retour</button>}
+            <button onClick={step<steps.length-1?()=>setStep(s=>s+1):finish} style={{flex:1,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 18px rgba(217,119,87,0.4)'}}>
+              {step<steps.length-1?'Suivant →':"C'est parti"}
+            </button>
+          </div>
+          <button onClick={finish} style={{marginTop:10,height:30,border:'none',background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer'}}>Passer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MainApp({authUser,onLogout,setUser,authToken}){
+  const[showOnboarding,setShowOnboarding]=React.useState(!authUser.onboardedAt);
   // Deep-link via ?action=...
   const initialTab=(()=>{
     if(typeof window==='undefined')return authUser.role==='coach'?'coach':'programme';
@@ -4019,6 +4129,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const inner=(
     <div style={{height:'100%',width:'100%',display:'flex',flexDirection:'column',position:'relative',paddingTop:isMobile?'env(safe-area-inset-top)':54}}>
+      {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
       {saveFlash&&(
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(124,196,161,0.18)',border:'1px solid rgba(124,196,161,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(124,196,161,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
           ✓ Sync cloud
