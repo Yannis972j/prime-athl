@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#0a0a0e"/>
 <title>Prime Athl — La salle, en mieux suivie.</title>
 <meta name="description" content="Plateforme coach-athlète : programmes Excel, plans nutrition, suivi temps réel des séances. Pensée pour la salle de sport."/>
@@ -62,7 +62,8 @@ img{display:block;max-width:100%}
 .btn-ghost{display:inline-flex;align-items:center;gap:7px;height:54px;padding:0 22px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid var(--line-2);color:var(--text);font-size:14px;font-weight:600;transition:all 0.2s}
 .btn-ghost:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.16)}
 
-@media(max-width:720px){.nav-links{display:none}.nav-links.cta-only{display:flex;gap:0}.nav-links.cta-only a:not(.btn-cta){display:none}}
+/* Mobile : on cache les liens d'ancrage mais le bouton CTA reste accessible */
+@media(max-width:720px){.nav-links a:not(.btn-cta){display:none}.nav-links{gap:0}}
 
 /* ── Hero ───────────────────────────────────── */
 .hero{padding:140px 0 80px;position:relative;overflow:hidden}
@@ -226,7 +227,7 @@ img{display:block;max-width:100%}
 <!-- ── Header ───────────────────────────────── -->
 <header class="header">
   <div class="container header-inner">
-    <a href="#" class="logo">
+    <a href="/" class="logo">
       <div class="logo-mark"><div>PA</div></div>
       Prime Athl
     </a>
@@ -256,8 +257,8 @@ img{display:block;max-width:100%}
           <a class="btn-ghost" href="#fonctions">Voir les fonctionnalités</a>
         </div>
         <div class="hero-meta">
-          <div class="hero-meta-item"><strong>0,3 s</strong><span>Sync coach ↔ athlète</span></div>
-          <div class="hero-meta-item"><strong>100 %</strong><span>Mobile-first</span></div>
+          <div class="hero-meta-item"><strong>Temps réel</strong><span>Sync coach ↔ athlète</span></div>
+          <div class="hero-meta-item"><strong>Mobile</strong><span>Salle, métro, vestiaire</span></div>
           <div class="hero-meta-item"><strong>Excel</strong><span>Import natif</span></div>
         </div>
       </div>
@@ -283,7 +284,7 @@ img{display:block;max-width:100%}
             <div class="pc-progress">
               <span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="active"></span><span></span><span></span><span></span>
             </div>
-            <div class="pc-meta"><span>Exercice 6/9</span><span>17/35 · 4 250 kg</span></div>
+            <div class="pc-meta"><span>Exercice 6/9</span><span>22/36 · 4 250 kg</span></div>
 
             <div class="pc-ex">
               <div class="pc-ex-pill">● Pectoraux</div>
@@ -331,10 +332,10 @@ img{display:block;max-width:100%}
 <section class="section-sm">
   <div class="container">
     <div class="stats-bar">
-      <div class="stat-item"><strong class="stat-num-1">9</strong><span>Exercices / séance</span></div>
-      <div class="stat-item"><strong class="stat-num-2">7</strong><span>Jours suivis</span></div>
-      <div class="stat-item"><strong class="stat-num-3">4</strong><span>Macros calculés</span></div>
-      <div class="stat-item"><strong class="stat-num-4">∞</strong><span>Historique gardé</span></div>
+      <div class="stat-item"><strong class="stat-num-1">2 s</strong><span>Sauvegarde cloud</span></div>
+      <div class="stat-item"><strong class="stat-num-2">30 j</strong><span>Backups conservés</span></div>
+      <div class="stat-item"><strong class="stat-num-3">EU</strong><span>Données hébergées</span></div>
+      <div class="stat-item"><strong class="stat-num-4">PWA</strong><span>Installable sans store</span></div>
     </div>
   </div>
 </section>
@@ -362,17 +363,17 @@ img{display:block;max-width:100%}
       <div class="feature">
         <div class="feature-icon">💪</div>
         <h3>Séance fluide</h3>
-        <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, image de l'exercice en arrière-plan, suggestion intelligente basée sur la dernière performance.</p>
+        <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, image de l'exercice en arrière-plan, rappel de ta dernière performance sous chaque série.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">🥗</div>
         <h3>Nutrition macro</h3>
-        <p>Plan par jour de la semaine, validation repas par repas, somme automatique kcal/protéines/glucides/lipides. Streak de jours validés affiché.</p>
+        <p>Plan par jour de la semaine, validation repas par repas, somme automatique kcal / protéines / glucides / lipides. Streak de jours validés affiché.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">📊</div>
         <h3>Historique complet</h3>
-        <p>Toutes les séances passées, volume total, courbes de progression. Le coach voit l'évolution de chaque athlète, sans effort.</p>
+        <p>Toutes tes séances passées, volume total, durée. Le coach voit chaque séance terminée et le volume cumulé de ses athlètes.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">🔒</div>
@@ -413,7 +414,7 @@ img{display:block;max-width:100%}
         <ul class="audience-list">
           <li>Reprends la séance du jour en un tap</li>
           <li>Chronomètre automatique entre les séries</li>
-          <li>Macros agrégés en temps réel selon les repas validés</li>
+          <li>Macros agrégées en temps réel selon les repas validés</li>
           <li>Historique de toutes tes séances</li>
           <li>Profil partagé avec ton coach (poids, PR, objectif)</li>
         </ul>
@@ -434,17 +435,17 @@ img{display:block;max-width:100%}
       <div class="step">
         <div class="step-num">1</div>
         <h3>Inscription</h3>
-        <p>Crée ton compte coach ou athlète en 30 secondes. Si tu es athlète, ton coach te file un code pour vous lier directement.</p>
+        <p>Tu crées ton compte en 30 secondes — avec un code d'invitation de ton coach pour être rattaché direct, ou en demande libre validée par le coach principal.</p>
       </div>
       <div class="step">
         <div class="step-num">2</div>
         <h3>Import</h3>
-        <p>Le coach importe l'Excel du programme et du plan nutrition. L'athlète les reçoit instantanément, prêts à être suivis.</p>
+        <p>Le coach importe ton Excel de programme et ton plan nutrition. Tu les reçois instantanément, prêts à être suivis sur ton téléphone.</p>
       </div>
       <div class="step">
         <div class="step-num">3</div>
         <h3>Suivi quotidien</h3>
-        <p>L'athlète valide ses séries à la salle, ses repas dans la journée. Le coach voit tout en direct. La progression se fait toute seule.</p>
+        <p>Tu valides tes séries à la salle, tes repas dans la journée. Ton coach voit tout en direct. La progression se construit toute seule.</p>
       </div>
     </div>
   </div>
@@ -465,7 +466,11 @@ img{display:block;max-width:100%}
       </div>
       <div class="faq-item">
         <button class="faq-q">Je peux utiliser l'app sans coach ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">Oui. Tu peux importer toi-même ton programme Excel et ton plan nutrition, puis t'auto-suivre. Si tu trouves un coach plus tard, il pourra reprendre la main sans que tu perdes ton historique.</div>
+        <div class="faq-a">Oui. Tu peux importer toi-même ton programme Excel et ton plan nutrition, puis t'auto-suivre. Si tu rejoins un coach plus tard, il reprendra la main sans que tu perdes ton historique.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Comment devenir coach sur la plateforme ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">L'accès coach est validé manuellement pour garantir la qualité. Tu peux le demander à l'inscription en choisissant "Coach" : le coach principal recevra ta demande et décidera de te promouvoir. En attendant tu utilises l'app comme athlète.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q">À quel format doivent être les fichiers Excel ?<span class="faq-q-icon">+</span></button>
@@ -476,8 +481,8 @@ img{display:block;max-width:100%}
         <div class="faq-a">Oui. Mots de passe hashés avec bcrypt 12 rounds, données stockées dans Postgres (Neon, infra EU), backups quotidiens automatiques avec 30 jours d'historique, JWT signé avec un secret fort, cookies httpOnly, rate-limiting anti brute-force, headers de sécurité Helmet.</div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">L'app marche-t-elle hors-ligne ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">L'app est une PWA : tu peux l'installer sur ton téléphone comme une vraie app. La séance en cours est sauvegardée localement, donc si tu perds le réseau à la salle, tu peux continuer à valider tes séries. La sync se fait dès que le réseau revient.</div>
+        <button class="faq-q">L'app marche-t-elle si le réseau est faible à la salle ?<span class="faq-q-icon">+</span></button>
+        <div class="faq-a">Oui. La séance en cours est sauvegardée localement sur ton téléphone, tu peux saisir tes séries même avec une connexion instable. Au prochain rafraîchissement avec réseau, ta séance terminée est envoyée au serveur. C'est une PWA : tu peux aussi l'installer sur ton écran d'accueil comme une vraie app.</div>
       </div>
       <div class="faq-item">
         <button class="faq-q">Sur quels appareils ça tourne ?<span class="faq-q-icon">+</span></button>
@@ -492,7 +497,7 @@ img{display:block;max-width:100%}
   <div class="container">
     <div class="final-cta">
       <h2>Prêt à <span class="gradient-text">arrêter de noter ses séries sur un carnet</span> ?</h2>
-      <p>Crée ton compte en 30 secondes. Pas de carte, pas de questions, pas d'engagement.</p>
+      <p>Crée ton compte en 30 secondes. Pas de carte bancaire, pas d'engagement. L'app est en bêta gratuite.</p>
       <a class="btn-cta btn-cta-lg" href="/Muscu.html">
         Lancer Prime Athl
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
@@ -506,7 +511,7 @@ img{display:block;max-width:100%}
   <div class="container">
     <div class="footer-inner">
       <div class="footer-brand">
-        <a href="#" class="logo">
+        <a href="/" class="logo">
           <div class="logo-mark"><div>PA</div></div>
           Prime Athl
         </a>
@@ -527,6 +532,12 @@ img{display:block;max-width:100%}
           <a href="/Muscu.html">Créer un compte</a>
         </div>
         <div class="footer-col">
+          <h5>Légal</h5>
+          <a href="/legal/cgu.html">CGU</a>
+          <a href="/legal/confidentialite.html">Confidentialité</a>
+          <a href="/legal/mentions.html">Mentions légales</a>
+        </div>
+        <div class="footer-col">
           <h5>Contact</h5>
           <a href="mailto:yannisjanvier@gmail.com">Email</a>
         </div>
@@ -534,7 +545,7 @@ img{display:block;max-width:100%}
     </div>
     <div class="footer-bottom">
       <div>© <span id="year"></span> Prime Athl. Tous droits réservés.</div>
-      <div>Made with care — Inter font · React · Postgres · Render</div>
+      <div>Hébergé en Europe · Postgres (Neon) · Render</div>
     </div>
   </div>
 </footer>
