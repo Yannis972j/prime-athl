@@ -3155,12 +3155,11 @@ const FOOD_CAT_EMOJI={"Protéines":"🥩","Compléments":"💊","Féculents":"�
 
 function FoodItemRow({item,num,inp,onCommit,onDelete}){
   const[name,setName]=React.useState(item.name||'');
-  const[qty,setQty]=React.useState(item.qty||0);
-  const[kcal,setKcal]=React.useState(item.kcal||0);
-  const[p,setP]=React.useState(item.p||0);
-  const[c,setC]=React.useState(item.c||0);
-  const[f,setF]=React.useState(item.f||0);
-  React.useEffect(()=>{setName(item.name||'');setQty(item.qty||0);setKcal(item.kcal||0);setP(item.p||0);setC(item.c||0);setF(item.f||0);},[item.name,item.qty,item.kcal,item.p,item.c,item.f]);
+  const[qty,setQty]=React.useState(String(item.qty||0));
+  const[kcal,setKcal]=React.useState(String(item.kcal||0));
+  const[p,setP]=React.useState(String(item.p||0));
+  const[c,setC]=React.useState(String(item.c||0));
+  const[f,setF]=React.useState(String(item.f||0));
   return(
     <div style={{padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',gap:8}}>
       <div style={{flex:1,minWidth:0}}>
@@ -3199,7 +3198,6 @@ function FoodSearch({onSelect,onClose}){
   ).slice(0,40),[q,cat]);
   const r=(v,qty)=>Math.round(v*qty/100*10)/10;
   const inputRef=React.useRef(null);
-  React.useEffect(()=>{setTimeout(()=>inputRef.current&&inputRef.current.focus(),80);},[]);
   if(picked){
     return(
       <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
@@ -3235,7 +3233,7 @@ function FoodSearch({onSelect,onClose}){
         <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:14,letterSpacing:-0.3}}>Ajouter un aliment</div>
         <div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:12,padding:'0 12px',marginBottom:12}}>
           <span style={{fontSize:16,opacity:0.5}}>🔍</span>
-          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Poulet, riz, whey…"
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Poulet, riz, whey…" autoFocus
             style={{flex:1,height:42,background:'transparent',border:'none',color:T.text,fontSize:14,outline:'none',fontFamily:'inherit'}}/>
           {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:T.textDim,cursor:'pointer',fontSize:16,padding:0}}>×</button>}
         </div>
