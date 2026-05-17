@@ -995,9 +995,17 @@ app.put('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res) =
   DATA.nutritionPrograms[a.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + a.id).emit('nutrition-updated', { plan, assignedAt: ts });
-  const coachNameN = DATA.users[req.user.id]?.firstName || 'Ton coach';
-  pushToUser(a.id, { title: '🥗 Plan nutrition mis à jour', body: `${coachNameN} a mis à jour ton plan nutrition`, url: '/Muscu.html' });
+  // No push here — push is sent only on explicit validation via POST .../notify
   res.json({ ok: true, assignedAt: ts });
+});
+
+// Coach validates and notifies athlete of nutrition plan
+app.post('/api/coach/nutrition/:athleteId/notify', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  pushToUser(a.id, { title: '🥗 Plan nutrition validé', body: `${coachName} a finalisé ton plan nutrition — consulte-le maintenant !`, url: '/Muscu.html' });
+  res.json({ ok: true });
 });
 
 // Coach fetches athlete's nutrition (plan + history)

@@ -3473,6 +3473,16 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
   });
   const[openMeal,setOpenMeal]=React.useState(()=>findFirstFilledMeal(normalizePlan(initialPlan),todayDayName())||null);
   const[saveStatus,setSaveStatus]=React.useState(null);
+  const[notifyStatus,setNotifyStatus]=React.useState(null); // null|sending|done|error
+
+  const notifyAthlete=async()=>{
+    setNotifyStatus('sending');
+    try{
+      await apiCall('/api/coach/nutrition/'+athleteId+'/notify',{method:'POST'});
+      setNotifyStatus('done');
+      setTimeout(()=>setNotifyStatus(null),3000);
+    }catch(e){setNotifyStatus('error');setTimeout(()=>setNotifyStatus(null),3000);}
+  };
   const[importMsg,setImportMsg]=React.useState(null);
   const[foodSearchMeal,setFoodSearchMeal]=React.useState(null);
   const timerRef=React.useRef(null);
@@ -3633,6 +3643,12 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       {importMsg&&(
         <div style={{marginBottom:10,padding:'8px 12px',borderRadius:10,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:12,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
       )}
+
+      {/* Bouton validation → push notification athlète */}
+      <button onClick={notifyAthlete} disabled={notifyStatus==='sending'} style={{width:'100%',height:46,borderRadius:13,border:'none',background:notifyStatus==='done'?'linear-gradient(135deg,#7cc4a1,#7ca8c4)':'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:notifyStatus==='sending'?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:12,boxShadow:notifyStatus==='done'?'0 6px 18px rgba(124,196,161,0.4)':'0 6px 18px rgba(217,119,87,0.4)',opacity:notifyStatus==='sending'?0.7:1,transition:'all 0.3s ease'}}>
+        {notifyStatus==='sending'?<span style={{fontSize:15}}>⏳</span>:notifyStatus==='done'?<span style={{fontSize:15}}>✅</span>:notifyStatus==='error'?<span style={{fontSize:15}}>✗</span>:<Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/>}
+        {notifyStatus==='sending'?'Envoi en cours…':notifyStatus==='done'?'Notification envoyée !':notifyStatus==='error'?'Erreur — réessaie':"Valider & notifier l'athlète"}
+      </button>
 
       {/* Totaux auto-calculés depuis les aliments du jour actif */}
       {(()=>{
