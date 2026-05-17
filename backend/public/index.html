@@ -46,7 +46,6 @@
   --card-bg:rgba(255,255,255,0.9); --card-bg2:rgba(240,240,238,0.95); --feat-preview-bg:rgba(234,234,232,0.95);
   --header-bg:rgba(244,244,242,0.88);
 }
-[data-theme="light"] html,[data-theme="light"] body{background:var(--bg);color:var(--text)}
 [data-theme="light"] .feature{background:var(--card-bg);border-color:rgba(0,0,0,0.08)}
 [data-theme="light"] .feat-preview{background:var(--feat-preview-bg);border-color:rgba(0,0,0,0.08)}
 [data-theme="light"] .audience-card{border-color:rgba(0,0,0,0.10)}
@@ -77,6 +76,9 @@
 [data-theme="light"] .bc-bar:last-child,[data-theme="light"] .bc-bar:nth-last-child(2){background:rgba(0,0,0,0.08)}
 [data-theme="light"] .bc-title,[data-theme="light"] .mb-title{color:var(--text)}
 [data-theme="light"] .wi-ex-name,[data-theme="light"] .sync-log-row{color:var(--dim)}
+[data-theme="light"] .cal-mock-title,[data-theme="light"] .nutri-mock-title,[data-theme="light"] .nutri-meal-name{color:var(--text)}
+[data-theme="light"] .btn-ghost{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12)}
+[data-theme="light"] .btn-ghost:hover{background:rgba(0,0,0,0.08);border-color:rgba(0,0,0,0.20)}
 [data-theme="light"] .footer{border-color:rgba(0,0,0,0.08)}
 [data-theme="light"] .footer-bottom{border-color:rgba(0,0,0,0.06)}
 
@@ -103,7 +105,7 @@ img{display:block;max-width:100%}
 .section-sm{padding:64px 0}
 
 /* Header */
-.header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,14,0.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.header{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--header-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
 .header-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
 .logo{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-0.3px;font-size:17px}
 .logo-mark{width:34px;height:34px;border-radius:10px;padding:2px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite}
@@ -177,17 +179,6 @@ img{display:block;max-width:100%}
 .pc-set.active .pc-check{background:var(--grad);box-shadow:0 4px 10px rgba(217,119,87,0.4)}
 .pc-set.done .pc-check{color:var(--accent);background:transparent;border:1px solid rgba(217,119,87,0.18);font-size:8px;font-weight:700}
 
-/* Stats bar */
-.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:48px;padding:36px 40px;border-radius:24px;background:linear-gradient(160deg,rgba(28,28,40,0.65),rgba(14,14,20,0.65));border:1px solid var(--line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-@media(max-width:720px){.stats-bar{grid-template-columns:repeat(2,1fr);gap:28px;padding:28px}}
-.stat-item{text-align:center}
-.stat-item strong{font-size:32px;font-weight:800;letter-spacing:-1px;display:block;line-height:1}
-.stat-item span{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-top:8px;display:block}
-.stat-num-1{background:linear-gradient(135deg,#d97757,#c97586);-webkit-background-clip:text;background-clip:text;color:transparent}
-.stat-num-2{background:linear-gradient(135deg,#7ca8c4,#8e6cb6);-webkit-background-clip:text;background-clip:text;color:transparent}
-.stat-num-3{background:linear-gradient(135deg,#7cc4a1,#c2a042);-webkit-background-clip:text;background-clip:text;color:transparent}
-.stat-num-4{background:linear-gradient(135deg,#c2a042,#d97757);-webkit-background-clip:text;background-clip:text;color:transparent}
-
 /* Section heading */
 .eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
 .section-title{font-size:clamp(30px,4vw,46px);font-weight:800;letter-spacing:-1.2px;line-height:1.1;margin-bottom:18px}
@@ -199,9 +190,9 @@ img{display:block;max-width:100%}
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media(max-width:960px){.features{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.features{grid-template-columns:1fr}}
-.feature{border-radius:20px;background:rgba(16,16,22,0.85);border:1px solid var(--line);transition:all 0.25s ease;overflow:hidden;display:flex;flex-direction:column}
+.feature{border-radius:20px;background:var(--card-bg);border:1px solid var(--line);transition:all 0.25s ease;overflow:hidden;display:flex;flex-direction:column}
 .feature:hover{transform:translateY(-3px);border-color:rgba(217,119,87,0.20);box-shadow:0 14px 36px rgba(0,0,0,0.4)}
-.feat-preview{height:148px;background:rgba(10,10,15,0.9);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
+.feat-preview{height:148px;background:var(--feat-preview-bg);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
 .feat-body{padding:20px 22px 24px}
 .feature-icon{width:38px;height:38px;border-radius:10px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.18);display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:12px}
 .feature h3{font-size:16px;font-weight:700;letter-spacing:-0.2px;margin-bottom:6px}
@@ -212,9 +203,9 @@ img{display:block;max-width:100%}
 @media(max-width:760px){.audience{grid-template-columns:1fr}}
 .audience-card{border-radius:24px;overflow:hidden;border:1px solid var(--line-2);display:flex;flex-direction:column}
 .audience-preview{height:280px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
-.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.06),rgba(10,10,14,1))}
-.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(124,168,196,0.06),rgba(10,10,14,1))}
-.audience-body{padding:26px 28px 30px;background:rgba(13,13,18,0.95)}
+.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.06),var(--bg))}
+.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(124,168,196,0.06),var(--bg))}
+.audience-body{padding:26px 28px 30px;background:var(--card-bg2)}
 
 /* Calendar mockup */
 .cal-mock{position:absolute;top:14px;left:14px;right:14px;background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:14px}
