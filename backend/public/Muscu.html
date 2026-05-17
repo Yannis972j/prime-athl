@@ -3371,7 +3371,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 }
 
 // ── Athlete Calendar Summary (coach view) ─────────────────
-function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan}){
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all'}){
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
@@ -3429,12 +3429,12 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan}){
 
       {/* Legend */}
       <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-        {[['#d97757','Séance prévue'],['#7cc4a1','Séance faite'],['#7ca8c4','Nutrition validée']].map(([c,l])=>(
+        {mode!=='nutrition'&&[['#d97757','Prévu'],['#7cc4a1','Fait']].map(([c,l])=>(
           <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
-            <div style={{width:6,height:6,borderRadius:3,background:c}}/>
-            {l}
+            <div style={{width:6,height:6,borderRadius:3,background:c}}/>{l}
           </div>
         ))}
+        {mode!=='sport'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#7ca8c4'}}/>Nutrition validée</div>}
       </div>
 
       {/* Week labels */}
@@ -3448,26 +3448,31 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan}){
           if(!d)return<div key={i}/>;
           const dayName=JS_TO_DAY[new Date(calYear,calMonth,d).getDay()];
           const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-          const hasProg=programDayNames.has(dayName);
-          const sessDone=sessionsByDate[dateStr];
-          const nutriOk=nutriDone[dateStr];
+          const hasProg=mode!=='nutrition'&&programDayNames.has(dayName);
+          const sessDone=mode!=='nutrition'&&sessionsByDate[dateStr];
+          const nutriOk=mode!=='sport'&&nutriDone[dateStr];
           const isToday=dateStr===todayStr;
           const isSel=sel===dateStr;
           let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)';
-          if(sessDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';}
-          else if(hasProg){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.22)';}
+          if(mode==='nutrition'){
+            if(nutriOk){bg='rgba(124,168,196,0.12)';border='1px solid rgba(124,168,196,0.35)';}
+          }else{
+            if(sessDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';}
+            else if(hasProg){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.22)';}
+            if(mode==='all'&&nutriOk&&!sessDone)border='1px solid rgba(124,168,196,0.25)';
+          }
           if(isToday)border='2px solid rgba(217,119,87,0.6)';
           if(isSel){bg='rgba(217,119,87,0.18)';border='2px solid #d97757';}
           const canClick=hasProg||sessDone||nutriOk;
+          const numColor=mode==='nutrition'?(nutriOk?'#7ca8c4':T.textFaint):(sessDone?'#7cc4a1':hasProg?'#d97757':T.textFaint);
           return(
             <div key={i} onClick={()=>canClick&&setSel(isSel?null:dateStr)}
-              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,position:'relative',transition:'all 0.15s'}}>
-              <span style={{fontSize:11,fontWeight:600,color:sessDone?'#7cc4a1':hasProg?'#d97757':T.textFaint,lineHeight:1}}>{d}</span>
-              {/* Dots row */}
+              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
+              <span style={{fontSize:11,fontWeight:600,color:numColor,lineHeight:1}}>{d}</span>
               <div style={{display:'flex',gap:2,marginTop:2}}>
                 {sessDone&&<div style={{width:3,height:3,borderRadius:2,background:'#7cc4a1'}}/>}
                 {!sessDone&&hasProg&&<div style={{width:3,height:3,borderRadius:2,background:'#d97757'}}/>}
-                {nutriOk&&<div style={{width:3,height:3,borderRadius:2,background:'#7ca8c4'}}/>}
+                {nutriOk&&mode!=='sport'&&<div style={{width:3,height:3,borderRadius:2,background:'#7ca8c4'}}/>}
               </div>
             </div>
           );
@@ -3477,41 +3482,41 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan}){
       {/* Selected day panel */}
       {sel&&(()=>{
         const dayName=JS_TO_DAY[new Date(sel+'T12:00:00').getDay()];
-        const dateStr=sel;
-        const sess=sessionsByDate[dateStr];
-        const nutriOk=nutriDone[dateStr];
+        const sess=sessionsByDate[sel];
+        const nutriOk=nutriDone[sel];
         const hasProg=programDayNames.has(dayName);
         const dateLabel=new Date(sel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+        const progData=Object.values(program?.data||{}).reduce((acc,sheet)=>acc||sheet[dayName],null);
         return(
           <div style={{marginTop:8,padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
-            <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:8}}>{dateLabel}</div>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {/* Programme */}
-              <div style={{flex:1,minWidth:120,padding:'8px 10px',borderRadius:10,background:sess?'rgba(124,196,161,0.08)':hasProg?'rgba(217,119,87,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(124,196,161,0.25)':hasProg?'rgba(217,119,87,0.2)':'rgba(255,255,255,0.06)'}`}}>
-                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Programme</div>
+            <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:10}}>{dateLabel}</div>
+            {mode!=='nutrition'&&(
+              <div style={{marginBottom:8,padding:'8px 10px',borderRadius:10,background:sess?'rgba(124,196,161,0.08)':hasProg?'rgba(217,119,87,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(124,196,161,0.25)':hasProg?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.06)'}`}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:6}}>Séance</div>
                 {sess?(
                   <>
-                    <div style={{fontSize:12,fontWeight:600,color:'#7cc4a1'}}>✓ {sess.name||dayName}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:'#7cc4a1'}}>✓ {sess.name||dayName}</div>
                     <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg</div>
                   </>
-                ):hasProg?(
-                  <div style={{fontSize:12,color:'#d97757',fontWeight:600}}>{dayName} — non fait</div>
+                ):hasProg&&progData?(
+                  <>
+                    <div style={{fontSize:12,color:'#d97757',fontWeight:600,marginBottom:6}}>{dayName} — non effectué</div>
+                    {progData.exercises?.slice(0,3).map((ex,i)=>(
+                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}</div>
+                    ))}
+                    {(progData.exercises?.length||0)>3&&<div style={{fontSize:10,color:T.textFaint}}>+{progData.exercises.length-3} ex.</div>}
+                  </>
                 ):(
-                  <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Repos</div>
+                  <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Jour de repos</div>
                 )}
               </div>
-              {/* Nutrition */}
-              {hasNutriPlan&&(
-                <div style={{flex:1,minWidth:120,padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(124,168,196,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(124,168,196,0.25)':'rgba(255,255,255,0.06)'}`}}>
-                  <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
-                  {nutriOk?(
-                    <div style={{fontSize:12,fontWeight:600,color:'#7ca8c4'}}>✓ Validée</div>
-                  ):(
-                    <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Non validée</div>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
+            {mode!=='sport'&&hasNutriPlan&&(
+              <div style={{padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(124,168,196,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(124,168,196,0.25)':'rgba(255,255,255,0.06)'}`}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
+                <div style={{fontSize:12,fontWeight:600,color:nutriOk?'#7ca8c4':T.textFaint}}>{nutriOk?'✓ Validée':'Non validée'}</div>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -3861,6 +3866,7 @@ function CoachScreen({authToken,authUser}){
   const[nutriDetail,setNutriDetail]=React.useState(null);
   const[nutriMode,setNutriMode]=React.useState('mirror'); // 'mirror' | 'edit'
   const[showDangerZone,setShowDangerZone]=React.useState(false);
+  const[detailTab,setDetailTab]=React.useState('profil'); // 'profil'|'sport'|'nutrition'|'historique'|'album'
   const reloadDetail=async id=>{
     try{
       const[d,n]=await Promise.all([
@@ -3943,11 +3949,21 @@ function CoachScreen({authToken,authUser}){
     const totalVol=sessions.reduce((s,x)=>s+(x.totalVolume||0),0);
     const programDays=Object.values(a.program?.data||{}).reduce((s,d)=>s+Object.keys(d).length,0);
     const programMonths=Object.keys(a.program?.data||{}).length;
+
+    const TABS=[
+      {id:'profil',label:'Profil',icon:'user'},
+      {id:'sport',label:'Séances',icon:'dumbbell'},
+      {id:'nutrition',label:'Nutrition',icon:'apple'},
+      {id:'historique',label:'Historique',icon:'clock'},
+      {id:'album',label:'Album',icon:'image'},
+    ];
+
     return(
-      <div style={{padding:'18px 18px 100px',color:T.text}}>
+      <div style={{padding:'18px 0 100px',color:T.text}}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleExcel}/>
 
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
           <button onClick={closeDetail} style={{width:36,height:36,borderRadius:18,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <Icon name="chevronLeft" size={18}/>
           </button>
@@ -3960,10 +3976,19 @@ function CoachScreen({authToken,authUser}){
           </button>
         </div>
 
-        {msg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
+        {msg&&<div style={{margin:'0 18px 12px',padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
-        {/* Profile compact : tout uniformisé sur une seule page */}
-        {(()=>{
+        {/* Tab bar */}
+        <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none'}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setDetailTab(t.id)} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'all 0.15s'}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab 1 : Profil ── */}
+        {detailTab==='profil'&&(()=>{
           const F=({label,value,onChange,suffix,type='text'})=>(
             <div style={{display:'flex',flexDirection:'column',gap:2}}>
               <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</div>
@@ -3976,156 +4001,197 @@ function CoachScreen({authToken,authUser}){
             </div>
           );
           return(
-            <GlassCard padding={10} style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:T.textFaint,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
-                <Icon name="user" size={11} stroke={T.textFaint}/>
-                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{a.email}</span>
+            <div style={{padding:'0 18px'}}>
+              <GlassCard padding={10} style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:T.textFaint,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
+                  <Icon name="user" size={11} stroke={T.textFaint}/>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{a.email}</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                  <F label="Prénom" value={a.firstName} onChange={e=>patchAthlete({firstName:e.target.value})}/>
+                  <F label="Nom" value={a.lastName} onChange={e=>patchAthlete({lastName:e.target.value})}/>
+                  <F label="Taille" value={a.height} onChange={e=>patchAthlete({height:e.target.value})} suffix="cm" type="number"/>
+                  <F label="Poids" value={a.weight} onChange={e=>patchAthlete({weight:e.target.value})} suffix="kg" type="number"/>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4}}>
+                  {['Hypertrophie','Force','Perte','Endurance'].map((o,i)=>{
+                    const full=['Hypertrophie','Force','Perte de poids','Endurance'][i];
+                    return(
+                      <button key={o} onClick={()=>patchAthlete({objective:full})} style={{height:26,padding:'0 4px',borderRadius:7,border:a.objective===full?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:a.objective===full?T.accentSoft:'rgba(255,255,255,0.03)',color:a.objective===full?T.accent:T.textDim,fontSize:10,fontWeight:600,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o}</button>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+
+              {/* Stats rapides */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
+                {[
+                  {label:'Séances',value:sessions.length,unit:''},
+                  {label:'Volume total',value:Math.round(totalVol/1000),unit:'t'},
+                  {label:'Programme',value:programDays>0?`${programMonths}M`:'-',unit:''},
+                ].map(stat=>(
+                  <GlassCard key={stat.label} padding={10} style={{textAlign:'center'}}>
+                    <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.5}}>{stat.value}<span style={{fontSize:11,fontWeight:500,color:T.textDim,marginLeft:1}}>{stat.unit}</span></div>
+                    <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{stat.label}</div>
+                  </GlassCard>
+                ))}
               </div>
-              {/* Tous les champs uniformisés en grille 2 colonnes — nom, prenom, taille, poids */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                <F label="Prénom" value={a.firstName} onChange={e=>patchAthlete({firstName:e.target.value})}/>
-                <F label="Nom" value={a.lastName} onChange={e=>patchAthlete({lastName:e.target.value})}/>
-                <F label="Taille" value={a.height} onChange={e=>patchAthlete({height:e.target.value})} suffix="cm" type="number"/>
-                <F label="Poids" value={a.weight} onChange={e=>patchAthlete({weight:e.target.value})} suffix="kg" type="number"/>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4}}>
-                {['Hypertrophie','Force','Perte','Endurance'].map((o,i)=>{
-                  const full=['Hypertrophie','Force','Perte de poids','Endurance'][i];
-                  return(
-                    <button key={o} onClick={()=>patchAthlete({objective:full})} style={{height:26,padding:'0 4px',borderRadius:7,border:a.objective===full?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:a.objective===full?T.accentSoft:'rgba(255,255,255,0.03)',color:a.objective===full?T.accent:T.textDim,fontSize:10,fontWeight:600,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o}</button>
-                  );
-                })}
-              </div>
-            </GlassCard>
+
+              {/* Danger zone */}
+              <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:8,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
+                {showDangerZone?'▴ Masquer':'⋯ Plus d\'options'}
+              </button>
+              {showDangerZone&&(
+                <div style={{marginTop:8,padding:12,borderRadius:12,background:'rgba(194,160,66,0.04)',border:'1px solid rgba(194,160,66,0.2)',display:'flex',flexDirection:'column',gap:6}}>
+                  <div style={{fontSize:10,color:T.warn,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>⚠ Actions irréversibles</div>
+                  <button onClick={()=>resetAthlete({profile:true},'le profil')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Réinitialiser le profil</button>
+                  <button onClick={()=>resetAthlete({program:true},'le programme')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer le programme</button>
+                  <button onClick={()=>resetAthlete({history:true},"l'historique")} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer l'historique ({sessions.length})</button>
+                  <button onClick={()=>resetAthlete({profile:true,program:true,history:true},'TOUTES les données')} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.4)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>🔥 Tout réinitialiser</button>
+                  <div style={{height:1,background:'rgba(255,255,255,0.06)',margin:'4px 0'}}/>
+                  <button onClick={()=>removeAthlete(a)} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Détacher l'athlète (compte préservé)</button>
+                </div>
+              )}
+            </div>
           );
         })()}
 
-        {/* Program section — bouton import + miroir séance de l'athlète */}
-        <SectionHeader title="Séance" right={a.program?.assignedAt?<span style={{fontSize:10,color:T.textFaint}}>maj {new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}</span>:null}/>
-        <div style={{display:'flex',gap:6,marginBottom:12}}>
-          <button onClick={()=>fileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(217,119,87,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
-            <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(217,119,87,0.12)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
-              {programDays>0?'📋':'📥'}
+        {/* ── Tab 2 : Séances / Programme ── */}
+        {detailTab==='sport'&&(
+          <div style={{padding:'0 18px'}}>
+            {/* Import programme */}
+            <div style={{display:'flex',gap:6,marginBottom:12}}>
+              <button onClick={()=>fileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(217,119,87,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(217,119,87,0.12),rgba(201,117,134,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(217,119,87,0.12)':'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
+                  {programDays>0?'📋':'📥'}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer programme'}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif':'Excel du programme musculation'}</div>
+                </div>
+              </button>
+              {programDays>0&&(
+                <button onClick={async()=>{
+                  if(!confirm(`Supprimer le programme importé pour ${a.firstName||a.email.split('@')[0]} ?`))return;
+                  try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}
+                  catch(e){flash('✗ '+(e.message||e));}
+                }} title="Supprimer le programme" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(217,119,87,0.25)',background:'rgba(217,119,87,0.06)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <Icon name="trash" size={16} stroke={T.accent}/>
+                </button>
+              )}
             </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer séance'}</div>
-              <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?'Tape pour remplacer le programme Excel':'Excel du programme musculation'}</div>
-            </div>
-          </button>
-          {programDays>0&&(
-            <button onClick={async()=>{
-              if(!confirm(`Supprimer le programme importé pour ${a.firstName||a.email.split('@')[0]} ?`))return;
-              try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}
-              catch(e){flash('✗ '+(e.message||e));}
-            }} title="Supprimer le programme" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(217,119,87,0.25)',background:'rgba(217,119,87,0.06)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-              <Icon name="trash" size={16} stroke={T.accent}/>
-            </button>
-          )}
-        </div>
-        {/* Calendrier synthétique */}
-        <SectionHeader title="Calendrier"/>
-        <AthleteCalendarSummary
-          sessions={sessions}
-          program={a.program}
-          nutriHistory={nutriDetail?.history}
-          nutriPlan={nutriDetail?.plan}
-        />
 
-        {programDays>0&&<CoachProgramMirror athleteData={a}/>}
-
-        {/* Nutrition — 2 modes, défaut = miroir si plan, sinon édition */}
-        <SectionHeader title="Nutrition" right={nutriDetail&&nutriDetail.plan?(
-          <button onClick={()=>setNutriMode(nutriMode==='edit'?'mirror':'edit')} style={{fontSize:11,color:T.accent,fontWeight:700,background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',gap:4}}>
-            <Icon name={nutriMode==='edit'?'apple':'edit'} size={12} stroke={T.accent}/>
-            {nutriMode==='edit'?'Voir progression':'Modifier'}
-          </button>
-        ):null}/>
-        <div style={{marginBottom:18}}>
-          {/* Vue miroir : visible uniquement si plan existe ET mode==='mirror' */}
-          {nutriDetail&&nutriDetail.plan&&nutriMode==='mirror'?(
-            <CoachNutritionMirror key={(nutriDetail.plan.assignedAt)||0} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} authToken={authToken}/>
-          ):(
-            /* Éditeur : toujours rendu au même endroit (pas de démontage entre "pas de plan" → "plan créé") */
-            <NutritionEditor
-              athleteId={a.id}
-              athleteName={(a.firstName||a.email.split('@')[0])+(a.lastName?' '+a.lastName:'')}
-              initialPlan={nutriDetail&&nutriDetail.plan?nutriDetail.plan.data:null}
-              onSaved={()=>reloadDetail(a.id)}
-              onImported={()=>reloadDetail(a.id)}
+            {/* Calendrier sport */}
+            <SectionHeader title="Calendrier"/>
+            <AthleteCalendarSummary
+              sessions={sessions}
+              program={a.program}
+              nutriHistory={nutriDetail?.history}
+              nutriPlan={nutriDetail?.plan}
+              mode="sport"
             />
-          )}
-        </div>
 
-        {/* Volume curve */}
-        {sessions.length>1&&(()=>{
-          const sorted=[...sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-20);
-          const vols=sorted.map(s=>s.totalVolume||0);
-          const maxV=Math.max(1,...vols);
-          const W=300,H=70,pad=6;
-          const pts=vols.map((v,i)=>`${pad+i/(vols.length-1)*(W-2*pad)},${H-pad-v/maxV*(H-2*pad)}`);
-          const path=`M ${pts.join(' L ')}`;
-          return(
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Volume · {sorted.length} dernières séances</div>
-              <GlassCard padding={12}>
-                <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block'}}>
-                  <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d97757" stopOpacity="0.25"/><stop offset="100%" stopColor="#d97757" stopOpacity="0"/></linearGradient></defs>
-                  <path d={`${path} L ${W-pad},${H} L ${pad},${H} Z`} fill="url(#vg)"/>
-                  <path d={path} fill="none" stroke="#d97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  {vols.map((v,i)=>{const x=pad+i/(vols.length-1)*(W-2*pad);const y=H-pad-v/maxV*(H-2*pad);return<circle key={i} cx={x} cy={y} r="3" fill="#d97757"/>;})}
-                </svg>
-                <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
-                  <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[0].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
-                  <span style={{fontSize:11,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg total</span>
-                  <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[sorted.length-1].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
-                </div>
-              </GlassCard>
-            </div>
-          );
-        })()}
+            {/* Programme journalier */}
+            {programDays>0&&<CoachProgramMirror athleteData={a}/>}
 
-        {/* Sessions */}
-        <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
-        {sessions.length===0?(
-          <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
-        ):(
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {sessions.slice(0,20).map(s=>(
-              <GlassCard key={s.id} padding={12}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
-                    <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
-                    <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</div>
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
-                  </div>
+            {/* Courbe de volume */}
+            {sessions.length>1&&(()=>{
+              const sorted=[...sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-20);
+              const vols=sorted.map(s=>s.totalVolume||0);
+              const maxV=Math.max(1,...vols);
+              const W=300,H=70,pad=6;
+              const pts=vols.map((v,i)=>`${pad+i/(vols.length-1)*(W-2*pad)},${H-pad-v/maxV*(H-2*pad)}`);
+              const path=`M ${pts.join(' L ')}`;
+              return(
+                <div style={{marginBottom:16,marginTop:4}}>
+                  <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Volume · {sorted.length} dernières séances</div>
+                  <GlassCard padding={12}>
+                    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block'}}>
+                      <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d97757" stopOpacity="0.25"/><stop offset="100%" stopColor="#d97757" stopOpacity="0"/></linearGradient></defs>
+                      <path d={`${path} L ${W-pad},${H} L ${pad},${H} Z`} fill="url(#vg)"/>
+                      <path d={path} fill="none" stroke="#d97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      {vols.map((v,i)=>{const x=pad+i/(vols.length-1)*(W-2*pad);const y=H-pad-v/maxV*(H-2*pad);return<circle key={i} cx={x} cy={y} r="3" fill="#d97757"/>;})}
+                    </svg>
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+                      <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[0].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                      <span style={{fontSize:11,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg total</span>
+                      <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[sorted.length-1].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                    </div>
+                  </GlassCard>
                 </div>
-              </GlassCard>
-            ))}
+              );
+            })()}
           </div>
         )}
 
-        {/* Album photos */}
-        <SectionHeader title="Album photos"/>
-        <PhotoGallery readOnly userId={a.id}/>
+        {/* ── Tab 3 : Nutrition ── */}
+        {detailTab==='nutrition'&&(
+          <div style={{padding:'0 18px'}}>
+            <SectionHeader title="Calendrier nutrition"/>
+            <AthleteCalendarSummary
+              sessions={sessions}
+              program={a.program}
+              nutriHistory={nutriDetail?.history}
+              nutriPlan={nutriDetail?.plan}
+              mode="nutrition"
+            />
 
-        {/* Plus d'options (zone destructive collapsée) */}
-        <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:18,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
-          {showDangerZone?'▴ Masquer':'⋯ Plus d\'options'}
-        </button>
-        {showDangerZone&&(
-          <div style={{marginTop:8,padding:12,borderRadius:12,background:'rgba(194,160,66,0.04)',border:'1px solid rgba(194,160,66,0.2)',display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{fontSize:10,color:T.warn,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>⚠ Actions irréversibles</div>
-            <button onClick={()=>resetAthlete({profile:true},'le profil')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Réinitialiser le profil</button>
-            <button onClick={()=>resetAthlete({program:true},'le programme')} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer le programme</button>
-            <button onClick={()=>resetAthlete({history:true},"l'historique")} style={{height:34,borderRadius:9,border:'1px solid rgba(194,160,66,0.25)',background:'transparent',color:T.warn,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Effacer l'historique ({sessions.length})</button>
-            <button onClick={()=>resetAthlete({profile:true,program:true,history:true},'TOUTES les données')} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.4)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>🔥 Tout réinitialiser</button>
-            <div style={{height:1,background:'rgba(255,255,255,0.06)',margin:'4px 0'}}/>
-            <button onClick={()=>removeAthlete(a)} style={{height:36,borderRadius:9,border:'1px solid rgba(201,117,134,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',textAlign:'left',padding:'0 12px'}}>Détacher l'athlète (compte préservé)</button>
+            <SectionHeader title="Plan nutrition" right={nutriDetail&&nutriDetail.plan?(
+              <button onClick={()=>setNutriMode(nutriMode==='edit'?'mirror':'edit')} style={{fontSize:11,color:T.accent,fontWeight:700,background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',gap:4}}>
+                <Icon name={nutriMode==='edit'?'apple':'edit'} size={12} stroke={T.accent}/>
+                {nutriMode==='edit'?'Voir progression':'Modifier'}
+              </button>
+            ):null}/>
+            <div style={{marginBottom:18}}>
+              {nutriDetail&&nutriDetail.plan&&nutriMode==='mirror'?(
+                <CoachNutritionMirror key={(nutriDetail.plan.assignedAt)||0} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} authToken={authToken}/>
+              ):(
+                <NutritionEditor
+                  athleteId={a.id}
+                  athleteName={(a.firstName||a.email.split('@')[0])+(a.lastName?' '+a.lastName:'')}
+                  initialPlan={nutriDetail&&nutriDetail.plan?nutriDetail.plan.data:null}
+                  onSaved={()=>reloadDetail(a.id)}
+                  onImported={()=>reloadDetail(a.id)}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab 4 : Historique ── */}
+        {detailTab==='historique'&&(
+          <div style={{padding:'0 18px'}}>
+            <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
+            {sessions.length===0?(
+              <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
+            ):(
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {sessions.slice(0,50).map(s=>(
+                  <GlassCard key={s.id} padding={12}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
+                        <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
+                        <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</div>
+                      </div>
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab 5 : Album ── */}
+        {detailTab==='album'&&(
+          <div style={{padding:'0 18px'}}>
+            <SectionHeader title="Album photos"/>
+            <PhotoGallery readOnly userId={a.id}/>
           </div>
         )}
       </div>
