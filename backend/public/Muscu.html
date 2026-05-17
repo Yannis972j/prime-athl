@@ -3035,6 +3035,204 @@ function findFirstFilledMeal(plan,day){
   return m?m.id:null;
 }
 
+// ── Base de données aliments (200 aliments sport / nutrition) ──
+const FOOD_DB=[
+  // Protéines animales
+  {n:"Poulet grillé (blanc)",c:"Protéines",e:"🍗",k:165,p:31,g:0,l:3.6},
+  {n:"Blanc de dinde",c:"Protéines",e:"🦃",k:135,p:30,g:0,l:1},
+  {n:"Steak haché 5% MG",c:"Protéines",e:"🥩",k:144,p:21,g:0,l:6},
+  {n:"Steak haché 15% MG",c:"Protéines",e:"🥩",k:215,p:17,g:0,l:16},
+  {n:"Bœuf (rumsteck)",c:"Protéines",e:"🥩",k:158,p:26,g:0,l:6},
+  {n:"Saumon atlantique",c:"Protéines",e:"🐟",k:208,p:20,g:0,l:13},
+  {n:"Saumon fumé",c:"Protéines",e:"🐟",k:172,p:19,g:0,l:11},
+  {n:"Thon en boîte (eau)",c:"Protéines",e:"🐠",k:116,p:26,g:0,l:1},
+  {n:"Cabillaud",c:"Protéines",e:"🐡",k:82,p:18,g:0,l:0.7},
+  {n:"Crevettes cuites",c:"Protéines",e:"🦐",k:99,p:21,g:0,l:1},
+  {n:"Tilapia",c:"Protéines",e:"🐟",k:96,p:20,g:0,l:2},
+  {n:"Œuf entier",c:"Protéines",e:"🥚",k:143,p:13,g:0.6,l:10},
+  {n:"Blanc d'œuf",c:"Protéines",e:"🥚",k:52,p:11,g:0.7,l:0.2},
+  {n:"Jambon blanc dégraissé",c:"Protéines",e:"🥩",k:107,p:17,g:1,l:4},
+  {n:"Filet mignon porc",c:"Protéines",e:"🥩",k:143,p:22,g:0,l:6},
+  {n:"Escalope de veau",c:"Protéines",e:"🥩",k:130,p:26,g:0,l:3},
+  {n:"Sardines (boîte huile égouttée)",c:"Protéines",e:"🐟",k:208,p:25,g:0,l:12},
+  {n:"Maquereau au naturel",c:"Protéines",e:"🐟",k:190,p:19,g:0,l:12},
+  // Compléments
+  {n:"Whey protéine vanille",c:"Compléments",e:"💊",k:380,p:80,g:7,l:6},
+  {n:"Whey protéine chocolat",c:"Compléments",e:"💊",k:375,p:78,g:9,l:5},
+  {n:"Whey protéine fraise",c:"Compléments",e:"💊",k:378,p:79,g:8,l:5},
+  {n:"Caséine (nuit)",c:"Compléments",e:"🌙",k:360,p:80,g:6,l:3},
+  {n:"Protéine végétale (pois/riz)",c:"Compléments",e:"🌿",k:370,p:75,g:10,l:5},
+  {n:"Gainer mass gainer",c:"Compléments",e:"💪",k:380,p:30,g:55,l:5},
+  {n:"BCAA poudre",c:"Compléments",e:"⚡",k:16,p:4,g:0,l:0},
+  {n:"Créatine monohydrate",c:"Compléments",e:"⚡",k:0,p:0,g:0,l:0},
+  {n:"Glutamine poudre",c:"Compléments",e:"💊",k:16,p:4,g:0,l:0},
+  {n:"Barre protéinée (moyenne)",c:"Compléments",e:"🍫",k:220,p:20,g:20,l:7},
+  // Féculents
+  {n:"Riz blanc cuit",c:"Féculents",e:"🍚",k:130,p:2.7,g:28,l:0.3},
+  {n:"Riz complet cuit",c:"Féculents",e:"🌾",k:111,p:2.6,g:23,l:0.9},
+  {n:"Riz basmati cuit",c:"Féculents",e:"🍚",k:121,p:2.5,g:26,l:0.3},
+  {n:"Flocons d'avoine",c:"Féculents",e:"🌾",k:364,p:13,g:66,l:7},
+  {n:"Flocons d'avoine cuits (bouillie)",c:"Féculents",e:"🌾",k:71,p:2.5,g:12,l:1.5},
+  {n:"Patate douce cuite",c:"Féculents",e:"🍠",k:86,p:1.6,g:20,l:0.1},
+  {n:"Pomme de terre cuite",c:"Féculents",e:"🥔",k:77,p:2,g:17,l:0.1},
+  {n:"Pâtes blanches cuites",c:"Féculents",e:"🍝",k:131,p:5,g:25,l:1.1},
+  {n:"Pâtes complètes cuites",c:"Féculents",e:"🍝",k:124,p:5,g:23,l:1.4},
+  {n:"Pain complet",c:"Féculents",e:"🍞",k:247,p:9,g:45,l:3},
+  {n:"Pain de seigle",c:"Féculents",e:"🍞",k:258,p:9,g:49,l:2},
+  {n:"Quinoa cuit",c:"Féculents",e:"🌿",k:120,p:4.4,g:22,l:1.9},
+  {n:"Lentilles cuites",c:"Féculents",e:"🫘",k:116,p:9,g:20,l:0.4},
+  {n:"Pois chiches cuits",c:"Féculents",e:"🫘",k:164,p:9,g:27,l:2.6},
+  {n:"Haricots rouges cuits",c:"Féculents",e:"🫘",k:127,p:8.7,g:22,l:0.5},
+  {n:"Haricots blancs cuits",c:"Féculents",e:"🫘",k:139,p:9,g:25,l:0.6},
+  {n:"Galette de riz",c:"Féculents",e:"🌾",k:385,p:8,g:82,l:2.8},
+  {n:"Pain de mie complet (tranche)",c:"Féculents",e:"🍞",k:238,p:9,g:42,l:3.5},
+  {n:"Couscous cuit",c:"Féculents",e:"🌾",k:112,p:3.8,g:23,l:0.2},
+  // Légumes
+  {n:"Brocolis vapeur",c:"Légumes",e:"🥦",k:34,p:2.8,g:7,l:0.4},
+  {n:"Épinards cuits",c:"Légumes",e:"🥬",k:23,p:2.9,g:3.8,l:0.3},
+  {n:"Haricots verts",c:"Légumes",e:"🫛",k:31,p:1.8,g:7,l:0.1},
+  {n:"Courgette cuite",c:"Légumes",e:"🥒",k:17,p:1.2,g:3.5,l:0.2},
+  {n:"Poivron rouge",c:"Légumes",e:"🫑",k:31,p:1,g:6,l:0.3},
+  {n:"Tomate",c:"Légumes",e:"🍅",k:18,p:0.9,g:3.5,l:0.2},
+  {n:"Concombre",c:"Légumes",e:"🥒",k:15,p:0.6,g:3.6,l:0.1},
+  {n:"Chou-fleur vapeur",c:"Légumes",e:"🥦",k:25,p:1.9,g:5,l:0.3},
+  {n:"Asperges",c:"Légumes",e:"🌿",k:20,p:2.2,g:3.9,l:0.1},
+  {n:"Champignons de Paris",c:"Légumes",e:"🍄",k:22,p:3.1,g:3.3,l:0.3},
+  {n:"Céleri branche",c:"Légumes",e:"🥬",k:16,p:0.7,g:3,l:0.2},
+  {n:"Chou blanc cru",c:"Légumes",e:"🥬",k:25,p:1.3,g:5.8,l:0.1},
+  {n:"Salade verte (laitue)",c:"Légumes",e:"🥗",k:14,p:1.3,g:2.1,l:0.2},
+  {n:"Oignon",c:"Légumes",e:"🧅",k:40,p:1.1,g:9.3,l:0.1},
+  {n:"Ail",c:"Légumes",e:"🧄",k:149,p:6,g:33,l:0.5},
+  {n:"Edamame (soja)",c:"Légumes",e:"🫘",k:121,p:11,g:8.9,l:5.2},
+  {n:"Maïs doux cuit",c:"Légumes",e:"🌽",k:96,p:3.4,g:21,l:1.5},
+  {n:"Petit pois cuit",c:"Légumes",e:"🫛",k:84,p:5.4,g:15,l:0.4},
+  {n:"Épinards crus",c:"Légumes",e:"🥬",k:23,p:2.9,g:3.6,l:0.4},
+  // Fruits
+  {n:"Banane",c:"Fruits",e:"🍌",k:89,p:1.1,g:23,l:0.3},
+  {n:"Pomme",c:"Fruits",e:"🍎",k:52,p:0.3,g:14,l:0.2},
+  {n:"Myrtilles",c:"Fruits",e:"🫐",k:57,p:0.7,g:14,l:0.3},
+  {n:"Fraises",c:"Fruits",e:"🍓",k:32,p:0.7,g:8,l:0.3},
+  {n:"Mangue",c:"Fruits",e:"🥭",k:60,p:0.8,g:15,l:0.4},
+  {n:"Ananas",c:"Fruits",e:"🍍",k:50,p:0.5,g:13,l:0.1},
+  {n:"Kiwi",c:"Fruits",e:"🥝",k:61,p:1.1,g:15,l:0.5},
+  {n:"Orange",c:"Fruits",e:"🍊",k:47,p:0.9,g:12,l:0.1},
+  {n:"Raisins",c:"Fruits",e:"🍇",k:69,p:0.7,g:18,l:0.2},
+  {n:"Poire",c:"Fruits",e:"🍐",k:57,p:0.4,g:15,l:0.1},
+  {n:"Pastèque",c:"Fruits",e:"🍉",k:30,p:0.6,g:7.5,l:0.2},
+  {n:"Cerise",c:"Fruits",e:"🍒",k:63,p:1,g:16,l:0.2},
+  {n:"Pêche",c:"Fruits",e:"🍑",k:39,p:0.9,g:10,l:0.3},
+  {n:"Grenade",c:"Fruits",e:"🍎",k:83,p:1.7,g:19,l:1.2},
+  // Laitiers
+  {n:"Yaourt grec 0%",c:"Laitiers",e:"🥛",k:59,p:10,g:3.6,l:0.4},
+  {n:"Yaourt grec 10%",c:"Laitiers",e:"🥛",k:133,p:9,g:3.4,l:9},
+  {n:"Fromage blanc 0%",c:"Laitiers",e:"🥛",k:45,p:8,g:4,l:0.2},
+  {n:"Fromage blanc 20%",c:"Laitiers",e:"🥛",k:88,p:7,g:4,l:4.5},
+  {n:"Skyr nature",c:"Laitiers",e:"🥛",k:63,p:11,g:4,l:0.2},
+  {n:"Cottage cheese",c:"Laitiers",e:"🧀",k:98,p:11,g:3.4,l:4.3},
+  {n:"Lait demi-écrémé",c:"Laitiers",e:"🥛",k:46,p:3.2,g:4.7,l:1.6},
+  {n:"Lait écrémé",c:"Laitiers",e:"🥛",k:34,p:3.4,g:5,l:0.1},
+  {n:"Lait entier",c:"Laitiers",e:"🥛",k:61,p:3.2,g:4.6,l:3.3},
+  {n:"Mozzarella light",c:"Laitiers",e:"🧀",k:190,p:19,g:2,l:12},
+  {n:"Ricotta",c:"Laitiers",e:"🧀",k:174,p:11,g:3,l:13},
+  // Lipides
+  {n:"Avocat",c:"Lipides",e:"🥑",k:160,p:2,g:9,l:15},
+  {n:"Amandes",c:"Lipides",e:"🌰",k:579,p:21,g:22,l:50},
+  {n:"Noix",c:"Lipides",e:"🌰",k:654,p:15,g:14,l:65},
+  {n:"Noix de cajou",c:"Lipides",e:"🌰",k:553,p:18,g:30,l:44},
+  {n:"Beurre de cacahuète",c:"Lipides",e:"🥜",k:588,p:25,g:20,l:50},
+  {n:"Cacahuètes nature",c:"Lipides",e:"🥜",k:567,p:26,g:16,l:49},
+  {n:"Huile d'olive",c:"Lipides",e:"🫒",k:884,p:0,g:0,l:100},
+  {n:"Huile de coco",c:"Lipides",e:"🫧",k:862,p:0,g:0,l:100},
+  {n:"Graines de chia",c:"Lipides",e:"🌱",k:486,p:17,g:42,l:31},
+  {n:"Graines de lin",c:"Lipides",e:"🌱",k:534,p:18,g:29,l:42},
+  {n:"Graines de courge",c:"Lipides",e:"🌱",k:559,p:30,g:11,l:49},
+  {n:"Beurre (doux)",c:"Lipides",e:"🧈",k:717,p:0.9,g:0.1,l:81},
+  {n:"Tahini (purée sésame)",c:"Lipides",e:"🌱",k:595,p:17,g:21,l:54},
+];
+
+const FOOD_CATS=["Protéines","Compléments","Féculents","Légumes","Fruits","Laitiers","Lipides"];
+const FOOD_CAT_EMOJI={"Protéines":"🥩","Compléments":"💊","Féculents":"🌾","Légumes":"🥦","Fruits":"🍌","Laitiers":"🥛","Lipides":"🥑"};
+
+function FoodSearch({onSelect,onClose}){
+  const[q,setQ]=React.useState('');
+  const[cat,setCat]=React.useState('');
+  const[picked,setPicked]=React.useState(null);
+  const[qty,setQty]=React.useState(100);
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const results=React.useMemo(()=>FOOD_DB.filter(f=>
+    (!cat||f.c===cat)&&(!q||norm(f.n).includes(norm(q))||norm(f.c).includes(norm(q)))
+  ).slice(0,40),[q,cat]);
+  const r=(v,qty)=>Math.round(v*qty/100*10)/10;
+  const inputRef=React.useRef(null);
+  React.useEffect(()=>{setTimeout(()=>inputRef.current&&inputRef.current.focus(),80);},[]);
+  if(picked){
+    return(
+      <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#1a1815',borderRadius:20,padding:22,width:'100%',maxWidth:320,border:'1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{fontSize:32,marginBottom:6}}>{picked.e}</div>
+          <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:2}}>{picked.n}</div>
+          <div style={{fontSize:11,color:T.textDim,marginBottom:16}}>{picked.c}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+            <input type="number" inputMode="decimal" value={qty} onChange={e=>{const v=Math.max(1,+e.target.value||1);setQty(v);}}
+              style={{flex:1,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:12,color:T.text,fontSize:22,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit'}}/>
+            <span style={{fontSize:13,color:T.textDim,fontWeight:600}}>g</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,margin:'14px 0'}}>
+            {[{l:'kcal',v:r(picked.k,qty),c:'#d97757'},{l:'Prot',v:r(picked.p,qty),c:'#7cc4a1'},{l:'Gluc',v:r(picked.g,qty),c:'#c2a042'},{l:'Lip',v:r(picked.l,qty),c:'#c97586'}].map(m=>(
+              <div key={m.l} style={{background:'rgba(255,255,255,0.04)',borderRadius:10,padding:'8px 4px',textAlign:'center'}}>
+                <div style={{fontSize:15,fontWeight:700,color:m.c}}>{m.v}</div>
+                <div style={{fontSize:9,color:T.textFaint,marginTop:2,fontWeight:600,textTransform:'uppercase'}}>{m.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <button onClick={()=>setPicked(null)} style={{height:42,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>← Retour</button>
+            <button onClick={()=>{onSelect({name:picked.n,qty,unit:'g',kcal:r(picked.k,qty),p:r(picked.p,qty),c:r(picked.g,qty),f:r(picked.l,qty)});}} style={{height:42,borderRadius:11,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>✓ Ajouter</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return(
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(6px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#1a1815',borderRadius:'22px 22px 0 0',padding:'20px 18px 32px',maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+        <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 16px'}}/>
+        <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:14,letterSpacing:-0.3}}>Ajouter un aliment</div>
+        <div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:12,padding:'0 12px',marginBottom:12}}>
+          <span style={{fontSize:16,opacity:0.5}}>🔍</span>
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Poulet, riz, whey…"
+            style={{flex:1,height:42,background:'transparent',border:'none',color:T.text,fontSize:14,outline:'none',fontFamily:'inherit'}}/>
+          {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:T.textDim,cursor:'pointer',fontSize:16,padding:0}}>×</button>}
+        </div>
+        <div style={{display:'flex',gap:6,overflowX:'auto',scrollbarWidth:'none',marginBottom:14,paddingBottom:2}}>
+          <button onClick={()=>setCat('')} style={{flexShrink:0,height:28,padding:'0 12px',borderRadius:20,border:cat===''?'1px solid rgba(217,119,87,0.4)':'1px solid rgba(255,255,255,0.1)',background:cat===''?'rgba(217,119,87,0.15)':'transparent',color:cat===''?'#d97757':T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Tous</button>
+          {FOOD_CATS.map(c=>(
+            <button key={c} onClick={()=>setCat(cat===c?'':c)} style={{flexShrink:0,height:28,padding:'0 12px',borderRadius:20,border:cat===c?'1px solid rgba(217,119,87,0.4)':'1px solid rgba(255,255,255,0.1)',background:cat===c?'rgba(217,119,87,0.15)':'transparent',color:cat===c?'#d97757':T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+              {FOOD_CAT_EMOJI[c]} {c}
+            </button>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:'auto',scrollbarWidth:'thin',scrollbarColor:'rgba(255,255,255,0.1) transparent'}}>
+          {results.length===0&&<div style={{textAlign:'center',padding:32,color:T.textDim,fontSize:13}}>Aucun aliment trouvé</div>}
+          {results.map((f,i)=>(
+            <div key={i} onClick={()=>{setPicked(f);setQty(100);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',cursor:'pointer'}}>
+              <div style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.04)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{f.e}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.n}</div>
+                <div style={{fontSize:10,color:T.textDim,marginTop:1}}>{f.c}</div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#d97757'}}>{f.k} kcal</div>
+                <div style={{fontSize:10,color:T.textDim,marginTop:1}}>P{f.p}g · G{f.g}g · L{f.l}g</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported}){
   const[data,setData]=React.useState(()=>normalizePlan(initialPlan));
   const[activeDay,setActiveDay]=React.useState(()=>{
@@ -3047,6 +3245,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
   const[openMeal,setOpenMeal]=React.useState(()=>findFirstFilledMeal(normalizePlan(initialPlan),todayDayName())||null);
   const[saveStatus,setSaveStatus]=React.useState(null);
   const[importMsg,setImportMsg]=React.useState(null);
+  const[foodSearchMeal,setFoodSearchMeal]=React.useState(null);
   const timerRef=React.useRef(null);
   const fileRef=React.useRef(null);
 
@@ -3152,8 +3351,9 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
     const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,...patch}:m);
     updMeals(activeDay,ms);
   };
-  const addItem=mid=>{
-    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,items:[...(m.items||[]),{name:'',qty:100,unit:'g',kcal:0,p:0,c:0,f:0}]}:m);
+  const addItem=(mid,foodData)=>{
+    const item=foodData||{name:'',qty:100,unit:'g',kcal:0,p:0,c:0,f:0};
+    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,items:[...(m.items||[]),item]}:m);
     updMeals(activeDay,ms);
   };
   const updItem=(mid,idx,patch)=>{
@@ -3298,6 +3498,8 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         );
       })()}
 
+      {foodSearchMeal&&<FoodSearch onClose={()=>setFoodSearchMeal(null)} onSelect={food=>{addItem(foodSearchMeal,food);setFoodSearchMeal(null);}}/>}
+
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {(data.days[activeDay].meals||[]).map(m=>{
           const mm=mealMacros(m.items);
@@ -3353,7 +3555,9 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
                         </div>
                       ))}
                     </div>
-                    <button onClick={()=>addItem(m.id)} style={{width:'100%',marginTop:6,height:34,border:'1px dashed rgba(217,119,87,0.4)',borderRadius:10,background:'transparent',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter un aliment</button>
+                    <button onClick={()=>setFoodSearchMeal(m.id)} style={{width:'100%',marginTop:6,height:34,border:'1px dashed rgba(217,119,87,0.4)',borderRadius:10,background:'transparent',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                      <span style={{fontSize:15}}>🔍</span> Rechercher un aliment
+                    </button>
                   </div>
 
                   <div style={{marginTop:10}}>
