@@ -5461,6 +5461,11 @@ function BottomTabBar({tab,onTab,role,unreadMessages}){
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+// Register Service Worker for push notifications
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(e=>console.warn('[SW] registration failed:',e));
+}
 </script>
 </body>
 </html>
