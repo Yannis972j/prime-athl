@@ -4300,8 +4300,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   // Expose socket for MessagesScreen
   React.useEffect(()=>{
-    if(!authToken)return;
-    const s=io(getApiBase(),{auth:{token:authToken},transports:['websocket','polling']});
+    if(!authToken||typeof io==='undefined')return;
+    const s=io(API_BASE||undefined,{auth:{token:authToken},transports:['websocket','polling']});
     setSocket(s);
     return()=>s.disconnect();
   },[authToken]);
