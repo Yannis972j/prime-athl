@@ -1540,13 +1540,32 @@ function PhotoGallery({readOnly,userId}){
 }
 
 // ── Messages Screen ───────────────────────────────────────
-function MessagesScreen({authUser,socket}){
+function MessagesScreen({authUser}){
   const[partners,setPartners]=React.useState([]);
   const[selected,setSelected]=React.useState(null);
   const[messages,setMessages]=React.useState([]);
   const[text,setText]=React.useState('');
   const[unread,setUnread]=React.useState({});
   const bottomRef=React.useRef(null);
+  const selectedRef=React.useRef(null);
+  selectedRef.current=selected;
+
+  // Own socket connection for real-time messages
+  React.useEffect(()=>{
+    if(typeof io==='undefined')return;
+    const token=localStorage.getItem('pa_token');
+    if(!token)return;
+    const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    s.on('new-message',({from,msg})=>{
+      const sel=selectedRef.current;
+      if(sel&&(from===sel.id||msg.senderId===authUser.id)){
+        setMessages(m=>[...m.filter(x=>x.id!==msg.id),msg].sort((a,b)=>a.createdAt-b.createdAt));
+      }else{
+        setUnread(u=>({...u,[from]:(u[from]||0)+1}));
+      }
+    });
+    return()=>s.disconnect();
+  },[authUser.id]);
 
   // Build partner list
   React.useEffect(()=>{
@@ -1567,36 +1586,22 @@ function MessagesScreen({authUser,socket}){
   // Load messages when partner selected
   React.useEffect(()=>{
     if(!selected)return;
-    const load=async()=>{
-      try{const r=await apiCall('/api/messages/'+selected.id);setMessages(r.messages||[]);}catch{}
-    };
-    load();
+    apiCall('/api/messages/'+selected.id).then(r=>setMessages(r.messages||[])).catch(()=>{});
     setUnread(u=>({...u,[selected.id]:0}));
   },[selected]);
-
-  // Socket listener
-  React.useEffect(()=>{
-    if(!socket)return;
-    const handler=({from,msg})=>{
-      if(selected&&(from===selected.id||msg.senderId===authUser.id)){
-        setMessages(m=>[...m.filter(x=>x.id!==msg.id),msg].sort((a,b)=>a.createdAt-b.createdAt));
-      }else{
-        setUnread(u=>({...u,[from]:(u[from]||0)+1}));
-      }
-    };
-    socket.on('new-message',handler);
-    return()=>socket.off('new-message',handler);
-  },[socket,selected,authUser.id]);
 
   // Scroll to bottom
   React.useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
 
   const send=async()=>{
     if(!text.trim()||!selected)return;
+    const t=text.trim();
+    setText('');
     try{
-      await apiCall('/api/messages/'+selected.id,{method:'POST',body:{text}});
-      setText('');
-    }catch(e){alert(e.message);}
+      const r=await apiCall('/api/messages/'+selected.id,{method:'POST',body:{text:t}});
+      // Optimistic update in case socket is slow
+      if(r.msg)setMessages(m=>[...m.filter(x=>x.id!==r.msg.id),r.msg].sort((a,b)=>a.createdAt-b.createdAt));
+    }catch(e){setText(t);alert(e.message);}
   };
 
   const fmtTime=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
@@ -4276,7 +4281,6 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   },[]);
 
   const[unreadMessages,setUnreadMessages]=React.useState(0);
-  const[socket,setSocket]=React.useState(null);
 
   // Realtime: program / profile / nutrition mis à jour par coach
   useSocket(authToken,{
@@ -4298,13 +4302,6 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     },
   });
 
-  // Expose socket for MessagesScreen
-  React.useEffect(()=>{
-    if(!authToken||typeof io==='undefined')return;
-    const s=io(API_BASE||undefined,{auth:{token:authToken},transports:['websocket','polling']});
-    setSocket(s);
-    return()=>s.disconnect();
-  },[authToken]);
 
   // Wrap setImportedPrograms: local + push to backend (athlete) or coach UI handles its own
   const updateOwnProgram=React.useCallback(async data=>{
@@ -4373,7 +4370,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
             {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}
             {tab==='coach'&&authUser.role==='coach'&&<CoachScreen authToken={authToken} authUser={authUser}/>}
-            {tab==='messages'&&<MessagesScreen authUser={authUser} socket={socket} onOpen={()=>setUnreadMessages(0)}/>}
+            {tab==='messages'&&<MessagesScreen authUser={authUser}/>}
           </div>
         )}
       </div>
