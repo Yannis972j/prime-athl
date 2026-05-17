@@ -1465,6 +1465,7 @@ function PhotoGallery({readOnly,userId}){
   const[photos,setPhotos]=React.useState([]);
   const[loading,setLoading]=React.useState(true);
   const[selected,setSelected]=React.useState(null);
+  const[pending,setPending]=React.useState(null); // {dataUrl, note}
   const fileRef=React.useRef(null);
 
   const url=readOnly&&userId?'/api/coach/athletes/'+userId+'/photos':'/api/photos';
@@ -1491,15 +1492,20 @@ function PhotoGallery({readOnly,userId}){
         canvas.width=img.width*scale;canvas.height=img.height*scale;
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
         const compressed=canvas.toDataURL('image/jpeg',0.75);
-        try{await apiCall('/api/photos',{method:'POST',body:{dataUrl:compressed,date:Date.now()}});load();}
-        catch(err){
-          if(err.message==='photo_limit_reached')alert('Album plein (30 photos max). Supprime des photos pour en ajouter.');
-          else alert('Erreur upload: '+(err.message||err));
-        }
+        setPending({dataUrl:compressed,note:''});
       };
       img.src=dataUrl;
     };
     reader.readAsDataURL(file);
+  };
+
+  const confirmUpload=async()=>{
+    if(!pending)return;
+    try{await apiCall('/api/photos',{method:'POST',body:{dataUrl:pending.dataUrl,note:pending.note,date:Date.now()}});load();setPending(null);}
+    catch(err){
+      if(err.message==='photo_limit_reached')alert('Album plein (30 photos max). Supprime des photos pour en ajouter.');
+      else alert('Erreur upload: '+(err.message||err));
+    }
   };
 
   const del=async(id)=>{
@@ -1513,6 +1519,20 @@ function PhotoGallery({readOnly,userId}){
 
   return(
     <div style={{marginBottom:18}}>
+      {/* Modale confirmation upload avec note */}
+      {pending&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:1100,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24}}>
+          <div style={{width:'100%',maxWidth:360,background:'rgba(24,24,32,0.98)',borderRadius:20,border:'1px solid rgba(255,255,255,0.1)',padding:20,display:'flex',flexDirection:'column',gap:14}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Ajouter une note</div>
+            <img src={pending.dataUrl} alt="" style={{width:'100%',borderRadius:12,objectFit:'cover',maxHeight:200}}/>
+            <input value={pending.note} onChange={e=>setPending(p=>({...p,note:e.target.value}))} placeholder="Note optionnelle (ex: Semaine 4)" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,color:T.text,fontSize:13,padding:'9px 12px',fontFamily:'inherit',outline:'none'}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setPending(null)} style={{flex:1,height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
+              <button onClick={confirmUpload} style={{flex:2,height:40,borderRadius:11,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Publier</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingLeft:2}}>
         <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Photos de progression</div>
         {!readOnly&&<button onClick={()=>fileRef.current.click()} style={{height:26,padding:'0 10px',borderRadius:7,border:'1px solid rgba(217,119,87,0.3)',background:'rgba(217,119,87,0.06)',color:T.accent,fontSize:10,fontWeight:700,cursor:'pointer'}}>+ Photo</button>}
@@ -1532,9 +1552,10 @@ function PhotoGallery({readOnly,userId}){
       {selected&&(
         <div onClick={()=>setSelected(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:1000,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
           <img src={selected.dataUrl} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:'100%',maxHeight:'70vh',borderRadius:14,objectFit:'contain'}}/>
-          <div style={{marginTop:10,fontSize:12,color:'rgba(255,255,255,0.5)'}}>
+          <div style={{marginTop:10,fontSize:12,color:'rgba(255,255,255,0.5)',textAlign:'center'}}>
             {new Date(selected.date).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}
           </div>
+          {selected.note&&<div style={{fontSize:13,color:'rgba(255,255,255,0.75)',textAlign:'center',marginTop:4,fontStyle:'italic'}}>"{selected.note}"</div>}
           {!readOnly&&<button onClick={e=>{e.stopPropagation();del(selected.id);}} style={{marginTop:12,height:34,padding:'0 16px',borderRadius:9,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:T.danger,fontSize:12,fontWeight:600,cursor:'pointer'}}>Supprimer</button>}
         </div>
       )}
@@ -3736,6 +3757,34 @@ function CoachScreen({authToken,authUser}){
             />
           )}
         </div>
+
+        {/* Volume curve */}
+        {sessions.length>1&&(()=>{
+          const sorted=[...sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-20);
+          const vols=sorted.map(s=>s.totalVolume||0);
+          const maxV=Math.max(1,...vols);
+          const W=300,H=70,pad=6;
+          const pts=vols.map((v,i)=>`${pad+i/(vols.length-1)*(W-2*pad)},${H-pad-v/maxV*(H-2*pad)}`);
+          const path=`M ${pts.join(' L ')}`;
+          return(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Volume · {sorted.length} dernières séances</div>
+              <GlassCard padding={12}>
+                <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block'}}>
+                  <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d97757" stopOpacity="0.25"/><stop offset="100%" stopColor="#d97757" stopOpacity="0"/></linearGradient></defs>
+                  <path d={`${path} L ${W-pad},${H} L ${pad},${H} Z`} fill="url(#vg)"/>
+                  <path d={path} fill="none" stroke="#d97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  {vols.map((v,i)=>{const x=pad+i/(vols.length-1)*(W-2*pad);const y=H-pad-v/maxV*(H-2*pad);return<circle key={i} cx={x} cy={y} r="3" fill="#d97757"/>;})}
+                </svg>
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+                  <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[0].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                  <span style={{fontSize:11,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg total</span>
+                  <span style={{fontSize:10,color:T.textFaint}}>{new Date(sorted[sorted.length-1].date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                </div>
+              </GlassCard>
+            </div>
+          );
+        })()}
 
         {/* Sessions */}
         <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
