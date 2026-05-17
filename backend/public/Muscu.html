@@ -1576,7 +1576,7 @@ function MessagesScreen({authUser}){
           if(coach)setPartners([coach]);
         }else if(authUser.role==='coach'){
           const r=await apiCall('/api/coach/athletes');
-          setPartners((r.athletes||[]).filter(a=>a.status==='active'));
+          setPartners((Array.isArray(r)?r:(r.athletes||[])).filter(a=>a.status==='active'));
         }
       }catch{}
     };
