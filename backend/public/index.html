@@ -156,7 +156,7 @@ img{display:block;max-width:100%}
 
 /* BG mockup layer */
 .audience-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.audience-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,14,0.10) 0%,rgba(10,10,14,0.88) 55%,rgba(10,10,14,0.98) 100%);z-index:1}
+.audience-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,14,0) 0%,rgba(10,10,14,0.70) 48%,rgba(10,10,14,0.95) 100%);z-index:1}
 
 /* Calendar mockup */
 .cal-mock{position:absolute;top:18px;left:12px;right:12px;background:rgba(18,18,26,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
@@ -206,10 +206,70 @@ img{display:block;max-width:100%}
 .audience-coach .audience-list li::before{background:rgba(217,119,87,0.18);color:var(--accent)}
 .audience-athlete .audience-list li::before{background:rgba(124,168,196,0.18);color:var(--steel)}
 
+/* Feature illustrated cards */
+.feature-illustrated{padding:0;display:flex;flex-direction:column;justify-content:flex-end;min-height:270px}
+.feat-bg{position:absolute;inset:0;padding:16px 14px 100px;pointer-events:none;overflow:hidden}
+.feat-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(14,14,20,0) 0%,rgba(14,14,20,0.78) 45%,rgba(14,14,20,0.97) 100%);z-index:0}
+.feat-bg>*{position:relative;z-index:1}
+
+/* Workout illustration */
+.wi-ex{background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.22);border-radius:10px;padding:10px}
+.wi-ex-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(217,119,87,0.18);color:var(--accent);font-size:8px;font-weight:700;margin-bottom:3px}
+.wi-ex-name{font-size:12px;font-weight:700;color:#fff;margin-bottom:2px}
+.wi-ex-prev{font-size:8px;color:var(--steel);margin-bottom:7px}
+.wi-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.wi-step{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 7px;font-size:9px;font-weight:700;color:#fff}
+.wi-x{font-size:8px;color:var(--faint)}
+.wi-check{margin-left:auto;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px}
+.wi-check.done{background:rgba(217,119,87,0.20);color:var(--accent);border:1px solid rgba(217,119,87,0.35)}
+.wi-check.active{background:var(--grad);color:#fff}
+.wi-timer{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;font-weight:700;color:var(--sage)}
+
+/* Macro bars */
+.mb-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
+.mb-row{margin-bottom:8px}
+.mb-label{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-bottom:3px;font-weight:600}
+.mb-track{height:5px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden}
+.mb-fill{height:100%;border-radius:3px}
+.mb-meals{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.mb-meal-chip{padding:3px 8px;border-radius:999px;font-size:8px;font-weight:600;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);color:var(--dim)}
+.mb-meal-chip span{color:var(--accent);margin-left:3px}
+.mb-meal-pending{opacity:0.5}
+
+/* Excel table */
+.xl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.xl-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(124,196,161,0.12);border:1px solid rgba(124,196,161,0.25);color:var(--sage);font-size:9px;font-weight:700}
+.xl-status{font-size:9px;color:var(--sage);font-weight:700}
+.xl-table{width:100%;border-collapse:collapse}
+.xl-table th{font-size:8px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;padding:3px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07)}
+.xl-table td{font-size:9px;color:var(--dim);padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.xl-table tr:last-child td{border:none}
+.xl-day{color:var(--accent)!important;font-weight:700}
+
+/* Sync illustration */
+.sync-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.sync-node{flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:8px 10px;text-align:center}
+.sync-node-label{font-size:8px;color:var(--faint);font-weight:700;letter-spacing:0.4px;text-transform:uppercase}
+.sync-node-val{font-size:12px;font-weight:800;color:#fff;margin-top:2px}
+.sync-arrow{font-size:20px;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+.sync-log{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:8px 10px}
+.sync-log-row{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:9px;color:var(--dim);border-bottom:1px solid rgba(255,255,255,0.04)}
+.sync-log-row:last-child{border:none}
+.sync-log-dot{width:5px;height:5px;border-radius:2px;flex-shrink:0}
+.sync-log-time{margin-left:auto;color:var(--faint);font-size:8px;font-weight:600}
+
+/* Bar chart */
+.bc-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
+.bc-bars{display:flex;align-items:flex-end;gap:5px;height:60px;margin-bottom:5px}
+.bc-bar{flex:1;border-radius:4px 4px 0 0;min-height:4px}
+.bc-labels{display:flex;gap:5px}
+.bc-label{flex:1;text-align:center;font-size:8px;color:var(--faint);font-weight:600}
+.bc-streak{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;color:var(--accent)}
+
 /* Chat feature card */
 .feature-chat{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;min-height:260px;padding:0}
 .chat-bg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-start;gap:10px;padding:20px 16px 80px;pointer-events:none}
-.chat-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(14,14,20,0.05) 0%,rgba(14,14,20,0.92) 55%,rgba(14,14,20,1) 100%)}
+.chat-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(14,14,20,0) 0%,rgba(14,14,20,0.78) 48%,rgba(14,14,20,0.97) 100%)}
 .chat-msg{display:flex;align-items:flex-end;gap:8px}
 .chat-msg-athlete{flex-direction:row-reverse}
 .chat-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
@@ -361,18 +421,6 @@ img{display:block;max-width:100%}
   </div>
 </section>
 
-<!-- Stats -->
-<section class="section-sm">
-  <div class="container">
-    <div class="stats-bar">
-      <div class="stat-item"><strong class="stat-num-1">200+</strong><span>Aliments sport</span></div>
-      <div class="stat-item"><strong class="stat-num-2">7 jours</strong><span>Plan nutrition</span></div>
-      <div class="stat-item"><strong class="stat-num-3">Push</strong><span>Notifications temps réel</span></div>
-      <div class="stat-item"><strong class="stat-num-4">PWA</strong><span>Installable sans store</span></div>
-    </div>
-  </div>
-</section>
-
 <!-- Features -->
 <section class="section" id="fonctions">
   <div class="container">
@@ -382,36 +430,157 @@ img{display:block;max-width:100%}
       <p class="section-sub">Chaque écran sert un usage précis. Pas de stats vides, pas de gadgets.</p>
     </div>
     <div class="features">
-      <div class="feature">
-        <div class="feature-icon">💪</div>
-        <h3>Séance guidée</h3>
-        <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, rappel de ta dernière performance sous chaque série. Tu te concentres sur la séance, pas sur l'écran.</p>
+
+      <!-- Séance guidée -->
+      <div class="feature feature-illustrated">
+        <div class="feat-bg" aria-hidden="true">
+          <div class="wi-ex">
+            <div class="wi-ex-pill">● Pectoraux</div>
+            <div class="wi-ex-name">Développé couché</div>
+            <div class="wi-ex-prev">↺ Dernière : 80×8 · 80×7 · 75×6</div>
+            <div class="wi-row">
+              <div class="wi-step">− 82.5 kg +</div>
+              <span class="wi-x">×</span>
+              <div class="wi-step">− 8 +</div>
+              <div class="wi-check done">✓</div>
+            </div>
+            <div class="wi-row">
+              <div class="wi-step">− 82.5 kg +</div>
+              <span class="wi-x">×</span>
+              <div class="wi-step">− 8 +</div>
+              <div class="wi-check done">✓</div>
+            </div>
+            <div class="wi-row">
+              <div class="wi-step">− 82.5 kg +</div>
+              <span class="wi-x">×</span>
+              <div class="wi-step">− 7 +</div>
+              <div class="wi-check active">✓</div>
+            </div>
+          </div>
+          <div class="wi-timer">⏱ Repos · 01:23</div>
+        </div>
+        <div class="feature-content">
+          <div class="feature-icon">💪</div>
+          <h3>Séance guidée</h3>
+          <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, rappel de ta dernière performance sous chaque série.</p>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-icon">🥗</div>
-        <h3>Nutrition complète</h3>
-        <p>Plan sur 7 jours, validation repas par repas, base de 200+ aliments sport avec calcul automatique des macros. Jauges kcal, protéines, glucides, lipides en temps réel.</p>
+
+      <!-- Nutrition complète -->
+      <div class="feature feature-illustrated">
+        <div class="feat-bg" aria-hidden="true">
+          <div class="mb-title">🥗 Lundi · Macros du jour</div>
+          <div class="mb-row">
+            <div class="mb-label"><span>Calories</span><span style="color:#d97757">1 840 / 2 450 kcal</span></div>
+            <div class="mb-track"><div class="mb-fill" style="width:75%;background:linear-gradient(90deg,#d97757,#c97586)"></div></div>
+          </div>
+          <div class="mb-row">
+            <div class="mb-label"><span>Protéines</span><span style="color:#7cc4a1">142 / 190g</span></div>
+            <div class="mb-track"><div class="mb-fill" style="width:75%;background:#7cc4a1"></div></div>
+          </div>
+          <div class="mb-row">
+            <div class="mb-label"><span>Glucides</span><span style="color:#7ca8c4">180 / 270g</span></div>
+            <div class="mb-track"><div class="mb-fill" style="width:67%;background:#7ca8c4"></div></div>
+          </div>
+          <div class="mb-row">
+            <div class="mb-label"><span>Lipides</span><span style="color:#c2a042">48 / 65g</span></div>
+            <div class="mb-track"><div class="mb-fill" style="width:74%;background:#c2a042"></div></div>
+          </div>
+          <div class="mb-meals">
+            <div class="mb-meal-chip">☀️ Petit-déj <span>680 kcal</span></div>
+            <div class="mb-meal-chip">🍽️ Déjeuner <span>820 kcal</span></div>
+            <div class="mb-meal-chip mb-meal-pending">🌙 Dîner <span>à venir</span></div>
+          </div>
+        </div>
+        <div class="feature-content">
+          <div class="feature-icon">🥗</div>
+          <h3>Nutrition complète</h3>
+          <p>Plan sur 7 jours, 200+ aliments sport, calcul automatique des macros. Jauges kcal, protéines, glucides, lipides en temps réel.</p>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-icon">📥</div>
-        <h3>Import Excel natif</h3>
-        <p>Le coach glisse son fichier de programme ou de nutrition. Détection automatique des jours, exercices, charges, séries, calories et macros. Zéro saisie manuelle.</p>
+
+      <!-- Import Excel -->
+      <div class="feature feature-illustrated">
+        <div class="feat-bg" aria-hidden="true">
+          <div class="xl-head">
+            <div class="xl-badge">📥 Programme.xlsx</div>
+            <span class="xl-status">✓ Importé</span>
+          </div>
+          <table class="xl-table">
+            <thead><tr><th>Jour</th><th>Exercice</th><th>Kg</th><th>Séries</th><th>Reps</th></tr></thead>
+            <tbody>
+              <tr><td class="xl-day">Lun</td><td>Squat barre</td><td>100</td><td>4</td><td>8</td></tr>
+              <tr><td class="xl-day">Lun</td><td>Fentes</td><td>60</td><td>3</td><td>12</td></tr>
+              <tr><td class="xl-day">Mar</td><td>Dév. couché</td><td>80</td><td>4</td><td>8</td></tr>
+              <tr><td class="xl-day">Mar</td><td>Rowing barre</td><td>70</td><td>4</td><td>10</td></tr>
+              <tr><td class="xl-day">Jeu</td><td>Développé épaules</td><td>50</td><td>3</td><td>12</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="feature-content">
+          <div class="feature-icon">📥</div>
+          <h3>Import Excel natif</h3>
+          <p>Le coach glisse son fichier. Détection automatique des jours, exercices, charges, séries, calories et macros. Zéro saisie manuelle.</p>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-icon">⚡</div>
-        <h3>Sync temps réel</h3>
-        <p>Le coach modifie un programme → l'athlète le voit dans la seconde. Séances terminées, repas validés, messages : tout remonte instantanément via notifications push.</p>
+
+      <!-- Sync temps réel -->
+      <div class="feature feature-illustrated">
+        <div class="feat-bg" aria-hidden="true">
+          <div class="sync-row">
+            <div class="sync-node">
+              <div class="sync-node-label">Coach</div>
+              <div class="sync-node-val">Yannis</div>
+            </div>
+            <div class="sync-arrow">⚡</div>
+            <div class="sync-node">
+              <div class="sync-node-label">Athlète</div>
+              <div class="sync-node-val">Christelle</div>
+            </div>
+          </div>
+          <div class="sync-log">
+            <div class="sync-log-row"><span class="sync-log-dot" style="background:#7cc4a1"></span>Programme mis à jour<span class="sync-log-time">0.3s</span></div>
+            <div class="sync-log-row"><span class="sync-log-dot" style="background:#d97757"></span>Séance terminée ✓<span class="sync-log-time">1s</span></div>
+            <div class="sync-log-row"><span class="sync-log-dot" style="background:#7ca8c4"></span>Repas validé 🥗<span class="sync-log-time">2s</span></div>
+            <div class="sync-log-row"><span class="sync-log-dot" style="background:#c2a042"></span>Push notification 🔔<span class="sync-log-time">2s</span></div>
+          </div>
+        </div>
+        <div class="feature-content">
+          <div class="feature-icon">⚡</div>
+          <h3>Sync temps réel</h3>
+          <p>Le coach modifie un programme → l'athlète le voit dans la seconde. Tout remonte instantanément via notifications push.</p>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-icon">📊</div>
-        <h3>Suivi & historique</h3>
-        <p>Volume hebdo, streak de jours consécutifs, photos de progression, calendrier global. Le coach voit l'historique complet de chaque athlète depuis un seul écran.</p>
+
+      <!-- Suivi & historique -->
+      <div class="feature feature-illustrated">
+        <div class="feat-bg" aria-hidden="true">
+          <div class="bc-title">📊 Volume hebdo (kg)</div>
+          <div class="bc-bars">
+            <div class="bc-bar" style="height:55%;background:rgba(217,119,87,0.5)"></div>
+            <div class="bc-bar" style="height:72%;background:rgba(217,119,87,0.6)"></div>
+            <div class="bc-bar" style="height:40%;background:rgba(217,119,87,0.45)"></div>
+            <div class="bc-bar" style="height:88%;background:linear-gradient(180deg,#d97757,#c97586)"></div>
+            <div class="bc-bar" style="height:65%;background:rgba(217,119,87,0.55)"></div>
+            <div class="bc-bar" style="height:20%;background:rgba(255,255,255,0.08)"></div>
+            <div class="bc-bar" style="height:10%;background:rgba(255,255,255,0.05)"></div>
+          </div>
+          <div class="bc-labels">
+            <span class="bc-label">L</span><span class="bc-label">M</span><span class="bc-label">M</span><span class="bc-label" style="color:#d97757">J</span><span class="bc-label">V</span><span class="bc-label">S</span><span class="bc-label">D</span>
+          </div>
+          <div class="bc-streak">🔥 5 jours consécutifs</div>
+        </div>
+        <div class="feature-content">
+          <div class="feature-icon">📊</div>
+          <h3>Suivi & historique</h3>
+          <p>Volume hebdo, streak de jours consécutifs, photos de progression, calendrier global. Le coach voit tout depuis un seul écran.</p>
+        </div>
       </div>
       <div class="feature feature-chat">
         <div class="chat-bg" aria-hidden="true">
           <div class="chat-msg chat-msg-coach">
             <span class="chat-avatar chat-avatar-coach">Y</span>
-            <div class="chat-bubble chat-bubble-coach">Séance top ce matin Camille 🔥 T'as explosé ton record sur le soulevé !</div>
+            <div class="chat-bubble chat-bubble-coach">Séance top ce matin Christelle 🔥 T'as explosé ton record sur le soulevé !</div>
           </div>
           <div class="chat-msg chat-msg-athlete">
             <div class="chat-bubble chat-bubble-athlete">Merci coach 💪 Je me suis sentie vraiment forte aujourd'hui</div>
