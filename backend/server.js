@@ -1215,15 +1215,22 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   io.to('user:' + me).emit('new-message', { from: me, msg });
   // Push notification to partner if subscribed
   const sub = DATA.pushSubscriptions[partner];
+  console.log('[push-msg] partner=', partner, 'hasSub=', !!sub, 'hasVapid=', !!VAPID_PUBLIC_KEY);
   if (sub && VAPID_PUBLIC_KEY) {
     const sender = DATA.users[me];
-    const name = sender?.firstName || sender?.email?.split('@')[0] || 'Coach';
+    const name = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
     webpush.sendNotification(sub, JSON.stringify({
       title: `💬 ${name}`,
       body: text.trim().slice(0, 100),
       tag: `msg-${me}`,
       url: '/Muscu.html'
-    })).catch(() => { delete DATA.pushSubscriptions[partner]; persist(); });
+    })).then(() => console.log('[push-msg] sent OK'))
+      .catch(e => {
+        console.error('[push-msg] error:', e.statusCode, e.message);
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          delete DATA.pushSubscriptions[partner]; persist();
+        }
+      });
   }
   res.json({ ok: true, msg });
 });
@@ -1240,6 +1247,11 @@ function pushToUser(userId, payload) {
 // ── Push subscriptions ────────────────────────────────
 app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ key: VAPID_PUBLIC_KEY || null });
+});
+
+app.get('/api/push/status', authRequired, (req, res) => {
+  const sub = DATA.pushSubscriptions[req.user.id];
+  res.json({ subscribed: !!sub, endpoint: sub?.endpoint?.slice(0, 50) || null, vapidConfigured: !!VAPID_PUBLIC_KEY });
 });
 
 app.post('/api/push/subscribe', authRequired, (req, res) => {
