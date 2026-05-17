@@ -13,6 +13,8 @@ import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
 import webpush from 'web-push';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +34,12 @@ const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.
 const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
+// Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
+if (process.env.CLOUDINARY_URL) {
+  cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL });
+}
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
@@ -1066,22 +1074,45 @@ app.get('/api/coach/athletes/:id/weight', authRequired, coachOnly, (req, res) =>
   res.json({ logs });
 });
 
+// ── Upload fichier → Cloudinary (ou base64 fallback) ──
+app.post('/api/upload', authRequired, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+  if (process.env.CLOUDINARY_URL) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'prime-athl', transformation: [{ width: 1200, crop: 'limit', quality: 'auto:good' }] },
+          (err, r) => err ? reject(err) : resolve(r)
+        ).end(req.file.buffer);
+      });
+      return res.json({ url: result.secure_url });
+    } catch(e) {
+      return res.status(500).json({ error: 'upload_failed', detail: e.message });
+    }
+  }
+  // Fallback base64 si Cloudinary non configuré
+  const b64 = req.file.buffer.toString('base64');
+  res.json({ url: `data:${req.file.mimetype};base64,${b64}` });
+});
+
 // ── Progress photos ──────────────────────────────────
 app.get('/api/photos', authRequired, (req, res) => {
   const photos = (DATA.progressPhotos[req.user.id] || []).slice().sort((a,b) => b.date - a.date);
   res.json({ photos });
 });
 
-const MAX_PHOTOS_PER_USER = 30;
+const MAX_PHOTOS_PER_USER = 50;
 app.post('/api/photos', authRequired, (req, res) => {
-  const { dataUrl, note, date } = req.body || {};
-  if (!dataUrl) return res.status(400).json({ error: 'dataUrl_required' });
-  if (dataUrl.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 2MB' });
+  const { url, dataUrl, note, date } = req.body || {};
+  const src = url || dataUrl;
+  if (!src) return res.status(400).json({ error: 'url_required' });
+  // Limite taille uniquement pour base64 (les URLs Cloudinary sont légères)
+  if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[req.user.id]) DATA.progressPhotos[req.user.id] = [];
   if (DATA.progressPhotos[req.user.id].length >= MAX_PHOTOS_PER_USER) {
     return res.status(400).json({ error: 'photo_limit_reached', detail: `Maximum ${MAX_PHOTOS_PER_USER} photos` });
   }
-  const photo = { id: uid(), dataUrl, note: note || '', date: date || Date.now(), createdAt: Date.now() };
+  const photo = { id: uid(), url: src, note: note || '', date: date || Date.now(), createdAt: Date.now() };
   DATA.progressPhotos[req.user.id].unshift(photo);
   persist();
   res.json({ ok: true, photo });
