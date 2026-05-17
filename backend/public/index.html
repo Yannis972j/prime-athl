@@ -14,20 +14,78 @@
 <link rel="preconnect" href="https://rsms.me"/>
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
 <style>
+/* ── Thème par défaut : Dark Prime ── */
 :root{
   --bg:#0a0a0e; --bg-2:#13131a; --bg-3:#1a1a24;
   --text:#f4f1ed; --dim:#a8a097; --faint:#6e655c;
-  --line:rgba(255,255,255,0.06);
-  --line-2:rgba(255,255,255,0.10);
-  --accent:#d97757;
-  --rose:#c97586;
-  --steel:#7ca8c4;
-  --gold:#c2a042;
-  --sage:#7cc4a1;
+  --line:rgba(255,255,255,0.06); --line-2:rgba(255,255,255,0.10);
+  --accent:#d97757; --rose:#c97586; --steel:#7ca8c4; --gold:#c2a042; --sage:#7cc4a1;
   --grad:linear-gradient(135deg,#d97757 0%,#c97586 50%,#8e6cb6 100%);
   --grad-soft:linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.10),rgba(142,108,182,0.08));
   --shadow-card:0 30px 80px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.04) inset;
+  --card-bg:rgba(16,16,22,0.85); --card-bg2:rgba(10,10,15,0.9); --feat-preview-bg:rgba(10,10,15,0.9);
+  --header-bg:rgba(10,10,14,0.78);
 }
+/* ── Thème Luxe Gris ── */
+[data-theme="luxe"]{
+  --bg:#0c0c10; --bg-2:#14141a; --bg-3:#1c1c24;
+  --text:#dddde6; --dim:#8080a0; --faint:#505068;
+  --line:rgba(200,200,255,0.06); --line-2:rgba(200,200,255,0.10);
+  --accent:#9090c4; --rose:#a080b4; --steel:#6080b0; --gold:#908060; --sage:#509080;
+  --grad:linear-gradient(135deg,#6868a8 0%,#8888bc 50%,#585894 100%);
+  --card-bg:rgba(18,18,26,0.9); --card-bg2:rgba(12,12,18,0.92); --feat-preview-bg:rgba(10,10,16,0.92);
+  --header-bg:rgba(12,12,16,0.82);
+}
+/* ── Thème Blanc-Noir ── */
+[data-theme="light"]{
+  --bg:#f4f4f2; --bg-2:#ffffff; --bg-3:#e8e8e6;
+  --text:#0c0c14; --dim:#484858; --faint:#88889a;
+  --line:rgba(0,0,0,0.07); --line-2:rgba(0,0,0,0.12);
+  --accent:#d97757; --rose:#c97586; --steel:#4a7aaa; --gold:#a07820; --sage:#2a8a60;
+  --grad:linear-gradient(135deg,#d97757 0%,#c97586 50%,#8e6cb6 100%);
+  --card-bg:rgba(255,255,255,0.9); --card-bg2:rgba(240,240,238,0.95); --feat-preview-bg:rgba(234,234,232,0.95);
+  --header-bg:rgba(244,244,242,0.88);
+}
+[data-theme="light"] html,[data-theme="light"] body{background:var(--bg);color:var(--text)}
+[data-theme="light"] .feature{background:var(--card-bg);border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .feat-preview{background:var(--feat-preview-bg);border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .audience-card{border-color:rgba(0,0,0,0.10)}
+[data-theme="light"] .audience-preview{border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.06),rgba(244,244,242,1))}
+[data-theme="light"] .audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(74,122,170,0.06),rgba(244,244,242,1))}
+[data-theme="light"] .audience-body{background:rgba(255,255,255,0.95)}
+[data-theme="light"] .header{background:var(--header-bg);border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .cal-mock,[data-theme="light"] .nutri-mock{background:rgba(255,255,255,0.95);border-color:rgba(0,0,0,0.09)}
+[data-theme="light"] .cal-d{background:rgba(0,0,0,0.03);color:var(--dim)}
+[data-theme="light"] .nutri-macro{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.07)}
+[data-theme="light"] .nutri-meal{background:rgba(0,0,0,0.025);border-color:rgba(0,0,0,0.06)}
+[data-theme="light"] .step,[data-theme="light"] .faq-item{background:rgba(255,255,255,0.8);border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .final-cta{background:linear-gradient(160deg,rgba(217,119,87,0.08),rgba(248,248,246,0.98));border-color:rgba(217,119,87,0.18)}
+[data-theme="light"] .hero::before{background:radial-gradient(ellipse,rgba(217,119,87,0.10) 0%,transparent 55%)}
+[data-theme="light"] .wi-ex{background:rgba(217,119,87,0.06);border-color:rgba(217,119,87,0.15)}
+[data-theme="light"] .wi-step{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.10);color:var(--text)}
+[data-theme="light"] .sync-log,[data-theme="light"] .xl-table th{border-color:rgba(0,0,0,0.07)}
+[data-theme="light"] .xl-table td{border-color:rgba(0,0,0,0.04)}
+[data-theme="light"] .sync-node{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.10)}
+[data-theme="light"] .sync-node-val{color:var(--text)}
+[data-theme="light"] .chat-bubble{color:var(--text)}
+[data-theme="light"] .chat-bubble-coach{background:rgba(217,119,87,0.12);border-color:rgba(217,119,87,0.25)}
+[data-theme="light"] .chat-bubble-athlete{background:rgba(74,122,170,0.12);border-color:rgba(74,122,170,0.25)}
+[data-theme="light"] .mb-track{background:rgba(0,0,0,0.07)}
+[data-theme="light"] .mb-meal-chip{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.09)}
+[data-theme="light"] .bc-bar:nth-child(-n+5){background:rgba(217,119,87,0.35)}
+[data-theme="light"] .bc-bar:last-child,[data-theme="light"] .bc-bar:nth-last-child(2){background:rgba(0,0,0,0.08)}
+[data-theme="light"] .bc-title,[data-theme="light"] .mb-title{color:var(--text)}
+[data-theme="light"] .wi-ex-name,[data-theme="light"] .sync-log-row{color:var(--dim)}
+[data-theme="light"] .footer{border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .footer-bottom{border-color:rgba(0,0,0,0.06)}
+
+/* ── Theme Picker ── */
+.theme-picker{display:flex;align-items:center;gap:5px;margin-right:8px}
+.theme-swatch{width:19px;height:19px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.2s;flex-shrink:0}
+.theme-swatch:hover{transform:scale(1.18)}
+.theme-swatch.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+@media(max-width:560px){.theme-picker{gap:4px}.theme-swatch{width:16px;height:16px}}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
 html,body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;font-feature-settings:'cv11','ss03'}
 body{overflow-x:hidden;line-height:1.5}
@@ -325,6 +383,11 @@ img{display:block;max-width:100%}
       <a href="#fonctions">Fonctionnalités</a>
       <a href="#qui">Pour qui</a>
       <a href="#faq">FAQ</a>
+      <div class="theme-picker" title="Changer le thème">
+        <button class="theme-swatch" data-theme="dark" style="background:linear-gradient(135deg,#0a0a0e 40%,#d97757)" title="Dark Prime"></button>
+        <button class="theme-swatch" data-theme="luxe" style="background:linear-gradient(135deg,#0c0c10 40%,#9090c4)" title="Luxe Gris"></button>
+        <button class="theme-swatch" data-theme="light" style="background:linear-gradient(135deg,#f4f4f2 40%,#0c0c14)" title="Blanc-Noir"></button>
+      </div>
       <a class="btn-cta" href="/Muscu.html">Lancer l'app →</a>
     </nav>
   </div>
@@ -764,6 +827,17 @@ img{display:block;max-width:100%}
 </footer>
 
 <script>
+// Theme picker
+(function(){
+  function applyTheme(t){
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('prime-theme', t);
+    document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === t));
+  }
+  document.querySelectorAll('.theme-swatch').forEach(s => s.addEventListener('click', () => applyTheme(s.dataset.theme)));
+  applyTheme(localStorage.getItem('prime-theme') || 'dark');
+})();
+
 document.querySelectorAll('.faq-q').forEach(btn => {
   btn.addEventListener('click', () => {
     const item = btn.parentElement;
