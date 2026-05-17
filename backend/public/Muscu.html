@@ -1583,12 +1583,15 @@ function MessagesScreen({authUser}){
     load();
   },[authUser]);
 
-  // Load messages when partner selected
+  // Load + poll messages when partner selected
   React.useEffect(()=>{
     if(!selected)return;
-    apiCall('/api/messages/'+selected.id).then(r=>setMessages(r.messages||[])).catch(()=>{});
+    const load=()=>apiCall('/api/messages/'+selected.id).then(r=>setMessages(r.messages||[])).catch(()=>{});
+    load();
     setUnread(u=>({...u,[selected.id]:0}));
-  },[selected]);
+    const interval=setInterval(load,3000);
+    return()=>clearInterval(interval);
+  },[selected?.id]);
 
   // Scroll to bottom
   React.useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
