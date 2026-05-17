@@ -2434,6 +2434,22 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[importMsg,setImportMsg]=React.useState(null);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
+  const nowN=new Date();
+  const[calYear,setCalYear]=React.useState(nowN.getFullYear());
+  const[calMonth,setCalMonth]=React.useState(nowN.getMonth());
+  const[selectedDate,setSelectedDate]=React.useState(null);
+  const JS_TO_DAY_N=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+  const todayStrN=`${nowN.getFullYear()}-${String(nowN.getMonth()+1).padStart(2,'0')}-${String(nowN.getDate()).padStart(2,'0')}`;
+  const calDaysN=React.useMemo(()=>{
+    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
+    const dim=new Date(calYear,calMonth+1,0).getDate();
+    const cells=[];
+    for(let i=0;i<firstDow;i++)cells.push(null);
+    for(let d=1;d<=dim;d++)cells.push(d);
+    return cells;
+  },[calYear,calMonth]);
+  const prevMonthN=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
+  const nextMonthN=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
 
   const handleSelfImport=e=>{
     const file=e.target.files[0];
@@ -2580,20 +2596,57 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         </div>
       </div>
 
-      {/* Day selector */}
-      <div style={{display:'flex',gap:4,marginBottom:14,overflowX:'auto',paddingBottom:4}}>
-        {DAYS_OF_WEEK.map(d=>{
-          const dayMeals=getDayMeals(data,d);
-          const hasContent=dayMeals.some(m=>(m.items||[]).length>0);
-          const isCurDay=d===todayDayName();
-          const active=d===viewDay;
-          return(
-            <button key={d} onClick={()=>setViewDay(d)} style={{flexShrink:0,height:42,padding:'0 11px',borderRadius:12,border:active?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:active?(isCurDay?'linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.12))':T.accentSoft):'rgba(255,255,255,0.03)',color:active?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:1,minWidth:46,position:'relative'}}>
-              <span>{d.slice(0,3)}</span>
-              <span style={{fontSize:8,color:isCurDay?T.accent:T.textFaint,fontWeight:600}}>{isCurDay?'AUJ.':hasContent?'•':''}</span>
-            </button>
-          );
-        })}
+      {/* Calendar selector */}
+      <div style={{marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <button onClick={prevMonthN} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <div style={{fontSize:13,fontWeight:700,textTransform:'capitalize'}}>{new Date(calYear,calMonth).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</div>
+          <button onClick={nextMonthN} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+        </div>
+        <div style={{display:'flex',gap:12,marginBottom:8}}>
+          {[['#7cc4a1','Validé'],['#d97757','Planifié']].map(([c,l])=>(
+            <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
+              <div style={{width:6,height:6,borderRadius:3,background:c}}/>
+              {l}
+            </div>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+          {['L','M','M','J','V','S','D'].map((d,i)=>(
+            <div key={i} style={{textAlign:'center',fontSize:9,fontWeight:700,color:T.textFaint,padding:'2px 0'}}>{d}</div>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+          {calDaysN.map((d,i)=>{
+            if(!d)return<div key={i}/>;
+            const dow=new Date(calYear,calMonth,d).getDay();
+            const dayName=JS_TO_DAY_N[dow];
+            const dayMeals=getDayMeals(data,dayName);
+            const hasPlan=dayMeals.some(m=>(m.items||[]).length>0);
+            const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const histLog=history[dateStr];
+            const isDone=histLog&&Object.values(histLog.validated||{}).some(Boolean);
+            const isToday2=dateStr===todayStrN;
+            const isSel=selectedDate===dateStr;
+            let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)',color=T.textFaint;
+            if(isDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';color='#7cc4a1';}
+            else if(hasPlan){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.25)';color='#d97757';}
+            if(isToday2)border='2px solid rgba(217,119,87,0.6)';
+            if(isSel){bg='rgba(217,119,87,0.2)';border='2px solid #d97757';}
+            return(
+              <div key={i} onClick={()=>{if(hasPlan||isDone){setSelectedDate(isSel?null:dateStr);setViewDay(dayName);setExpandedMeal(null);}}}
+                style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasPlan||isDone)?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
+                <span style={{fontSize:11,fontWeight:600,color}}>{d}</span>
+                {(hasPlan||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:1}}/>}
+              </div>
+            );
+          })}
+        </div>
+        {selectedDate&&(
+          <div style={{marginTop:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',fontSize:12,color:T.textDim,textAlign:'center',textTransform:'capitalize'}}>
+            {new Date(selectedDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} · <span style={{color:T.accent,fontWeight:700}}>{viewDay}</span>
+          </div>
+        )}
       </div>
 
       {/* Big calorie gauge */}
