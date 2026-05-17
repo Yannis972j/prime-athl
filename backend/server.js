@@ -981,6 +981,54 @@ app.put('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res) =
 });
 
 // Coach fetches athlete's nutrition (plan + history)
+// ── Coach calendar — vue globale tous athlètes ────────────
+app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
+  const year  = parseInt(req.query.year)  || new Date().getFullYear();
+  const month = parseInt(req.query.month) || new Date().getMonth() + 1; // 1-12
+  const start = new Date(year, month - 1, 1).getTime();
+  const end   = new Date(year, month, 1).getTime();
+  const JS_TO_DAY = ['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+  const PALETTE = ['#d97757','#7cc4a1','#7ca8c4','#c97586','#c2a042','#a08fd4','#78b4b4'];
+
+  const athletes = Object.values(DATA.users)
+    .filter(u => u.coachId === req.user.id && u.status === 'active');
+
+  const result = athletes.map((u, idx) => {
+    // Sessions du mois
+    const sessionDates = Object.values(DATA.sessions)
+      .filter(s => s.userId === u.id && s.date >= start && s.date < end)
+      .map(s => new Date(s.date).toISOString().slice(0,10));
+
+    // Nutrition validée du mois (nutritionLogs)
+    const logs = DATA.nutritionLogs[u.id] || {};
+    const nutriDates = Object.keys(logs).filter(dateStr => {
+      const d = new Date(dateStr).getTime();
+      return d >= start && d < end && Object.values(logs[dateStr]||{}).some(v => v);
+    });
+
+    // Jours prévus au programme (noms de jours)
+    const prog = DATA.programs[u.id];
+    const programDays = prog
+      ? [...new Set(Object.values(prog.data || {}).flatMap(sheet => Object.keys(sheet)))]
+      : [];
+
+    const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email.split('@')[0];
+    return {
+      id: u.id,
+      name,
+      initials: ((u.firstName||'')[0]||'') + ((u.lastName||'')[0]||'') || name[0].toUpperCase(),
+      color: PALETTE[idx % PALETTE.length],
+      sessionDates,
+      nutriDates,
+      programDays,
+      hasProgram: !!prog,
+      hasNutrition: !!(DATA.nutritionPrograms[u.id]),
+    };
+  });
+
+  res.json({ year, month, athletes: result });
+});
+
 app.get('/api/coach/athletes/:id/nutrition', authRequired, coachOnly, (req, res) => {
   const u = DATA.users[req.params.id];
   if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });

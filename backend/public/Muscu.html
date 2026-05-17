@@ -4194,6 +4194,184 @@ function timeAgo(ts){
   return new Date(ts).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
 }
 
+// ── Coach Global Calendar ────────────────────────────────────────────────────
+function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
+  const now=new Date();
+  const[year,setYear]=React.useState(now.getFullYear());
+  const[month,setMonth]=React.useState(now.getMonth()+1);
+  const[calData,setCalData]=React.useState(null);
+  const[loading,setLoading]=React.useState(false);
+  const[selectedDay,setSelectedDay]=React.useState(null);
+
+  React.useEffect(()=>{
+    setLoading(true);
+    setCalData(null);
+    apiCall(`/api/coach/calendar?year=${year}&month=${month}`)
+      .then(d=>setCalData(d))
+      .catch(console.error)
+      .finally(()=>setLoading(false));
+  },[year,month]);
+
+  const prevMonth=()=>{if(month===1){setYear(y=>y-1);setMonth(12);}else setMonth(m=>m-1);setSelectedDay(null);};
+  const nextMonth=()=>{if(month===12){setYear(y=>y+1);setMonth(1);}else setMonth(m=>m+1);setSelectedDay(null);};
+
+  const MONTH_NAMES=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const DAY_LABELS=['Lu','Ma','Me','Je','Ve','Sa','Di'];
+
+  // Build grid: weeks × 7
+  const firstDay=new Date(year,month-1,1).getDay(); // 0=Sun
+  const startOffset=(firstDay+6)%7; // Mon=0
+  const daysInMonth=new Date(year,month,0).getDate();
+  const cells=[];
+  for(let i=0;i<startOffset;i++)cells.push(null);
+  for(let d=1;d<=daysInMonth;d++)cells.push(d);
+  while(cells.length%7!==0)cells.push(null);
+
+  const isToday=(d)=>d&&year===now.getFullYear()&&month===now.getMonth()+1&&d===now.getDate();
+
+  const dotsForDay=(d)=>{
+    if(!calData||!d)return[];
+    const dots=[];
+    for(const ath of calData){
+      const dayStr=String(d).padStart(2,'0');
+      const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+      const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
+      const hasProg=ath.programDays.some(pd=>{
+        // programDays are day-of-week labels; we check if this calendar day matches
+        const jsDay=new Date(year,month-1,d).getDay();
+        const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+        return pd===DAYS[jsDay];
+      });
+      if(hasSession||hasNutri||hasProg)dots.push({color:ath.color,hasSession,hasNutri,hasProg,name:ath.name,id:ath.id});
+    }
+    return dots;
+  };
+
+  const selectedDots=selectedDay?dotsForDay(selectedDay):[];
+  const selectedAths=selectedDay&&calData?calData.filter(ath=>{
+    const dayStr=String(selectedDay).padStart(2,'0');
+    const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+    const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
+    const jsDay=new Date(year,month-1,selectedDay).getDay();
+    const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+    const hasProg=ath.programDays.some(pd=>pd===DAYS[jsDay]);
+    return hasSession||hasNutri||hasProg;
+  }):[];
+
+  return(
+    <div style={{padding:'18px 18px 100px',color:T.text}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={onBack} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Icon name="chevronLeft" size={18} stroke={T.textDim}/>
+        </button>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Coaching</div>
+          <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5}}><HoloText>Calendrier global</HoloText></div>
+        </div>
+      </div>
+
+      {/* Month nav */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+        <button onClick={prevMonth} style={{width:36,height:36,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Icon name="chevronLeft" size={16} stroke={T.text}/>
+        </button>
+        <div style={{fontSize:16,fontWeight:700}}>{MONTH_NAMES[month-1]} {year}</div>
+        <button onClick={nextMonth} style={{width:36,height:36,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <Icon name="chevronRight" size={16} stroke={T.text}/>
+        </button>
+      </div>
+
+      {/* Legend */}
+      {calData&&calData.length>0&&(
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+          {calData.map(a=>(
+            <div key={a.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 9px',borderRadius:999,background:'rgba(255,255,255,0.04)',border:`1px solid ${a.color}44`,fontSize:11,fontWeight:600,cursor:'pointer'}} onClick={()=>onOpenAthlete(athletes.find(x=>x.id===a.id)||{id:a.id,email:a.name})}>
+              <div style={{width:8,height:8,borderRadius:4,background:a.color,flexShrink:0}}/>
+              {a.name}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Grid */}
+      {loading?(
+        <div style={{padding:40,textAlign:'center',color:T.textFaint,fontSize:13}}>Chargement…</div>
+      ):(
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+            {DAY_LABELS.map(l=>(
+              <div key={l} style={{textAlign:'center',fontSize:10,fontWeight:700,color:T.textFaint,padding:'4px 0',letterSpacing:0.3}}>{l}</div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3}}>
+            {cells.map((d,i)=>{
+              if(!d)return <div key={`e${i}`}/>;
+              const dots=dotsForDay(d);
+              const today=isToday(d);
+              const selected=selectedDay===d;
+              return(
+                <button key={d} onClick={()=>setSelectedDay(selected?null:d)} style={{
+                  aspectRatio:'1',borderRadius:10,border:selected?`2px solid #7ca8c4`:`1px solid ${today?'rgba(217,119,87,0.5)':T.border}`,
+                  background:selected?'rgba(124,168,196,0.15)':today?'rgba(217,119,87,0.08)':'rgba(255,255,255,0.02)',
+                  cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,padding:'4px 2px',position:'relative'
+                }}>
+                  <span style={{fontSize:12,fontWeight:today?800:500,color:today?T.accent:T.text}}>{d}</span>
+                  {dots.length>0&&(
+                    <div style={{display:'flex',gap:2,flexWrap:'wrap',justifyContent:'center',maxWidth:'100%'}}>
+                      {dots.slice(0,4).map((dot,di)=>(
+                        <div key={di} style={{width:5,height:5,borderRadius:3,background:dot.color,flexShrink:0}}/>
+                      ))}
+                      {dots.length>4&&<div style={{width:5,height:5,borderRadius:3,background:T.textFaint}}/>}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Day detail panel */}
+          {selectedDay&&(
+            <div style={{marginTop:16,padding:14,borderRadius:16,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:T.textDim}}>
+                {new Date(year,month-1,selectedDay).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+              </div>
+              {selectedAths.length===0?(
+                <div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'10px 0'}}>Aucune activité ce jour</div>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {selectedAths.map(ath=>{
+                    const dayStr=String(selectedDay).padStart(2,'0');
+                    const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+                    const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
+                    const jsDay=new Date(year,month-1,selectedDay).getDay();
+                    const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+                    const hasProg=ath.programDays.some(pd=>pd===DAYS[jsDay]);
+                    return(
+                      <div key={ath.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:`1px solid ${ath.color}33`,cursor:'pointer'}} onClick={()=>onOpenAthlete(athletes.find(x=>x.id===ath.id)||{id:ath.id,email:ath.name})}>
+                        <div style={{width:8,height:32,borderRadius:4,background:ath.color,flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ath.name}</div>
+                          <div style={{display:'flex',gap:6,marginTop:3,flexWrap:'wrap'}}>
+                            {hasSession&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,196,161,0.15)',color:'#7cc4a1',border:'1px solid rgba(124,196,161,0.3)'}}>💪 Séance</span>}
+                            {hasNutri&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,168,196,0.15)',color:'#7ca8c4',border:'1px solid rgba(124,168,196,0.3)'}}>🥗 Nutrition</span>}
+                            {hasProg&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(217,119,87,0.12)',color:T.accent,border:'1px solid rgba(217,119,87,0.3)'}}>📋 Programme</span>}
+                          </div>
+                        </div>
+                        <Icon name="chevronRight" size={14} stroke={T.textFaint}/>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -4224,6 +4402,7 @@ function CoachScreen({authToken,authUser}){
   const[available,setAvailable]=React.useState([]);
   const[showAvailable,setShowAvailable]=React.useState(false);
   const[pending,setPending]=React.useState([]);
+  const[coachView,setCoachView]=React.useState('athletes'); // 'athletes'|'calendar'
   const isMain=authUser&&authUser.isMainCoach;
 
   const load=React.useCallback(async()=>{
@@ -4623,6 +4802,10 @@ function CoachScreen({authToken,authUser}){
   // ── List view ───────────────────────────────────
   const unusedInvites=invites.filter(i=>!i.used);
 
+  if(coachView==='calendar'){
+    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
+  }
+
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16}}>
@@ -4633,6 +4816,9 @@ function CoachScreen({authToken,authUser}){
         <div style={{display:'flex',gap:6,flexShrink:0}}>
           <button onClick={load} disabled={loading} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:loading?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:loading?0.5:1}} title="Rafraîchir">
             <Icon name="refresh" size={15} stroke={T.textDim} style={{animation:loading?'holoShift 1s linear infinite':'none'}}/>
+          </button>
+          <button onClick={()=>setCoachView('calendar')} style={{height:40,padding:'0 14px',borderRadius:13,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(124,168,196,0.06)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+            📅 Calendrier
           </button>
           <button onClick={generateInvite} style={{height:40,padding:'0 14px',borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 6px 18px rgba(217,119,87,0.4)'}}>
             <Icon name="plus" size={14} stroke="#fff" strokeWidth={2.4}/> Code invitation
