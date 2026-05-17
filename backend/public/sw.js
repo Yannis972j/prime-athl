@@ -7,6 +7,9 @@ self.addEventListener('push', e => {
       body: data.body || '',
       icon: '/icon-192.png',
       badge: '/icon-192.png',
+      tag: data.tag || 'prime-athl',
+      renotify: true,
+      requireInteraction: false,
       data: { url: data.url || '/Muscu.html' },
     })
   );
@@ -14,5 +17,16 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(clients.openWindow(e.notification.data?.url || '/Muscu.html'));
+  const target = e.notification.data?.url || '/Muscu.html';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      // Focus existing tab if already open
+      for (const c of list) {
+        if (c.url.includes('/Muscu.html') && 'focus' in c) {
+          return c.focus();
+        }
+      }
+      return clients.openWindow(target);
+    })
+  );
 });

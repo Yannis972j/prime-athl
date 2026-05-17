@@ -1218,8 +1218,12 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   if (sub && VAPID_PUBLIC_KEY) {
     const sender = DATA.users[me];
     const name = sender?.firstName || sender?.email?.split('@')[0] || 'Coach';
-    webpush.sendNotification(sub, JSON.stringify({ title: 'Prime Athl', body: `${name}: ${text.trim().slice(0,80)}`, url: '/Muscu.html' }))
-      .catch(() => { delete DATA.pushSubscriptions[partner]; persist(); });
+    webpush.sendNotification(sub, JSON.stringify({
+      title: `💬 ${name}`,
+      body: text.trim().slice(0, 100),
+      tag: `msg-${me}`,
+      url: '/Muscu.html'
+    })).catch(() => { delete DATA.pushSubscriptions[partner]; persist(); });
   }
   res.json({ ok: true, msg });
 });
