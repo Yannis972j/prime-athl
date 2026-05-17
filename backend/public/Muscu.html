@@ -5292,7 +5292,7 @@ function OnboardingModal({user,onClose}){
 }
 
 function MainApp({authUser,onLogout,setUser,authToken}){
-  const[showOnboarding,setShowOnboarding]=React.useState(!authUser.onboardedAt);
+  const[showOnboarding,setShowOnboarding]=React.useState(!authUser.onboardedAt&&authUser.role!=='coach');
   // Deep-link via ?action=...
   const initialTab=(()=>{
     if(typeof window==='undefined')return authUser.role==='coach'?'coach':'programme';
@@ -5319,7 +5319,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   },[]);
 
   // Local-only: workout in progress
-  const[workout,setWorkout]=useLocalState('pa_workout_'+authUser.id,DEFAULT_WORKOUT,triggerSave);
+  const EMPTY_WORKOUT={name:'Ma séance',muscles:'',exercises:[]};
+  const[workout,setWorkout]=useLocalState('pa_workout_'+authUser.id,EMPTY_WORKOUT,triggerSave);
 
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});
@@ -5507,7 +5508,7 @@ function BottomTabBar({tab,onTab,role,unreadMessages}){
               <button key={it.id} onClick={()=>onTab(it.id)} style={{flex:1,height:60,border:'none',background:'transparent',cursor:'pointer',color:active?T.accent:T.textFaint,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,position:'relative'}}>
                 <div style={{position:'relative'}}>
                   <Icon name={it.icon} size={20} stroke={active?T.accent:T.textFaint} strokeWidth={active?2.2:1.6}/>
-                  {badge&&<div style={{position:'absolute',top:-4,right:-4,width:8,height:8,borderRadius:4,background:T.accent}}/>}
+                  {badge&&<div style={{position:'absolute',top:-6,right:-8,minWidth:16,height:16,borderRadius:8,background:T.accent,color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',boxShadow:'0 2px 6px rgba(217,119,87,0.6)'}}>{unreadMessages>9?'9+':unreadMessages}</div>}
                 </div>
                 <span style={{fontSize:10,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>{it.label}</span>
               </button>
