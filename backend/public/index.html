@@ -150,17 +150,59 @@ img{display:block;max-width:100%}
 /* Audience */
 .audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:760px){.audience{grid-template-columns:1fr}}
-.audience-card{padding:38px 32px;border-radius:24px;position:relative;overflow:hidden;border:1px solid var(--line-2)}
-.audience-coach{background:linear-gradient(160deg,rgba(217,119,87,0.10),rgba(20,20,28,0.85))}
-.audience-athlete{background:linear-gradient(160deg,rgba(124,168,196,0.10),rgba(20,20,28,0.85))}
-.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:18px}
+.audience-card{border-radius:24px;position:relative;overflow:hidden;border:1px solid var(--line-2);min-height:480px;display:flex;flex-direction:column;justify-content:flex-end}
+.audience-coach{background:linear-gradient(160deg,rgba(217,119,87,0.08),rgba(10,10,14,0.95))}
+.audience-athlete{background:linear-gradient(160deg,rgba(124,168,196,0.08),rgba(10,10,14,0.95))}
+
+/* BG mockup layer */
+.audience-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.audience-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,14,0.10) 0%,rgba(10,10,14,0.88) 55%,rgba(10,10,14,0.98) 100%);z-index:1}
+
+/* Calendar mockup */
+.cal-mock{position:absolute;top:18px;left:12px;right:12px;background:rgba(18,18,26,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
+.cal-mock-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-mock-title{font-size:13px;font-weight:700;color:#fff}
+.cal-mock-nav{display:flex;gap:6px}
+.cal-mock-nav span{width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dim)}
+.cal-mock-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px}
+.cal-mock-days span{text-align:center;font-size:9px;font-weight:700;color:var(--faint);padding:2px 0;letter-spacing:0.3px}
+.cal-mock-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-d{height:28px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--dim);background:rgba(255,255,255,0.02);position:relative;gap:2px}
+.cal-d.today{background:rgba(217,119,87,0.20);color:var(--accent);border:1px solid rgba(217,119,87,0.35)}
+.cal-d.prev{color:var(--faint);opacity:0.4}
+.cal-d-dots{display:flex;gap:2px;justify-content:center}
+.cal-dot{width:4px;height:4px;border-radius:2px}
+
+/* Nutrition mockup */
+.nutri-mock{position:absolute;top:18px;left:12px;right:12px;background:rgba(18,18,26,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
+.nutri-mock-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
+.nutri-mock-sub{font-size:9px;color:var(--faint);font-weight:600;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:12px}
+.nutri-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.nutri-macro{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 6px;text-align:center}
+.nutri-macro strong{display:block;font-size:13px;font-weight:800;letter-spacing:-0.4px}
+.nutri-macro span{font-size:8px;color:var(--faint);font-weight:600;letter-spacing:0.3px;text-transform:uppercase;margin-top:2px;display:block}
+.nutri-macro-kcal strong{color:#d97757}
+.nutri-macro-p strong{color:#7cc4a1}
+.nutri-macro-g strong{color:#7ca8c4}
+.nutri-macro-l strong{color:#c2a042}
+.nutri-meal{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:9px 10px;margin-bottom:6px}
+.nutri-meal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.nutri-meal-name{font-size:10px;font-weight:700;color:#fff}
+.nutri-meal-kcal{font-size:9px;color:var(--accent);font-weight:700;background:rgba(217,119,87,0.12);border:1px solid rgba(217,119,87,0.25);padding:2px 6px;border-radius:999px}
+.nutri-item{display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-top:1px solid rgba(255,255,255,0.04)}
+.nutri-item-name{font-size:9px;color:var(--dim)}
+.nutri-item-qty{font-size:9px;color:var(--faint);font-weight:600}
+
+/* Content over bg */
+.audience-content{position:relative;z-index:2;padding:28px 28px 32px}
+.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:16px}
 .audience-coach .audience-tag{background:rgba(217,119,87,0.15);color:var(--accent);border:1px solid rgba(217,119,87,0.3)}
 .audience-athlete .audience-tag{background:rgba(124,168,196,0.15);color:var(--steel);border:1px solid rgba(124,168,196,0.3)}
-.audience-card h3{font-size:26px;font-weight:800;letter-spacing:-0.6px;margin-bottom:12px}
-.audience-card p{font-size:14.5px;color:var(--dim);line-height:1.6;margin-bottom:24px}
-.audience-list{list-style:none;display:flex;flex-direction:column;gap:12px}
-.audience-list li{display:flex;align-items:flex-start;gap:11px;font-size:14px;color:var(--text);line-height:1.5}
-.audience-list li::before{content:'✓';flex-shrink:0;width:18px;height:18px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+.audience-content h3{font-size:24px;font-weight:800;letter-spacing:-0.6px;margin-bottom:10px}
+.audience-content p{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:18px}
+.audience-list{list-style:none;display:flex;flex-direction:column;gap:9px}
+.audience-list li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text);line-height:1.5}
+.audience-list li::before{content:'✓';flex-shrink:0;width:17px;height:17px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
 .audience-coach .audience-list li::before{background:rgba(217,119,87,0.18);color:var(--accent)}
 .audience-athlete .audience-list li::before{background:rgba(124,168,196,0.18);color:var(--steel)}
 
@@ -369,30 +411,109 @@ img{display:block;max-width:100%}
       <p class="section-sub">Coach ou athlète, chacun voit l'interface adaptée à son rôle. Pas de mode unique mal taillé pour les deux.</p>
     </div>
     <div class="audience">
+
+      <!-- COACH : calendrier en bg -->
       <div class="audience-card audience-coach">
-        <span class="audience-tag">🎯 Coach</span>
-        <h3>Tous tes athlètes, un seul écran.</h3>
-        <p>Tu prépares leurs programmes et leur nutrition, tu vois leurs séances en direct, tu leur envoies une notification quand tout est prêt.</p>
-        <ul class="audience-list">
-          <li>Calendrier global multi-athlètes par mois</li>
-          <li>Import Excel programme + nutrition en quelques secondes</li>
-          <li>Messagerie intégrée avec chaque athlète</li>
-          <li>Fiche athlète : profil, séances, nutrition, photos, historique</li>
-          <li>Codes d'invitation pour rattacher rapidement</li>
-        </ul>
+        <div class="audience-bg">
+          <div class="cal-mock">
+            <div class="cal-mock-head">
+              <span class="cal-mock-title">📅 Mai 2025</span>
+              <div class="cal-mock-nav"><span>‹</span><span>›</span></div>
+            </div>
+            <div class="cal-mock-days">
+              <span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span>
+            </div>
+            <div class="cal-mock-grid">
+              <div class="cal-d prev">28</div><div class="cal-d prev">29</div><div class="cal-d prev">30</div>
+              <div class="cal-d">1</div><div class="cal-d">2<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
+              <div class="cal-d">3<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
+              <div class="cal-d">4</div>
+              <div class="cal-d">5<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
+              <div class="cal-d">6<div class="cal-d-dots"><span class="cal-dot" style="background:#7ca8c4"></span><span class="cal-dot" style="background:#c2a042"></span></div></div>
+              <div class="cal-d">7<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
+              <div class="cal-d">8<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
+              <div class="cal-d">9<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
+              <div class="cal-d">10</div>
+              <div class="cal-d">11<div class="cal-d-dots"><span class="cal-dot" style="background:#c2a042"></span></div></div>
+              <div class="cal-d">12<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
+              <div class="cal-d">13<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
+              <div class="cal-d">14<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
+              <div class="cal-d">15</div>
+              <div class="cal-d">16<div class="cal-d-dots"><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
+              <div class="cal-d today">17<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
+              <div class="cal-d">18</div><div class="cal-d">19</div><div class="cal-d">20</div><div class="cal-d">21</div>
+              <div class="cal-d">22</div><div class="cal-d">23</div><div class="cal-d">24</div><div class="cal-d">25</div><div class="cal-d">26</div><div class="cal-d">27</div><div class="cal-d">28</div>
+            </div>
+          </div>
+        </div>
+        <div class="audience-content">
+          <span class="audience-tag">🎯 Coach</span>
+          <h3>Tous tes athlètes, un seul écran.</h3>
+          <p>Tu prépares leurs programmes et leur nutrition, tu vois leurs séances en direct, tu leur envoies une notification quand tout est prêt.</p>
+          <ul class="audience-list">
+            <li>Calendrier global multi-athlètes par mois</li>
+            <li>Import Excel programme + nutrition en quelques secondes</li>
+            <li>Messagerie intégrée avec chaque athlète</li>
+            <li>Fiche athlète : profil, séances, nutrition, photos, historique</li>
+            <li>Codes d'invitation pour rattacher rapidement</li>
+          </ul>
+        </div>
       </div>
+
+      <!-- ATHLÈTE : plan nutrition en bg -->
       <div class="audience-card audience-athlete">
-        <span class="audience-tag">💪 Athlète</span>
-        <h3>Ta séance, ton plan, dans ta poche.</h3>
-        <p>Tu vois ce que ton coach a préparé, tu valides tes séries et tes repas. L'app fonctionne même sans bonne connexion à la salle.</p>
-        <ul class="audience-list">
-          <li>Programme du jour prêt à démarrer en un tap</li>
-          <li>Chrono de repos automatique entre les séries</li>
-          <li>Macros agrégées selon les repas validés</li>
-          <li>Notifications push pour les nouveaux programmes</li>
-          <li>Photos de progression et suivi du poids</li>
-        </ul>
+        <div class="audience-bg">
+          <div class="nutri-mock">
+            <div class="nutri-mock-title">🥗 Plan nutrition</div>
+            <div class="nutri-mock-sub">Lundi · Jour 1</div>
+            <div class="nutri-macros">
+              <div class="nutri-macro nutri-macro-kcal"><strong>2 450</strong><span>kcal</span></div>
+              <div class="nutri-macro nutri-macro-p"><strong>190g</strong><span>Prot.</span></div>
+              <div class="nutri-macro nutri-macro-g"><strong>270g</strong><span>Gluc.</span></div>
+              <div class="nutri-macro nutri-macro-l"><strong>65g</strong><span>Lip.</span></div>
+            </div>
+            <div class="nutri-meal">
+              <div class="nutri-meal-head">
+                <span class="nutri-meal-name">☀️ Petit-déjeuner</span>
+                <span class="nutri-meal-kcal">680 kcal</span>
+              </div>
+              <div class="nutri-item"><span class="nutri-item-name">Flocons d'avoine</span><span class="nutri-item-qty">80g</span></div>
+              <div class="nutri-item"><span class="nutri-item-name">Blanc d'œuf</span><span class="nutri-item-qty">200g</span></div>
+              <div class="nutri-item"><span class="nutri-item-name">Banane</span><span class="nutri-item-qty">120g</span></div>
+            </div>
+            <div class="nutri-meal">
+              <div class="nutri-meal-head">
+                <span class="nutri-meal-name">🍽️ Déjeuner</span>
+                <span class="nutri-meal-kcal">820 kcal</span>
+              </div>
+              <div class="nutri-item"><span class="nutri-item-name">Poulet grillé</span><span class="nutri-item-qty">200g</span></div>
+              <div class="nutri-item"><span class="nutri-item-name">Riz blanc cuit</span><span class="nutri-item-qty">250g</span></div>
+              <div class="nutri-item"><span class="nutri-item-name">Brocoli vapeur</span><span class="nutri-item-qty">150g</span></div>
+            </div>
+            <div class="nutri-meal">
+              <div class="nutri-meal-head">
+                <span class="nutri-meal-name">🌙 Dîner</span>
+                <span class="nutri-meal-kcal">650 kcal</span>
+              </div>
+              <div class="nutri-item"><span class="nutri-item-name">Saumon</span><span class="nutri-item-qty">180g</span></div>
+              <div class="nutri-item"><span class="nutri-item-name">Patate douce</span><span class="nutri-item-qty">200g</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="audience-content">
+          <span class="audience-tag">💪 Athlète</span>
+          <h3>Ta séance, ton plan, dans ta poche.</h3>
+          <p>Tu vois ce que ton coach a préparé, tu valides tes séries et tes repas. L'app fonctionne même sans bonne connexion à la salle.</p>
+          <ul class="audience-list">
+            <li>Programme du jour prêt à démarrer en un tap</li>
+            <li>Chrono de repos automatique entre les séries</li>
+            <li>Macros agrégées selon les repas validés</li>
+            <li>Notifications push pour les nouveaux programmes</li>
+            <li>Photos de progression et suivi du poids</li>
+          </ul>
+        </div>
       </div>
+
     </div>
   </div>
 </section>
