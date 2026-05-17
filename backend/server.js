@@ -34,6 +34,7 @@ const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
+const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
@@ -46,7 +47,6 @@ const FRONTEND_CANDIDATES = [
   path.join(__dirname, '..', 'muscu'),    // local dev (sibling folder)
 ];
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
-const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
 const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {} };
@@ -762,6 +762,10 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       invites: body.invites || {},
       nutritionPrograms: body.nutritionPrograms || {},
       nutritionLogs: body.nutritionLogs || {},
+      weightLogs: body.weightLogs || {},
+      messages: body.messages || {},
+      progressPhotos: body.progressPhotos || {},
+      pushSubscriptions: body.pushSubscriptions || {},
     };
     persist();
     res.json({ ok: true, counts: {

@@ -1709,7 +1709,7 @@ function StatsScreen({history,profile}){
   const muscleArr=Object.entries(muscleVol).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxM=Math.max(1,...muscleArr.map(([_,v])=>v));
 
-  if(history.length===0&&prs.length===0){
+  if(history.length===0){
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
         <div style={{marginBottom:16}}>
