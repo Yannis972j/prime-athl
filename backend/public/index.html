@@ -367,6 +367,63 @@ img{display:block;max-width:100%}
 .footer-col a{display:block;font-size:13.5px;color:var(--dim);font-weight:500;margin-bottom:9px;transition:color 0.2s}
 .footer-col a:hover{color:var(--text)}
 .footer-bottom{margin-top:44px;padding-top:24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--faint)}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media(max-width:640px){
+  .container{padding:0 16px}
+  .section{padding:60px 0}
+  .section-head{margin-bottom:36px}
+  .section-sub{font-size:15px;margin-bottom:36px}
+  .section-title{letter-spacing:-0.8px}
+
+  /* Hero */
+  .hero{padding:96px 0 48px}
+  .hero p{font-size:16px}
+  .hero-ctas{flex-direction:column;gap:10px}
+  .hero-ctas .btn-cta-lg,.hero-ctas .btn-ghost{width:100%;justify-content:center;height:52px}
+  .hero-meta{gap:16px;margin-top:32px}
+  .hero-meta-item strong{font-size:18px}
+  /* Masquer le mockup téléphone — trop encombrant sur mobile */
+  .phone-wrap{display:none}
+
+  /* Features */
+  .feat-preview{height:130px}
+  .feat-body{padding:16px 18px 20px}
+  .feature h3{font-size:15px}
+  .feature p{font-size:13px}
+
+  /* Audience */
+  .audience-preview{height:220px}
+  .audience-body{padding:20px 20px 24px}
+  .audience-body h3{font-size:19px}
+
+  /* Steps */
+  .steps{gap:36px;padding-top:8px}
+  .step{padding:22px 20px 20px}
+  .step h3{font-size:16px;margin:12px 0 6px}
+  .step p{font-size:13px}
+
+  /* FAQ */
+  .faq-q{font-size:14px;padding:17px 18px}
+  .faq-a{font-size:13px}
+  .faq-item.open .faq-a{padding:0 18px 16px}
+
+  /* Final CTA */
+  .final-cta{padding:48px 20px;border-radius:22px}
+  .final-cta p{font-size:15px}
+  .final-cta .btn-cta-lg{width:100%;justify-content:center}
+
+  /* Footer */
+  .footer{padding:44px 0 28px;margin-top:40px}
+  .footer-cols{gap:28px}
+  .footer-bottom{flex-direction:column;align-items:flex-start;gap:6px}
+}
+
+@media(max-width:380px){
+  .hero h1{font-size:34px;letter-spacing:-1px}
+  .hero-pill{font-size:11px}
+  .hero-meta{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
