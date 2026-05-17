@@ -682,6 +682,8 @@ app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => 
   DATA.programs[req.params.athleteId] = { data, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: ts });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  pushToUser(req.params.athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts });
 });
 
@@ -973,6 +975,8 @@ app.put('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res) =
   DATA.nutritionPrograms[a.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + a.id).emit('nutrition-updated', { plan, assignedAt: ts });
+  const coachNameN = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  pushToUser(a.id, { title: '🥗 Plan nutrition mis à jour', body: `${coachNameN} a mis à jour ton plan nutrition`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts });
 });
 
@@ -1171,6 +1175,15 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   }
   res.json({ ok: true, msg });
 });
+
+// ── Push helper ──────────────────────────────────────
+function pushToUser(userId, payload) {
+  if (!VAPID_PUBLIC_KEY) return;
+  const sub = DATA.pushSubscriptions[userId];
+  if (!sub) return;
+  webpush.sendNotification(sub, JSON.stringify(payload))
+    .catch(() => { delete DATA.pushSubscriptions[userId]; persist(); });
+}
 
 // ── Push subscriptions ────────────────────────────────
 app.get('/api/push/vapid-public-key', (req, res) => {
