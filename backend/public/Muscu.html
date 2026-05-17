@@ -2062,7 +2062,7 @@ function ProfileScreen({profile,onChange,onLogout}){
       </div>
 
 
-      {!profile.isMainCoach&&<PhotoGallery/>}
+      {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
@@ -3758,6 +3758,10 @@ function CoachScreen({authToken,authUser}){
             ))}
           </div>
         )}
+
+        {/* Album photos */}
+        <SectionHeader title="Album photos"/>
+        <PhotoGallery readOnly userId={a.id}/>
 
         {/* Plus d'options (zone destructive collapsée) */}
         <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:18,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
