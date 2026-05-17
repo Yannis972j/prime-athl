@@ -1492,7 +1492,10 @@ function PhotoGallery({readOnly,userId}){
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
         const compressed=canvas.toDataURL('image/jpeg',0.75);
         try{await apiCall('/api/photos',{method:'POST',body:{dataUrl:compressed,date:Date.now()}});load();}
-        catch(err){alert('Erreur upload: '+(err.message||err));}
+        catch(err){
+          if(err.message==='photo_limit_reached')alert('Album plein (30 photos max). Supprime des photos pour en ajouter.');
+          else alert('Erreur upload: '+(err.message||err));
+        }
       };
       img.src=dataUrl;
     };

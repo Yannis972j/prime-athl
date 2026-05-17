@@ -1072,12 +1072,16 @@ app.get('/api/photos', authRequired, (req, res) => {
   res.json({ photos });
 });
 
+const MAX_PHOTOS_PER_USER = 30;
 app.post('/api/photos', authRequired, (req, res) => {
   const { dataUrl, note, date } = req.body || {};
   if (!dataUrl) return res.status(400).json({ error: 'dataUrl_required' });
   if (dataUrl.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 2MB' });
-  const photo = { id: uid(), dataUrl, note: note || '', date: date || Date.now(), createdAt: Date.now() };
   if (!DATA.progressPhotos[req.user.id]) DATA.progressPhotos[req.user.id] = [];
+  if (DATA.progressPhotos[req.user.id].length >= MAX_PHOTOS_PER_USER) {
+    return res.status(400).json({ error: 'photo_limit_reached', detail: `Maximum ${MAX_PHOTOS_PER_USER} photos` });
+  }
+  const photo = { id: uid(), dataUrl, note: note || '', date: date || Date.now(), createdAt: Date.now() };
   DATA.progressPhotos[req.user.id].unshift(photo);
   persist();
   res.json({ ok: true, photo });
