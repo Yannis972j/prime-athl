@@ -3370,6 +3370,155 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
   );
 }
 
+// ── Athlete Calendar Summary (coach view) ─────────────────
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan}){
+  const now=new Date();
+  const[calYear,setCalYear]=React.useState(now.getFullYear());
+  const[calMonth,setCalMonth]=React.useState(now.getMonth());
+  const[sel,setSel]=React.useState(null);
+
+  const JS_TO_DAY=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
+  const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // programme days set (from all sheets)
+  const programDayNames=React.useMemo(()=>{
+    const s=new Set();
+    Object.values(program?.data||{}).forEach(sheet=>Object.keys(sheet).forEach(d=>s.add(d)));
+    return s;
+  },[program]);
+
+  // sessions done: map dateStr → session
+  const sessionsByDate=React.useMemo(()=>{
+    const m={};
+    (sessions||[]).forEach(s=>{const d=s.date?.slice(0,10);if(d)m[d]=s;});
+    return m;
+  },[sessions]);
+
+  // nutrition validated: map dateStr → bool
+  const nutriDone=React.useMemo(()=>{
+    const m={};
+    Object.entries(nutriHistory||{}).forEach(([d,log])=>{
+      if(Object.values(log.validated||{}).some(Boolean))m[d]=true;
+    });
+    return m;
+  },[nutriHistory]);
+
+  // has nutrition plan
+  const hasNutriPlan=!!(nutriPlan?.data);
+
+  const calDays=React.useMemo(()=>{
+    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
+    const dim=new Date(calYear,calMonth+1,0).getDate();
+    const c=[];
+    for(let i=0;i<firstDow;i++)c.push(null);
+    for(let d=1;d<=dim;d++)c.push(d);
+    return c;
+  },[calYear,calMonth]);
+
+  const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
+  const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
+
+  return(
+    <div style={{marginBottom:18}}>
+      {/* Month nav */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <button onClick={prevM} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+        <span style={{fontSize:13,fontWeight:700,textTransform:'capitalize'}}>{new Date(calYear,calMonth).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</span>
+        <button onClick={nextM} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+      </div>
+
+      {/* Legend */}
+      <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
+        {[['#d97757','Séance prévue'],['#7cc4a1','Séance faite'],['#7ca8c4','Nutrition validée']].map(([c,l])=>(
+          <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
+            <div style={{width:6,height:6,borderRadius:3,background:c}}/>
+            {l}
+          </div>
+        ))}
+      </div>
+
+      {/* Week labels */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:3}}>
+        {['L','M','M','J','V','S','D'].map((d,i)=><div key={i} style={{textAlign:'center',fontSize:9,fontWeight:700,color:T.textFaint}}>{d}</div>)}
+      </div>
+
+      {/* Grid */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+        {calDays.map((d,i)=>{
+          if(!d)return<div key={i}/>;
+          const dayName=JS_TO_DAY[new Date(calYear,calMonth,d).getDay()];
+          const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const hasProg=programDayNames.has(dayName);
+          const sessDone=sessionsByDate[dateStr];
+          const nutriOk=nutriDone[dateStr];
+          const isToday=dateStr===todayStr;
+          const isSel=sel===dateStr;
+          let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)';
+          if(sessDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';}
+          else if(hasProg){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.22)';}
+          if(isToday)border='2px solid rgba(217,119,87,0.6)';
+          if(isSel){bg='rgba(217,119,87,0.18)';border='2px solid #d97757';}
+          const canClick=hasProg||sessDone||nutriOk;
+          return(
+            <div key={i} onClick={()=>canClick&&setSel(isSel?null:dateStr)}
+              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,position:'relative',transition:'all 0.15s'}}>
+              <span style={{fontSize:11,fontWeight:600,color:sessDone?'#7cc4a1':hasProg?'#d97757':T.textFaint,lineHeight:1}}>{d}</span>
+              {/* Dots row */}
+              <div style={{display:'flex',gap:2,marginTop:2}}>
+                {sessDone&&<div style={{width:3,height:3,borderRadius:2,background:'#7cc4a1'}}/>}
+                {!sessDone&&hasProg&&<div style={{width:3,height:3,borderRadius:2,background:'#d97757'}}/>}
+                {nutriOk&&<div style={{width:3,height:3,borderRadius:2,background:'#7ca8c4'}}/>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Selected day panel */}
+      {sel&&(()=>{
+        const dayName=JS_TO_DAY[new Date(sel+'T12:00:00').getDay()];
+        const dateStr=sel;
+        const sess=sessionsByDate[dateStr];
+        const nutriOk=nutriDone[dateStr];
+        const hasProg=programDayNames.has(dayName);
+        const dateLabel=new Date(sel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+        return(
+          <div style={{marginTop:8,padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+            <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:8}}>{dateLabel}</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {/* Programme */}
+              <div style={{flex:1,minWidth:120,padding:'8px 10px',borderRadius:10,background:sess?'rgba(124,196,161,0.08)':hasProg?'rgba(217,119,87,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(124,196,161,0.25)':hasProg?'rgba(217,119,87,0.2)':'rgba(255,255,255,0.06)'}`}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Programme</div>
+                {sess?(
+                  <>
+                    <div style={{fontSize:12,fontWeight:600,color:'#7cc4a1'}}>✓ {sess.name||dayName}</div>
+                    <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+                  </>
+                ):hasProg?(
+                  <div style={{fontSize:12,color:'#d97757',fontWeight:600}}>{dayName} — non fait</div>
+                ):(
+                  <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Repos</div>
+                )}
+              </div>
+              {/* Nutrition */}
+              {hasNutriPlan&&(
+                <div style={{flex:1,minWidth:120,padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(124,168,196,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(124,168,196,0.25)':'rgba(255,255,255,0.06)'}`}}>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
+                  {nutriOk?(
+                    <div style={{fontSize:12,fontWeight:600,color:'#7ca8c4'}}>✓ Validée</div>
+                  ):(
+                    <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Non validée</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 // ── Coach Nutrition Mirror (read-only view of athlete's daily progress) ──
 // Coach reads athlete's program (read-only mirror)
 function CoachProgramMirror({athleteData}){
@@ -3873,6 +4022,15 @@ function CoachScreen({authToken,authUser}){
             </button>
           )}
         </div>
+        {/* Calendrier synthétique */}
+        <SectionHeader title="Calendrier"/>
+        <AthleteCalendarSummary
+          sessions={sessions}
+          program={a.program}
+          nutriHistory={nutriDetail?.history}
+          nutriPlan={nutriDetail?.plan}
+        />
+
         {programDays>0&&<CoachProgramMirror athleteData={a}/>}
 
         {/* Nutrition — 2 modes, défaut = miroir si plan, sinon édition */}

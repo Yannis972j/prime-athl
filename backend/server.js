@@ -975,7 +975,7 @@ app.get('/api/coach/athletes/:id/nutrition', authRequired, coachOnly, (req, res)
   const plan = DATA.nutritionPrograms[u.id] || null;
   const logs = DATA.nutritionLogs[u.id] || {};
   const history = {};
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 30; i++) {
     const d = ymd(Date.now() - i * 24*3600*1000);
     history[d] = logs[d] || { validated: {}, validatedAt: {} };
   }
