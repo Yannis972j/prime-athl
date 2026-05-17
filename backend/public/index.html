@@ -138,28 +138,28 @@ img{display:block;max-width:100%}
 .section-head .section-sub{margin:0 auto}
 
 /* Features */
-.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-@media(max-width:920px){.features{grid-template-columns:repeat(2,1fr)}}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:960px){.features{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.features{grid-template-columns:1fr}}
-.feature{padding:28px;border-radius:20px;background:linear-gradient(160deg,rgba(28,28,40,0.6),rgba(14,14,20,0.6));border:1px solid var(--line);transition:all 0.3s ease;position:relative;overflow:hidden}
-.feature:hover{transform:translateY(-4px);border-color:rgba(217,119,87,0.25);box-shadow:0 20px 40px rgba(0,0,0,0.4)}
-.feature-icon{width:46px;height:46px;border-radius:12px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.20);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:18px}
-.feature h3{font-size:18px;font-weight:700;letter-spacing:-0.3px;margin-bottom:8px}
-.feature p{font-size:14px;color:var(--dim);line-height:1.6}
+.feature{border-radius:20px;background:rgba(16,16,22,0.85);border:1px solid var(--line);transition:all 0.25s ease;overflow:hidden;display:flex;flex-direction:column}
+.feature:hover{transform:translateY(-3px);border-color:rgba(217,119,87,0.20);box-shadow:0 14px 36px rgba(0,0,0,0.4)}
+.feat-preview{height:148px;background:rgba(10,10,15,0.9);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
+.feat-body{padding:20px 22px 24px}
+.feature-icon{width:38px;height:38px;border-radius:10px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.18);display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:12px}
+.feature h3{font-size:16px;font-weight:700;letter-spacing:-0.2px;margin-bottom:6px}
+.feature p{font-size:13.5px;color:var(--dim);line-height:1.6}
 
 /* Audience */
 .audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:760px){.audience{grid-template-columns:1fr}}
-.audience-card{border-radius:24px;position:relative;overflow:hidden;border:1px solid var(--line-2);min-height:480px;display:flex;flex-direction:column;justify-content:flex-end}
-.audience-coach{background:linear-gradient(160deg,rgba(217,119,87,0.08),rgba(10,10,14,0.95))}
-.audience-athlete{background:linear-gradient(160deg,rgba(124,168,196,0.08),rgba(10,10,14,0.95))}
-
-/* BG mockup layer */
-.audience-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.audience-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,14,0) 0%,rgba(10,10,14,0.70) 48%,rgba(10,10,14,0.95) 100%);z-index:1}
+.audience-card{border-radius:24px;overflow:hidden;border:1px solid var(--line-2);display:flex;flex-direction:column}
+.audience-preview{height:280px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.06),rgba(10,10,14,1))}
+.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(124,168,196,0.06),rgba(10,10,14,1))}
+.audience-body{padding:26px 28px 30px;background:rgba(13,13,18,0.95)}
 
 /* Calendar mockup */
-.cal-mock{position:absolute;top:18px;left:12px;right:12px;background:rgba(18,18,26,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
+.cal-mock{position:absolute;top:14px;left:14px;right:14px;background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:14px}
 .cal-mock-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .cal-mock-title{font-size:13px;font-weight:700;color:#fff}
 .cal-mock-nav{display:flex;gap:6px}
@@ -174,7 +174,7 @@ img{display:block;max-width:100%}
 .cal-dot{width:4px;height:4px;border-radius:2px}
 
 /* Nutrition mockup */
-.nutri-mock{position:absolute;top:18px;left:12px;right:12px;background:rgba(18,18,26,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
+.nutri-mock{position:absolute;top:14px;left:14px;right:14px;background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:14px}
 .nutri-mock-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
 .nutri-mock-sub{font-size:9px;color:var(--faint);font-weight:600;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:12px}
 .nutri-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
@@ -193,24 +193,20 @@ img{display:block;max-width:100%}
 .nutri-item-name{font-size:9px;color:var(--dim)}
 .nutri-item-qty{font-size:9px;color:var(--faint);font-weight:600}
 
-/* Content over bg */
-.audience-content{position:relative;z-index:2;padding:28px 28px 32px}
-.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:16px}
+/* Audience body */
+.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:14px}
 .audience-coach .audience-tag{background:rgba(217,119,87,0.15);color:var(--accent);border:1px solid rgba(217,119,87,0.3)}
 .audience-athlete .audience-tag{background:rgba(124,168,196,0.15);color:var(--steel);border:1px solid rgba(124,168,196,0.3)}
-.audience-content h3{font-size:24px;font-weight:800;letter-spacing:-0.6px;margin-bottom:10px}
-.audience-content p{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:18px}
+.audience-body h3{font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:9px}
+.audience-body p{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:18px}
 .audience-list{list-style:none;display:flex;flex-direction:column;gap:9px}
 .audience-list li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text);line-height:1.5}
 .audience-list li::before{content:'✓';flex-shrink:0;width:17px;height:17px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
 .audience-coach .audience-list li::before{background:rgba(217,119,87,0.18);color:var(--accent)}
 .audience-athlete .audience-list li::before{background:rgba(124,168,196,0.18);color:var(--steel)}
 
-/* Feature illustrated cards */
-.feature-illustrated{padding:0;display:flex;flex-direction:column;justify-content:flex-end;min-height:270px}
-.feat-bg{position:absolute;inset:0;padding:16px 14px 100px;pointer-events:none;overflow:hidden}
-.feat-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(14,14,20,0) 0%,rgba(14,14,20,0.78) 45%,rgba(14,14,20,0.97) 100%);z-index:0}
-.feat-bg>*{position:relative;z-index:1}
+/* Feature preview content wrappers */
+.feat-preview>*{position:relative;z-index:1;width:100%}
 
 /* Workout illustration */
 .wi-ex{background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.22);border-radius:10px;padding:10px}
@@ -266,19 +262,16 @@ img{display:block;max-width:100%}
 .bc-label{flex:1;text-align:center;font-size:8px;color:var(--faint);font-weight:600}
 .bc-streak{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;color:var(--accent)}
 
-/* Chat feature card */
-.feature-chat{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;min-height:260px;padding:0}
-.chat-bg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-start;gap:10px;padding:20px 16px 80px;pointer-events:none}
-.chat-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(14,14,20,0) 0%,rgba(14,14,20,0.78) 48%,rgba(14,14,20,0.97) 100%)}
+/* Chat preview */
+.chat-preview{display:flex;flex-direction:column;gap:9px;width:100%}
 .chat-msg{display:flex;align-items:flex-end;gap:8px}
 .chat-msg-athlete{flex-direction:row-reverse}
-.chat-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+.chat-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
 .chat-avatar-coach{background:linear-gradient(135deg,#d97757,#c97586);color:#fff}
 .chat-avatar-athlete{background:linear-gradient(135deg,#7ca8c4,#8e6cb6);color:#fff}
-.chat-bubble{max-width:78%;padding:8px 11px;border-radius:14px;font-size:11px;line-height:1.45;color:#fff}
-.chat-bubble-coach{background:rgba(217,119,87,0.22);border:1px solid rgba(217,119,87,0.30);border-bottom-left-radius:4px}
-.chat-bubble-athlete{background:rgba(124,168,196,0.22);border:1px solid rgba(124,168,196,0.30);border-bottom-right-radius:4px;text-align:right}
-.feature-content{position:relative;z-index:1;padding:28px}
+.chat-bubble{max-width:80%;padding:7px 10px;border-radius:13px;font-size:11px;line-height:1.45;color:#fff}
+.chat-bubble-coach{background:rgba(217,119,87,0.25);border:1px solid rgba(217,119,87,0.35);border-bottom-left-radius:3px}
+.chat-bubble-athlete{background:rgba(124,168,196,0.25);border:1px solid rgba(124,168,196,0.35);border-bottom-right-radius:3px}
 
 /* Steps */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
@@ -432,34 +425,19 @@ img{display:block;max-width:100%}
     <div class="features">
 
       <!-- Séance guidée -->
-      <div class="feature feature-illustrated">
-        <div class="feat-bg" aria-hidden="true">
+      <div class="feature">
+        <div class="feat-preview">
           <div class="wi-ex">
             <div class="wi-ex-pill">● Pectoraux</div>
             <div class="wi-ex-name">Développé couché</div>
             <div class="wi-ex-prev">↺ Dernière : 80×8 · 80×7 · 75×6</div>
-            <div class="wi-row">
-              <div class="wi-step">− 82.5 kg +</div>
-              <span class="wi-x">×</span>
-              <div class="wi-step">− 8 +</div>
-              <div class="wi-check done">✓</div>
-            </div>
-            <div class="wi-row">
-              <div class="wi-step">− 82.5 kg +</div>
-              <span class="wi-x">×</span>
-              <div class="wi-step">− 8 +</div>
-              <div class="wi-check done">✓</div>
-            </div>
-            <div class="wi-row">
-              <div class="wi-step">− 82.5 kg +</div>
-              <span class="wi-x">×</span>
-              <div class="wi-step">− 7 +</div>
-              <div class="wi-check active">✓</div>
-            </div>
+            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 8 +</div><div class="wi-check done">✓</div></div>
+            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 8 +</div><div class="wi-check done">✓</div></div>
+            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 7 +</div><div class="wi-check active">✓</div></div>
+            <div class="wi-timer">⏱ Repos · 01:23</div>
           </div>
-          <div class="wi-timer">⏱ Repos · 01:23</div>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">💪</div>
           <h3>Séance guidée</h3>
           <p>Steppers ±2,5 kg et ±1 rep, chrono de repos automatique, rappel de ta dernière performance sous chaque série.</p>
@@ -467,85 +445,64 @@ img{display:block;max-width:100%}
       </div>
 
       <!-- Nutrition complète -->
-      <div class="feature feature-illustrated">
-        <div class="feat-bg" aria-hidden="true">
-          <div class="mb-title">🥗 Lundi · Macros du jour</div>
-          <div class="mb-row">
-            <div class="mb-label"><span>Calories</span><span style="color:#d97757">1 840 / 2 450 kcal</span></div>
-            <div class="mb-track"><div class="mb-fill" style="width:75%;background:linear-gradient(90deg,#d97757,#c97586)"></div></div>
-          </div>
-          <div class="mb-row">
-            <div class="mb-label"><span>Protéines</span><span style="color:#7cc4a1">142 / 190g</span></div>
-            <div class="mb-track"><div class="mb-fill" style="width:75%;background:#7cc4a1"></div></div>
-          </div>
-          <div class="mb-row">
-            <div class="mb-label"><span>Glucides</span><span style="color:#7ca8c4">180 / 270g</span></div>
-            <div class="mb-track"><div class="mb-fill" style="width:67%;background:#7ca8c4"></div></div>
-          </div>
-          <div class="mb-row">
-            <div class="mb-label"><span>Lipides</span><span style="color:#c2a042">48 / 65g</span></div>
-            <div class="mb-track"><div class="mb-fill" style="width:74%;background:#c2a042"></div></div>
-          </div>
-          <div class="mb-meals">
-            <div class="mb-meal-chip">☀️ Petit-déj <span>680 kcal</span></div>
-            <div class="mb-meal-chip">🍽️ Déjeuner <span>820 kcal</span></div>
-            <div class="mb-meal-chip mb-meal-pending">🌙 Dîner <span>à venir</span></div>
+      <div class="feature">
+        <div class="feat-preview">
+          <div style="width:100%">
+            <div class="mb-title">🥗 Lundi · Macros du jour</div>
+            <div class="mb-row"><div class="mb-label"><span>Calories</span><span style="color:#d97757">1 840 / 2 450</span></div><div class="mb-track"><div class="mb-fill" style="width:75%;background:linear-gradient(90deg,#d97757,#c97586)"></div></div></div>
+            <div class="mb-row"><div class="mb-label"><span>Protéines</span><span style="color:#7cc4a1">142 / 190g</span></div><div class="mb-track"><div class="mb-fill" style="width:75%;background:#7cc4a1"></div></div></div>
+            <div class="mb-row"><div class="mb-label"><span>Glucides</span><span style="color:#7ca8c4">180 / 270g</span></div><div class="mb-track"><div class="mb-fill" style="width:67%;background:#7ca8c4"></div></div></div>
+            <div class="mb-row"><div class="mb-label"><span>Lipides</span><span style="color:#c2a042">48 / 65g</span></div><div class="mb-track"><div class="mb-fill" style="width:74%;background:#c2a042"></div></div></div>
+            <div class="mb-meals"><div class="mb-meal-chip">☀️ Petit-déj <span>680 kcal</span></div><div class="mb-meal-chip">🍽️ Déjeuner <span>820 kcal</span></div><div class="mb-meal-chip mb-meal-pending">🌙 Dîner <span>à venir</span></div></div>
           </div>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">🥗</div>
           <h3>Nutrition complète</h3>
-          <p>Plan sur 7 jours, 200+ aliments sport, calcul automatique des macros. Jauges kcal, protéines, glucides, lipides en temps réel.</p>
+          <p>Plan sur 7 jours, 200+ aliments sport, calcul automatique des macros. Jauges kcal, protéines, glucides et lipides en temps réel.</p>
         </div>
       </div>
 
       <!-- Import Excel -->
-      <div class="feature feature-illustrated">
-        <div class="feat-bg" aria-hidden="true">
-          <div class="xl-head">
-            <div class="xl-badge">📥 Programme.xlsx</div>
-            <span class="xl-status">✓ Importé</span>
+      <div class="feature">
+        <div class="feat-preview">
+          <div style="width:100%">
+            <div class="xl-head"><div class="xl-badge">📥 Programme.xlsx</div><span class="xl-status">✓ Importé</span></div>
+            <table class="xl-table">
+              <thead><tr><th>Jour</th><th>Exercice</th><th>Kg</th><th>Séries</th><th>Reps</th></tr></thead>
+              <tbody>
+                <tr><td class="xl-day">Lun</td><td>Squat barre</td><td>100</td><td>4</td><td>8</td></tr>
+                <tr><td class="xl-day">Lun</td><td>Fentes</td><td>60</td><td>3</td><td>12</td></tr>
+                <tr><td class="xl-day">Mar</td><td>Dév. couché</td><td>80</td><td>4</td><td>8</td></tr>
+                <tr><td class="xl-day">Jeu</td><td>Épaules</td><td>50</td><td>3</td><td>12</td></tr>
+              </tbody>
+            </table>
           </div>
-          <table class="xl-table">
-            <thead><tr><th>Jour</th><th>Exercice</th><th>Kg</th><th>Séries</th><th>Reps</th></tr></thead>
-            <tbody>
-              <tr><td class="xl-day">Lun</td><td>Squat barre</td><td>100</td><td>4</td><td>8</td></tr>
-              <tr><td class="xl-day">Lun</td><td>Fentes</td><td>60</td><td>3</td><td>12</td></tr>
-              <tr><td class="xl-day">Mar</td><td>Dév. couché</td><td>80</td><td>4</td><td>8</td></tr>
-              <tr><td class="xl-day">Mar</td><td>Rowing barre</td><td>70</td><td>4</td><td>10</td></tr>
-              <tr><td class="xl-day">Jeu</td><td>Développé épaules</td><td>50</td><td>3</td><td>12</td></tr>
-            </tbody>
-          </table>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">📥</div>
           <h3>Import Excel natif</h3>
-          <p>Le coach glisse son fichier. Détection automatique des jours, exercices, charges, séries, calories et macros. Zéro saisie manuelle.</p>
+          <p>Le coach glisse son fichier. Détection automatique des jours, exercices, charges, séries, calories et macros. Zéro saisie.</p>
         </div>
       </div>
 
       <!-- Sync temps réel -->
-      <div class="feature feature-illustrated">
-        <div class="feat-bg" aria-hidden="true">
-          <div class="sync-row">
-            <div class="sync-node">
-              <div class="sync-node-label">Coach</div>
-              <div class="sync-node-val">Yannis</div>
+      <div class="feature">
+        <div class="feat-preview">
+          <div style="width:100%">
+            <div class="sync-row">
+              <div class="sync-node"><div class="sync-node-label">Coach</div><div class="sync-node-val">Yannis</div></div>
+              <div class="sync-arrow">⚡</div>
+              <div class="sync-node"><div class="sync-node-label">Athlète</div><div class="sync-node-val">Christelle</div></div>
             </div>
-            <div class="sync-arrow">⚡</div>
-            <div class="sync-node">
-              <div class="sync-node-label">Athlète</div>
-              <div class="sync-node-val">Christelle</div>
+            <div class="sync-log">
+              <div class="sync-log-row"><span class="sync-log-dot" style="background:#7cc4a1"></span>Programme mis à jour<span class="sync-log-time">0.3s</span></div>
+              <div class="sync-log-row"><span class="sync-log-dot" style="background:#d97757"></span>Séance terminée ✓<span class="sync-log-time">1s</span></div>
+              <div class="sync-log-row"><span class="sync-log-dot" style="background:#c2a042"></span>Push notification 🔔<span class="sync-log-time">2s</span></div>
             </div>
-          </div>
-          <div class="sync-log">
-            <div class="sync-log-row"><span class="sync-log-dot" style="background:#7cc4a1"></span>Programme mis à jour<span class="sync-log-time">0.3s</span></div>
-            <div class="sync-log-row"><span class="sync-log-dot" style="background:#d97757"></span>Séance terminée ✓<span class="sync-log-time">1s</span></div>
-            <div class="sync-log-row"><span class="sync-log-dot" style="background:#7ca8c4"></span>Repas validé 🥗<span class="sync-log-time">2s</span></div>
-            <div class="sync-log-row"><span class="sync-log-dot" style="background:#c2a042"></span>Push notification 🔔<span class="sync-log-time">2s</span></div>
           </div>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">⚡</div>
           <h3>Sync temps réel</h3>
           <p>Le coach modifie un programme → l'athlète le voit dans la seconde. Tout remonte instantanément via notifications push.</p>
@@ -553,54 +510,47 @@ img{display:block;max-width:100%}
       </div>
 
       <!-- Suivi & historique -->
-      <div class="feature feature-illustrated">
-        <div class="feat-bg" aria-hidden="true">
-          <div class="bc-title">📊 Volume hebdo (kg)</div>
-          <div class="bc-bars">
-            <div class="bc-bar" style="height:55%;background:rgba(217,119,87,0.5)"></div>
-            <div class="bc-bar" style="height:72%;background:rgba(217,119,87,0.6)"></div>
-            <div class="bc-bar" style="height:40%;background:rgba(217,119,87,0.45)"></div>
-            <div class="bc-bar" style="height:88%;background:linear-gradient(180deg,#d97757,#c97586)"></div>
-            <div class="bc-bar" style="height:65%;background:rgba(217,119,87,0.55)"></div>
-            <div class="bc-bar" style="height:20%;background:rgba(255,255,255,0.08)"></div>
-            <div class="bc-bar" style="height:10%;background:rgba(255,255,255,0.05)"></div>
+      <div class="feature">
+        <div class="feat-preview">
+          <div style="width:100%">
+            <div class="bc-title">📊 Volume hebdo (kg)</div>
+            <div class="bc-bars">
+              <div class="bc-bar" style="height:55%;background:rgba(217,119,87,0.45)"></div>
+              <div class="bc-bar" style="height:72%;background:rgba(217,119,87,0.55)"></div>
+              <div class="bc-bar" style="height:40%;background:rgba(217,119,87,0.40)"></div>
+              <div class="bc-bar" style="height:90%;background:linear-gradient(180deg,#d97757,#c97586)"></div>
+              <div class="bc-bar" style="height:65%;background:rgba(217,119,87,0.50)"></div>
+              <div class="bc-bar" style="height:15%;background:rgba(255,255,255,0.07)"></div>
+              <div class="bc-bar" style="height:8%;background:rgba(255,255,255,0.05)"></div>
+            </div>
+            <div class="bc-labels"><span class="bc-label">L</span><span class="bc-label">M</span><span class="bc-label">M</span><span class="bc-label" style="color:#d97757;font-weight:700">J</span><span class="bc-label">V</span><span class="bc-label">S</span><span class="bc-label">D</span></div>
+            <div class="bc-streak">🔥 5 jours consécutifs</div>
           </div>
-          <div class="bc-labels">
-            <span class="bc-label">L</span><span class="bc-label">M</span><span class="bc-label">M</span><span class="bc-label" style="color:#d97757">J</span><span class="bc-label">V</span><span class="bc-label">S</span><span class="bc-label">D</span>
-          </div>
-          <div class="bc-streak">🔥 5 jours consécutifs</div>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">📊</div>
           <h3>Suivi & historique</h3>
           <p>Volume hebdo, streak de jours consécutifs, photos de progression, calendrier global. Le coach voit tout depuis un seul écran.</p>
         </div>
       </div>
-      <div class="feature feature-chat">
-        <div class="chat-bg" aria-hidden="true">
-          <div class="chat-msg chat-msg-coach">
-            <span class="chat-avatar chat-avatar-coach">Y</span>
-            <div class="chat-bubble chat-bubble-coach">Séance top ce matin Christelle 🔥 T'as explosé ton record sur le soulevé !</div>
-          </div>
-          <div class="chat-msg chat-msg-athlete">
-            <div class="chat-bubble chat-bubble-athlete">Merci coach 💪 Je me suis sentie vraiment forte aujourd'hui</div>
-            <span class="chat-avatar chat-avatar-athlete">C</span>
-          </div>
-          <div class="chat-msg chat-msg-coach">
-            <span class="chat-avatar chat-avatar-coach">Y</span>
-            <div class="chat-bubble chat-bubble-coach">C'est le travail des 3 dernières semaines qui paye. Continue comme ça, on vise +5 kg la semaine prochaine 🎯</div>
-          </div>
-          <div class="chat-msg chat-msg-athlete">
-            <div class="chat-bubble chat-bubble-athlete">Carrément ! J'ai hâte 🚀</div>
-            <span class="chat-avatar chat-avatar-athlete">C</span>
+
+      <!-- Messagerie directe -->
+      <div class="feature">
+        <div class="feat-preview">
+          <div class="chat-preview">
+            <div class="chat-msg chat-msg-coach"><span class="chat-avatar chat-avatar-coach">Y</span><div class="chat-bubble chat-bubble-coach">Séance top ce matin Christelle 🔥 T'as explosé ton record !</div></div>
+            <div class="chat-msg chat-msg-athlete"><div class="chat-bubble chat-bubble-athlete">Merci coach 💪 Je me suis sentie vraiment forte</div><span class="chat-avatar chat-avatar-athlete">C</span></div>
+            <div class="chat-msg chat-msg-coach"><span class="chat-avatar chat-avatar-coach">Y</span><div class="chat-bubble chat-bubble-coach">C'est le travail des 3 semaines qui paye. On vise +5 kg 🎯</div></div>
+            <div class="chat-msg chat-msg-athlete"><div class="chat-bubble chat-bubble-athlete">Carrément ! J'ai hâte 🚀</div><span class="chat-avatar chat-avatar-athlete">C</span></div>
           </div>
         </div>
-        <div class="feature-content">
+        <div class="feat-body">
           <div class="feature-icon">💬</div>
           <h3>Messagerie directe</h3>
-          <p>Chat coach ↔ athlète intégré. Notification push dès qu'un message arrive, même app fermée. Plus besoin de WhatsApp pour les retours de séance.</p>
+          <p>Chat coach ↔ athlète intégré. Notification push dès qu'un message arrive, même app fermée. Plus besoin de WhatsApp.</p>
         </div>
       </div>
+
     </div>
   </div>
 </section>
@@ -611,37 +561,29 @@ img{display:block;max-width:100%}
     <div class="section-head">
       <div class="eyebrow">Pour qui</div>
       <h2 class="section-title">Une app, <span class="gradient-text">deux rôles.</span></h2>
-      <p class="section-sub">Coach ou athlète, chacun voit l'interface adaptée à son rôle. Pas de mode unique mal taillé pour les deux.</p>
+      <p class="section-sub">Coach ou athlète, chacun voit l'interface adaptée à son rôle.</p>
     </div>
     <div class="audience">
 
-      <!-- COACH : calendrier en bg -->
+      <!-- COACH -->
       <div class="audience-card audience-coach">
-        <div class="audience-bg">
+        <div class="audience-preview">
           <div class="cal-mock">
-            <div class="cal-mock-head">
-              <span class="cal-mock-title">📅 Mai 2025</span>
-              <div class="cal-mock-nav"><span>‹</span><span>›</span></div>
-            </div>
-            <div class="cal-mock-days">
-              <span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span>
-            </div>
+            <div class="cal-mock-head"><span class="cal-mock-title">📅 Mai 2025</span><div class="cal-mock-nav"><span>‹</span><span>›</span></div></div>
+            <div class="cal-mock-days"><span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span></div>
             <div class="cal-mock-grid">
               <div class="cal-d prev">28</div><div class="cal-d prev">29</div><div class="cal-d prev">30</div>
               <div class="cal-d">1</div><div class="cal-d">2<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
-              <div class="cal-d">3<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
-              <div class="cal-d">4</div>
+              <div class="cal-d">3<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span></div></div><div class="cal-d">4</div>
               <div class="cal-d">5<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
               <div class="cal-d">6<div class="cal-d-dots"><span class="cal-dot" style="background:#7ca8c4"></span><span class="cal-dot" style="background:#c2a042"></span></div></div>
               <div class="cal-d">7<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
               <div class="cal-d">8<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
-              <div class="cal-d">9<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
-              <div class="cal-d">10</div>
+              <div class="cal-d">9<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div><div class="cal-d">10</div>
               <div class="cal-d">11<div class="cal-d-dots"><span class="cal-dot" style="background:#c2a042"></span></div></div>
               <div class="cal-d">12<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
               <div class="cal-d">13<div class="cal-d-dots"><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
-              <div class="cal-d">14<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div>
-              <div class="cal-d">15</div>
+              <div class="cal-d">14<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span></div></div><div class="cal-d">15</div>
               <div class="cal-d">16<div class="cal-d-dots"><span class="cal-dot" style="background:#7ca8c4"></span></div></div>
               <div class="cal-d today">17<div class="cal-d-dots"><span class="cal-dot" style="background:#d97757"></span><span class="cal-dot" style="background:#7cc4a1"></span></div></div>
               <div class="cal-d">18</div><div class="cal-d">19</div><div class="cal-d">20</div><div class="cal-d">21</div>
@@ -649,7 +591,7 @@ img{display:block;max-width:100%}
             </div>
           </div>
         </div>
-        <div class="audience-content">
+        <div class="audience-body">
           <span class="audience-tag">🎯 Coach</span>
           <h3>Tous tes athlètes, un seul écran.</h3>
           <p>Tu prépares leurs programmes et leur nutrition, tu vois leurs séances en direct, tu leur envoies une notification quand tout est prêt.</p>
@@ -663,9 +605,9 @@ img{display:block;max-width:100%}
         </div>
       </div>
 
-      <!-- ATHLÈTE : plan nutrition en bg -->
+      <!-- ATHLÈTE -->
       <div class="audience-card audience-athlete">
-        <div class="audience-bg">
+        <div class="audience-preview">
           <div class="nutri-mock">
             <div class="nutri-mock-title">🥗 Plan nutrition</div>
             <div class="nutri-mock-sub">Lundi · Jour 1</div>
@@ -676,34 +618,18 @@ img{display:block;max-width:100%}
               <div class="nutri-macro nutri-macro-l"><strong>65g</strong><span>Lip.</span></div>
             </div>
             <div class="nutri-meal">
-              <div class="nutri-meal-head">
-                <span class="nutri-meal-name">☀️ Petit-déjeuner</span>
-                <span class="nutri-meal-kcal">680 kcal</span>
-              </div>
+              <div class="nutri-meal-head"><span class="nutri-meal-name">☀️ Petit-déjeuner</span><span class="nutri-meal-kcal">680 kcal</span></div>
               <div class="nutri-item"><span class="nutri-item-name">Flocons d'avoine</span><span class="nutri-item-qty">80g</span></div>
               <div class="nutri-item"><span class="nutri-item-name">Blanc d'œuf</span><span class="nutri-item-qty">200g</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Banane</span><span class="nutri-item-qty">120g</span></div>
             </div>
             <div class="nutri-meal">
-              <div class="nutri-meal-head">
-                <span class="nutri-meal-name">🍽️ Déjeuner</span>
-                <span class="nutri-meal-kcal">820 kcal</span>
-              </div>
+              <div class="nutri-meal-head"><span class="nutri-meal-name">🍽️ Déjeuner</span><span class="nutri-meal-kcal">820 kcal</span></div>
               <div class="nutri-item"><span class="nutri-item-name">Poulet grillé</span><span class="nutri-item-qty">200g</span></div>
               <div class="nutri-item"><span class="nutri-item-name">Riz blanc cuit</span><span class="nutri-item-qty">250g</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Brocoli vapeur</span><span class="nutri-item-qty">150g</span></div>
-            </div>
-            <div class="nutri-meal">
-              <div class="nutri-meal-head">
-                <span class="nutri-meal-name">🌙 Dîner</span>
-                <span class="nutri-meal-kcal">650 kcal</span>
-              </div>
-              <div class="nutri-item"><span class="nutri-item-name">Saumon</span><span class="nutri-item-qty">180g</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Patate douce</span><span class="nutri-item-qty">200g</span></div>
             </div>
           </div>
         </div>
-        <div class="audience-content">
+        <div class="audience-body">
           <span class="audience-tag">💪 Athlète</span>
           <h3>Ta séance, ton plan, dans ta poche.</h3>
           <p>Tu vois ce que ton coach a préparé, tu valides tes séries et tes repas. L'app fonctionne même sans bonne connexion à la salle.</p>
