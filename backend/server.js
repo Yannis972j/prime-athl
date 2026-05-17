@@ -12,6 +12,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
+import webpush from 'web-push';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,6 +32,13 @@ const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.
 const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
+// VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
+// Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
+const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(`mailto:${MAIN_COACH_EMAIL}`, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 const DB_PATH          = process.env.DB_PATH    || path.join(__dirname, 'data.json');
 // Try multiple frontend paths (local dev, Render deploy)
 const FRONTEND_CANDIDATES = [
@@ -41,7 +49,7 @@ const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRON
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -1012,6 +1020,136 @@ app.get('/api/widget', authRequired, (req, res) => {
     weekStats: { sessions: sessionsThisWeek, volume: Math.round(totalVolumeWeek) },
     prs: { squat: u.prSquat || null, bench: u.prBench || null, deadlift: u.prDeadlift || null },
   });
+});
+
+// ── My coach info (for athlete) ─────────────────────
+app.get('/api/my-coach', authRequired, (req, res) => {
+  const me = DATA.users[req.user.id];
+  if (!me || !me.coachId) return res.status(404).json({ error: 'no_coach' });
+  const coach = DATA.users[me.coachId];
+  if (!coach) return res.status(404).json({ error: 'coach_not_found' });
+  res.json({ id: coach.id, email: coach.email, firstName: coach.firstName, lastName: coach.lastName, role: coach.role });
+});
+
+// ── Weight logs ─────────────────────────────────────
+app.get('/api/weight', authRequired, (req, res) => {
+  const logs = (DATA.weightLogs[req.user.id] || []).slice().sort((a,b) => a.date - b.date);
+  res.json({ logs });
+});
+
+app.post('/api/weight', authRequired, (req, res) => {
+  const { weight, date } = req.body || {};
+  if (!weight || isNaN(parseFloat(weight))) return res.status(400).json({ error: 'weight_required' });
+  const entry = { id: uid(), weight: parseFloat(weight), date: date || Date.now(), createdAt: Date.now() };
+  if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = [];
+  DATA.weightLogs[req.user.id].push(entry);
+  persist();
+  res.json({ ok: true, entry });
+});
+
+app.delete('/api/weight/:id', authRequired, (req, res) => {
+  const logs = DATA.weightLogs[req.user.id] || [];
+  DATA.weightLogs[req.user.id] = logs.filter(l => l.id !== req.params.id);
+  persist();
+  res.json({ ok: true });
+});
+
+// Coach can view athlete weight
+app.get('/api/coach/athletes/:id/weight', authRequired, coachOnly, (req, res) => {
+  const u = DATA.users[req.params.id];
+  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  const logs = (DATA.weightLogs[u.id] || []).slice().sort((a,b) => a.date - b.date);
+  res.json({ logs });
+});
+
+// ── Progress photos ──────────────────────────────────
+app.get('/api/photos', authRequired, (req, res) => {
+  const photos = (DATA.progressPhotos[req.user.id] || []).slice().sort((a,b) => b.date - a.date);
+  res.json({ photos });
+});
+
+app.post('/api/photos', authRequired, (req, res) => {
+  const { dataUrl, note, date } = req.body || {};
+  if (!dataUrl) return res.status(400).json({ error: 'dataUrl_required' });
+  if (dataUrl.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 2MB' });
+  const photo = { id: uid(), dataUrl, note: note || '', date: date || Date.now(), createdAt: Date.now() };
+  if (!DATA.progressPhotos[req.user.id]) DATA.progressPhotos[req.user.id] = [];
+  DATA.progressPhotos[req.user.id].unshift(photo);
+  persist();
+  res.json({ ok: true, photo });
+});
+
+app.delete('/api/photos/:id', authRequired, (req, res) => {
+  const photos = DATA.progressPhotos[req.user.id] || [];
+  DATA.progressPhotos[req.user.id] = photos.filter(p => p.id !== req.params.id);
+  persist();
+  res.json({ ok: true });
+});
+
+app.get('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) => {
+  const u = DATA.users[req.params.id];
+  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  const photos = (DATA.progressPhotos[u.id] || []).slice().sort((a,b) => b.date - a.date);
+  res.json({ photos });
+});
+
+// ── Messages ─────────────────────────────────────────
+function chatId(a, b) { return [a, b].sort().join('_'); }
+
+app.get('/api/messages/:partnerId', authRequired, (req, res) => {
+  const me = req.user.id;
+  const partner = req.params.partnerId;
+  // Verify partner exists and is accessible (coach↔athlete)
+  const partnerUser = DATA.users[partner];
+  if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  const key = chatId(me, partner);
+  const msgs = (DATA.messages[key] || []).slice().sort((a,b) => a.createdAt - b.createdAt);
+  res.json({ messages: msgs });
+});
+
+app.post('/api/messages/:partnerId', authRequired, (req, res) => {
+  const me = req.user.id;
+  const partner = req.params.partnerId;
+  const { text } = req.body || {};
+  if (!text || !text.trim()) return res.status(400).json({ error: 'text_required' });
+  const partnerUser = DATA.users[partner];
+  if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  const key = chatId(me, partner);
+  const msg = { id: uid(), senderId: me, text: text.trim(), createdAt: Date.now() };
+  if (!DATA.messages[key]) DATA.messages[key] = [];
+  DATA.messages[key].push(msg);
+  persist();
+  // Emit to both participants
+  io.to('user:' + partner).emit('new-message', { from: me, msg });
+  io.to('user:' + me).emit('new-message', { from: me, msg });
+  // Push notification to partner if subscribed
+  const sub = DATA.pushSubscriptions[partner];
+  if (sub && VAPID_PUBLIC_KEY) {
+    const sender = DATA.users[me];
+    const name = sender?.firstName || sender?.email?.split('@')[0] || 'Coach';
+    webpush.sendNotification(sub, JSON.stringify({ title: 'Prime Athl', body: `${name}: ${text.trim().slice(0,80)}`, url: '/Muscu.html' }))
+      .catch(() => { delete DATA.pushSubscriptions[partner]; persist(); });
+  }
+  res.json({ ok: true, msg });
+});
+
+// ── Push subscriptions ────────────────────────────────
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ key: VAPID_PUBLIC_KEY || null });
+});
+
+app.post('/api/push/subscribe', authRequired, (req, res) => {
+  const { subscription } = req.body || {};
+  if (!subscription) return res.status(400).json({ error: 'subscription_required' });
+  DATA.pushSubscriptions[req.user.id] = subscription;
+  persist();
+  res.json({ ok: true });
+});
+
+app.delete('/api/push/subscribe', authRequired, (req, res) => {
+  delete DATA.pushSubscriptions[req.user.id];
+  persist();
+  res.json({ ok: true });
 });
 
 // ── Server + Socket.IO ──────────────────────────────

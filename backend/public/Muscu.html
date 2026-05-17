@@ -159,6 +159,7 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
     upload:<><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></>,
     apple:<><path d="M12 7c0-3 2-5 5-5-.3 2-2 3-4 3"/><path d="M12 8c-3 0-7 2-7 7s3 8 5 8c1 0 2-0.5 2-0.5s1 0.5 2 0.5c2 0 5-3 5-8s-4-7-7-7z"/></>,
     refresh:<><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></>,
+    message:<><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></>,
   };
   return <svg {...p}>{paths[name]||null}</svg>;
 }
@@ -778,20 +779,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
     setRestSeconds(rest);setRestTotal(rest);
   };
 
-  // Per-exercise recommendation when all sets are done
-  const recommendation=React.useMemo(()=>{
-    if(!ex||!ex.sets.every(s=>s.done))return null;
-    const totalReps=ex.sets.reduce((s,x)=>s+(x.reps||0),0);
-    const totalTarget=ex.sets.reduce((s,x)=>s+(typeof x.target==='number'?x.target:0),0);
-    const w=ex.sets[0]?.weight||0;
-    if(totalTarget===0||w===0)return null;
-    const ratio=totalReps/totalTarget;
-    const round=v=>Math.round(v*2)/2;
-    if(ratio>=1.05)return{type:'up',icon:'↑',text:`Objectif explosé. Passe à ${round(w+5)} kg la prochaine fois.`,color:T.good};
-    if(ratio>=1)return{type:'up',icon:'↑',text:`Objectif validé. Augmente à ${round(w+2.5)} kg la prochaine fois.`,color:T.good};
-    if(ratio>=0.9)return{type:'maintain',icon:'=',text:`T'y es presque. Garde ${w} kg et pousse + la prochaine.`,color:T.warn};
-    return{type:'down',icon:'↓',text:`Charge un peu lourde. Essaie ${round(w*0.95)} kg pour bien finir tes séries.`,color:T.accent};
-  },[ex,exercises,currentEx]);
 
   // inline edit helpers
   const numIn=(val,onChange,w=56)=>(
@@ -980,16 +967,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 })}
               </div>
 
-              {/* Coach recommendation when exercise is done */}
-              {recommendation&&(
-                <div style={{marginTop:12,padding:'12px 14px',borderRadius:12,background:recommendation.color+'15',border:`1px solid ${recommendation.color}55`,display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:32,height:32,borderRadius:10,background:recommendation.color+'22',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:recommendation.color,flexShrink:0}}>{recommendation.icon}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:recommendation.color,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:2}}>Coach</div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,lineHeight:1.3}}>{recommendation.text}</div>
-                  </div>
-                </div>
-              )}
 
               {/* add set */}
               <button onClick={()=>{
@@ -1308,6 +1285,383 @@ function ProgramsScreen({onOpen,importedPrograms,onLoadDay,onImportPrograms}){
   );
 }
 
+// ── Weight Chart ──────────────────────────────────────────
+function WeightChartSection({userId}){
+  const[logs,setLogs]=React.useState([]);
+  const[newW,setNewW]=React.useState('');
+  const[loading,setLoading]=React.useState(true);
+
+  const load=React.useCallback(async()=>{
+    try{const r=await apiCall('/api/weight');setLogs(r.logs||[]);}catch{}finally{setLoading(false);}
+  },[]);
+
+  React.useEffect(()=>{load();},[load]);
+
+  const add=async()=>{
+    const w=parseFloat(newW);
+    if(!w||w<20||w>300)return;
+    await apiCall('/api/weight',{method:'POST',body:{weight:w,date:Date.now()}});
+    setNewW('');
+    load();
+  };
+
+  const del=async(id)=>{
+    await apiCall('/api/weight/'+id,{method:'DELETE'});
+    load();
+  };
+
+  if(loading)return null;
+
+  const sorted=[...logs].sort((a,b)=>a.date-b.date);
+  const last=sorted[sorted.length-1];
+  const first=sorted[0];
+  const diff=last&&first&&last!==first?+(last.weight-first.weight).toFixed(1):null;
+
+  // SVG line chart
+  const W=300,H=90,pad=8;
+  let chart=null;
+  if(sorted.length>1){
+    const weights=sorted.map(l=>l.weight);
+    const minW=Math.min(...weights),maxW=Math.max(...weights);
+    const range=maxW-minW||1;
+    const pts=sorted.map((l,i)=>{
+      const x=pad+(i/(sorted.length-1))*(W-2*pad);
+      const y=H-pad-(l.weight-minW)/range*(H-2*pad);
+      return `${x},${y}`;
+    });
+    const path=`M ${pts.join(' L ')}`;
+    chart=(
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block',marginBottom:8}}>
+        <defs>
+          <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#d97757" stopOpacity="0.3"/>
+            <stop offset="100%" stopColor="#d97757" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d={`${path} L ${W-pad},${H} L ${pad},${H} Z`} fill="url(#wg)"/>
+        <path d={path} fill="none" stroke="#d97757" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        {sorted.map((l,i)=>{
+          const x=pad+(i/(sorted.length-1))*(W-2*pad);
+          const y=H-pad-(l.weight-minW)/range*(H-2*pad);
+          return <circle key={l.id} cx={x} cy={y} r="3" fill="#d97757"/>;
+        })}
+      </svg>
+    );
+  }
+
+  return(
+    <div style={{marginBottom:18}}>
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8,paddingLeft:2}}>Suivi du poids</div>
+      <GlassCard padding={14}>
+        {/* Current + diff */}
+        <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
+          <span style={{fontSize:28,fontWeight:700,letterSpacing:-1}}>{last?last.weight:'-'}</span>
+          <span style={{fontSize:13,color:T.textDim}}>kg</span>
+          {diff!==null&&<span style={{fontSize:12,fontWeight:600,color:diff<0?T.good:diff>0?T.accent:T.textDim,marginLeft:4}}>{diff>0?'+':''}{diff} kg</span>}
+        </div>
+        {/* Chart */}
+        {chart}
+        {sorted.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'12px 0',fontStyle:'italic'}}>Aucune donnée — ajoute ton poids ci-dessous</div>}
+        {/* Add entry */}
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          <div style={{position:'relative',flex:1}}>
+            <input type="number" inputMode="decimal" value={newW} onChange={e=>setNewW(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="Ex : 84.5" style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:9,color:T.text,fontSize:14,fontWeight:600,padding:'7px 30px 7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+            <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint}}>kg</span>
+          </div>
+          <button onClick={add} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:T.accentSoft,color:T.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>Ajouter</button>
+        </div>
+        {/* History list (last 5) */}
+        {sorted.length>0&&(
+          <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:4}}>
+            {[...sorted].reverse().slice(0,5).map(l=>(
+              <div key={l.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 6px',borderRadius:7,background:'rgba(255,255,255,0.025)'}}>
+                <span style={{fontSize:11,color:T.textDim}}>{new Date(l.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                <span style={{fontSize:13,fontWeight:600}}>{l.weight} kg</span>
+                <button onClick={()=>del(l.id)} style={{border:'none',background:'transparent',color:T.textFaint,cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+    </div>
+  );
+}
+
+// ── Calendar View ─────────────────────────────────────────
+function CalendarView({history}){
+  const now=new Date();
+  const[year,setYear]=React.useState(now.getFullYear());
+  const[month,setMonth]=React.useState(now.getMonth());
+
+  const sessionByDay=React.useMemo(()=>{
+    const m={};
+    history.forEach(h=>{
+      const d=new Date(h.date);
+      if(d.getFullYear()===year&&d.getMonth()===month){
+        const key=d.getDate();
+        if(!m[key])m[key]=[];
+        m[key].push(h);
+      }
+    });
+    return m;
+  },[history,year,month]);
+
+  const firstDay=new Date(year,month,1).getDay();
+  const offset=(firstDay+6)%7; // Mon=0
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const cells=Array(offset).fill(null).concat(Array.from({length:daysInMonth},(_,i)=>i+1));
+  while(cells.length%7!==0)cells.push(null);
+
+  const MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const JOURS=['L','M','M','J','V','S','D'];
+
+  const prev=()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);};
+  const next=()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);};
+
+  const todayDay=now.getFullYear()===year&&now.getMonth()===month?now.getDate():null;
+
+  return(
+    <div style={{marginBottom:18}}>
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8,paddingLeft:2}}>Calendrier</div>
+      <GlassCard padding={12}>
+        {/* Nav */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <button onClick={prev} style={{width:28,height:28,borderRadius:7,border:'1px solid '+T.border,background:'rgba(255,255,255,0.03)',color:T.textDim,cursor:'pointer',fontSize:14}}>‹</button>
+          <span style={{fontSize:13,fontWeight:700}}>{MOIS[month]} {year}</span>
+          <button onClick={next} style={{width:28,height:28,borderRadius:7,border:'1px solid '+T.border,background:'rgba(255,255,255,0.03)',color:T.textDim,cursor:'pointer',fontSize:14}}>›</button>
+        </div>
+        {/* Day headers */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:4}}>
+          {JOURS.map((j,i)=><div key={i} style={{textAlign:'center',fontSize:9,color:T.textFaint,fontWeight:600}}>{j}</div>)}
+        </div>
+        {/* Days grid */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3}}>
+          {cells.map((d,i)=>{
+            if(!d)return<div key={i}/>;
+            const sessions=sessionByDay[d]||[];
+            const hasSession=sessions.length>0;
+            const isToday=d===todayDay;
+            return(
+              <div key={i} title={hasSession?sessions.map(s=>s.name||'Séance').join(', '):''}
+                style={{aspectRatio:'1',borderRadius:7,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:hasSession?'rgba(217,119,87,0.18)':isToday?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.025)',border:isToday?`1px solid ${T.accent}`:'1px solid transparent',cursor:hasSession?'default':'default'}}>
+                <span style={{fontSize:11,fontWeight:hasSession||isToday?700:400,color:hasSession?T.accent:isToday?T.text:T.textDim}}>{d}</span>
+                {hasSession&&<div style={{width:4,height:4,borderRadius:2,background:T.accent,marginTop:1}}/>}
+              </div>
+            );
+          })}
+        </div>
+        {/* Legend */}
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+          <div style={{width:10,height:10,borderRadius:3,background:'rgba(217,119,87,0.18)',border:'1px solid transparent'}}/>
+          <span style={{fontSize:10,color:T.textFaint}}>Séance effectuée</span>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+// ── Photo Gallery ─────────────────────────────────────────
+function PhotoGallery({readOnly,userId}){
+  const[photos,setPhotos]=React.useState([]);
+  const[loading,setLoading]=React.useState(true);
+  const[selected,setSelected]=React.useState(null);
+  const fileRef=React.useRef(null);
+
+  const url=readOnly&&userId?'/api/coach/athletes/'+userId+'/photos':'/api/photos';
+
+  const load=React.useCallback(async()=>{
+    try{const r=await apiCall(url);setPhotos(r.photos||[]);}catch{}finally{setLoading(false);}
+  },[url]);
+
+  React.useEffect(()=>{load();},[load]);
+
+  const upload=async(e)=>{
+    const file=e.target.files[0];
+    e.target.value='';
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const dataUrl=ev.target.result;
+      // Compress via canvas
+      const img=new Image();
+      img.onload=async()=>{
+        const canvas=document.createElement('canvas');
+        const maxDim=800;
+        const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+        canvas.width=img.width*scale;canvas.height=img.height*scale;
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        const compressed=canvas.toDataURL('image/jpeg',0.75);
+        try{await apiCall('/api/photos',{method:'POST',body:{dataUrl:compressed,date:Date.now()}});load();}
+        catch(err){alert('Erreur upload: '+(err.message||err));}
+      };
+      img.src=dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const del=async(id)=>{
+    if(!confirm('Supprimer cette photo ?'))return;
+    await apiCall('/api/photos/'+id,{method:'DELETE'});
+    setSelected(null);
+    load();
+  };
+
+  if(loading)return null;
+
+  return(
+    <div style={{marginBottom:18}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingLeft:2}}>
+        <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Photos de progression</div>
+        {!readOnly&&<button onClick={()=>fileRef.current.click()} style={{height:26,padding:'0 10px',borderRadius:7,border:'1px solid rgba(217,119,87,0.3)',background:'rgba(217,119,87,0.06)',color:T.accent,fontSize:10,fontWeight:700,cursor:'pointer'}}>+ Photo</button>}
+      </div>
+      {!readOnly&&<input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={upload}/>}
+      {photos.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'16px',fontStyle:'italic',background:'rgba(255,255,255,0.02)',borderRadius:12,border:'1px solid rgba(255,255,255,0.05)'}}>{readOnly?'Aucune photo partagée':'Ajoute ta première photo de progression'}</div>}
+      {photos.length>0&&(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
+          {photos.map(p=>(
+            <div key={p.id} onClick={()=>setSelected(p)} style={{aspectRatio:'1',borderRadius:10,overflow:'hidden',cursor:'pointer',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+              <img src={p.dataUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Lightbox */}
+      {selected&&(
+        <div onClick={()=>setSelected(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:1000,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
+          <img src={selected.dataUrl} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:'100%',maxHeight:'70vh',borderRadius:14,objectFit:'contain'}}/>
+          <div style={{marginTop:10,fontSize:12,color:'rgba(255,255,255,0.5)'}}>
+            {new Date(selected.date).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}
+          </div>
+          {!readOnly&&<button onClick={e=>{e.stopPropagation();del(selected.id);}} style={{marginTop:12,height:34,padding:'0 16px',borderRadius:9,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:T.danger,fontSize:12,fontWeight:600,cursor:'pointer'}}>Supprimer</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Messages Screen ───────────────────────────────────────
+function MessagesScreen({authUser,socket}){
+  const[partners,setPartners]=React.useState([]);
+  const[selected,setSelected]=React.useState(null);
+  const[messages,setMessages]=React.useState([]);
+  const[text,setText]=React.useState('');
+  const[unread,setUnread]=React.useState({});
+  const bottomRef=React.useRef(null);
+
+  // Build partner list
+  React.useEffect(()=>{
+    const load=async()=>{
+      try{
+        if(authUser.role==='athlete'){
+          const coach=await apiCall('/api/my-coach').catch(()=>null);
+          if(coach)setPartners([coach]);
+        }else if(authUser.role==='coach'){
+          const r=await apiCall('/api/coach/athletes');
+          setPartners((r.athletes||[]).filter(a=>a.status==='active'));
+        }
+      }catch{}
+    };
+    load();
+  },[authUser]);
+
+  // Load messages when partner selected
+  React.useEffect(()=>{
+    if(!selected)return;
+    const load=async()=>{
+      try{const r=await apiCall('/api/messages/'+selected.id);setMessages(r.messages||[]);}catch{}
+    };
+    load();
+    setUnread(u=>({...u,[selected.id]:0}));
+  },[selected]);
+
+  // Socket listener
+  React.useEffect(()=>{
+    if(!socket)return;
+    const handler=({from,msg})=>{
+      if(selected&&(from===selected.id||msg.senderId===authUser.id)){
+        setMessages(m=>[...m.filter(x=>x.id!==msg.id),msg].sort((a,b)=>a.createdAt-b.createdAt));
+      }else{
+        setUnread(u=>({...u,[from]:(u[from]||0)+1}));
+      }
+    };
+    socket.on('new-message',handler);
+    return()=>socket.off('new-message',handler);
+  },[socket,selected,authUser.id]);
+
+  // Scroll to bottom
+  React.useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
+
+  const send=async()=>{
+    if(!text.trim()||!selected)return;
+    try{
+      await apiCall('/api/messages/'+selected.id,{method:'POST',body:{text}});
+      setText('');
+    }catch(e){alert(e.message);}
+  };
+
+  const fmtTime=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  const fmtDate=ts=>new Date(ts).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column',color:T.text}}>
+      {selected?(
+        <>
+          {/* Header */}
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+            <button onClick={()=>setSelected(null)} style={{width:32,height:32,borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+            <div style={{width:32,height:32,borderRadius:16,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>{(selected.firstName?.[0]||selected.email?.[0]||'?').toUpperCase()}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600}}>{selected.firstName||selected.email.split('@')[0]}</div>
+              <div style={{fontSize:10,color:T.textFaint}}>{selected.role==='coach'?'Coach':'Athlète'}</div>
+            </div>
+          </div>
+          {/* Messages */}
+          <div style={{flex:1,overflow:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+            {messages.length===0&&<div style={{textAlign:'center',fontSize:12,color:T.textFaint,marginTop:40,fontStyle:'italic'}}>Aucun message — dis bonjour 👋</div>}
+            {messages.map((m,i)=>{
+              const isMe=m.senderId===authUser.id;
+              const showDate=i===0||fmtDate(messages[i-1].createdAt)!==fmtDate(m.createdAt);
+              return(
+                <React.Fragment key={m.id}>
+                  {showDate&&<div style={{textAlign:'center',fontSize:10,color:T.textFaint,margin:'4px 0'}}>{fmtDate(m.createdAt)}</div>}
+                  <div style={{display:'flex',flexDirection:'column',alignItems:isMe?'flex-end':'flex-start'}}>
+                    <div style={{maxWidth:'80%',padding:'8px 12px',borderRadius:isMe?'14px 14px 4px 14px':'14px 14px 14px 4px',background:isMe?T.accentSoft:'rgba(255,255,255,0.06)',border:isMe?`1px solid rgba(217,119,87,0.3)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,lineHeight:1.4,color:isMe?T.accent:T.text}}>
+                      {m.text}
+                    </div>
+                    <span style={{fontSize:9,color:T.textFaint,marginTop:2,marginLeft:4,marginRight:4}}>{fmtTime(m.createdAt)}</span>
+                  </div>
+                </React.Fragment>
+              );
+            })}
+            <div ref={bottomRef}/>
+          </div>
+          {/* Input */}
+          <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0,paddingBottom:'max(10px,env(safe-area-inset-bottom))'}}>
+            <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()} placeholder="Message..." style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:20,color:T.text,fontSize:13,padding:'8px 14px',fontFamily:'inherit',outline:'none'}}/>
+            <button onClick={send} disabled={!text.trim()} style={{width:36,height:36,borderRadius:18,border:'none',background:text.trim()?T.accent:'rgba(255,255,255,0.08)',color:'#fff',cursor:text.trim()?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background 0.2s'}}>↑</button>
+          </div>
+        </>
+      ):(
+        <div style={{flex:1,overflow:'auto',padding:'14px 16px 90px'}}>
+          <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5,marginBottom:16}}>Messages</div>
+          {partners.length===0&&<div style={{textAlign:'center',fontSize:13,color:T.textFaint,marginTop:60,fontStyle:'italic'}}>{authUser.role==='coach'?'Aucun athlète actif pour l\'instant':'Aucun coach assigné'}</div>}
+          {partners.map(p=>(
+            <button key={p.id} onClick={()=>setSelected(p)} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px',borderRadius:14,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',cursor:'pointer',marginBottom:8,textAlign:'left',position:'relative'}}>
+              <div style={{width:40,height:40,borderRadius:20,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{(p.firstName?.[0]||p.email?.[0]||'?').toUpperCase()}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.firstName||p.email.split('@')[0]}</div>
+                <div style={{fontSize:11,color:T.textFaint}}>{p.role==='coach'?'Coach':'Athlète'}</div>
+              </div>
+              {(unread[p.id]||0)>0&&<div style={{width:18,height:18,borderRadius:9,background:T.accent,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{unread[p.id]}</div>}
+              <span style={{color:T.textFaint,fontSize:16}}>›</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Stats ─────────────────────────────────────────────────
 function StatsScreen({history,profile}){
   const now=Date.now();
@@ -1416,6 +1770,9 @@ function StatsScreen({history,profile}){
           </GlassCard>
         </>
       )}
+
+      <WeightChartSection/>
+      <CalendarView history={history}/>
     </div>
   );
 }
@@ -1696,6 +2053,8 @@ function ProfileScreen({profile,onChange,onLogout}){
         ))}
       </div>
 
+
+      {!profile.isMainCoach&&<PhotoGallery/>}
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
@@ -3916,6 +4275,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     return()=>window.removeEventListener('resize',onResize);
   },[]);
 
+  const[unreadMessages,setUnreadMessages]=React.useState(0);
+  const[socket,setSocket]=React.useState(null);
+
   // Realtime: program / profile / nutrition mis à jour par coach
   useSocket(authToken,{
     'program-updated':({data,assignedAt})=>{
@@ -3928,11 +4290,21 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       triggerSave();
     },
     'nutrition-updated':()=>{
-      // Force le composant NutritionScreen à refetch via key prop, même si pas monté
       setNutriRefreshKey(k=>k+1);
       triggerSave();
     },
+    'new-message':()=>{
+      setTab(t=>{ if(t!=='messages')setUnreadMessages(u=>u+1); return t; });
+    },
   });
+
+  // Expose socket for MessagesScreen
+  React.useEffect(()=>{
+    if(!authToken)return;
+    const s=io(getApiBase(),{auth:{token:authToken},transports:['websocket','polling']});
+    setSocket(s);
+    return()=>s.disconnect();
+  },[authToken]);
 
   // Wrap setImportedPrograms: local + push to backend (athlete) or coach UI handles its own
   const updateOwnProgram=React.useCallback(async data=>{
@@ -4001,10 +4373,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
             {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}
             {tab==='coach'&&authUser.role==='coach'&&<CoachScreen authToken={authToken} authUser={authUser}/>}
+            {tab==='messages'&&<MessagesScreen authUser={authUser} socket={socket} onOpen={()=>setUnreadMessages(0)}/>}
           </div>
         )}
       </div>
-      {!screen&&<BottomTabBar tab={tab} onTab={setTab} role={authUser.role}/>}
+      {!screen&&<BottomTabBar tab={tab} onTab={t=>{setTab(t);if(t==='messages')setUnreadMessages(0);}} role={authUser.role} unreadMessages={unreadMessages}/>}
     </div>
   );
 
@@ -4022,16 +4395,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   );
 }
 
-function BottomTabBar({tab,onTab,role}){
+function BottomTabBar({tab,onTab,role,unreadMessages}){
   const items=role==='coach'?[
     {id:'coach',icon:'users',label:'Coach'},
     {id:'programme',icon:'grid',label:'Prog'},
     {id:'nutrition',icon:'apple',label:'Nutri'},
-    {id:'stats',icon:'chart',label:'Stats'},
+    {id:'messages',icon:'message',label:'Chat'},
     {id:'profile',icon:'user',label:'Profil'},
   ]:[
     {id:'programme',icon:'grid',label:'Programme'},
     {id:'nutrition',icon:'apple',label:'Nutrition'},
+    {id:'messages',icon:'message',label:'Chat'},
     {id:'stats',icon:'chart',label:'Stats'},
     {id:'profile',icon:'user',label:'Profil'},
   ];
@@ -4041,9 +4415,13 @@ function BottomTabBar({tab,onTab,role}){
         <div style={{borderRadius:23,background:'linear-gradient(180deg,rgba(20,20,28,0.92),rgba(10,10,16,0.96))',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',height:60,display:'flex',alignItems:'center'}}>
           {items.map(it=>{
             const active=tab===it.id;
+            const badge=it.id==='messages'&&unreadMessages>0;
             return(
-              <button key={it.id} onClick={()=>onTab(it.id)} style={{flex:1,height:60,border:'none',background:'transparent',cursor:'pointer',color:active?T.accent:T.textFaint,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3}}>
-                <Icon name={it.icon} size={20} stroke={active?T.accent:T.textFaint} strokeWidth={active?2.2:1.6}/>
+              <button key={it.id} onClick={()=>onTab(it.id)} style={{flex:1,height:60,border:'none',background:'transparent',cursor:'pointer',color:active?T.accent:T.textFaint,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,position:'relative'}}>
+                <div style={{position:'relative'}}>
+                  <Icon name={it.icon} size={20} stroke={active?T.accent:T.textFaint} strokeWidth={active?2.2:1.6}/>
+                  {badge&&<div style={{position:'absolute',top:-4,right:-4,width:8,height:8,borderRadius:4,background:T.accent}}/>}
+                </div>
                 <span style={{fontSize:10,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>{it.label}</span>
               </button>
             );
