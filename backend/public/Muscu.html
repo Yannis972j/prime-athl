@@ -1029,34 +1029,47 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
 // ── Dashboard ─────────────────────────────────────────────
 function DashboardScreen({workout,onStart,onEdit,onTab}){
   const days=['L','M','M','J','V','S','D'];
-  const week=[1,1,0,1,2,3,3];
   const totalSets=workout.exercises.reduce((s,e)=>s+e.sets.length,0);
   const totalEx=workout.exercises.length;
+  const estMin=Math.round(totalSets*2.5+totalEx*1.5);
+
+  const[widget,setWidget]=React.useState(null);
+  React.useEffect(()=>{apiCall('/api/widget').then(d=>setWidget(d)).catch(()=>{});},[]);
+
+  const todayIdx=(new Date().getDay()+6)%7; // Mon=0
+  const weekCells=(widget?.weekDayVolumes||[0,0,0,0,0,0,0]).map((vol,i)=>{
+    if(i>todayIdx)return 3; // futur
+    if(vol>0)return 1; // fait
+    if(i<todayIdx)return 0; // manqué
+    return 2; // aujourd'hui
+  });
+  const firstName=widget?.firstName||'';
+  const streak=widget?.streak||0;
+  const totalVol=widget?.weekStats?.volume||0;
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+
   return(
     <div style={{padding:'4px 18px 100px',color:T.text}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginTop:6,marginBottom:22}}>
         <div>
-          <div style={{fontSize:13,color:T.textDim,fontWeight:500}}>Vendredi 10 mai</div>
-          <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,marginTop:2,lineHeight:1.1}}>Salut, <HoloText>Léo</HoloText></div>
+          <div style={{fontSize:13,color:T.textDim,fontWeight:500,textTransform:'capitalize'}}>{dateStr}</div>
+          <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,marginTop:2,lineHeight:1.1}}>Salut, <HoloText>{firstName||'…'}</HoloText></div>
         </div>
-        <div style={{width:44,height:44,borderRadius:22,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:16,boxShadow:'0 6px 20px rgba(217,119,87,0.45)'}}>L</div>
+        {firstName&&<div style={{width:44,height:44,borderRadius:22,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:16,boxShadow:'0 6px 20px rgba(217,119,87,0.45)'}}>{firstName[0].toUpperCase()}</div>}
       </div>
 
       <HoloCard intense padding={0} style={{marginBottom:18}}>
         <div style={{padding:20,position:'relative'}}>
           <div style={{position:'absolute',top:-40,right:-40,width:180,height:180,background:HOLO.iris,opacity:0.45,filter:'blur(40px)',borderRadius:'50%',pointerEvents:'none'}}/>
           <div style={{position:'relative'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <Pill>● En cours</Pill>
-              <span style={{fontSize:11,color:T.textDim,fontWeight:500}}>Semaine 3 · Jour 12</span>
-            </div>
             <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Aujourd'hui</div>
             <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.8,lineHeight:1.05,marginTop:4}}>{workout.name}</div>
             <div style={{fontSize:13,color:T.textDim,marginTop:4}}>{workout.muscles}</div>
             <div style={{display:'flex',gap:16,marginTop:18}}>
               <StatBox label="Exercices" value={String(totalEx)}/>
               <StatBox label="Séries" value={String(totalSets)}/>
-              <StatBox label="Durée" value="~55" suffix="min"/>
+              {estMin>0&&<StatBox label="Durée" value={`~${estMin}`} suffix="min"/>}
             </div>
             <div style={{display:'flex',gap:10,marginTop:20}}>
               <button onClick={onStart} style={{flex:1,height:50,border:'none',borderRadius:15,cursor:'pointer',background:'linear-gradient(135deg,#d97757,#c97586 80%)',color:'#fff',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 10px 30px rgba(217,119,87,0.4)'}}>
@@ -1071,32 +1084,33 @@ function DashboardScreen({workout,onStart,onEdit,onTab}){
       </HoloCard>
 
       <div style={{marginBottom:18}}>
-        <SectionHeader title="Cette semaine" right={<span style={{color:T.accent,fontSize:12,fontWeight:600}}>4 / 5</span>}/>
+        <SectionHeader title="Cette semaine" right={<span style={{color:T.accent,fontSize:12,fontWeight:600}}>{weekCells.filter(s=>s===1).length} séance{weekCells.filter(s=>s===1).length!==1?'s':''}</span>}/>
         <GlassCard padding={14}>
           <div style={{display:'flex',justifyContent:'space-between',gap:6}}>
-            {week.map((s,i)=><DayCell key={i} day={days[i]} state={s} active={i===4}/>)}
+            {weekCells.map((s,i)=><DayCell key={i} day={days[i]} state={s} active={i===todayIdx}/>)}
           </div>
         </GlassCard>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-        <GlassCard padding={14}>
-          <div style={{display:'flex',alignItems:'center',gap:6,color:T.warn,marginBottom:8}}><Icon name="flame" size={16} stroke={T.warn}/><span style={{fontSize:11,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Série</span></div>
-          <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,lineHeight:1}}>12</div>
-          <div style={{fontSize:12,color:T.textDim,marginTop:4}}>jours consécutifs</div>
-        </GlassCard>
-      </div>
+      {streak>0&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
+          <GlassCard padding={14}>
+            <div style={{display:'flex',alignItems:'center',gap:6,color:T.warn,marginBottom:8}}><Icon name="flame" size={16} stroke={T.warn}/><span style={{fontSize:11,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Série</span></div>
+            <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,lineHeight:1}}>{streak}</div>
+            <div style={{fontSize:12,color:T.textDim,marginTop:4}}>jour{streak>1?'s':''} consécutif{streak>1?'s':''}</div>
+          </GlassCard>
+        </div>
+      )}
 
       <SectionHeader title="Volume hebdo" right={<button onClick={()=>onTab('stats')} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:2}}>Voir tout <Icon name="chevronRight" size={14} stroke={T.accent}/></button>}/>
       <GlassCard padding={16}>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:6}}>
           <div>
-            <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.4}}><HoloText>14 820</HoloText><span style={{fontSize:13,color:T.textDim,fontWeight:500,marginLeft:4}}>kg</span></div>
-            <div style={{fontSize:11,color:T.good,fontWeight:600,marginTop:2}}>↑ 8,2% vs semaine passée</div>
+            <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.4}}><HoloText>{totalVol>0?totalVol.toLocaleString('fr-FR'):'—'}</HoloText>{totalVol>0&&<span style={{fontSize:13,color:T.textDim,fontWeight:500,marginLeft:4}}>kg</span>}</div>
+            <div style={{fontSize:11,color:T.textDim,fontWeight:500,marginTop:2}}>cette semaine</div>
           </div>
-          <Pill color={T.good}>Top 12%</Pill>
         </div>
-        <MiniBarChart data={[62,78,0,88,72,95,0]}/>
+        <MiniBarChart data={widget?.weekDayVolumes||[0,0,0,0,0,0,0]} todayIdx={todayIdx}/>
       </GlassCard>
     </div>
   );
@@ -1118,17 +1132,23 @@ function DayCell({day,state,active}){
   </div>);
 }
 
-function MiniBarChart({data}){
-  const max=Math.max(...data);
+function MiniBarChart({data,todayIdx}){
+  const max=Math.max(...data,1);
+  const today=todayIdx!=null?todayIdx:(new Date().getDay()+6)%7;
   return(<div style={{display:'flex',alignItems:'flex-end',gap:6,height:60,marginTop:12}}>
-    {data.map((v,i)=>(
-      <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%'}}>
-        <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end'}}>
-          <div style={{width:'100%',height:`${Math.max(4,(v/max)*100)}%`,background:v===0?'rgba(255,255,255,0.06)':i===5?HOLO.irisHorizon:'linear-gradient(180deg,rgba(217,119,87,0.7),rgba(217,119,87,0.25))',borderRadius:5}}/>
+    {data.map((v,i)=>{
+      const isFuture=i>today;
+      const isToday=i===today;
+      const bg=v===0?'rgba(255,255,255,0.06)':isToday?HOLO.irisHorizon:'linear-gradient(180deg,rgba(217,119,87,0.7),rgba(217,119,87,0.25))';
+      return(
+        <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%',opacity:isFuture?0.3:1}}>
+          <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end'}}>
+            <div style={{width:'100%',height:`${Math.max(4,(v/max)*100)}%`,background:bg,borderRadius:5}}/>
+          </div>
+          <div style={{fontSize:9,color:isToday?T.accent:T.textFaint,fontWeight:isToday?700:600}}>{['L','M','M','J','V','S','D'][i]}</div>
         </div>
-        <div style={{fontSize:9,color:T.textFaint,fontWeight:600}}>{['L','M','M','J','V','S','D'][i]}</div>
-      </div>
-    ))}
+      );
+    })}
   </div>);
 }
 
@@ -2067,9 +2087,19 @@ function PushNotifToggle(){
     if(!('serviceWorker' in navigator)||!('PushManager' in window)){setStatus('unsupported');return;}
     const perm=Notification.permission;
     if(perm==='denied'){setStatus('denied');return;}
-    // Check if already subscribed
-    navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(sub=>{
-      setStatus(sub?'on':'off');
+    // Check browser subscription + sync with server if needed
+    navigator.serviceWorker.ready.then(async reg=>{
+      const sub=await reg.pushManager.getSubscription();
+      if(!sub){setStatus('off');return;}
+      // Browser has a subscription — verify server knows about it
+      try{
+        const s=await apiCall('/api/push/status');
+        if(!s.subscribed){
+          // Re-register silently
+          await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+        }
+      }catch(e){}
+      setStatus('on');
     }).catch(()=>setStatus('off'));
   },[]);
 
@@ -2486,21 +2516,23 @@ function mealStatus(meal, nowHM){
 }
 
 function CircleGauge({value,max,size=120,color='#d97757',label,suffix=''}){
+  const over=max>0&&value>max;
   const pct=Math.max(0,Math.min(1,max>0?value/max:0));
   const r=size/2-8;
   const c=2*Math.PI*r;
+  const strokeColor=over?'#e05050':color;
   return(
     <div style={{position:'relative',width:size,height:size,display:'inline-block'}}>
       <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8"/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c*(1-pct)}
-          style={{transition:'stroke-dashoffset 0.6s cubic-bezier(.34,1.56,.64,1)',filter:`drop-shadow(0 0 4px ${color}aa)`}}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={strokeColor} strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={over?0:c*(1-pct)}
+          style={{transition:'stroke-dashoffset 0.6s cubic-bezier(.34,1.56,.64,1)',filter:`drop-shadow(0 0 ${over?6:4}px ${strokeColor}aa)`}}/>
       </svg>
       <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-        <div style={{fontSize:size>80?22:14,fontWeight:700,letterSpacing:-0.5,color}}>{Math.round(value)}</div>
+        <div style={{fontSize:size>80?22:14,fontWeight:700,letterSpacing:-0.5,color:strokeColor}}>{Math.round(value)}</div>
         <div style={{fontSize:9,color:T.textDim,fontWeight:600,letterSpacing:0.3,marginTop:size>80?-2:0}}>/{Math.round(max)}{suffix}</div>
-        {label&&<div style={{fontSize:8,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginTop:2}}>{label}</div>}
+        {label&&<div style={{fontSize:8,color:over?'#e05050':T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginTop:2}}>{over?'EXCÈS':label}</div>}
       </div>
     </div>
   );
@@ -3301,6 +3333,17 @@ const FOOD_DB=[
 const FOOD_CATS=["Protéines","Compléments","Féculents","Légumes","Fruits","Laitiers","Lipides"];
 const FOOD_CAT_EMOJI={"Protéines":"🥩","Compléments":"💊","Féculents":"🌾","Légumes":"🥦","Fruits":"🍌","Laitiers":"🥛","Lipides":"🥑"};
 
+function DelConfirm({onDelete}){
+  const[confirm,setConfirm]=React.useState(false);
+  if(confirm)return(
+    <div style={{display:'flex',gap:4,flexShrink:0}}>
+      <button onClick={()=>setConfirm(false)} style={{height:26,padding:'0 7px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:11,fontWeight:700}}>Non</button>
+      <button onClick={onDelete} style={{height:26,padding:'0 7px',borderRadius:7,border:'none',background:'#c97586',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Oui</button>
+    </div>
+  );
+  return <button onClick={()=>setConfirm(true)} style={{width:26,height:26,borderRadius:7,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>;
+}
+
 function FoodItemRow({item,inp,onCommit,onDelete}){
   const[name,setName]=React.useState(item.name||'');
   const[qty,setQty]=React.useState(String(item.qty||0));
@@ -3328,7 +3371,7 @@ function FoodItemRow({item,inp,onCommit,onDelete}){
           onBlur={e=>commitQty(e.target.value)}
           style={{width:56,height:30,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:T.text,fontSize:12,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit'}}/>
         <span style={{fontSize:10,color:T.textDim,flexShrink:0}}>g</span>
-        <button onClick={onDelete} style={{width:26,height:26,borderRadius:7,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        <DelConfirm onDelete={onDelete}/>
       </div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         {[{l:'kcal',v:macros.kcal,c:'#d97757'},{l:'P',v:macros.p,c:'#c97586'},{l:'G',v:macros.c,c:'#7ca8c4'},{l:'L',v:macros.f,c:'#c2a042'}].map(m=>(
@@ -3565,14 +3608,14 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" style={{display:'none'}} onChange={handleExcelImport}/>
 
       {/* Excel I/O buttons */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:6,marginBottom:10}}>
-        <button onClick={()=>fileRef.current.click()} style={{height:38,borderRadius:11,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+        <button onClick={()=>fileRef.current.click()} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.08)',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📥</span> Importer
         </button>
-        <button onClick={handleExcelExport} style={{height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+        <button onClick={handleExcelExport} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📤</span> Excel
         </button>
-        <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{height:38,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+        <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📄</span> PDF
         </button>
         <button onClick={async()=>{

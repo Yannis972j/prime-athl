@@ -316,7 +316,8 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
 
     if (ic) {
       const inv = DATA.invites[ic.toUpperCase()];
-      if (!inv || inv.used) return res.status(400).json({ error: 'invite_invalid' });
+      const INVITE_TTL = 30 * 24 * 3600 * 1000;
+      if (!inv || inv.used || (Date.now() - inv.createdAt > INVITE_TTL)) return res.status(400).json({ error: 'invite_invalid' });
       coachId  = inv.coachId;
       userRole = 'athlete';
       inv.used = true;
@@ -505,8 +506,16 @@ const PROFILE_FIELDS = ['firstName','lastName','height','weight','objective','pr
 app.patch('/api/me', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
-  for (const k of PROFILE_FIELDS) {
-    if (req.body[k] !== undefined) u[k] = req.body[k];
+  const strFields = ['firstName','lastName','objective'];
+  const numFields = { height:[50,300], weight:[20,500], prSquat:[0,1000], prBench:[0,1000], prDeadlift:[0,1000] };
+  for (const k of strFields) {
+    if (req.body[k] !== undefined) u[k] = String(req.body[k]).slice(0, 100);
+  }
+  for (const [k,[min,max]] of Object.entries(numFields)) {
+    if (req.body[k] !== undefined) {
+      const v = parseFloat(req.body[k]);
+      if (!isNaN(v)) u[k] = Math.max(min, Math.min(max, v));
+    }
   }
   persist();
   const p = profileOf(u);
@@ -723,12 +732,23 @@ app.get('/api/sessions', authRequired, (req, res) => {
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
   const { date, name, totalVolume, exercises } = req.body || {};
+  if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name_required' });
+  const safeVolume = Math.max(0, Math.min(1e7, parseFloat(totalVolume) || 0));
+  const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => ({
+    name: String(ex.name || '').slice(0, 100),
+    muscle: String(ex.muscle || '').slice(0, 50),
+    sets: (Array.isArray(ex.sets) ? ex.sets : []).slice(0, 30).map(s => ({
+      weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
+      reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
+      done: !!s.done,
+    })),
+  }));
   const session = {
     id, userId: req.user.id,
     date: date || Date.now(),
-    name: name || '',
-    totalVolume: totalVolume || 0,
-    exercises: exercises || [],
+    name: String(name).slice(0, 100),
+    totalVolume: safeVolume,
+    exercises: safeExercises,
   };
   DATA.sessions[id] = session;
   persist();
@@ -1054,11 +1074,28 @@ app.get('/api/widget', authRequired, (req, res) => {
   const p = DATA.programs[u.id];
   const sessions = Object.values(DATA.sessions).filter(s => s.userId === u.id).sort((a,b) => b.date - a.date);
   const lastSession = sessions[0] || null;
-  const now = Date.now();
-  const weekMs = 7 * 24 * 3600 * 1000;
-  const sessionsThisWeek = sessions.filter(s => now - s.date < weekMs).length;
-  const totalVolumeWeek = sessions.filter(s => now - s.date < weekMs).reduce((sum, s) => sum + (s.totalVolume || 0), 0);
-  // Find next day (any day in the program, simplified)
+
+  // Per-day volumes Mon(0)–Sun(6) for current week
+  const weekDayVolumes = [0,0,0,0,0,0,0];
+  const startOfWeek = new Date(); startOfWeek.setHours(0,0,0,0);
+  startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay()+6)%7));
+  for (const s of sessions) {
+    const d = new Date(s.date);
+    if (d >= startOfWeek) weekDayVolumes[(d.getDay()+6)%7] += s.totalVolume || 0;
+  }
+
+  // Streak: consecutive days with ≥1 session (start from yesterday if no session today)
+  const sessionDaySet = new Set(sessions.map(s => { const d=new Date(s.date); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }));
+  let streak = 0;
+  const cur = new Date(); cur.setHours(0,0,0,0);
+  const todayKey = `${cur.getFullYear()}-${cur.getMonth()+1}-${cur.getDate()}`;
+  if (!sessionDaySet.has(todayKey)) cur.setDate(cur.getDate()-1);
+  while (true) {
+    const k = `${cur.getFullYear()}-${cur.getMonth()+1}-${cur.getDate()}`;
+    if (sessionDaySet.has(k)) { streak++; cur.setDate(cur.getDate()-1); } else break;
+  }
+
+  // Find next day in program
   let nextDay = null;
   if (p && p.data) {
     const sheets = Object.keys(p.data);
@@ -1081,7 +1118,9 @@ app.get('/api/widget', authRequired, (req, res) => {
     role: u.role,
     nextDay,
     lastSession: lastSession ? { name: lastSession.name, totalVolume: lastSession.totalVolume, date: lastSession.date } : null,
-    weekStats: { sessions: sessionsThisWeek, volume: Math.round(totalVolumeWeek) },
+    weekStats: { sessions: sessions.filter(s => new Date(s.date) >= startOfWeek).length, volume: Math.round(weekDayVolumes.reduce((a,b)=>a+b,0)) },
+    weekDayVolumes: weekDayVolumes.map(v => Math.round(v)),
+    streak,
     prs: { squat: u.prSquat || null, bench: u.prBench || null, deadlift: u.prDeadlift || null },
   });
 });
