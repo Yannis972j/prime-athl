@@ -41,8 +41,8 @@
 </head>
 <body>
 <div id="root"></div>
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
@@ -242,38 +242,6 @@ function IOSDevice({children,width=402,height=874,dark=false}){
   );
 }
 
-// ── Tweaks panel ─────────────────────────────────────────
-const TWK_CSS=`
-  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:9999;width:272px;max-height:calc(100vh - 32px);display:flex;flex-direction:column;background:rgba(250,249,247,.82);color:#29261b;backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border:.5px solid rgba(255,255,255,.6);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);font:11.5px/1.4 ui-sans-serif,system-ui,sans-serif;overflow:hidden}
-  .twk-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 8px 10px 14px;cursor:move;user-select:none}
-  .twk-hd b{font-size:12px;font-weight:600}
-  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px}
-  .twk-x:hover{background:rgba(0,0,0,.06)}
-  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0}
-  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(41,38,27,.45);padding:8px 0 0}
-  .twk-row{display:flex;flex-direction:column;gap:5px}
-  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
-  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;color:rgba(41,38,27,.72)}
-  .twk-lbl>span:first-child{font-weight:500}
-  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;background:rgba(0,0,0,.06);user-select:none}
-  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);transition:left .15s,width .15s}
-  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;border-radius:6px;cursor:default;padding:4px 6px}
-  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
-  .twk-toggle[data-on="1"]{background:#34c759}
-  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
-  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
-  .twk-chips{display:flex;gap:6px}
-  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:40px;padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;box-shadow:0 0 0 .5px rgba(0,0,0,.12)}
-  .twk-chip[data-on="1"]{box-shadow:0 0 0 2px rgba(0,0,0,.85)}
-  .twk-chip svg{position:absolute;top:5px;left:5px;width:13px;height:13px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
-`;
-
-function useTweaks(def){
-  const[v,setV]=React.useState(def);
-  const set=React.useCallback((k,val)=>setV(p=>({...p,[k]:val})),[]);
-  return[v,set];
-}
-
 // ── Cloud / Backend ─────────────────────────────────────
 const API_BASE=(()=>{
   if(typeof window==='undefined')return '';
@@ -377,54 +345,6 @@ function useLocalState(key,defaultValue,onSave){
     if(onSave)onSave();
   },[key,state]);
   return[state,setState];
-}
-
-function TweaksPanel({title='Tweaks',children}){
-  const[open,setOpen]=React.useState(false);
-  const ref=React.useRef(null);
-  const off=React.useRef({x:16,y:16});
-  const clamp=React.useCallback(()=>{
-    const p=ref.current;if(!p)return;
-    const w=p.offsetWidth,h=p.offsetHeight;
-    off.current={x:Math.min(Math.max(16,off.current.x),Math.max(16,window.innerWidth-w-16)),y:Math.min(Math.max(16,off.current.y),Math.max(16,window.innerHeight-h-16))};
-    p.style.right=off.current.x+'px';p.style.bottom=off.current.y+'px';
-  },[]);
-  React.useEffect(()=>{if(open){clamp();window.addEventListener('resize',clamp);return()=>window.removeEventListener('resize',clamp);}}, [open,clamp]);
-  const drag=e=>{
-    const p=ref.current;if(!p)return;
-    const r=p.getBoundingClientRect(),sx=e.clientX,sy=e.clientY;
-    const sr=window.innerWidth-r.right,sb=window.innerHeight-r.bottom;
-    const mv=ev=>{off.current={x:sr-(ev.clientX-sx),y:sb-(ev.clientY-sy)};clamp();};
-    const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);};
-    window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);
-  };
-  return(
-    <>
-      <button onClick={()=>setOpen(o=>!o)} style={{position:'fixed',right:16,bottom:16,zIndex:10000,width:40,height:40,borderRadius:20,border:'1px solid rgba(255,255,255,0.2)',background:'rgba(20,20,30,0.9)',color:'#fff',fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(12px)'}}>⚙</button>
-      {open&&(<><style>{TWK_CSS}</style>
-        <div ref={ref} className="twk-panel" style={{right:off.current.x,bottom:off.current.y}}>
-          <div className="twk-hd" onMouseDown={drag}><b>{title}</b><button className="twk-x" onClick={()=>setOpen(false)}>✕</button></div>
-          <div className="twk-body">{children}</div>
-        </div></>)}
-    </>
-  );
-}
-function TweakSection({label,children}){return(<><div className="twk-sect">{label}</div>{children}</>);}
-function TweakToggle({label,value,onChange}){return(<div className="twk-row twk-row-h"><div className="twk-lbl"><span>{label}</span></div><button type="button" className="twk-toggle" data-on={value?'1':'0'} onClick={()=>onChange(!value)}><i/></button></div>);}
-function TweakRadio({label,value,options,onChange}){
-  const opts=options.map(o=>typeof o==='object'?o:{value:o,label:o});
-  const idx=Math.max(0,opts.findIndex(o=>o.value===value));const n=opts.length;
-  return(<div className="twk-row"><div className="twk-lbl"><span>{label}</span></div>
-    <div className="twk-seg"><div className="twk-seg-thumb" style={{left:`calc(2px + ${idx} * (100% - 4px) / ${n})`,width:`calc((100% - 4px) / ${n})`}}/>
-    {opts.map(o=><button key={o.value} type="button" onClick={()=>onChange(o.value)}>{o.label}</button>)}</div></div>);
-}
-function TweakColor({label,value,options,onChange}){
-  const k=o=>String(JSON.stringify(o)).toLowerCase();const cur=k(value);
-  return(<div className="twk-row"><div className="twk-lbl"><span>{label}</span></div>
-    <div className="twk-chips">{options.map((o,i)=>{const on=k(o)===cur;return(
-      <button key={i} type="button" className="twk-chip" data-on={on?'1':'0'} style={{background:o}} onClick={()=>onChange(o)}>
-        {on&&<svg viewBox="0 0 14 14"><path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" stroke="#fff"/></svg>}
-      </button>);})}</div></div>);
 }
 
 // ── Default workout data ──────────────────────────────────
