@@ -28,12 +28,16 @@ const result = esbuild.transformSync(jsx, {
   legalComments: 'none',
 });
 
+// Échapper </script> dans le code minifié pour éviter la fermeture prématurée de la balise
+const safeCode = result.code.replace(/<\/script>/gi, '<\\/script>');
+
 let output = html
   // Retire Babel CDN (plus besoin)
   .replace(/\s*<script src="https:\/\/unpkg\.com\/@babel\/standalone[^"]*"[^>]*><\/script>/g, '')
   // Remplace le bloc JSX par du JS vanilla
-  .replace(/<script type="text\/babel">[\s\S]*?<\/script>/,
-    `<script>${result.code}</script>`);
+  // IMPORTANT : on utilise une fonction (pas une string) pour éviter que les $ dans le JS
+  // minifié soient interprétés comme des patterns de remplacement ($&, $', $` etc.)
+  .replace(/<script type="text\/babel">[\s\S]*?<\/script>/, () => `<script>${safeCode}</script>`);
 
 fs.writeFileSync(OUT, output);
 const sizeKB = (output.length / 1024).toFixed(1);
