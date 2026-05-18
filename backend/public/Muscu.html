@@ -113,7 +113,7 @@ function setAppTheme(name){
   document.body.style.background=T.bg;
   if(_themeUpdate)_themeUpdate(n=>n+1);
 }
-let T={...THEMES[localStorage.getItem('prime-theme')||'dark']};
+let T={...(THEMES[localStorage.getItem('prime-theme')]||THEMES.dark)};
 
 // ── Exercise images (free-exercise-db on GitHub) ────────────
 const EXERCISE_IMG_BASE='https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
@@ -980,7 +980,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
 
       {/* Rest +30s discret (le chrono principal est inline près de la série active) */}
       {restSeconds>0&&(
-        <button onClick={()=>setRestSeconds(s=>s+30)} style={{position:'absolute',right:14,bottom:14,height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
+        <button onClick={()=>{setRestSeconds(s=>{const ns=s+30;if(!restTotal)setRestTotal(ns);return ns;})}} style={{position:'absolute',right:14,bottom:14,height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
       )}
     </div>
   );
@@ -1601,7 +1601,7 @@ function MessagesScreen({authUser}){
       }catch{}
     };
     load();
-  },[authUser]);
+  },[authUser.id,authUser.role]);
 
   // Load + poll messages when partner selected
   React.useEffect(()=>{
@@ -3526,7 +3526,6 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
     exportNutritionExcel(data,athleteName);
   };
 
-  React.useEffect(()=>{setData(initialPlan||DEFAULT_NUTRI_TEMPLATE);},[athleteId,initialPlan]);
 
   const save=React.useCallback((next)=>{
     if(timerRef.current)clearTimeout(timerRef.current);

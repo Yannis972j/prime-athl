@@ -372,7 +372,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
     const u = findUserByEmail((email || '').toLowerCase());
     // Réponse identique en temps constant si user inconnu (anti-énumération)
-    if (!u) { await bcrypt.compare(password || '', '$2a$12$dummyhashdummyhashdummyhashdummyhashdummyhashdumm'); return res.status(401).json({ error: 'invalid_credentials' }); }
+    if (!u) { await bcrypt.compare(password || '', '$2a$12$dummyhashdummyhashdummyhashdummyhashdummyhashdummyhsh'); return res.status(401).json({ error: 'invalid_credentials' }); }
     if (isLocked(u)) {
       const mins = Math.ceil((u.lockedUntil - Date.now()) / 60000);
       return res.status(429).json({ error: 'account_locked', detail: `Compte verrouillé. Réessaie dans ${mins} min.` });
@@ -733,7 +733,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
   }
   const list = Object.values(DATA.sessions)
     .filter(s => s.userId === target)
-    .sort((a, b) => b.date - a.date)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500)
     .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [] }));
   res.json(list);
@@ -867,6 +867,10 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       invites: body.invites || {},
       nutritionPrograms: body.nutritionPrograms || {},
       nutritionLogs: body.nutritionLogs || {},
+      weightLogs: body.weightLogs || {},
+      messages: body.messages || {},
+      progressPhotos: body.progressPhotos || {},
+      pushSubscriptions: body.pushSubscriptions || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
@@ -1034,7 +1038,7 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
   const result = athletes.map((u, idx) => {
     // Sessions du mois
     const sessionDates = Object.values(DATA.sessions)
-      .filter(s => s.userId === u.id && s.date >= start && s.date < end)
+      .filter(s => s.userId === u.id && new Date(s.date).getTime() >= start && new Date(s.date).getTime() < end)
       .map(s => new Date(s.date).toISOString().slice(0,10));
 
     // Nutrition validée du mois (nutritionLogs)
