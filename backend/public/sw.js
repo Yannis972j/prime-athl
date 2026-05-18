@@ -1,6 +1,7 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v3';
-const STATIC = ['/Muscu.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'prime-athl-v4';
+// Ne jamais mettre Muscu.html en cache : il change à chaque deploy
+const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting()));
@@ -13,7 +14,12 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   // API calls : réseau d'abord, pas de cache
   if (e.request.url.includes('/api/')) return;
-  // Assets statiques : cache d'abord, réseau en fallback
+  // Muscu.html : toujours réseau (jamais cache) pour avoir la dernière version
+  if (e.request.url.endsWith('/Muscu.html') || e.request.url.endsWith('/Muscu.html?')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  // Autres assets statiques : cache d'abord, réseau en fallback
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       if (res.ok && e.request.method === 'GET') {
