@@ -264,6 +264,7 @@ app.get('/app', (req, res) => res.redirect('/Muscu.html'));
 // on le sert à la place de Muscu.html. Sinon fallback sur la version source (Babel CDN).
 const MUSCU_APP_BUILT = path.join(FRONTEND, 'Muscu.app.html');
 app.get('/Muscu.html', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   fs.access(MUSCU_APP_BUILT, fs.constants.F_OK, (err) => {
     if (err) return next();
     res.sendFile(MUSCU_APP_BUILT);
