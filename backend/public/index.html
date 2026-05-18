@@ -39,7 +39,7 @@
   --grad:linear-gradient(135deg,#d97757 0%,#c97586 50%,#8e6cb6 100%);
   --grad-soft:linear-gradient(135deg,rgba(217,119,87,0.18),rgba(201,117,134,0.10),rgba(142,108,182,0.08));
   --shadow-card:0 30px 80px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.04) inset;
-  --card-bg:rgba(16,16,22,0.85); --card-bg2:rgba(10,10,15,0.9); --feat-preview-bg:rgba(10,10,15,0.9);
+  --card-bg:rgba(16,16,22,0.85); --card-bg2:rgba(10,10,15,0.9); --feat-preview-bg:rgba(12,12,18,0.95);
   --header-bg:rgba(10,10,14,0.78);
 }
 /* ── Thème Luxe Gris ── */
@@ -77,13 +77,7 @@
 [data-theme="light"] .step,[data-theme="light"] .faq-item{background:rgba(255,255,255,0.8);border-color:rgba(0,0,0,0.08)}
 [data-theme="light"] .final-cta{background:linear-gradient(160deg,rgba(217,119,87,0.08),rgba(248,248,246,0.98));border-color:rgba(217,119,87,0.18)}
 [data-theme="light"] .hero::before{background:radial-gradient(ellipse,rgba(217,119,87,0.10) 0%,transparent 55%)}
-[data-theme="light"] .wi-ex{background:rgba(217,119,87,0.06);border-color:rgba(217,119,87,0.15)}
-[data-theme="light"] .wi-step{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.10);color:var(--text)}
-[data-theme="light"] .sync-log,[data-theme="light"] .xl-table th{border-color:rgba(0,0,0,0.07)}
-[data-theme="light"] .xl-table td{border-color:rgba(0,0,0,0.04)}
-[data-theme="light"] .sync-node{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.10)}
-[data-theme="light"] .sync-node-val{color:var(--text)}
-[data-theme="light"] .chat-bubble{color:var(--text)}
+[data-theme="light"] .sync-log,[data-theme="light"] .xl-table th{border-color:rgba(0,0,0,0.10)}
 [data-theme="light"] .chat-bubble-coach{background:rgba(217,119,87,0.12);border-color:rgba(217,119,87,0.25)}
 [data-theme="light"] .chat-bubble-athlete{background:rgba(74,122,170,0.12);border-color:rgba(74,122,170,0.25)}
 [data-theme="light"] .mb-track{background:rgba(0,0,0,0.07)}
@@ -207,8 +201,15 @@ img{display:block;max-width:100%}
 @media(max-width:960px){.features{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.features{grid-template-columns:1fr}}
 .feature{border-radius:20px;background:var(--card-bg);border:1px solid var(--line);transition:all 0.25s ease;overflow:hidden;display:flex;flex-direction:column}
-.feature:hover{transform:translateY(-3px);border-color:rgba(217,119,87,0.20);box-shadow:0 14px 36px rgba(0,0,0,0.4)}
-.feat-preview{height:148px;background:var(--feat-preview-bg);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
+.feature:hover{transform:translateY(-3px);border-color:rgba(217,119,87,0.28);box-shadow:0 20px 48px rgba(0,0,0,0.5),0 0 0 1px rgba(217,119,87,0.08) inset}
+.feat-preview{height:172px;background:var(--feat-preview-bg);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
+/* Glow coloré par type de carte */
+.feature:nth-child(1) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 10%,rgba(217,119,87,0.20) 0%,transparent 60%);pointer-events:none}
+.feature:nth-child(2) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(124,196,161,0.18) 0%,transparent 60%);pointer-events:none}
+.feature:nth-child(3) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 15%,rgba(124,196,161,0.16) 0%,transparent 60%);pointer-events:none}
+.feature:nth-child(4) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(194,160,66,0.18) 0%,transparent 60%);pointer-events:none}
+.feature:nth-child(5) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 10%,rgba(217,119,87,0.18) 0%,transparent 60%);pointer-events:none}
+.feature:nth-child(6) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(124,168,196,0.18) 0%,transparent 60%);pointer-events:none}
 .feat-body{padding:20px 22px 24px}
 .feature-icon{width:38px;height:38px;border-radius:10px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.18);display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:12px}
 .feature h3{font-size:16px;font-weight:700;letter-spacing:-0.2px;margin-bottom:6px}
@@ -218,13 +219,13 @@ img{display:block;max-width:100%}
 .audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:760px){.audience{grid-template-columns:1fr}}
 .audience-card{border-radius:24px;overflow:hidden;border:1px solid var(--line-2);display:flex;flex-direction:column}
-.audience-preview{height:280px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
-.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.06),var(--bg))}
-.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(124,168,196,0.06),var(--bg))}
+.audience-preview{height:300px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(217,119,87,0.10) 0%,rgba(217,119,87,0.02) 50%,var(--bg-2) 100%)}
+.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(124,168,196,0.10) 0%,rgba(124,168,196,0.02) 50%,var(--bg-2) 100%)}
 .audience-body{padding:26px 28px 30px;background:var(--card-bg2)}
 
 /* Calendar mockup */
-.cal-mock{position:absolute;top:14px;left:14px;right:14px;background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:14px}
+.cal-mock{position:absolute;top:16px;left:16px;right:16px;background:rgba(18,18,26,0.98);border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
 .cal-mock-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .cal-mock-title{font-size:13px;font-weight:700;color:#fff}
 .cal-mock-nav{display:flex;gap:6px}
@@ -239,7 +240,7 @@ img{display:block;max-width:100%}
 .cal-dot{width:4px;height:4px;border-radius:2px}
 
 /* Nutrition mockup */
-.nutri-mock{position:absolute;top:14px;left:14px;right:14px;background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:14px}
+.nutri-mock{position:absolute;top:16px;left:16px;right:16px;background:rgba(18,18,26,0.98);border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
 .nutri-mock-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
 .nutri-mock-sub{font-size:9px;color:var(--faint);font-weight:600;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:12px}
 .nutri-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
@@ -272,71 +273,88 @@ img{display:block;max-width:100%}
 
 /* Feature preview content wrappers */
 .feat-preview>*{position:relative;z-index:1;width:100%}
+/* Overrides light-mode feat-preview illustrations */
+[data-theme="light"] .wi-ex{background:rgba(217,119,87,0.09);border-color:rgba(217,119,87,0.22)}
+[data-theme="light"] .wi-ex-name{color:var(--text)}
+[data-theme="light"] .wi-step{background:rgba(0,0,0,0.06);border-color:rgba(0,0,0,0.14);color:var(--text)}
+[data-theme="light"] .mb-label{color:var(--dim)}
+[data-theme="light"] .mb-track{background:rgba(0,0,0,0.08)}
+[data-theme="light"] .mb-meal-chip{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.10);color:var(--dim)}
+[data-theme="light"] .xl-table th{color:var(--faint);border-color:rgba(0,0,0,0.10)}
+[data-theme="light"] .xl-table td{color:var(--dim);border-color:rgba(0,0,0,0.05)}
+[data-theme="light"] .sync-node{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12)}
+[data-theme="light"] .sync-node-label{color:var(--faint)}
+[data-theme="light"] .sync-node-val{color:var(--text)}
+[data-theme="light"] .sync-log{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.08)}
+[data-theme="light"] .sync-log-row{color:var(--dim);border-color:rgba(0,0,0,0.06)}
+[data-theme="light"] .sync-log-time{color:var(--faint)}
+[data-theme="light"] .bc-label{color:var(--faint)}
+[data-theme="light"] .chat-bubble{color:var(--text)}
 
 /* Workout illustration */
-.wi-ex{background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.22);border-radius:10px;padding:10px}
-.wi-ex-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(217,119,87,0.18);color:var(--accent);font-size:8px;font-weight:700;margin-bottom:3px}
-.wi-ex-name{font-size:12px;font-weight:700;color:#fff;margin-bottom:2px}
-.wi-ex-prev{font-size:8px;color:var(--steel);margin-bottom:7px}
+.wi-ex{background:rgba(217,119,87,0.12);border:1px solid rgba(217,119,87,0.30);border-radius:12px;padding:11px;width:100%}
+.wi-ex-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(217,119,87,0.22);color:var(--accent);font-size:8px;font-weight:700;margin-bottom:3px}
+.wi-ex-name{font-size:12px;font-weight:800;color:#fff;margin-bottom:2px}
+.wi-ex-prev{font-size:8px;color:#7ca8c4;margin-bottom:7px}
 .wi-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
-.wi-step{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 7px;font-size:9px;font-weight:700;color:#fff}
+.wi-step{background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:3px 7px;font-size:9px;font-weight:700;color:#fff}
 .wi-x{font-size:8px;color:var(--faint)}
 .wi-check{margin-left:auto;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px}
-.wi-check.done{background:rgba(217,119,87,0.20);color:var(--accent);border:1px solid rgba(217,119,87,0.35)}
-.wi-check.active{background:var(--grad);color:#fff}
-.wi-timer{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;font-weight:700;color:var(--sage)}
+.wi-check.done{background:rgba(217,119,87,0.28);color:var(--accent);border:1px solid rgba(217,119,87,0.45)}
+.wi-check.active{background:var(--grad);color:#fff;box-shadow:0 2px 8px rgba(217,119,87,0.5)}
+.wi-timer{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;font-weight:700;color:#7cc4a1}
 
 /* Macro bars */
 .mb-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
-.mb-row{margin-bottom:8px}
-.mb-label{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-bottom:3px;font-weight:600}
-.mb-track{height:5px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden}
+.mb-row{margin-bottom:7px}
+.mb-label{display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.70);margin-bottom:3px;font-weight:600}
+.mb-track{height:6px;border-radius:3px;background:rgba(255,255,255,0.10);overflow:hidden}
 .mb-fill{height:100%;border-radius:3px}
 .mb-meals{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
-.mb-meal-chip{padding:3px 8px;border-radius:999px;font-size:8px;font-weight:600;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);color:var(--dim)}
+.mb-meal-chip{padding:3px 8px;border-radius:999px;font-size:8px;font-weight:600;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.65)}
 .mb-meal-chip span{color:var(--accent);margin-left:3px}
 .mb-meal-pending{opacity:0.5}
 
 /* Excel table */
-.xl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.xl-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(124,196,161,0.12);border:1px solid rgba(124,196,161,0.25);color:var(--sage);font-size:9px;font-weight:700}
-.xl-status{font-size:9px;color:var(--sage);font-weight:700}
+.xl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.xl-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:7px;background:rgba(124,196,161,0.16);border:1px solid rgba(124,196,161,0.35);color:#7cc4a1;font-size:9px;font-weight:700}
+.xl-status{font-size:9px;color:#7cc4a1;font-weight:700}
 .xl-table{width:100%;border-collapse:collapse}
-.xl-table th{font-size:8px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;padding:3px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07)}
-.xl-table td{font-size:9px;color:var(--dim);padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.xl-table th{font-size:8px;color:rgba(255,255,255,0.40);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;padding:3px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.10)}
+.xl-table td{font-size:9px;color:rgba(255,255,255,0.65);padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.05)}
 .xl-table tr:last-child td{border:none}
-.xl-day{color:var(--accent)!important;font-weight:700}
+.xl-day{color:#d97757!important;font-weight:800}
 
 /* Sync illustration */
 .sync-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.sync-node{flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:8px 10px;text-align:center}
-.sync-node-label{font-size:8px;color:var(--faint);font-weight:700;letter-spacing:0.4px;text-transform:uppercase}
-.sync-node-val{font-size:12px;font-weight:800;color:#fff;margin-top:2px}
-.sync-arrow{font-size:20px;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
-.sync-log{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:8px 10px}
-.sync-log-row{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:9px;color:var(--dim);border-bottom:1px solid rgba(255,255,255,0.04)}
+.sync-node{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:10px;padding:8px 10px;text-align:center}
+.sync-node-label{font-size:8px;color:rgba(255,255,255,0.45);font-weight:700;letter-spacing:0.4px;text-transform:uppercase}
+.sync-node-val{font-size:13px;font-weight:800;color:#fff;margin-top:2px}
+.sync-arrow{font-size:22px;animation:pulse 2s ease-in-out infinite;flex-shrink:0;filter:drop-shadow(0 0 6px rgba(194,160,66,0.7))}
+.sync-log{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:9px 11px}
+.sync-log-row{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:9px;color:rgba(255,255,255,0.65);border-bottom:1px solid rgba(255,255,255,0.05)}
 .sync-log-row:last-child{border:none}
-.sync-log-dot{width:5px;height:5px;border-radius:2px;flex-shrink:0}
-.sync-log-time{margin-left:auto;color:var(--faint);font-size:8px;font-weight:600}
+.sync-log-dot{width:6px;height:6px;border-radius:3px;flex-shrink:0}
+.sync-log-time{margin-left:auto;color:rgba(255,255,255,0.35);font-size:8px;font-weight:600}
 
 /* Bar chart */
 .bc-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
-.bc-bars{display:flex;align-items:flex-end;gap:5px;height:60px;margin-bottom:5px}
-.bc-bar{flex:1;border-radius:4px 4px 0 0;min-height:4px}
+.bc-bars{display:flex;align-items:flex-end;gap:5px;height:64px;margin-bottom:5px}
+.bc-bar{flex:1;border-radius:5px 5px 0 0;min-height:4px}
 .bc-labels{display:flex;gap:5px}
-.bc-label{flex:1;text-align:center;font-size:8px;color:var(--faint);font-weight:600}
-.bc-streak{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;color:var(--accent)}
+.bc-label{flex:1;text-align:center;font-size:8px;color:rgba(255,255,255,0.40);font-weight:600}
+.bc-streak{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;font-weight:700;color:var(--accent)}
 
 /* Chat preview */
-.chat-preview{display:flex;flex-direction:column;gap:9px;width:100%}
-.chat-msg{display:flex;align-items:flex-end;gap:8px}
+.chat-preview{display:flex;flex-direction:column;gap:8px;width:100%}
+.chat-msg{display:flex;align-items:flex-end;gap:7px}
 .chat-msg-athlete{flex-direction:row-reverse}
 .chat-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
-.chat-avatar-coach{background:linear-gradient(135deg,#d97757,#c97586);color:#fff}
-.chat-avatar-athlete{background:linear-gradient(135deg,#7ca8c4,#8e6cb6);color:#fff}
-.chat-bubble{max-width:80%;padding:7px 10px;border-radius:13px;font-size:11px;line-height:1.45;color:#fff}
-.chat-bubble-coach{background:rgba(217,119,87,0.25);border:1px solid rgba(217,119,87,0.35);border-bottom-left-radius:3px}
-.chat-bubble-athlete{background:rgba(124,168,196,0.25);border:1px solid rgba(124,168,196,0.35);border-bottom-right-radius:3px}
+.chat-avatar-coach{background:linear-gradient(135deg,#d97757,#c97586);color:#fff;box-shadow:0 2px 8px rgba(217,119,87,0.4)}
+.chat-avatar-athlete{background:linear-gradient(135deg,#7ca8c4,#8e6cb6);color:#fff;box-shadow:0 2px 8px rgba(124,168,196,0.4)}
+.chat-bubble{max-width:82%;padding:7px 10px;border-radius:13px;font-size:10.5px;line-height:1.45;color:#fff}
+.chat-bubble-coach{background:rgba(217,119,87,0.30);border:1px solid rgba(217,119,87,0.45);border-bottom-left-radius:3px}
+.chat-bubble-athlete{background:rgba(124,168,196,0.28);border:1px solid rgba(124,168,196,0.42);border-bottom-right-radius:3px}
 
 /* Steps */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
@@ -395,7 +413,7 @@ img{display:block;max-width:100%}
   .phone-wrap{display:none}
 
   /* Features */
-  .feat-preview{height:130px}
+  .feat-preview{height:140px}
   .feat-body{padding:16px 18px 20px}
   .feature h3{font-size:15px}
   .feature p{font-size:13px}
@@ -641,13 +659,13 @@ img{display:block;max-width:100%}
           <div style="width:100%">
             <div class="bc-title">📊 Volume hebdo (kg)</div>
             <div class="bc-bars">
-              <div class="bc-bar" style="height:55%;background:rgba(217,119,87,0.45)"></div>
-              <div class="bc-bar" style="height:72%;background:rgba(217,119,87,0.55)"></div>
-              <div class="bc-bar" style="height:40%;background:rgba(217,119,87,0.40)"></div>
-              <div class="bc-bar" style="height:90%;background:linear-gradient(180deg,#d97757,#c97586)"></div>
-              <div class="bc-bar" style="height:65%;background:rgba(217,119,87,0.50)"></div>
-              <div class="bc-bar" style="height:15%;background:rgba(255,255,255,0.07)"></div>
-              <div class="bc-bar" style="height:8%;background:rgba(255,255,255,0.05)"></div>
+              <div class="bc-bar" style="height:55%;background:rgba(217,119,87,0.60)"></div>
+              <div class="bc-bar" style="height:72%;background:rgba(217,119,87,0.70)"></div>
+              <div class="bc-bar" style="height:40%;background:rgba(217,119,87,0.55)"></div>
+              <div class="bc-bar" style="height:90%;background:linear-gradient(180deg,#d97757,#c97586);box-shadow:0 0 12px rgba(217,119,87,0.5)"></div>
+              <div class="bc-bar" style="height:65%;background:rgba(217,119,87,0.65)"></div>
+              <div class="bc-bar" style="height:18%;background:rgba(255,255,255,0.12)"></div>
+              <div class="bc-bar" style="height:10%;background:rgba(255,255,255,0.08)"></div>
             </div>
             <div class="bc-labels"><span class="bc-label">L</span><span class="bc-label">M</span><span class="bc-label">M</span><span class="bc-label" style="color:#d97757;font-weight:700">J</span><span class="bc-label">V</span><span class="bc-label">S</span><span class="bc-label">D</span></div>
             <div class="bc-streak">🔥 5 jours consécutifs</div>
@@ -686,8 +704,7 @@ img{display:block;max-width:100%}
   <div class="container">
     <div class="section-head">
       <div class="eyebrow">Pour qui</div>
-      <h2 class="section-title">Une app, <span class="gradient-text">deux rôles.</span></h2>
-      <p class="section-sub">Coach ou athlète, chacun voit l'interface adaptée à son rôle.</p>
+      <h2 class="section-title">Fait pour <span class="gradient-text">chaque rôle.</span></h2>
     </div>
     <div class="audience">
 
