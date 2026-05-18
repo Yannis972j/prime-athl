@@ -12,8 +12,16 @@
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png"/>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
+<link rel="canonical" href="https://prime-athl.onrender.com/Muscu.html"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="preconnect" href="https://unpkg.com"/>
+<link rel="preconnect" href="https://cdn.sheetjs.com"/>
+<link rel="preconnect" href="https://cdn.socket.io"/>
+<link rel="preload" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" as="script" crossorigin/>
+<link rel="preload" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" as="script" crossorigin/>
+<link rel="preload" href="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" as="script"/>
+<link rel="preload" href="https://cdn.socket.io/4.8.1/socket.io.min.js" as="script" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
   html,body,#root{height:100%;margin:0}
@@ -65,6 +73,11 @@ const THEMES={
     good:'#7cc4a1',warn:'#e6c269',danger:'#c97586',
     macroP:'#c97586',macroC:'#7ca8c4',macroL:'#c2a042',
     radial:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',
+    cardA:'rgba(28,28,40,0.95)',cardB:'rgba(12,12,18,0.95)',
+    cardAccentA:'rgba(217,119,87,0.12)',cardAccentB:'rgba(20,20,28,0.92)',
+    glassA:'rgba(28,28,40,0.8)',glassB:'rgba(14,14,20,0.8)',
+    glassAccentA:'rgba(217,119,87,0.18)',glassAccentB:'rgba(20,20,28,0.6)',
+    cardShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',
   },
   luxe:{
     bg:'#0c0c10',bgRaise:'#14141c',border:'rgba(200,200,240,0.06)',
@@ -73,6 +86,11 @@ const THEMES={
     good:'#5a9080',warn:'#a89060',danger:'#9070a4',
     macroP:'#9070a4',macroC:'#6080b0',macroL:'#908060',
     radial:'radial-gradient(ellipse at 30% 0%,#1a1a26 0%,#0c0c10 55%)',
+    cardA:'rgba(28,28,38,0.95)',cardB:'rgba(14,14,22,0.95)',
+    cardAccentA:'rgba(144,144,196,0.10)',cardAccentB:'rgba(20,20,28,0.92)',
+    glassA:'rgba(28,28,38,0.8)',glassB:'rgba(14,14,22,0.8)',
+    glassAccentA:'rgba(144,144,196,0.18)',glassAccentB:'rgba(20,20,28,0.6)',
+    cardShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',
   },
   light:{
     bg:'#f4f4f2',bgRaise:'#ffffff',border:'rgba(0,0,0,0.09)',
@@ -81,6 +99,11 @@ const THEMES={
     good:'#2a8060',warn:'#907020',danger:'#b05070',
     macroP:'#b05070',macroC:'#3a6090',macroL:'#907020',
     radial:'#f4f4f2',
+    cardA:'rgba(255,255,255,0.97)',cardB:'rgba(244,244,242,0.97)',
+    cardAccentA:'rgba(217,119,87,0.08)',cardAccentB:'rgba(255,255,255,0.95)',
+    glassA:'rgba(255,255,255,0.92)',glassB:'rgba(248,248,246,0.92)',
+    glassAccentA:'rgba(217,119,87,0.12)',glassAccentB:'rgba(255,250,248,0.92)',
+    cardShadow:'0 1px 0 rgba(255,255,255,0.6) inset,0 12px 32px rgba(0,0,0,0.08)',
   },
 };
 let _themeUpdate=null;
@@ -184,7 +207,7 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
 function HoloCard({children,intense=false,style={},onClick,padding=18}){
   return(
     <div onClick={onClick} style={{position:'relative',borderRadius:22,padding:1,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 12s linear infinite',cursor:onClick?'pointer':'default',...style}}>
-      <div style={{position:'relative',borderRadius:21,background:intense?'linear-gradient(160deg,rgba(217,119,87,0.12),rgba(20,20,28,0.92) 60%)':'linear-gradient(160deg,rgba(28,28,40,0.95),rgba(12,12,18,0.95))',padding,overflow:'hidden'}}>
+      <div style={{position:'relative',borderRadius:21,background:intense?`linear-gradient(160deg,${T.cardAccentA},${T.cardAccentB} 60%)`:`linear-gradient(160deg,${T.cardA},${T.cardB})`,padding,overflow:'hidden'}}>
         <div style={{position:'absolute',inset:0,pointerEvents:'none',background:'radial-gradient(120% 80% at 0% 0%,rgba(217,119,87,0.10),transparent 40%),radial-gradient(120% 80% at 100% 100%,rgba(124,168,196,0.06),transparent 50%)'}}/>
         <div style={{position:'relative'}}>{children}</div>
       </div>
@@ -194,7 +217,7 @@ function HoloCard({children,intense=false,style={},onClick,padding=18}){
 
 function GlassCard({children,style={},onClick,padding=16,accent=false}){
   return(
-    <div onClick={onClick} style={{position:'relative',borderRadius:20,padding,background:accent?'linear-gradient(160deg,rgba(217,119,87,0.18),rgba(201,117,134,0.06) 60%,rgba(20,20,28,0.6))':'linear-gradient(160deg,rgba(28,28,40,0.8),rgba(14,14,20,0.8))',border:`1px solid ${accent?'rgba(217,119,87,0.35)':T.border}`,boxShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',cursor:onClick?'pointer':'default',...style}}>{children}</div>
+    <div onClick={onClick} style={{position:'relative',borderRadius:20,padding,background:accent?`linear-gradient(160deg,${T.glassAccentA},rgba(201,117,134,0.06) 60%,${T.glassAccentB})`:`linear-gradient(160deg,${T.glassA},${T.glassB})`,border:`1px solid ${accent?'rgba(217,119,87,0.35)':T.border}`,boxShadow:T.cardShadow,cursor:onClick?'pointer':'default',...style}}>{children}</div>
   );
 }
 

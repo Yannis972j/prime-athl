@@ -260,6 +260,16 @@ const authLimiter = rateLimit({
 // Le express.static plus bas servira automatiquement /index.html sur "/", mais on garde un fallback explicite :
 app.get('/app', (req, res) => res.redirect('/Muscu.html'));
 
+// Si build.js a généré Muscu.app.html (vanilla JS, sans Babel — bien plus rapide),
+// on le sert à la place de Muscu.html. Sinon fallback sur la version source (Babel CDN).
+const MUSCU_APP_BUILT = path.join(FRONTEND, 'Muscu.app.html');
+app.get('/Muscu.html', (req, res, next) => {
+  fs.access(MUSCU_APP_BUILT, fs.constants.F_OK, (err) => {
+    if (err) return next();
+    res.sendFile(MUSCU_APP_BUILT);
+  });
+});
+
 app.use(express.static(FRONTEND));
 
 // Helper : pose un cookie httpOnly avec le JWT (en plus du Bearer renvoyé en JSON)

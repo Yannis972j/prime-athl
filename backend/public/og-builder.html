@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>OG Image Builder — Prime Athl</title>
+<style>
+  body{margin:0;font-family:-apple-system,Inter,system-ui,sans-serif;background:#1a1a24;color:#f0f0f2;padding:24px;display:flex;flex-direction:column;align-items:center;gap:16px}
+  canvas{box-shadow:0 30px 80px rgba(0,0,0,0.5);border-radius:8px;max-width:100%;height:auto}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  button{padding:12px 22px;border-radius:10px;background:linear-gradient(135deg,#d97757,#c97586);color:#fff;border:0;font-weight:700;font-size:14px;cursor:pointer}
+  button:hover{opacity:0.9}
+  p{color:#a8a097;font-size:13px;max-width:760px;text-align:center;line-height:1.6}
+  code{background:rgba(255,255,255,0.07);padding:2px 6px;border-radius:4px;font-family:JetBrains Mono,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<h1 style="margin:0;font-weight:800;letter-spacing:-1px">Generateur OG Image</h1>
+<p>Cette page rend le visuel 1200x630 utilise comme apercu sur LinkedIn, Facebook, WhatsApp.<br/>
+Clique <b>Telecharger PNG</b>, puis place le fichier dans <code>backend/public/og-image.png</code>. Met aussi a jour les balises <code>og:image</code> dans <code>index.html</code> pour pointer vers le .png.</p>
+<canvas id="cv" width="1200" height="630" style="width:600px"></canvas>
+<div class="row">
+  <button onclick="dl()">Telecharger PNG (1200x630)</button>
+  <button onclick="render()">Re-render</button>
+</div>
+
+<script>
+const c = document.getElementById('cv');
+const ctx = c.getContext('2d');
+
+function render(){
+  const W = 1200, H = 630;
+
+  // Background degradient
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0a0a0e');
+  bg.addColorStop(1, '#13131a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Glow 1 (warm)
+  const g1 = ctx.createRadialGradient(W*0.75, H*0.20, 0, W*0.75, H*0.20, 500);
+  g1.addColorStop(0, 'rgba(217,119,87,0.22)');
+  g1.addColorStop(1, 'rgba(217,119,87,0)');
+  ctx.fillStyle = g1;
+  ctx.fillRect(0, 0, W, H);
+
+  // Glow 2 (cool)
+  const g2 = ctx.createRadialGradient(W*0.20, H*0.80, 0, W*0.20, H*0.80, 400);
+  g2.addColorStop(0, 'rgba(124,168,196,0.12)');
+  g2.addColorStop(1, 'rgba(124,168,196,0)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, 0, W, H);
+
+  // Logo mark (rounded square with PA)
+  ctx.save();
+  const lx = 80, ly = 220, ls = 64, lr = 18;
+  const lg = ctx.createLinearGradient(lx, ly, lx+ls, ly+ls);
+  lg.addColorStop(0, '#d97757');
+  lg.addColorStop(0.5, '#c97586');
+  lg.addColorStop(1, '#8e6cb6');
+  ctx.fillStyle = lg;
+  roundRect(ctx, lx, ly, ls, ls, lr);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 26px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PA', lx + ls/2, ly + ls/2 + 2);
+  ctx.restore();
+
+  // Brand name
+  ctx.fillStyle = '#f4f1ed';
+  ctx.font = '800 28px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Prime Athl', 160, 252);
+
+  // Headline ligne 1
+  ctx.fillStyle = '#f4f1ed';
+  ctx.font = '800 62px Inter, -apple-system, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Le suivi coach-athlete,', 80, 340);
+
+  // Headline ligne 2 (degradient)
+  const hg = ctx.createLinearGradient(80, 360, 700, 420);
+  hg.addColorStop(0, '#d97757');
+  hg.addColorStop(0.5, '#c97586');
+  hg.addColorStop(1, '#8e6cb6');
+  ctx.fillStyle = hg;
+  ctx.fillText('enfin simple.', 80, 415);
+
+  // Subline
+  ctx.fillStyle = '#a8a097';
+  ctx.font = '500 24px Inter, -apple-system, sans-serif';
+  ctx.fillText('Programmes - Nutrition - Messagerie - Sync temps reel', 80, 480);
+
+  // Pills
+  drawPill(ctx,  80, 510, 110, 34, 'Gratuit',         '#d97757', 'rgba(217,119,87,0.15)', 'rgba(217,119,87,0.4)');
+  drawPill(ctx, 204, 510, 156, 34, 'iOS & Android',   '#7cc4a1', 'rgba(124,196,161,0.12)', 'rgba(124,196,161,0.35)');
+  drawPill(ctx, 374, 510, 130, 34, 'Temps reel',      '#7ca8c4', 'rgba(124,168,196,0.12)', 'rgba(124,168,196,0.35)');
+
+  // Phone mockup (right side)
+  drawPhone(ctx, 780, 80);
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function drawPill(ctx, x, y, w, h, text, color, bg, border){
+  ctx.fillStyle = bg;
+  roundRect(ctx, x, y, w, h, 8);
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = '700 13px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w/2, y + h/2 + 1);
+}
+
+function drawPhone(ctx, x, y){
+  const w = 340, h = 470;
+  // Frame
+  ctx.fillStyle = '#1a1a24';
+  roundRect(ctx, x, y, w, h, 44);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.stroke();
+
+  // Dynamic island
+  ctx.fillStyle = '#000';
+  roundRect(ctx, x + 100, y + 12, 140, 26, 13);
+  ctx.fill();
+
+  // Exercise card
+  drawCard(ctx, x + 20, y + 68, 300, 52, 'rgba(217,119,87,0.12)', 'rgba(217,119,87,0.22)');
+  drawPill(ctx, x + 32, y + 76, 70, 16, 'PECTORAUX', '#d97757', 'rgba(217,119,87,0.25)', 'rgba(217,119,87,0.4)');
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 14px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Developpe couche', x + 32, y + 109);
+
+  // Set 1 (done)
+  drawSet(ctx, x + 20, y + 130, 300, 32, '#d97757', 'V', '80 kg  x  8 reps', 1);
+  // Set 2 (done)
+  drawSet(ctx, x + 20, y + 168, 300, 32, '#d97757', 'V', '80 kg  x  8 reps', 1);
+  // Set 3 (active)
+  drawSet(ctx, x + 20, y + 206, 300, 32, 'rgba(217,119,87,0.40)', '3', '82.5 kg  x  - reps', 0.5);
+
+  // Timer
+  ctx.fillStyle = '#7cc4a1';
+  ctx.font = '700 12px Inter, -apple-system, sans-serif';
+  ctx.fillText('Repos  01:42', x + 20, y + 264);
+
+  // Nutrition mini block
+  drawCard(ctx, x + 20, y + 280, 300, 170, 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)');
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 11px Inter, -apple-system, sans-serif';
+  ctx.fillText('Plan nutrition - Lundi', x + 32, y + 300);
+
+  drawBar(ctx, x + 32, y + 310, 276, '#d97757', 0.75);
+  ctx.fillStyle = '#a8a097';
+  ctx.font = '500 9px Inter, -apple-system, sans-serif';
+  ctx.fillText('Calories  1 840 / 2 450 kcal', x + 32, y + 328);
+
+  drawBar(ctx, x + 32, y + 334, 276, '#7cc4a1', 0.75);
+  ctx.fillText('Proteines  142 / 190 g', x + 32, y + 352);
+
+  drawBar(ctx, x + 32, y + 358, 276, '#7ca8c4', 0.67);
+  ctx.fillText('Glucides  180 / 270 g', x + 32, y + 376);
+
+  drawBar(ctx, x + 32, y + 382, 276, '#c2a042', 0.74);
+  ctx.fillText('Lipides  48 / 65 g', x + 32, y + 400);
+}
+
+function drawCard(ctx, x, y, w, h, fill, stroke){
+  ctx.fillStyle = fill;
+  roundRect(ctx, x, y, w, h, 10);
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawSet(ctx, x, y, w, h, badgeColor, badgeText, label, badgeOpacity){
+  ctx.fillStyle = 'rgba(217,119,87,0.08)';
+  roundRect(ctx, x, y, w, h, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(217,119,87,0.20)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // Badge
+  ctx.globalAlpha = badgeOpacity;
+  ctx.fillStyle = badgeColor;
+  roundRect(ctx, x + 8, y + 8, 16, 16, 4);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 9px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badgeText, x + 16, y + 16);
+  // Label
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 11px Inter, -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x + 36, y + 17);
+}
+
+function drawBar(ctx, x, y, w, color, fill){
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  roundRect(ctx, x, y, w, 4, 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  roundRect(ctx, x, y, w * fill, 4, 2);
+  ctx.fill();
+}
+
+function dl(){
+  const link = document.createElement('a');
+  link.download = 'og-image.png';
+  link.href = c.toDataURL('image/png');
+  link.click();
+}
+
+render();
+</script>
+</body>
+</html>
