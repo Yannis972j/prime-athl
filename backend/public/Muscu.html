@@ -6438,8 +6438,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         )}
         {!screen&&(
           <div className="tab-content" style={{height:'100%',overflow:'auto'}} key={tab}>
-            {tab==='programme'&&<HomeScreen workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram} onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')} onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll} refreshing={refreshing} history={history} onRefreshHistory={refreshAll}/>}
-            {tab==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={refreshAll} refreshing={refreshing}/>}
+            {tab==='programme'&&<ProgrammeTab
+              workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
+              onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
+              onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
+              refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
+              authToken={authToken} nutriRefreshKey={nutriRefreshKey}
+            />}
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
             {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}
             {tab==='explorer'&&<ExplorerScreen profile={profile} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>}
@@ -6466,18 +6471,50 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   );
 }
 
+// ── Programme Tab (Séances + Nutrition réunis) ───────────────────────────────
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey}){
+  const[sub,setSub]=React.useState('seances');
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      {/* Sous-navigation */}
+      <div style={{padding:'10px 16px 0',flexShrink:0}}>
+        <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`}}>
+          {[{id:'seances',label:'🏋️ Séances'},{id:'nutrition',label:'🍎 Nutrition'}].map(s=>(
+            <button key={s.id} onClick={()=>setSub(s.id)} style={{
+              flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+              background:sub===s.id?T.accentSoft:'transparent',
+              color:sub===s.id?T.accent:T.textFaint,
+              transition:'all 0.2s',letterSpacing:0.2,
+            }}>{s.label}</button>
+          ))}
+        </div>
+      </div>
+      {/* Contenu */}
+      <div style={{flex:1,overflow:'auto'}}>
+        {sub==='seances'&&<HomeScreen
+          workout={workout} importedPrograms={importedPrograms} onImportPrograms={onImportPrograms}
+          onStartWorkout={onStartWorkout} onEdit={onEdit} onResume={onResume}
+          onEditDay={onEditDay} profile={profile} programMeta={programMeta}
+          onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
+        />}
+        {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
+      </div>
+    </div>
+  );
+}
+
 function BottomTabBar({tab,onTab,role,unreadMessages}){
   const items=role==='coach'?[
     {id:'coach',icon:'users',label:'Coach'},
-    {id:'programme',icon:'grid',label:'Prog'},
+    {id:'programme',icon:'grid',label:'Programme'},
     {id:'explorer',icon:'compass',label:'Explorer'},
     {id:'messages',icon:'message',label:'Chat'},
     {id:'profile',icon:'user',label:'Profil'},
   ]:[
     {id:'programme',icon:'grid',label:'Programme'},
-    {id:'nutrition',icon:'apple',label:'Nutri'},
     {id:'explorer',icon:'compass',label:'Explorer'},
     {id:'messages',icon:'message',label:'Chat'},
+    {id:'stats',icon:'chart',label:'Stats'},
     {id:'profile',icon:'user',label:'Profil'},
   ];
   return(
