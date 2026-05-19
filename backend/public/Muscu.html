@@ -5339,6 +5339,11 @@ function CoachScreen({authToken,authUser}){
     }catch(e){alert('Erreur: '+e.message);}
   };
 
+  // ── Calendar view (must come before detail check) ───────────────────────────
+  if(coachView==='calendar'){
+    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
+  }
+
   // ── Detail view ─────────────────────────────────
   if(selected){
     const a=detail||selected;
@@ -5620,10 +5625,6 @@ function CoachScreen({authToken,authUser}){
 
   // ── List view ───────────────────────────────────
   const unusedInvites=invites.filter(i=>!i.used);
-
-  if(coachView==='calendar'){
-    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
-  }
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
