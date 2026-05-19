@@ -2441,7 +2441,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
     e.target.value='';
     parseYannisExcel(file,
       programs=>{
-        onImportPrograms(programs);
+        if(onImportPrograms)onImportPrograms(programs);
         const nS=Object.keys(programs).length;
         const nD=Object.values(programs).reduce((s,d)=>s+Object.keys(d).length,0);
         setImportMsg(`✓ ${nS} mois · ${nD} jours importés`);
