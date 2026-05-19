@@ -2394,6 +2394,43 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef=React.useRef(null);
   const[importMsg,setImportMsg]=React.useState(null);
+
+  // Archives programme
+  const[archives,setArchives]=React.useState([]);
+  const[saveMsg,setSaveMsg]=React.useState(null);
+  const[viewArchive,setViewArchive]=React.useState(null);
+  const[confirmDel,setConfirmDel]=React.useState(null);
+  const[showSaveModal,setShowSaveModal]=React.useState(false);
+  const[saveName,setSaveName]=React.useState('');
+
+  const loadArchives=React.useCallback(async()=>{
+    try{const r=await apiCall('/api/my-program/saved');setArchives(r||[]);}catch{}
+  },[]);
+  React.useEffect(()=>{loadArchives();},[loadArchives]);
+
+  const saveCurrentProgram=async(name)=>{
+    try{
+      await apiCall('/api/my-program/save',{method:'POST',body:{name}});
+      setSaveMsg('✓ Programme sauvegardé');setShowSaveModal(false);setSaveName('');
+      await loadArchives();setTimeout(()=>setSaveMsg(null),3000);
+    }catch(e){setSaveMsg('✗ '+(e.message||e));setTimeout(()=>setSaveMsg(null),3000);}
+  };
+  const openArchive=async(id)=>{
+    try{const r=await apiCall('/api/my-program/saved/'+id);setViewArchive(r);}catch{}
+  };
+  const restoreArchive=async(id,name)=>{
+    if(!confirm(`Utiliser "${name}" comme programme actif ?`))return;
+    try{
+      const r=await apiCall('/api/my-program/saved/'+id);
+      await apiCall('/api/my-program/restore/'+id,{method:'POST'});
+      if(onImportPrograms&&r.data)onImportPrograms(r.data);
+      setSaveMsg('✓ Programme chargé');setViewArchive(null);setTimeout(()=>setSaveMsg(null),3000);
+    }catch(e){setSaveMsg('✗ '+(e.message||e));setTimeout(()=>setSaveMsg(null),3000);}
+  };
+  const deleteArchive=async(id)=>{
+    await apiCall('/api/my-program/saved/'+id,{method:'DELETE'});
+    setConfirmDel(null);setViewArchive(null);await loadArchives();
+  };
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
@@ -2464,6 +2501,70 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
     <div style={{padding:'18px 18px 30px',color:T.text}}>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleFile}/>
 
+      {/* Modal : voir une archive */}
+      {viewArchive&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-end',backdropFilter:'blur(6px)'}} onClick={()=>{setViewArchive(null);setConfirmDel(null);}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxHeight:'82vh',background:T.bgRaise,borderRadius:'20px 20px 0 0',padding:20,overflowY:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700}}>{viewArchive.name}</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>Sauvegardé le {new Date(viewArchive.savedAt).toLocaleDateString('fr-FR')}</div>
+              </div>
+              <button onClick={()=>{setViewArchive(null);setConfirmDel(null);}} style={{width:32,height:32,borderRadius:10,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',color:T.textDim,fontSize:18,cursor:'pointer'}}>×</button>
+            </div>
+            <div style={{display:'flex',gap:8,marginBottom:14}}>
+              <button onClick={()=>restoreArchive(viewArchive.id,viewArchive.name)} style={{flex:1,height:42,borderRadius:12,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+                📋 Utiliser ce programme
+              </button>
+              <button onClick={()=>setConfirmDel(viewArchive.id)} style={{height:42,padding:'0 14px',borderRadius:12,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.08)',color:'#c97586',fontSize:18,cursor:'pointer'}}>🗑</button>
+            </div>
+            {confirmDel===viewArchive.id&&(
+              <div style={{padding:12,borderRadius:12,background:'rgba(201,117,134,0.10)',border:'1px solid rgba(201,117,134,0.25)',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <span style={{fontSize:13,color:'#c97586',fontWeight:600}}>Supprimer définitivement ?</span>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>deleteArchive(viewArchive.id)} style={{height:32,padding:'0 14px',borderRadius:9,border:'none',background:'#c97586',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Oui</button>
+                  <button onClick={()=>setConfirmDel(null)} style={{height:32,padding:'0 12px',borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:12,cursor:'pointer'}}>Non</button>
+                </div>
+              </div>
+            )}
+            {Object.entries(viewArchive.data||{}).map(([sheetName,sheetDays])=>(
+              <div key={sheetName} style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>{sheetName}</div>
+                {Object.entries(sheetDays).sort(([a],[b])=>['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'].indexOf(a)-['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'].indexOf(b)).map(([dayName,d])=>(
+                  <div key={dayName} style={{marginBottom:8,padding:12,borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                      <div style={{fontSize:13,fontWeight:700}}>{dayName}</div>
+                      <div style={{fontSize:10,color:T.textFaint}}>{d.category}</div>
+                    </div>
+                    {(d.exercises||[]).slice(0,4).map((ex,i)=>(
+                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'3px 0',borderTop:i>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        {ex.name} · {ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}{ex.weightStr&&ex.weightStr!=='0'?` · ${ex.weightStr}kg`:''}
+                      </div>
+                    ))}
+                    {(d.exercises||[]).length>4&&<div style={{fontSize:10,color:T.textFaint,marginTop:4}}>+{d.exercises.length-4} exercices</div>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal : nommer et sauvegarder */}
+      {showSaveModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.70)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(6px)'}} onClick={()=>setShowSaveModal(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:380,background:T.bgRaise,borderRadius:18,padding:22}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Sauvegarder ce programme</div>
+            <div style={{fontSize:12,color:T.textFaint,marginBottom:14}}>Donne un nom à cette archive</div>
+            <input value={saveName} onChange={e=>setSaveName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveName.trim()&&saveCurrentProgram(saveName.trim())} placeholder="Ex : Bloc force Juin 2026" autoFocus style={{width:'100%',height:42,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,padding:'0 12px',outline:'none',marginBottom:14,boxSizing:'border-box'}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setShowSaveModal(false)} style={{flex:1,height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.10)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
+              <button onClick={()=>saveName.trim()&&saveCurrentProgram(saveName.trim())} disabled={!saveName.trim()} style={{flex:2,height:40,borderRadius:11,border:'none',background:saveName.trim()?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.05)',color:saveName.trim()?'#fff':T.textFaint,fontSize:13,fontWeight:700,cursor:saveName.trim()?'pointer':'default'}}>Sauvegarder</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header (épuré) */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div style={{flex:1,minWidth:0}}>
@@ -2484,6 +2585,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
 
       {importMsg&&(
         <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>
+      )}
+      {saveMsg&&(
+        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:saveMsg.startsWith('✓')?'rgba(124,196,161,0.12)':'rgba(201,117,134,0.12)',border:`1px solid ${saveMsg.startsWith('✓')?'rgba(124,196,161,0.3)':'rgba(201,117,134,0.3)'}`,color:saveMsg.startsWith('✓')?T.good:'#c97586',fontSize:13,fontWeight:600,textAlign:'center'}}>{saveMsg}</div>
       )}
 
       {/* Resume in-progress workout (compact) */}
@@ -2523,12 +2627,15 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
         </div>
       )}
 
-      {/* Sheet tabs */}
-      {sheetNames.length>1&&(
-        <div style={{display:'flex',gap:6,marginBottom:14,overflowX:'auto',paddingBottom:4}}>
-          {sheetNames.map(name=>(
+      {/* Sheet tabs + bouton sauvegarder */}
+      {sheetNames.length>0&&(
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14,overflowX:'auto',paddingBottom:4}}>
+          {sheetNames.length>1&&sheetNames.map(name=>(
             <button key={name} onClick={()=>{setActiveSheet(name);setSelectedDay(null);}} style={{flexShrink:0,height:32,padding:'0 14px',borderRadius:16,border:sheet===name?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:sheet===name?T.accentSoft:'rgba(255,255,255,0.03)',color:sheet===name?T.accent:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>{name}</button>
           ))}
+          <button onClick={()=>setShowSaveModal(true)} style={{flexShrink:0,marginLeft:'auto',height:32,padding:'0 12px',borderRadius:14,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+            💾 Sauvegarder
+          </button>
         </div>
       )}
 
@@ -2624,6 +2731,27 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             );
           })()}
         </>
+      )}
+
+      {/* Mes archives */}
+      {archives.length>0&&(
+        <div style={{marginTop:24}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.textDim,letterSpacing:0.2}}>MES ARCHIVES</div>
+            <span style={{fontSize:11,color:T.textFaint}}>{archives.length} / 20</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {archives.map(a=>(
+              <div key={a.id} onClick={()=>openArchive(a.id)} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{a.name}</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{a.dayCount} jours · {new Date(a.savedAt).toLocaleDateString('fr-FR')}</div>
+                </div>
+                <Icon name="chevronRight" size={18} stroke={T.textFaint}/>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
