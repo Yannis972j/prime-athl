@@ -543,7 +543,9 @@ function parseYannisExcel(file, onSuccess, onError) {
           const weightStr = String(row[colCharge]||'').trim();
           const repsVal = parseReps(row[colReps]);
           const repsStr = repsVal === null ? '' : String(repsVal);
-          const repsTarget = (repsVal === null || repsVal === 'MAX') ? 10 : repsVal;
+          // Pour les fourchettes "10-12", target numérique = borne basse, targetStr = "10-12"
+          const repsMin = repsVal === null ? 10 : repsVal === 'MAX' ? 10 : (typeof repsVal === 'string' ? (parseInt(repsVal)||10) : repsVal);
+          const repsTarget = repsMin;
           const restStr = String(row[colRest]||'').trim();
           const restSecs = parseRest(restStr);
 
@@ -558,7 +560,7 @@ function parseYannisExcel(file, onSuccess, onError) {
           sheetData[currentDay].exercises.push({
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
-            sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget})),
+            sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
           });
         });
 
@@ -1010,7 +1012,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               {ex.style!=='CARDIO'&&(<div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
-                  const repsDisplay=s.reps||(isNext?'':s.target||'');
+                  const repsDisplay=s.done?s.reps:(isNext?'':(s.target||''));
                   return(
                     <div key={i}>
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 5px 4px 8px',borderRadius:12,background:s.done?'rgba(217,119,87,0.07)':isNext?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.025)',border:`1px solid ${s.done?'rgba(217,119,87,0.18)':isNext?'rgba(217,119,87,0.32)':'rgba(255,255,255,0.06)'}`,transition:'all 0.25s ease'}}>
@@ -1022,7 +1024,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                         <Stepper value={s.weight} onChange={v=>updSet(currentEx,i,{weight:v})} step={2.5} suffix="kg" disabled={s.done}/>
                         <span style={{color:T.textFaint,fontWeight:600,fontSize:11}}>×</span>
                         {/* Reps */}
-                        <Stepper value={repsDisplay} onChange={v=>updSet(currentEx,i,{reps:v})} step={1} target={s.target} disabled={s.done}/>
+                        <Stepper value={repsDisplay} onChange={v=>updSet(currentEx,i,{reps:v})} step={1} target={s.targetStr||s.target} disabled={s.done}/>
                         <div style={{flex:1}}/>
                         {/* Action droite : check / volume */}
                         {!s.done?(
