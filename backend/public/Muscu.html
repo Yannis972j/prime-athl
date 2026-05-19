@@ -481,8 +481,9 @@ function parseYannisExcel(file, onSuccess, onError) {
         const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
         if (!rows.length) return;
 
-        let colJour=0, colStyle=1, colExercice=2, colCharge=3;
-        let colSeries=6, colReps=7, colRest=8;
+        let colJour=0, colStyle=1, colExercice=2, colMuscle=3, colCharge=4;
+        let colDist=5, colVitesse=6, colIncli=7, colDuree=8;
+        let colSeries=9, colReps=10, colRest=11;
 
         const detectCols = row => {
           row.forEach((cell, i) => {
@@ -490,12 +491,21 @@ function parseYannisExcel(file, onSuccess, onError) {
             if (s === 'jour') colJour=i;
             else if (s === 'style') colStyle=i;
             else if (s.startsWith('exerci')) colExercice=i;
+            else if (s.startsWith('muscle')) colMuscle=i;
             else if (s.includes('charge') || s === 'kg') colCharge=i;
+            else if (s.includes('distance')) colDist=i;
+            else if (s.includes('vitesse')) colVitesse=i;
+            else if (s.includes('incli')) colIncli=i;
+            else if (s.includes('dur') && !s.includes('repos')) colDuree=i;
             else if (s.startsWith('serie')) colSeries=i;
             else if (s.startsWith('repeti') || s === 'reps') colReps=i;
             else if (s.includes('repos')) colRest=i;
           });
         };
+
+        // Styles qui s'héritent sur les lignes suivantes (cellule fusionnée Excel)
+        const INHERITABLE = ['SUPERSET','TRISET','ABDOS','CARDIO'];
+        const normalizeStyle = s => s === 'TRI-SET' ? 'TRISET' : s;
 
         const sheetData = {};
         let currentDay = null;
@@ -508,7 +518,7 @@ function parseYannisExcel(file, onSuccess, onError) {
           if (isHeaderRow(row)) { detectCols(row); return; }
           if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); return; }
 
-          const exName = String(row[colExercice]||'').trim();
+          const exName = String(row[colExercice]||'').trim().replace(/^\([ABC]\)\s*/i,'');
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
@@ -517,10 +527,11 @@ function parseYannisExcel(file, onSuccess, onError) {
 
           if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
 
-          const rawStyle = String(row[colStyle]||'').trim().toUpperCase();
-          // Cellule fusionnée Excel : si vide et style précédent était SUPERSET/TRISET, hériter
-          const styleVal = rawStyle || ((lastExplicitStyle==='SUPERSET'||lastExplicitStyle==='TRISET') ? lastExplicitStyle : 'CLASSIQUE');
+          const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
+          const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
           if (rawStyle) lastExplicitStyle = rawStyle;
+
+          const muscleName = String(row[colMuscle]||'').trim() || currentCategory;
           const seriesNum = parseFloat(String(row[colSeries]||'').replace(',','.'));
           const numSets = (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
           if (!isNaN(seriesNum) && seriesNum > 0) lastSeriesCount = numSets;
@@ -533,9 +544,17 @@ function parseYannisExcel(file, onSuccess, onError) {
           const restStr = String(row[colRest]||'').trim();
           const restSecs = parseRest(restStr);
 
+          // Cardio : champs spécifiques
+          const cardio = styleVal === 'CARDIO' ? {
+            distance: String(row[colDist]||'').trim(),
+            vitesse:  String(row[colVitesse]||'').trim(),
+            inclinaison: String(row[colIncli]||'').trim(),
+            duree:    String(row[colDuree]||'').trim(),
+          } : null;
+
           sheetData[currentDay].exercises.push({
-            id: uid(), name: exName, muscle: currentCategory, style: styleVal,
-            rest: restStr, restSeconds: restSecs, weightStr, repsStr,
+            id: uid(), name: exName, muscle: muscleName, style: styleVal,
+            rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
             sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget})),
           });
         });
@@ -572,26 +591,23 @@ function excelExport(workout) {
 }
 
 // ── Workout Editor Screen ─────────────────────────────────
-// Regroupe les exercices consécutifs de même style SUPERSET/TRISET en blocs
-// Abdos = vert (#6bc47a), SUPERSET = bleu, TRISET = or, CLASSIQUE = accent
-function isAbdos(ex){ return (ex.muscle||'').toLowerCase().includes('abdo'); }
+// Couleurs par style
+// CLASSIQUE=gris, SUPERSET=bleu, TRISET=rose, ABDOS=vert, CARDIO=orange
+const STYLE_COLORS={CLASSIQUE:'rgba(180,180,200,0.85)',SUPERSET:'#7ca8c4',TRISET:'#d47aaa',ABDOS:'#6bc47a',CARDIO:'#e8935a'};
 function groupExercises(exercises){
   const groups=[];
   let i=0;
   while(i<exercises.length){
     const ex=exercises[i];
-    if(ex.style==='SUPERSET'||ex.style==='TRISET'){
-      const style=ex.style;
-      const items=[{ex,idx:i}];
-      i++;
-      while(i<exercises.length&&exercises[i].style===style){ items.push({ex:exercises[i],idx:i});i++; }
-      const abdosBlock=items.every(({ex:e})=>isAbdos(e));
-      const color=abdosBlock?'#6bc47a':style==='SUPERSET'?'#7ca8c4':'#c2a042';
-      groups.push({style,color,items});
+    const s=ex.style||'CLASSIQUE';
+    if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
+      const items=[{ex,idx:i}]; i++;
+      while(i<exercises.length&&exercises[i].style===s){ items.push({ex:exercises[i],idx:i});i++; }
+      groups.push({style:s,color:STYLE_COLORS[s]||T.accent,items});
+    } else if(s==='CARDIO'){
+      groups.push({style:'CARDIO',color:STYLE_COLORS.CARDIO,items:[{ex,idx:i}]});i++;
     } else {
-      const color=isAbdos(ex)?'#6bc47a':T.accent;
-      groups.push({style:'CLASSIQUE',color,items:[{ex,idx:i}]});
-      i++;
+      groups.push({style:'CLASSIQUE',color:STYLE_COLORS.CLASSIQUE,items:[{ex,idx:i}]});i++;
     }
   }
   return groups;
@@ -1016,38 +1032,61 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           </button>
         </div>
 
-        {/* up next — groupé par blocs SUPERSET/TRISET */}
+        {/* up next — groupé par blocs */}
         <SectionHeader title="Suite"/>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {groupExercises(exercises).map((group,gi)=>{
+            // CARDIO : bloc spécial avec distance/vitesse/durée
+            if(group.style==='CARDIO'){
+              const {ex:e,idx:i}=group.items[0];
+              const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
+              const c=e.cardio||{};
+              return(
+                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',padding:'10px 14px',borderRadius:14,border:`1px solid ${isActive?group.color+'88':group.color+'33'}`,background:isActive?`${group.color}12`:'rgba(255,255,255,0.02)',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <div style={{width:6,height:6,borderRadius:3,background:group.color,boxShadow:`0 0 6px ${group.color}aa`}}/>
+                    <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6}}>CARDIO</span>
+                    <span style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,flex:1}}>{e.name}</span>
+                    {isActive&&<Pill color={group.color}>NOW</Pill>}
+                  </div>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                    {c.distance&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>📍 {c.distance} km</span>}
+                    {c.vitesse&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⚡ {c.vitesse} km/h</span>}
+                    {c.inclinaison&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⛰ {c.inclinaison}%</span>}
+                    {c.duree&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⏱ {c.duree}</span>}
+                  </div>
+                </button>
+              );
+            }
+            // CLASSIQUE : exo seul
             if(group.style==='CLASSIQUE'){
               const {ex:e,idx:i}=group.items[0];
               const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
               return(
-                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,background:isActive?'rgba(217,119,87,0.06)':'rgba(255,255,255,0.025)',cursor:'pointer'}}>
-                  <div style={{width:28,height:28,borderRadius:8,background:isDone?T.accent:isActive?'transparent':'rgba(255,255,255,0.06)',backgroundImage:isActive?HOLO.iris:'none',backgroundSize:'200% 200%',animation:isActive?'holoShift 6s linear infinite':'none',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
+                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?group.color+'66':'rgba(255,255,255,0.06)'}`,background:isActive?`${group.color}10`:'rgba(255,255,255,0.025)',cursor:'pointer'}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
                     {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
                     <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{e.muscle} · {e.sets.length} séries</div>
                   </div>
-                  {isActive&&<Pill style={{flexShrink:0}}>NOW</Pill>}
+                  {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
                 </button>
               );
             }
-            // SUPERSET ou TRISET : bloc groupé avec bordure colorée
+            // SUPERSET / TRISET / ABDOS : bloc groupé
             const blockDone=group.items.every(({ex:e})=>e.sets.every(s=>s.done));
             const blockActive=group.items.some(({idx:i})=>i===currentEx);
+            const blockLabel=group.style==='ABDOS'?'ABDOS':group.style==='TRISET'?'TRI-SET':'SUPERSET';
+            const blockSub=group.style==='ABDOS'?'Abdominaux':group.style==='TRISET'?'· 3 exos sans repos':'· 2 exos sans repos';
             return(
               <div key={gi} style={{borderRadius:14,border:`1px solid ${blockActive?group.color+'66':blockDone?'rgba(255,255,255,0.06)':group.color+'33'}`,background:blockActive?`${group.color}0d`:'rgba(255,255,255,0.015)',overflow:'hidden'}}>
-                {/* header bloc */}
                 <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px 4px',borderBottom:`1px solid ${group.color}22`}}>
                   <div style={{width:6,height:6,borderRadius:3,background:group.color,boxShadow:`0 0 6px ${group.color}aa`}}/>
-                  <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>{group.style}</span>
-                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginLeft:2}}>· Sans repos entre les exercices</span>
+                  <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>{blockLabel}</span>
+                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginLeft:2}}>{blockSub}</span>
                 </div>
-                {/* exercices du bloc */}
                 {group.items.map(({ex:e,idx:i},bi)=>{
                   const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
                   return(
@@ -1065,7 +1104,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
-                          <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.sets.length} séries · {e.repsStr||e.sets[0]?.target||'?'} reps</div>
+                          <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle} · {e.sets.length} séries · {e.repsStr||e.sets[0]?.target||'?'} reps</div>
                         </div>
                         {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
                       </button>
