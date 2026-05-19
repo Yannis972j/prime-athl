@@ -3006,21 +3006,33 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
           {selectedDay&&(()=>{
             const d=days[selectedDay.dayName];
             const isDone=doneDates.has(selectedDay.dateStr);
+            // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
+            const histSession=(history||[]).find(h=>h.date&&h.date.slice(0,10)===selectedDay.dateStr);
+            const displayExercises=d?d.exercises:(histSession?.exercises||null);
+            const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+            const refaire=()=>{
+              if(!histSession)return;
+              onStartWorkout({
+                name:histSession.name||selectedDay.dayName,
+                muscles:histSession.muscles||'',
+                exercises:(histSession.exercises||[]).map(ex=>({...ex,id:uid(),sets:(ex.sets||[]).map(s=>({...s,reps:0,done:false}))})),
+              });
+            };
             return(
               <div style={{background:'linear-gradient(160deg,rgba(28,28,40,0.9),rgba(14,14,20,0.9))',border:'1px solid rgba(255,255,255,0.08)',borderRadius:18,padding:16,marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                   <div>
                     <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize'}}>{dateLabel}</div>
-                    <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{d?d.category||selectedDay.dayName:selectedDay.dayName}</div>
+                    <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{displayName}</div>
                   </div>
                   <div style={{padding:'3px 10px',borderRadius:20,fontSize:10,fontWeight:700,background:isDone?'rgba(124,196,161,0.15)':'rgba(217,119,87,0.15)',color:isDone?'#7cc4a1':'#d97757'}}>{isDone?'✓ Fait':'À faire'}</div>
                 </div>
-                {d&&(
+                {displayExercises&&(
                   <>
                     <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:14}}>
                       {(()=>{
-                        const groups=groupExercises(d.exercises);
+                        const groups=groupExercises(displayExercises);
                         let shown=0;const els=[];
                         for(const group of groups){
                           if(shown>=6)break;
@@ -3031,7 +3043,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                                 <div style={{width:24,height:24,borderRadius:7,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{i+1}</div>
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.target||'?'} reps</div>
+                                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'} reps</div>
                                 </div>
                               </div>
                             );shown++;
@@ -3049,19 +3061,19 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                                     <div style={{flex:1,minWidth:0}}>
                                       <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
                                     </div>
-                                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.target||'?'}</span>
+                                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>
                                   </div>
                                 ))}
                               </div>
                             );shown+=group.items.length;
                           }
                         }
-                        const rem=d.exercises.length-shown;
+                        const rem=displayExercises.length-shown;
                         if(rem>0)els.push(<div key="more" style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{rem} exercices</div>);
                         return els;
                       })()}
                     </div>
-                    <button onClick={()=>startDay(selectedDay.dayName)} style={{width:'100%',height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                    <button onClick={()=>d?startDay(selectedDay.dayName):refaire()} style={{width:'100%',height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
                       <Icon name="play" size={16} stroke="#fff"/>
                       {isDone?'Refaire la séance':'Démarrer la séance'}
                     </button>
