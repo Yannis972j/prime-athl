@@ -49,6 +49,29 @@
 </head>
 <body>
 <div id="root"></div>
+<div id="splash" style="position:fixed;inset:0;background:#0a0a0e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:9999;transition:opacity 0.4s ease">
+  <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px">PA</div>
+  <div style="color:rgba(240,240,242,0.5);font-size:13px;font-family:Inter,system-ui,sans-serif;letter-spacing:0.3px">Chargement…</div>
+  <div style="width:120px;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">
+    <div id="splash-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#d97757,#c97586);border-radius:2px;transition:width 0.4s ease"></div>
+  </div>
+</div>
+<script>
+// Splash : animer la barre pendant le chargement des CDN
+(function(){
+  const bar = document.getElementById('splash-bar');
+  let w = 0;
+  const t = setInterval(() => { w = Math.min(w + (w < 70 ? 8 : 1), 92); if(bar) bar.style.width = w + '%'; }, 200);
+  window.__splashDone = function(){
+    clearInterval(t);
+    if(bar) bar.style.width = '100%';
+    setTimeout(() => {
+      const s = document.getElementById('splash');
+      if(s){ s.style.opacity = '0'; setTimeout(() => s.remove(), 400); }
+    }, 300);
+  };
+})();
+</script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
@@ -5509,7 +5532,33 @@ function BottomTabBar({tab,onTab,role,unreadMessages}){
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+// ── Error Boundary ──────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={crashed:false,error:null}; }
+  static getDerivedStateFromError(e){ return {crashed:true,error:e}; }
+  componentDidCatch(e,info){ console.error('[Prime Athl] Crash:', e, info); }
+  render(){
+    if(!this.state.crashed) return this.props.children;
+    return (
+      <div style={{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,textAlign:'center'}}>
+        <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
+        <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:8}}>Quelque chose s'est mal passé</div>
+        <div style={{fontSize:14,color:T.textDim,marginBottom:28,maxWidth:340,lineHeight:1.6}}>
+          {this.state.error?.message||'Erreur inattendue.'} <br/>Recharge la page pour reprendre.
+        </div>
+        <button
+          onClick={()=>window.location.reload()}
+          style={{padding:'12px 28px',borderRadius:12,background:T.accent,color:'#fff',fontWeight:700,fontSize:15,border:'none',cursor:'pointer'}}>
+          Recharger l'app
+        </button>
+      </div>
+    );
+  }
+}
+
+const _root = ReactDOM.createRoot(document.getElementById('root'));
+_root.render(<ErrorBoundary><App/></ErrorBoundary>);
+if(window.__splashDone) window.__splashDone();
 
 // Register Service Worker for push notifications
 if('serviceWorker' in navigator){
