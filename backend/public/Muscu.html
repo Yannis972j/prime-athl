@@ -2550,6 +2550,12 @@ function ProfileScreen({profile,onChange,onLogout}){
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
 
+      <SectionHeader title="Apparence"/>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,marginBottom:8}}>
+        <span style={{fontSize:13,color:T.textDim,fontWeight:500}}>Thème</span>
+        <ThemePicker/>
+      </div>
+
       <InstallPrompt/>
 
       <SectionHeader title="Notifications"/>
@@ -2603,7 +2609,7 @@ function MotivationMarquee(){
   );
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
@@ -2653,6 +2659,71 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
   const[selectedDay,setSelectedDay]=React.useState(null); // {date, dayName}
+
+  // ── Long-press drag to duplicate session ──
+  const[dragSrc,setDragSrc]=React.useState(null);   // {dateStr, dayName, exercises}
+  const[dragOver,setDragOver]=React.useState(null);  // target dateStr
+  const[dragPos,setDragPos]=React.useState({x:0,y:0});
+  const longPressTimer=React.useRef(null);
+  const dragActive=React.useRef(false);
+
+  const calGridRef=React.useRef(null);
+
+  const startLongPress=(e,d,dayName,dateStr,exercises)=>{
+    if(!exercises||exercises.length===0)return;
+    const touch=e.touches[0];
+    setDragPos({x:touch.clientX,y:touch.clientY});
+    longPressTimer.current=setTimeout(()=>{
+      dragActive.current=true;
+      setDragSrc({dateStr,dayName,exercises});
+      if(navigator.vibrate)navigator.vibrate(40);
+    },500);
+  };
+
+  const onDragTouchMove=React.useCallback(e=>{
+    if(!dragActive.current)return;
+    e.preventDefault();
+    const touch=e.touches[0];
+    setDragPos({x:touch.clientX,y:touch.clientY});
+    const el=document.elementFromPoint(touch.clientX,touch.clientY);
+    const cell=el&&el.closest('[data-cal-date]');
+    setDragOver(cell?cell.getAttribute('data-cal-date'):null);
+  },[]);
+
+  const onDragTouchEnd=React.useCallback(async()=>{
+    clearTimeout(longPressTimer.current);
+    if(!dragActive.current){dragActive.current=false;setDragSrc(null);setDragOver(null);return;}
+    dragActive.current=false;
+    const target=dragOver;
+    const src=dragSrc;
+    setDragSrc(null);setDragOver(null);
+    if(!target||!src||target===src.dateStr)return;
+    // Dupliquer : sauvegarder une session complète à la date cible
+    const cloned={
+      name:src.dayName,
+      muscles:src.exercises[0]?.muscle||'',
+      exercises:src.exercises.map(ex=>({...ex,id:uid(),sets:ex.sets.map(s=>({...s,reps:s.reps||s.target||0,done:true}))})),
+      date:target+'T12:00:00.000Z',
+      duration:0,
+      volume:src.exercises.reduce((t,ex)=>t+ex.sets.reduce((st,s)=>(s.done||true)?st+(s.weight||0)*(s.reps||s.target||0):st,0),0),
+    };
+    try{
+      await apiCall('/api/sessions',{method:'POST',body:cloned});
+      if(onRefreshHistory)onRefreshHistory();
+      setImportMsg(`✓ Séance copiée au ${new Date(target).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}`);
+      setTimeout(()=>setImportMsg(null),3000);
+    }catch(e){setImportMsg('✗ Erreur lors de la copie');setTimeout(()=>setImportMsg(null),3000);}
+  },[dragOver,dragSrc,onRefreshHistory]);
+
+  React.useEffect(()=>{
+    if(!dragSrc)return;
+    window.addEventListener('touchmove',onDragTouchMove,{passive:false});
+    window.addEventListener('touchend',onDragTouchEnd);
+    return()=>{
+      window.removeEventListener('touchmove',onDragTouchMove);
+      window.removeEventListener('touchend',onDragTouchEnd);
+    };
+  },[dragSrc,onDragTouchMove,onDragTouchEnd]);
 
   // Map JS weekday (0=Sun) → programme day name
   const JS_TO_DAY=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
@@ -2888,7 +2959,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
           </div>
 
           {/* Days grid */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:16}}>
+          <div ref={calGridRef} style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:16}}>
             {calDays.map((d,i)=>{
               if(!d)return<div key={i}/>;
               const dayName=getDayName(d);
@@ -2897,6 +2968,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               const isDone=doneDates.has(dateStr);
               const isToday=dateStr===todayStr;
               const isSel=selectedDay&&selectedDay.dateStr===dateStr;
+              const isDragOver=dragOver===dateStr;
+              const isDragSrc=dragSrc&&dragSrc.dateStr===dateStr;
               let bg='rgba(255,255,255,0.03)';
               let border='1px solid rgba(255,255,255,0.06)';
               let color=T.textFaint;
@@ -2904,15 +2977,29 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               else if(hasWorkout){bg='rgba(217,119,87,0.1)';border='1px solid rgba(217,119,87,0.3)';color='#d97757';}
               if(isToday)border='2px solid rgba(217,119,87,0.7)';
               if(isSel){bg='rgba(217,119,87,0.22)';border='2px solid #d97757';}
+              if(isDragOver){bg='rgba(124,196,161,0.25)';border='2px solid #7cc4a1';}
+              if(isDragSrc){bg='rgba(217,119,87,0.35)';border='2px dashed #d97757';}
+              const exercises=days[dayName]?days[dayName].exercises:[];
               return(
-                <div key={i} onClick={()=>{if(hasWorkout||isDone)setSelectedDay(isSel?null:{d,dayName,dateStr});}}
-                  style={{aspectRatio:'1',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasWorkout||isDone)?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
-                  <span style={{fontSize:12,fontWeight:600,color}}>{d}</span>
+                <div key={i} data-cal-date={dateStr}
+                  onClick={()=>{if(!dragSrc&&(hasWorkout||isDone))setSelectedDay(isSel?null:{d,dayName,dateStr});}}
+                  onTouchStart={e=>{if(hasWorkout||isDone){clearTimeout(longPressTimer.current);startLongPress(e,d,dayName,dateStr,exercises);}}}
+                  onTouchEnd={()=>{if(!dragActive.current)clearTimeout(longPressTimer.current);}}
+                  style={{aspectRatio:'1',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasWorkout||isDone)?'pointer':'default',background:bg,border,transition:'background 0.15s,border 0.15s',userSelect:'none',WebkitUserSelect:'none'}}>
+                  <span style={{fontSize:12,fontWeight:600,color,opacity:isDragSrc?0.5:1}}>{d}</span>
                   {(hasWorkout||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:2}}/>}
+                  {isDragOver&&<div style={{fontSize:8,color:'#7cc4a1',fontWeight:700,marginTop:2}}>+</div>}
                 </div>
               );
             })}
           </div>
+          {/* Drag ghost */}
+          {dragSrc&&(
+            <div style={{position:'fixed',left:dragPos.x-24,top:dragPos.y-24,width:48,height:48,borderRadius:14,background:'linear-gradient(135deg,#d97757,#c97586)',boxShadow:'0 8px 24px rgba(217,119,87,0.5)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:9999,opacity:0.9}}>
+              <Icon name="dumbbell" size={20} stroke="#fff" strokeWidth={1.8}/>
+              <div style={{fontSize:8,color:'rgba(255,255,255,0.8)',fontWeight:700,marginTop:2}}>COPIER</div>
+            </div>
+          )}
 
           {/* Selected day detail */}
           {selectedDay&&(()=>{
@@ -5983,10 +6070,6 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const inner=(
     <div style={{height:'100%',width:'100%',display:'flex',flexDirection:'column',position:'relative',paddingTop:isMobile?'env(safe-area-inset-top)':54}}>
-      {/* Theme picker — top-right floating */}
-      <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:12,zIndex:200,display:'flex',alignItems:'center',gap:4,padding:'4px 8px',borderRadius:999,background:T.accentSoft,border:`1px solid ${T.border}`}}>
-        <ThemePicker/>
-      </div>
       {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
       {saveFlash&&(
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(124,196,161,0.18)',border:'1px solid rgba(124,196,161,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(124,196,161,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
@@ -6012,7 +6095,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         )}
         {!screen&&(
           <div className="tab-content" style={{height:'100%',overflow:'auto'}} key={tab}>
-            {tab==='programme'&&<HomeScreen workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram} onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')} onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll} refreshing={refreshing} history={history}/>}
+            {tab==='programme'&&<HomeScreen workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram} onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')} onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll} refreshing={refreshing} history={history} onRefreshHistory={refreshAll}/>}
             {tab==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={refreshAll} refreshing={refreshing}/>}
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
             {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}

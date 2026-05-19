@@ -1118,7 +1118,7 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
   const PALETTE = ['#d97757','#7cc4a1','#7ca8c4','#c97586','#c2a042','#a08fd4','#78b4b4'];
 
   const athletes = Object.values(DATA.users)
-    .filter(u => u.coachId === req.user.id && u.status === 'active');
+    .filter(u => u.coachId === req.user.id && u.role === 'athlete');
 
   const result = athletes.map((u, idx) => {
     // Sessions du mois
