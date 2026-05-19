@@ -132,7 +132,7 @@ function persist() {
     saving = true;
     try {
       const tmp = DB_PATH + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(DATA, null, 2));
+      fs.writeFileSync(tmp, JSON.stringify(DATA));
       fs.renameSync(tmp, DB_PATH);
     } catch (e) { console.error('persist error:', e); }
     saving = false;
@@ -160,6 +160,22 @@ if (USE_PG) {
   setInterval(runBackup, BACKUP_INTERVAL_MS);
   setTimeout(runBackup, 5 * 60 * 1000); // 1er backup 5 min après le boot (le temps que le serveur soit stable)
 }
+
+// ── Nettoyage mémoire périodique ─────────────────────
+setInterval(() => {
+  const mb = v => Math.round(v / 1024 / 1024);
+  const mem = process.memoryUsage();
+  console.log(`[mem] rss=${mb(mem.rss)}MB heap=${mb(mem.heapUsed)}/${mb(mem.heapTotal)}MB`);
+
+  // Purge nutritionLogs > 90 jours
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const cutoffStr = new Date(cutoff).toISOString().slice(0, 10);
+  for (const uid of Object.keys(DATA.nutritionLogs || {})) {
+    for (const dateKey of Object.keys(DATA.nutritionLogs[uid] || {})) {
+      if (dateKey < cutoffStr) delete DATA.nutritionLogs[uid][dateKey];
+    }
+  }
+}, 60 * 60 * 1000); // toutes les heures
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
@@ -232,7 +248,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 
 // Rate-limit global doux (anti-DDOS basique) — 600 req / 5 min / IP
@@ -689,7 +705,7 @@ app.post('/api/my-program/save', authRequired, (req, res) => {
   if (!DATA.savedPrograms[req.user.id]) DATA.savedPrograms[req.user.id] = [];
   DATA.savedPrograms[req.user.id].unshift({ id: uid, name, savedAt: Date.now(), data: p.data });
   // Garder max 20 archives par utilisateur
-  if (DATA.savedPrograms[req.user.id].length > 20) DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].slice(0, 20);
+  if (DATA.savedPrograms[req.user.id].length > 5) DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].slice(0, 5);
   persist();
   res.json({ ok: true, id: uid });
 });
@@ -812,6 +828,12 @@ app.post('/api/sessions', authRequired, (req, res) => {
     exercises: safeExercises,
   };
   DATA.sessions[id] = session;
+  // Garder max 500 sessions au total (FIFO sur les plus vieilles)
+  const allSids = Object.keys(DATA.sessions);
+  if (allSids.length > 500) {
+    const sorted = allSids.sort((a, b) => new Date(DATA.sessions[a].date) - new Date(DATA.sessions[b].date));
+    sorted.slice(0, allSids.length - 500).forEach(sid => delete DATA.sessions[sid]);
+  }
   persist();
 
   const u = DATA.users[req.user.id];
@@ -1222,6 +1244,8 @@ app.post('/api/weight', authRequired, (req, res) => {
   const entry = { id: uid(), weight: parseFloat(weight), date: date || Date.now(), createdAt: Date.now() };
   if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = [];
   DATA.weightLogs[req.user.id].push(entry);
+  // Garder max 365 entrées de poids par user
+  if (DATA.weightLogs[req.user.id].length > 365) DATA.weightLogs[req.user.id] = DATA.weightLogs[req.user.id].slice(-365);
   persist();
   res.json({ ok: true, entry });
 });
@@ -1324,6 +1348,8 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   const msg = { id: uid(), senderId: me, text: text.trim(), createdAt: Date.now() };
   if (!DATA.messages[key]) DATA.messages[key] = [];
   DATA.messages[key].push(msg);
+  // Garder max 200 messages par conversation
+  if (DATA.messages[key].length > 200) DATA.messages[key] = DATA.messages[key].slice(-200);
   persist();
   // Emit to both participants
   io.to('user:' + partner).emit('new-message', { from: me, msg });
