@@ -57,7 +57,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -681,6 +681,57 @@ app.delete('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res
   res.json({ ok: true });
 });
 
+// ── Programmes archivés ────────────────────────────────────────
+// Sauvegarder le programme courant en archive
+app.post('/api/my-program/save', authRequired, (req, res) => {
+  const p = DATA.programs[req.user.id];
+  if (!p || !p.data || !Object.keys(p.data).length) return res.status(400).json({ error: 'no_program' });
+  const uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const name = req.body?.name || ('Programme ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }));
+  if (!DATA.savedPrograms[req.user.id]) DATA.savedPrograms[req.user.id] = [];
+  DATA.savedPrograms[req.user.id].unshift({ id: uid, name, savedAt: Date.now(), data: p.data });
+  // Garder max 20 archives par utilisateur
+  if (DATA.savedPrograms[req.user.id].length > 20) DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].slice(0, 20);
+  persist();
+  res.json({ ok: true, id: uid });
+});
+
+// Lister les programmes archivés
+app.get('/api/my-program/saved', authRequired, (req, res) => {
+  const saved = (DATA.savedPrograms[req.user.id] || []).map(s => ({
+    id: s.id, name: s.name, savedAt: s.savedAt,
+    sheets: Object.keys(s.data || {}),
+    dayCount: Object.values(s.data || {}).reduce((n, sheet) => n + Object.keys(sheet).length, 0),
+  }));
+  res.json(saved);
+});
+
+// Récupérer un programme archivé complet (pour le voir ou le dupliquer)
+app.get('/api/my-program/saved/:id', authRequired, (req, res) => {
+  const saved = (DATA.savedPrograms[req.user.id] || []).find(s => s.id === req.params.id);
+  if (!saved) return res.status(404).json({ error: 'not_found' });
+  res.json(saved);
+});
+
+// Supprimer un programme archivé
+app.delete('/api/my-program/saved/:id', authRequired, (req, res) => {
+  if (!DATA.savedPrograms[req.user.id]) return res.json({ ok: true });
+  DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].filter(s => s.id !== req.params.id);
+  persist();
+  res.json({ ok: true });
+});
+
+// Restaurer (dupliquer) un programme archivé en programme courant
+app.post('/api/my-program/restore/:id', authRequired, (req, res) => {
+  const saved = (DATA.savedPrograms[req.user.id] || []).find(s => s.id === req.params.id);
+  if (!saved) return res.status(404).json({ error: 'not_found' });
+  const ts = Date.now();
+  DATA.programs[req.user.id] = { data: saved.data, assignedBy: req.user.id, assignedAt: ts };
+  persist();
+  io.to('user:' + req.user.id).emit('program-updated', { data: saved.data, assignedAt: ts });
+  res.json({ ok: true, assignedAt: ts });
+});
+
 // User deletes their OWN program / nutrition (coach for himself)
 app.delete('/api/my-program', authRequired, (req, res) => {
   delete DATA.programs[req.user.id];
@@ -808,6 +859,7 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       messages: body.messages || {},
       progressPhotos: body.progressPhotos || {},
       pushSubscriptions: body.pushSubscriptions || {},
+      savedPrograms: body.savedPrograms || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -873,6 +925,7 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       messages: body.messages || {},
       progressPhotos: body.progressPhotos || {},
       pushSubscriptions: body.pushSubscriptions || {},
+      savedPrograms: body.savedPrograms || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
