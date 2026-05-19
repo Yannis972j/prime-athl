@@ -2980,7 +2980,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               if(isSel){bg='rgba(217,119,87,0.22)';border='2px solid #d97757';}
               if(isDragOver){bg='rgba(124,196,161,0.25)';border='2px solid #7cc4a1';}
               if(isDragSrc){bg='rgba(217,119,87,0.35)';border='2px dashed #d97757';}
-              const exercises=days[dayName]?days[dayName].exercises:[];
+              const progExercises=days[dayName]?days[dayName].exercises:[];
+              const histExercises=(history||[]).find(h=>h.date&&h.date.slice(0,10)===dateStr)?.exercises||[];
+              const exercises=progExercises.length>0?progExercises:histExercises;
               return(
                 <div key={i} data-cal-date={dateStr}
                   onClick={()=>{if(!dragSrc&&(hasWorkout||isDone))setSelectedDay(isSel?null:{d,dayName,dateStr});}}
