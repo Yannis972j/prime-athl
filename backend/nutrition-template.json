@@ -1,0 +1,1716 @@
+{
+  "dailyCalories": 2300,
+  "dailyProtein": 200,
+  "dailyCarbs": 220,
+  "dailyFat": 70,
+  "days": {
+    "LUNDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "MARDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "MERCREDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "JEUDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "VENDREDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "SAMEDI": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    },
+    "DIMANCHE": {
+      "meals": [
+        {
+          "id": "breakfast",
+          "label": "Petit-déjeuner",
+          "emoji": "🍳",
+          "timeStart": "05:00",
+          "timeEnd": "08:00",
+          "items": [
+            {
+              "name": "BANANE",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 90,
+              "p": 1,
+              "c": 21,
+              "f": 0.33
+            },
+            {
+              "name": "GALETTE D'EPEAUTRE",
+              "qty": 16,
+              "unit": "g",
+              "kcal": 57.8,
+              "p": 3.2,
+              "c": 9.76,
+              "f": 0.3
+            },
+            {
+              "name": "MIEL",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 28.9,
+              "p": 0,
+              "c": 7.14,
+              "f": 0
+            },
+            {
+              "name": "WHEY",
+              "qty": 30,
+              "unit": "g",
+              "kcal": 119,
+              "p": 25,
+              "c": 27.6,
+              "f": 0.33
+            },
+            {
+              "name": "BLANC DE POULET",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 106,
+              "p": 21,
+              "c": 0.6,
+              "f": 2.2
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack1",
+          "label": "Collation 1",
+          "emoji": "🥜",
+          "timeStart": "09:00",
+          "timeEnd": "12:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "GRAINE DE CHIA",
+              "qty": 5,
+              "unit": "g",
+              "kcal": 22.7,
+              "p": 1.15,
+              "c": 0.12,
+              "f": 1.55
+            },
+            {
+              "name": "BEURRE DE CACAHOUETE",
+              "qty": 20,
+              "unit": "g",
+              "kcal": 125.8,
+              "p": 5.2,
+              "c": 2.6,
+              "f": 10.2
+            },
+            {
+              "name": "KIWI",
+              "qty": 100,
+              "unit": "g",
+              "kcal": 60,
+              "p": 0,
+              "c": 14.11,
+              "f": 0
+            },
+            {
+              "name": "FLOCON D'AVOINE",
+              "qty": 50,
+              "unit": "g",
+              "kcal": 182.5,
+              "p": 6.5,
+              "c": 28.5,
+              "f": 3.4
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "lunch",
+          "label": "Déjeuner",
+          "emoji": "🍱",
+          "timeStart": "12:00",
+          "timeEnd": "14:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "HUILE D'OLIVE",
+              "qty": 10,
+              "unit": "g",
+              "kcal": 82.2,
+              "p": 0,
+              "c": 0,
+              "f": 9.1
+            },
+            {
+              "name": "POULET",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 153,
+              "p": 31.5,
+              "c": 1.95,
+              "f": 2.25
+            },
+            {
+              "name": "POMME DE TERRE",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 111,
+              "p": 3,
+              "c": 23.7,
+              "f": 0.3
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "snack2",
+          "label": "Collation 2",
+          "emoji": "🍎",
+          "timeStart": "14:00",
+          "timeEnd": "17:00",
+          "items": [
+            {
+              "name": "POMME",
+              "qty": 150,
+              "unit": "g",
+              "kcal": 78,
+              "p": 0.39,
+              "c": 20.72,
+              "f": 0.26
+            },
+            {
+              "name": "OEUFS DURS",
+              "qty": 3,
+              "unit": "g",
+              "kcal": 201,
+              "p": 20.25,
+              "c": 0.78,
+              "f": 12.93
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "dinner",
+          "label": "Dîner",
+          "emoji": "🍝",
+          "timeStart": "19:00",
+          "timeEnd": "21:00",
+          "items": [
+            {
+              "name": "HARICOT VERT",
+              "qty": 200,
+              "unit": "g",
+              "kcal": 81.8,
+              "p": 2.36,
+              "c": 16.48,
+              "f": 0
+            },
+            {
+              "name": "SARDINE",
+              "qty": 2,
+              "unit": "g",
+              "kcal": 321,
+              "p": 39.6,
+              "c": 0,
+              "f": 18.15
+            }
+          ],
+          "note": ""
+        },
+        {
+          "id": "eveningSnack",
+          "label": "Collation du soir",
+          "emoji": "🥛",
+          "timeStart": "21:00",
+          "timeEnd": "22:00",
+          "items": [
+            {
+              "name": "FROMAGE BLANC",
+              "qty": 250,
+              "unit": "g",
+              "kcal": 147.5,
+              "p": 20,
+              "c": 11.75,
+              "f": 0
+            },
+            {
+              "name": "CANELLE",
+              "qty": 0,
+              "unit": "g",
+              "kcal": 0,
+              "p": 0,
+              "c": 0,
+              "f": 0
+            }
+          ],
+          "note": ""
+        }
+      ]
+    }
+  }
+}

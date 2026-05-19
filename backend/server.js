@@ -1025,21 +1025,15 @@ const ymd = d => {
   return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
 };
 
-const DEFAULT_NUTRITION = {
-  dailyCalories: 0,
-  dailyProtein: 0,
-  dailyCarbs: 0,
-  dailyFat: 0,
-  meals: [
-    { id: 'breakfast',    label: 'Petit-déjeuner',    emoji: '🍳', timeStart: '05:00', timeEnd: '08:00', items: [], note: '' },
-    { id: 'snack1',       label: 'Collation 1',       emoji: '🥜', timeStart: '09:00', timeEnd: '12:00', items: [], note: '' },
-    { id: 'lunch',        label: 'Déjeuner',          emoji: '🍱', timeStart: '12:00', timeEnd: '14:00', items: [], note: '' },
-    { id: 'snack2',       label: 'Collation 2',       emoji: '🍎', timeStart: '14:00', timeEnd: '16:00', items: [], note: '' },
-    { id: 'snack3',       label: 'Collation 3',       emoji: '🥨', timeStart: '16:00', timeEnd: '18:00', items: [], note: '' },
-    { id: 'dinner',       label: 'Dîner',             emoji: '🍝', timeStart: '20:00', timeEnd: '21:00', items: [], note: '' },
-    { id: 'eveningSnack', label: 'Collation du soir', emoji: '🥛', timeStart: '21:00', timeEnd: '22:00', items: [], note: '' },
-  ],
-};
+// Charge le template nutrition depuis le fichier JSON généré à partir de l'Excel
+let DEFAULT_NUTRITION;
+try {
+  const tplPath = path.join(__dirname, 'nutrition-template.json');
+  DEFAULT_NUTRITION = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
+  console.log('[nutrition] Template chargé:', DEFAULT_NUTRITION.dailyCalories + 'kcal');
+} catch {
+  DEFAULT_NUTRITION = { dailyCalories: 0, dailyProtein: 0, dailyCarbs: 0, dailyFat: 0, days: {} };
+}
 
 // Athlete fetches their nutrition plan + today's log + last 14 days
 app.get('/api/nutrition', authRequired, (req, res) => {
