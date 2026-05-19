@@ -573,6 +573,8 @@ function excelExport(workout) {
 
 // ── Workout Editor Screen ─────────────────────────────────
 // Regroupe les exercices consécutifs de même style SUPERSET/TRISET en blocs
+// Abdos = vert (#6bc47a), SUPERSET = bleu, TRISET = or, CLASSIQUE = accent
+function isAbdos(ex){ return (ex.muscle||'').toLowerCase().includes('abdo'); }
 function groupExercises(exercises){
   const groups=[];
   let i=0;
@@ -580,15 +582,15 @@ function groupExercises(exercises){
     const ex=exercises[i];
     if(ex.style==='SUPERSET'||ex.style==='TRISET'){
       const style=ex.style;
-      const block={style,color:style==='SUPERSET'?'#7ca8c4':'#c2a042',items:[{ex,idx:i}]};
+      const items=[{ex,idx:i}];
       i++;
-      while(i<exercises.length&&exercises[i].style===style){
-        block.items.push({ex:exercises[i],idx:i});
-        i++;
-      }
-      groups.push(block);
+      while(i<exercises.length&&exercises[i].style===style){ items.push({ex:exercises[i],idx:i});i++; }
+      const abdosBlock=items.every(({ex:e})=>isAbdos(e));
+      const color=abdosBlock?'#6bc47a':style==='SUPERSET'?'#7ca8c4':'#c2a042';
+      groups.push({style,color,items});
     } else {
-      groups.push({style:'CLASSIQUE',color:T.accent,items:[{ex,idx:i}]});
+      const color=isAbdos(ex)?'#6bc47a':T.accent;
+      groups.push({style:'CLASSIQUE',color,items:[{ex,idx:i}]});
       i++;
     }
   }
