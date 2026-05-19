@@ -3292,7 +3292,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   if(!plan||!plan.data){
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={handleSelfImport}/>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleSelfImport}/>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>Mon plan</HoloText></div>
@@ -3358,7 +3358,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={handleSelfImport}/>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleSelfImport}/>
       {importMsg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div>
