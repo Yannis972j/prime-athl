@@ -856,6 +856,29 @@ app.post('/api/sessions', authRequired, (req, res) => {
   res.json({ id });
 });
 
+// ── Coach : supprimer / déplacer une séance athlète ──
+app.delete('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {
+  const s = DATA.sessions[req.params.sessionId];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  const a = DATA.users[s.userId];
+  if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  delete DATA.sessions[req.params.sessionId];
+  persist();
+  io.to('user:' + s.userId).emit('session-deleted', { sessionId: req.params.sessionId });
+  res.json({ ok: true });
+});
+
+app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {
+  const s = DATA.sessions[req.params.sessionId];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  const a = DATA.users[s.userId];
+  if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  if (req.body.date) s.date = req.body.date;
+  persist();
+  io.to('user:' + s.userId).emit('session-moved', { sessionId: req.params.sessionId, date: s.date });
+  res.json({ ok: true, date: s.date });
+});
+
 // ── Backup / Restore (main coach only) ──────────────
 app.get('/api/admin/backup', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   try {
