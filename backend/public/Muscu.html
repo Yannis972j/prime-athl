@@ -4816,9 +4816,36 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
     },
   });
 
+  const[applying,setApplying]=React.useState(false);
+  const[applyMsg,setApplyMsg]=React.useState(null);
+
+  const applyTemplate=async()=>{
+    setApplying(true);
+    try{
+      const tpl=await apiCall('/api/nutrition/template');
+      const plan=tpl.template||tpl;
+      await apiCall('/api/coach/nutrition/'+athleteId,{method:'PUT',body:{plan}});
+      await apiCall('/api/coach/nutrition/'+athleteId+'/notify',{method:'POST'});
+      setApplyMsg('✓ Plan assigné et notifié !');
+      setTimeout(()=>setApplyMsg(null),3000);
+      load();
+    }catch(e){setApplyMsg('✗ Erreur : '+e.message);}
+    setApplying(false);
+  };
+
   if(loading)return<div style={{padding:20,textAlign:'center',color:T.textFaint,fontSize:12}}>Chargement…</div>;
   if(!data||!data.plan||!data.plan.data){
-    return<div style={{padding:20,textAlign:'center',color:T.textDim,fontSize:13}}>Aucun plan assigné. Crée-le d'abord.</div>;
+    return(
+      <div style={{padding:20,textAlign:'center'}}>
+        <div style={{fontSize:36,marginBottom:10}}>🍎</div>
+        <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:6}}>Aucun plan assigné</div>
+        <div style={{fontSize:12,color:T.textDim,marginBottom:16,lineHeight:1.5}}>Assigne le plan nutrition standard à {athleteName}</div>
+        {applyMsg&&<div style={{marginBottom:12,fontSize:12,fontWeight:700,color:applyMsg.startsWith('✓')?T.good:T.danger}}>{applyMsg}</div>}
+        <button onClick={applyTemplate} disabled={applying} style={{padding:'12px 22px',borderRadius:12,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:applying?0.6:1}}>
+          {applying?'Envoi…':'🍽️ Appliquer le plan standard'}
+        </button>
+      </div>
+    );
   }
 
   const plan=normalizePlan(data.plan.data);
