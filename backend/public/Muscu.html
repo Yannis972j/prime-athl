@@ -5030,15 +5030,52 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   const[calData,setCalData]=React.useState(null);
   const[loading,setLoading]=React.useState(false);
   const[selectedDay,setSelectedDay]=React.useState(null);
+  const[sessionModal,setSessionModal]=React.useState(null); // {athleteId, athleteName, color, session}
+  const[modalLoading,setModalLoading]=React.useState(false);
+  const[moveDate,setMoveDate]=React.useState('');
+  const[confirmDelete,setConfirmDelete]=React.useState(false);
 
-  React.useEffect(()=>{
+  const reload=()=>{
     setLoading(true);
     setCalData(null);
     apiCall(`/api/coach/calendar?year=${year}&month=${month}`)
       .then(d=>setCalData(d.athletes||d))
       .catch(console.error)
       .finally(()=>setLoading(false));
-  },[year,month]);
+  };
+
+  const openSession=async(ath,dateStr)=>{
+    setModalLoading(true);
+    setSessionModal({athleteId:ath.id,athleteName:ath.name,color:ath.color,session:null,dateStr});
+    setMoveDate(dateStr);
+    setConfirmDelete(false);
+    try{
+      const sessions=await apiCall('/api/sessions?userId='+ath.id);
+      const s=sessions.find(x=>x.date&&x.date.slice(0,10)===dateStr);
+      setSessionModal(m=>({...m,session:s||null}));
+    }catch(e){console.error(e);}
+    setModalLoading(false);
+  };
+
+  const moveSession=async()=>{
+    if(!sessionModal?.session||!moveDate)return;
+    try{
+      await apiCall('/api/coach/sessions/'+sessionModal.session.id,{method:'PATCH',body:{date:moveDate+'T12:00:00.000Z'}});
+      setSessionModal(null);
+      reload();
+    }catch(e){alert('Erreur: '+e.message);}
+  };
+
+  const deleteSession=async()=>{
+    if(!sessionModal?.session)return;
+    try{
+      await apiCall('/api/coach/sessions/'+sessionModal.session.id,{method:'DELETE'});
+      setSessionModal(null);
+      reload();
+    }catch(e){alert('Erreur: '+e.message);}
+  };
+
+  React.useEffect(()=>{reload();},[year,month]);
 
   const prevMonth=()=>{if(month===1){setYear(y=>y-1);setMonth(12);}else setMonth(m=>m-1);setSelectedDay(null);};
   const nextMonth=()=>{if(month===12){setYear(y=>y+1);setMonth(1);}else setMonth(m=>m+1);setSelectedDay(null);};
@@ -5170,23 +5207,27 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
                   {selectedAths.map(ath=>{
                     const dayStr=String(selectedDay).padStart(2,'0');
+                    const dateStr=`${year}-${String(month).padStart(2,'0')}-${dayStr}`;
                     const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
                     const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
                     const jsDay=new Date(year,month-1,selectedDay).getDay();
                     const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
                     const hasProg=ath.programDays.some(pd=>pd===DAYS[jsDay]);
                     return(
-                      <div key={ath.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:`1px solid ${ath.color}33`,cursor:'pointer'}} onClick={()=>onOpenAthlete(athletes.find(x=>x.id===ath.id)||{id:ath.id,email:ath.name})}>
-                        <div style={{width:8,height:32,borderRadius:4,background:ath.color,flexShrink:0}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ath.name}</div>
-                          <div style={{display:'flex',gap:6,marginTop:3,flexWrap:'wrap'}}>
-                            {hasSession&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,196,161,0.15)',color:'#7cc4a1',border:'1px solid rgba(124,196,161,0.3)'}}>💪 Séance</span>}
-                            {hasNutri&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,168,196,0.15)',color:'#7ca8c4',border:'1px solid rgba(124,168,196,0.3)'}}>🥗 Nutrition</span>}
-                            {hasProg&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(217,119,87,0.12)',color:T.accent,border:'1px solid rgba(217,119,87,0.3)'}}>📋 Programme</span>}
+                      <div key={ath.id} style={{borderRadius:11,background:'rgba(255,255,255,0.03)',border:`1px solid ${ath.color}33`,overflow:'hidden'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',cursor:'pointer'}}
+                          onClick={()=>hasSession?openSession(ath,dateStr):onOpenAthlete(athletes.find(x=>x.id===ath.id)||{id:ath.id,email:ath.name})}>
+                          <div style={{width:8,height:32,borderRadius:4,background:ath.color,flexShrink:0}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ath.name}</div>
+                            <div style={{display:'flex',gap:6,marginTop:3,flexWrap:'wrap'}}>
+                              {hasSession&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,196,161,0.15)',color:'#7cc4a1',border:'1px solid rgba(124,196,161,0.3)'}}>💪 Séance</span>}
+                              {hasNutri&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(124,168,196,0.15)',color:'#7ca8c4',border:'1px solid rgba(124,168,196,0.3)'}}>🥗 Nutrition</span>}
+                              {hasProg&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(217,119,87,0.12)',color:T.accent,border:'1px solid rgba(217,119,87,0.3)'}}>📋 Programme</span>}
+                            </div>
                           </div>
+                          <Icon name={hasSession?'dumbbell':'chevronRight'} size={14} stroke={hasSession?'#7cc4a1':T.textFaint}/>
                         </div>
-                        <Icon name="chevronRight" size={14} stroke={T.textFaint}/>
                       </div>
                     );
                   })}
@@ -5195,6 +5236,68 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
             </div>
           )}
         </>
+      )}
+
+      {/* ── Modal séance complète ── */}
+      {sessionModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'flex-end'}} onClick={e=>{if(e.target===e.currentTarget){setSessionModal(null);setConfirmDelete(false);}}}>
+          <div style={{width:'100%',maxHeight:'85vh',overflow:'auto',background:T.card,borderRadius:'20px 20px 0 0',padding:20,boxSizing:'border-box'}}>
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+              <div style={{width:10,height:10,borderRadius:5,background:sessionModal.color,flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>{sessionModal.athleteName}</div>
+                <div style={{fontSize:17,fontWeight:700}}>{sessionModal.session?.name||'Séance'}</div>
+              </div>
+              <button onClick={()=>onOpenAthlete(athletes.find(x=>x.id===sessionModal.athleteId)||{id:sessionModal.athleteId,email:sessionModal.athleteName})} style={{fontSize:11,fontWeight:700,padding:'5px 10px',borderRadius:8,border:`1px solid ${sessionModal.color}55`,background:`${sessionModal.color}11`,color:sessionModal.color,cursor:'pointer'}}>Profil</button>
+              <button onClick={()=>{setSessionModal(null);setConfirmDelete(false);}} style={{width:30,height:30,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            </div>
+
+            {modalLoading?(
+              <div style={{padding:30,textAlign:'center',color:T.textFaint,fontSize:13}}>Chargement…</div>
+            ):!sessionModal.session?(
+              <div style={{padding:20,textAlign:'center',color:T.textDim,fontSize:13}}>Séance introuvable</div>
+            ):(
+              <>
+                {/* Exercices */}
+                <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
+                  {(sessionModal.session.exercises||[]).map((ex,i)=>(
+                    <div key={i} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div style={{fontSize:12,fontWeight:600}}>{ex.name}</div>
+                        <div style={{fontSize:10,color:T.textFaint}}>{ex.sets?.length||0} séries</div>
+                      </div>
+                      <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                        {(ex.sets||[]).filter(s=>s.done).map((s,si)=>(
+                          <span key={si} style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(124,196,161,0.1)',color:'#7cc4a1',border:'1px solid rgba(124,196,161,0.2)'}}>{s.weight}kg×{s.reps}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Déplacer */}
+                <div style={{marginBottom:12,padding:12,borderRadius:12,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.2)'}}>
+                  <div style={{fontSize:11,color:'#7ca8c4',fontWeight:700,marginBottom:8,textTransform:'uppercase',letterSpacing:0.4}}>📅 Déplacer la séance</div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <input type="date" value={moveDate} onChange={e=>setMoveDate(e.target.value)} style={{flex:1,height:36,borderRadius:9,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,padding:'0 10px',outline:'none'}}/>
+                    <button onClick={moveSession} disabled={moveDate===sessionModal.dateStr} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:'linear-gradient(135deg,#7ca8c4,#6090b0)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:moveDate===sessionModal.dateStr?0.4:1}}>Déplacer</button>
+                  </div>
+                </div>
+
+                {/* Supprimer */}
+                {!confirmDelete?(
+                  <button onClick={()=>setConfirmDelete(true)} style={{width:'100%',height:40,borderRadius:11,border:'1px solid rgba(201,117,134,0.3)',background:'rgba(201,117,134,0.06)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑️ Supprimer la séance</button>
+                ):(
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={deleteSession} style={{flex:1,height:40,borderRadius:11,border:'none',background:'linear-gradient(135deg,#c97586,#a05060)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmer la suppression</button>
+                    <button onClick={()=>setConfirmDelete(false)} style={{height:40,padding:'0 14px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,cursor:'pointer'}}>Annuler</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -5290,6 +5393,16 @@ function CoachScreen({authToken,authUser}){
   const[nutriMode,setNutriMode]=React.useState('mirror'); // 'mirror' | 'edit'
   const[showDangerZone,setShowDangerZone]=React.useState(false);
   const[detailTab,setDetailTab]=React.useState('profil'); // 'profil'|'sport'|'nutrition'|'historique'|'album'
+  const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
+  const sessionPressTimer=React.useRef(null);
+
+  const deleteSession=async(sid,athleteId)=>{
+    try{
+      await apiCall('/api/coach/sessions/'+sid,{method:'DELETE'});
+      reloadDetail(athleteId);
+    }catch(e){alert('Erreur: '+e.message);}
+    setDeletingSessionId(null);
+  };
   const reloadDetail=async id=>{
     try{
       const[d,n]=await Promise.all([
@@ -5617,9 +5730,15 @@ function CoachScreen({authToken,authUser}){
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {sessions.slice(0,50).map(s=>(
-                  <GlassCard key={s.id} padding={12}>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                {sessions.slice(0,50).map(s=>{
+                  const isDeleting=deletingSessionId===s.id;
+                  return(
+                  <div key={s.id}
+                    onTouchStart={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
+                    onTouchEnd={()=>clearTimeout(sessionPressTimer.current)}
+                    onTouchMove={()=>clearTimeout(sessionPressTimer.current)}
+                    style={{borderRadius:14,border:isDeleting?'1px solid rgba(201,117,134,0.5)':'1px solid rgba(255,255,255,0.07)',background:isDeleting?'rgba(201,117,134,0.08)':'rgba(255,255,255,0.03)',transition:'all 0.2s',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,padding:12}}>
                       <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
                         <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
                       </div>
@@ -5631,8 +5750,14 @@ function CoachScreen({authToken,authUser}){
                         <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
                       </div>
                     </div>
-                  </GlassCard>
-                ))}
+                    {isDeleting&&(
+                      <div style={{display:'flex',gap:8,padding:'0 12px 10px'}}>
+                        <button onClick={()=>deleteSession(s.id,a.id)} style={{flex:1,height:34,borderRadius:9,border:'none',background:'linear-gradient(135deg,#c97586,#a05060)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>🗑️ Supprimer</button>
+                        <button onClick={()=>setDeletingSessionId(null)} style={{height:34,padding:'0 14px',borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,cursor:'pointer'}}>Annuler</button>
+                      </div>
+                    )}
+                  </div>
+                );})}
               </div>
             )}
           </div>
