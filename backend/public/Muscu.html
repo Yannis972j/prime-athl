@@ -3163,6 +3163,17 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
 
+  const load=React.useCallback(async()=>{
+    try{
+      const r=await apiCall('/api/nutrition');
+      setPlan(r.plan);
+      setTodayLog(r.today||{validated:{},validatedAt:{}});
+      setHistory(r.history||{});
+    }catch(e){console.error(e);}
+    setLoading(false);
+  },[]);
+  React.useEffect(()=>{load();},[load]);
+
   // ── Long-press drag (coach) ──
   const[nutriDragSrc,setNutriDragSrc]=React.useState(null);  // {dateStr, dayName}
   const[nutriDragOver,setNutriDragOver]=React.useState(null);
@@ -3261,17 +3272,6 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
       }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),5000);}
     },err=>{setImportMsg('✗ '+err);setTimeout(()=>setImportMsg(null),5000);});
   };
-
-  const load=React.useCallback(async()=>{
-    try{
-      const r=await apiCall('/api/nutrition');
-      setPlan(r.plan);
-      setTodayLog(r.today||{validated:{},validatedAt:{}});
-      setHistory(r.history||{});
-    }catch(e){console.error(e);}
-    setLoading(false);
-  },[]);
-  React.useEffect(()=>{load();},[load]);
 
   useSocket(authToken,{
     'nutrition-updated':({plan})=>{setPlan(p=>p?{...p,data:plan}:{data:plan});},
