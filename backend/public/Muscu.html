@@ -941,13 +941,18 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
         <div style={{position:'relative',borderRadius:18,marginBottom:10,background:'linear-gradient(180deg,rgba(14,14,20,0.78),rgba(14,14,20,0.92))',backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 -8px 28px rgba(0,0,0,0.4),0 12px 30px rgba(0,0,0,0.4)',overflow:'hidden'}}>
           <div style={{padding:'12px 14px 14px',position:'relative'}}>
             <div style={{position:'relative'}}>
-              {(ex.style==='SUPERSET'||ex.style==='TRISET')&&(
-                <div style={{display:'inline-flex',alignItems:'center',gap:5,marginBottom:6,padding:'3px 9px',borderRadius:999,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.12)':'rgba(194,160,66,0.12)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(124,168,196,0.3)':'rgba(194,160,66,0.3)'}`}}>
-                  <div style={{width:5,height:5,borderRadius:3,background:ex.style==='SUPERSET'?'#7ca8c4':'#c2a042'}}/>
-                  <span style={{fontSize:10,color:ex.style==='SUPERSET'?'#7ca8c4':'#c2a042',fontWeight:800,letterSpacing:0.5}}>{ex.style}</span>
-                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600}}>· Enchaîner sans repos</span>
-                </div>
-              )}
+              {(ex.style==='SUPERSET'||ex.style==='TRISET'||ex.style==='ABDOS'||ex.style==='CARDIO')&&(()=>{
+                const sc=STYLE_COLORS[ex.style]||T.accent;
+                const label=ex.style==='TRISET'?'TRI-SET':ex.style;
+                const sub=ex.style==='CARDIO'?'':ex.style==='ABDOS'?'· Abdominaux':'· Enchaîner sans repos';
+                return(
+                  <div style={{display:'inline-flex',alignItems:'center',gap:5,marginBottom:6,padding:'3px 9px',borderRadius:999,background:`${sc}14`,border:`1px solid ${sc}44`}}>
+                    <div style={{width:5,height:5,borderRadius:3,background:sc}}/>
+                    <span style={{fontSize:10,color:sc,fontWeight:800,letterSpacing:0.5}}>{label}</span>
+                    {sub&&<span style={{fontSize:9,color:T.textFaint,fontWeight:600}}>{sub}</span>}
+                  </div>
+                );
+              })()}
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
                 <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,flex:1,minWidth:0}}>{ex.name}</div>
                 {restSeconds>0&&(
@@ -967,8 +972,39 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               </div>
 
 
+              {/* CARDIO : affichage spécial — pas de séries/poids */}
+              {ex.style==='CARDIO'&&ex.cardio&&(()=>{
+                const c=ex.cardio; const sc=STYLE_COLORS.CARDIO;
+                const allDone=ex.sets.every(s=>s.done);
+                return(
+                  <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:8}}>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {c.distance&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Distance</div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.distance}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
+                      </div>}
+                      {c.vitesse&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.vitesse}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km/h</span></div>
+                      </div>}
+                      {c.inclinaison&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Inclinaison</div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.inclinaison}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>%</span></div>
+                      </div>}
+                      {c.duree&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.duree}</div>
+                      </div>}
+                    </div>
+                    <button onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }} style={{width:'100%',height:46,borderRadius:13,border:'none',background:allDone?'rgba(255,255,255,0.06)':`linear-gradient(135deg,${sc},#d97757)`,color:allDone?T.textDim:'#fff',fontSize:14,fontWeight:700,cursor:allDone?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                      {allDone?<><Icon name="check" size={16} stroke={T.textDim} strokeWidth={2.5}/> Cardio terminé</>:<><Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/> Marquer comme terminé</>}
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* set rows — compact horizontal avec steppers tactiles */}
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {ex.style!=='CARDIO'&&(<div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
                   const repsDisplay=s.reps||(isNext?'':s.target||'');
@@ -1000,10 +1036,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                     </div>
                   );
                 })}
-              </div>
+              </div>)}
 
 
-              {/* add set */}
+              {/* add/remove set — masqué pour CARDIO */}
+              {ex.style!=='CARDIO'&&<>
               <button onClick={()=>{
                 const last=ex.sets[ex.sets.length-1];
                 updSet(currentEx,ex.sets.length,undefined);
@@ -1011,13 +1048,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'all 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(217,119,87,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
                 <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
               </button>
-              {/* Supprimer la dernière série (UX : on garde au moins 1 set) */}
               {ex.sets.length>1&&(
                 <button onClick={()=>{
                   if(!confirm('Supprimer la dernière série ?'))return;
                   setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,-1)}));
                 }} style={{width:'100%',marginTop:4,height:26,border:'none',borderRadius:8,background:'transparent',color:T.textFaint,fontSize:10,fontWeight:600,cursor:'pointer',opacity:0.55,letterSpacing:0.3}}>− Retirer la dernière</button>
               )}
+              </> }
             </div>
           </div>
         </div>
@@ -1089,26 +1126,23 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                 </div>
                 {group.items.map(({ex:e,idx:i},bi)=>{
                   const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
+                  const chargeStr=e.weightStr&&e.weightStr!=='0'?e.weightStr+'kg':'';
+                  const repsStr=e.repsStr||e.sets[0]?.target||'?';
                   return(
-                    <React.Fragment key={e.id||i}>
-                      {bi>0&&(
-                        <div style={{display:'flex',alignItems:'center',gap:6,padding:'2px 12px',background:`${group.color}08`}}>
-                          <div style={{flex:1,height:1,background:`${group.color}22`}}/>
-                          <span style={{fontSize:9,color:group.color,fontWeight:700,letterSpacing:0.4}}>↓ ENCHAÎNER</span>
-                          <div style={{flex:1,height:1,background:`${group.color}22`}}/>
-                        </div>
-                      )}
-                      <button onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:isActive?`${group.color}12`:'transparent',cursor:'pointer',border:'none'}}>
-                        <div style={{width:28,height:28,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
-                          {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
-                          <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle} · {e.sets.length} séries · {e.repsStr||e.sets[0]?.target||'?'} reps</div>
-                        </div>
-                        {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
-                      </button>
-                    </React.Fragment>
+                    <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:isActive?`${group.color}12`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${group.color}18`:'none'}}>
+                      <div style={{width:26,height:26,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>
+                        {isDone?<Icon name="check" size={12} stroke="#000" strokeWidth={2.8}/>:i+1}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none'}}>{e.name}</div>
+                        <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
+                      </div>
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        {chargeStr&&<div style={{fontSize:12,fontWeight:700,color:group.color}}>{chargeStr}</div>}
+                        <div style={{fontSize:10,color:T.textFaint}}>{e.sets.length}×{repsStr}</div>
+                      </div>
+                      {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
+                    </button>
                   );
                 })}
               </div>
