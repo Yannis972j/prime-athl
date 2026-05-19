@@ -1057,6 +1057,39 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               </> }
             </div>
           </div>
+          {/* Partenaires du bloc SUPERSET / TRISET / ABDOS visibles dans la même carte */}
+          {(ex.style==='SUPERSET'||ex.style==='TRISET'||ex.style==='ABDOS')&&(()=>{
+            const sc=STYLE_COLORS[ex.style]||T.accent;
+            const siblings=groupExercises(exercises).find(g=>g.items.some(({idx})=>idx===currentEx))?.items.filter(({idx})=>idx!==currentEx)||[];
+            if(!siblings.length)return null;
+            return(
+              <div style={{borderTop:`1px solid ${sc}22`}}>
+                {siblings.map(({ex:s,idx:si},bi)=>{
+                  const sDone=s.sets.every(x=>x.done);
+                  const chargeStr=s.weightStr&&s.weightStr!=='0'?s.weightStr+'kg':'';
+                  return(
+                    <button key={s.id||si} onClick={()=>setCurrentEx(si)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:sDone?'transparent':`${sc}08`,border:'none',cursor:'pointer',borderTop:bi>0?`1px solid ${sc}18`:'none'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:0}}>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                          <div style={{width:1,height:10,background:`${sc}55`}}/>
+                          <div style={{width:6,height:6,borderRadius:3,background:sDone?sc:'rgba(255,255,255,0.2)',border:`1px solid ${sc}66`}}/>
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:sDone?T.textDim:T.text,textDecoration:sDone?'line-through':'none'}}>{s.name}</div>
+                          <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{s.muscle}</div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        {chargeStr&&<div style={{fontSize:12,fontWeight:700,color:sc}}>{chargeStr}</div>}
+                        <div style={{fontSize:10,color:T.textFaint}}>{s.sets.length} séries · {s.repsStr||s.sets[0]?.target||'?'} reps</div>
+                      </div>
+                      {sDone&&<Icon name="check" size={14} stroke={sc} strokeWidth={2.5}/>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* nav buttons */}
