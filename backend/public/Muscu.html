@@ -2565,7 +2565,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
         </div>
       )}
 
-      {/* Header (épuré) */}
+      {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{(()=>{const h=new Date().getHours();return h<12?'Bon matin':h<18?'Bon après-midi':'Bonsoir';})()}</div>
@@ -2573,12 +2573,18 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             <HoloText>{profile&&profile.firstName?profile.firstName:'Athlète'}</HoloText> 👋
           </div>
         </div>
-        {/* Bouton import affiché uniquement pour athlètes autonomes (sans coach) */}
-        {(!profile||!profile.coachId)&&(
-          <button onClick={()=>fileRef.current.click()} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.025)',color:T.textDim,fontSize:11,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-            📥 Importer séance
-          </button>
-        )}
+        <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+          {sheetNames.length>0&&(
+            <button onClick={()=>setShowSaveModal(true)} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(217,119,87,0.4)',background:'rgba(217,119,87,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+              💾 Sauvegarder
+            </button>
+          )}
+          {(!profile||!profile.coachId)&&(
+            <button onClick={()=>fileRef.current.click()} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.025)',color:T.textDim,fontSize:11,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+              📥 Importer
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{marginBottom:16}}><MotivationMarquee/></div>
@@ -2627,15 +2633,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
         </div>
       )}
 
-      {/* Sheet tabs + bouton sauvegarder */}
-      {sheetNames.length>0&&(
-        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14,overflowX:'auto',paddingBottom:4}}>
-          {sheetNames.length>1&&sheetNames.map(name=>(
+      {/* Sheet tabs (onglets mois) */}
+      {sheetNames.length>1&&(
+        <div style={{display:'flex',gap:6,marginBottom:14,overflowX:'auto',paddingBottom:4}}>
+          {sheetNames.map(name=>(
             <button key={name} onClick={()=>{setActiveSheet(name);setSelectedDay(null);}} style={{flexShrink:0,height:32,padding:'0 14px',borderRadius:16,border:sheet===name?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:sheet===name?T.accentSoft:'rgba(255,255,255,0.03)',color:sheet===name?T.accent:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>{name}</button>
           ))}
-          <button onClick={()=>setShowSaveModal(true)} style={{flexShrink:0,marginLeft:'auto',height:32,padding:'0 12px',borderRadius:14,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
-            💾 Sauvegarder
-          </button>
         </div>
       )}
 
