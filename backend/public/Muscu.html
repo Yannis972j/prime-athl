@@ -568,6 +568,29 @@ function excelExport(workout) {
 }
 
 // ── Workout Editor Screen ─────────────────────────────────
+// Regroupe les exercices consécutifs de même style SUPERSET/TRISET en blocs
+function groupExercises(exercises){
+  const groups=[];
+  let i=0;
+  while(i<exercises.length){
+    const ex=exercises[i];
+    if(ex.style==='SUPERSET'||ex.style==='TRISET'){
+      const style=ex.style;
+      const block={style,color:style==='SUPERSET'?'#7ca8c4':'#c2a042',items:[{ex,idx:i}]};
+      i++;
+      while(i<exercises.length&&exercises[i].style===style){
+        block.items.push({ex:exercises[i],idx:i});
+        i++;
+      }
+      groups.push(block);
+    } else {
+      groups.push({style:'CLASSIQUE',color:T.accent,items:[{ex,idx:i}]});
+      i++;
+    }
+  }
+  return groups;
+}
+
 function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef = React.useRef(null);
@@ -896,6 +919,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
         <div style={{position:'relative',borderRadius:18,marginBottom:10,background:'linear-gradient(180deg,rgba(14,14,20,0.78),rgba(14,14,20,0.92))',backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 -8px 28px rgba(0,0,0,0.4),0 12px 30px rgba(0,0,0,0.4)',overflow:'hidden'}}>
           <div style={{padding:'12px 14px 14px',position:'relative'}}>
             <div style={{position:'relative'}}>
+              {(ex.style==='SUPERSET'||ex.style==='TRISET')&&(
+                <div style={{display:'inline-flex',alignItems:'center',gap:5,marginBottom:6,padding:'3px 9px',borderRadius:999,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.12)':'rgba(194,160,66,0.12)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(124,168,196,0.3)':'rgba(194,160,66,0.3)'}`}}>
+                  <div style={{width:5,height:5,borderRadius:3,background:ex.style==='SUPERSET'?'#7ca8c4':'#c2a042'}}/>
+                  <span style={{fontSize:10,color:ex.style==='SUPERSET'?'#7ca8c4':'#c2a042',fontWeight:800,letterSpacing:0.5}}>{ex.style}</span>
+                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600}}>· Enchaîner sans repos</span>
+                </div>
+              )}
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
                 <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,flex:1,minWidth:0}}>{ex.name}</div>
                 {restSeconds>0&&(
@@ -980,22 +1010,63 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           </button>
         </div>
 
-        {/* up next */}
+        {/* up next — groupé par blocs SUPERSET/TRISET */}
         <SectionHeader title="Suite"/>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          {exercises.map((e,i)=>{
-            const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
+          {groupExercises(exercises).map((group,gi)=>{
+            if(group.style==='CLASSIQUE'){
+              const {ex:e,idx:i}=group.items[0];
+              const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
+              return(
+                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,background:isActive?'rgba(217,119,87,0.06)':'rgba(255,255,255,0.025)',cursor:'pointer'}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:isDone?T.accent:isActive?'transparent':'rgba(255,255,255,0.06)',backgroundImage:isActive?HOLO.iris:'none',backgroundSize:'200% 200%',animation:isActive?'holoShift 6s linear infinite':'none',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
+                    {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
+                    <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{e.muscle} · {e.sets.length} séries</div>
+                  </div>
+                  {isActive&&<Pill style={{flexShrink:0}}>NOW</Pill>}
+                </button>
+              );
+            }
+            // SUPERSET ou TRISET : bloc groupé avec bordure colorée
+            const blockDone=group.items.every(({ex:e})=>e.sets.every(s=>s.done));
+            const blockActive=group.items.some(({idx:i})=>i===currentEx);
             return(
-              <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?'rgba(217,119,87,0.3)':'rgba(255,255,255,0.06)'}`,background:isActive?'rgba(217,119,87,0.06)':'rgba(255,255,255,0.025)',cursor:'pointer'}}>
-                <div style={{width:28,height:28,borderRadius:8,background:isDone?T.accent:isActive?'transparent':'rgba(255,255,255,0.06)',backgroundImage:isActive?HOLO.iris:'none',backgroundSize:'200% 200%',animation:isActive?'holoShift 6s linear infinite':'none',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
-                  {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
+              <div key={gi} style={{borderRadius:14,border:`1px solid ${blockActive?group.color+'66':blockDone?'rgba(255,255,255,0.06)':group.color+'33'}`,background:blockActive?`${group.color}0d`:'rgba(255,255,255,0.015)',overflow:'hidden'}}>
+                {/* header bloc */}
+                <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px 4px',borderBottom:`1px solid ${group.color}22`}}>
+                  <div style={{width:6,height:6,borderRadius:3,background:group.color,boxShadow:`0 0 6px ${group.color}aa`}}/>
+                  <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>{group.style}</span>
+                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginLeft:2}}>· Sans repos entre les exercices</span>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
-                  <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{e.muscle} · {e.sets.length} séries</div>
-                </div>
-                {isActive&&<Pill style={{flexShrink:0}}>NOW</Pill>}
-              </button>
+                {/* exercices du bloc */}
+                {group.items.map(({ex:e,idx:i},bi)=>{
+                  const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
+                  return(
+                    <React.Fragment key={e.id||i}>
+                      {bi>0&&(
+                        <div style={{display:'flex',alignItems:'center',gap:6,padding:'2px 12px',background:`${group.color}08`}}>
+                          <div style={{flex:1,height:1,background:`${group.color}22`}}/>
+                          <span style={{fontSize:9,color:group.color,fontWeight:700,letterSpacing:0.4}}>↓ ENCHAÎNER</span>
+                          <div style={{flex:1,height:1,background:`${group.color}22`}}/>
+                        </div>
+                      )}
+                      <button onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:isActive?`${group.color}12`:'transparent',cursor:'pointer',border:'none'}}>
+                        <div style={{width:28,height:28,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
+                          {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
+                          <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.sets.length} séries · {e.repsStr||e.sets[0]?.target||'?'} reps</div>
+                        </div>
+                        {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
@@ -1345,17 +1416,47 @@ function ProgramsScreen({onOpen,importedPrograms,onLoadDay,onImportPrograms}){
                     </button>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                    {d.exercises.slice(0,5).map((ex,i)=>(
-                      <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div style={{width:20,height:20,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:ex.style==='SUPERSET'?'rgba(124,168,196,0.12)':'rgba(217,119,87,0.10)',border:`1px solid ${ex.style==='SUPERSET'?'rgba(124,168,196,0.25)':'rgba(217,119,87,0.2)'}`,color:ex.style==='SUPERSET'?'#7ca8c4':T.accent}}>
-                          {i+1}
-                        </div>
-                        <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
-                        <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}</span>
-                        {ex.weightStr&&ex.weightStr!=='0'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.weightStr}kg</span>}
-                      </div>
-                    ))}
-                    {exCount>5&&<div style={{fontSize:11,color:T.textFaint,paddingLeft:28}}>+{exCount-5} exercices</div>}
+                    {(()=>{
+                      const groups=groupExercises(d.exercises);
+                      let shown=0;
+                      const els=[];
+                      for(const group of groups){
+                        if(shown>=5)break;
+                        if(group.style==='CLASSIQUE'){
+                          const {ex,idx:i}=group.items[0];
+                          els.push(
+                            <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
+                              <div style={{width:20,height:20,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,background:'rgba(217,119,87,0.10)',border:'1px solid rgba(217,119,87,0.2)',color:T.accent}}>{i+1}</div>
+                              <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
+                              <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}</span>
+                              {ex.weightStr&&ex.weightStr!=='0'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.weightStr}kg</span>}
+                            </div>
+                          );
+                          shown++;
+                        } else {
+                          els.push(
+                            <div key={group.items[0].idx} style={{borderRadius:8,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',background:`${group.color}12`}}>
+                                <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
+                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{group.style}</span>
+                                <span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>· sans repos</span>
+                              </div>
+                              {group.items.map(({ex,idx:i},bi)=>(
+                                <div key={i} style={{display:'flex',alignItems:'center',gap:7,padding:`${bi>0?'2px':'4px'} 8px 4px`,borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
+                                  {bi>0&&<span style={{fontSize:8,color:group.color,fontWeight:700,flexShrink:0}}>↓</span>}
+                                  <span style={{flex:1,fontSize:11,fontWeight:500,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
+                                  <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          shown+=group.items.length;
+                        }
+                      }
+                      const remaining=exCount-shown;
+                      if(remaining>0)els.push(<div key="more" style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{remaining} exercices</div>);
+                      return els;
+                    })()}
                   </div>
                 </GlassCard>
               );
@@ -2713,16 +2814,47 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                 {d&&(
                   <>
                     <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:14}}>
-                      {d.exercises.slice(0,5).map((ex,i)=>(
-                        <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                          <div style={{width:24,height:24,borderRadius:7,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{i+1}</div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                            <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.target||'?'} reps</div>
-                          </div>
-                        </div>
-                      ))}
-                      {d.exercises.length>5&&<div style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{d.exercises.length-5} exercices</div>}
+                      {(()=>{
+                        const groups=groupExercises(d.exercises);
+                        let shown=0;const els=[];
+                        for(const group of groups){
+                          if(shown>=6)break;
+                          if(group.style==='CLASSIQUE'){
+                            const {ex,idx:i}=group.items[0];
+                            els.push(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                                <div style={{width:24,height:24,borderRadius:7,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{i+1}</div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.target||'?'} reps</div>
+                                </div>
+                              </div>
+                            );shown++;
+                          } else {
+                            els.push(
+                              <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
+                                  <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
+                                  <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{group.style}</span>
+                                  <span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>· enchaîner sans repos</span>
+                                </div>
+                                {group.items.map(({ex,idx:i},bi)=>(
+                                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
+                                    {bi>0&&<span style={{fontSize:9,color:group.color,fontWeight:700}}>↓</span>}
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                                    </div>
+                                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.target||'?'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            );shown+=group.items.length;
+                          }
+                        }
+                        const rem=d.exercises.length-shown;
+                        if(rem>0)els.push(<div key="more" style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{rem} exercices</div>);
+                        return els;
+                      })()}
                     </div>
                     <button onClick={()=>startDay(selectedDay.dayName)} style={{width:'100%',height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
                       <Icon name="play" size={16} stroke="#fff"/>
