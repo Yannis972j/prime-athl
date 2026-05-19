@@ -37,7 +37,6 @@
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,184,108,0.5)}70%{box-shadow:0 0 0 10px rgba(255,184,108,0)}100%{box-shadow:0 0 0 0 rgba(255,184,108,0)}}
   @keyframes countPop{0%{transform:scale(1)}40%{transform:scale(1.15)}100%{transform:scale(1)}}
   @keyframes tabFadeIn{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
-  @keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
   .tab-content{animation:tabFadeIn 0.35s cubic-bezier(.16,1,.3,1)}
   button,a{transition:transform 0.18s cubic-bezier(.16,1,.3,1),box-shadow 0.18s ease,background 0.2s ease,opacity 0.18s ease,border-color 0.2s ease}
   button:active{transform:scale(0.98)}
@@ -72,11 +71,11 @@
   };
 })();
 </script>
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"></script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"></script>
 <script type="text/babel">
 
 // ── shared ──────────────────────────────────────────────
@@ -2980,7 +2979,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               if(isSel){bg='rgba(217,119,87,0.22)';border='2px solid #d97757';}
               if(isDragOver){bg='rgba(124,196,161,0.25)';border='2px solid #7cc4a1';}
               if(isDragSrc){bg='rgba(217,119,87,0.35)';border='2px dashed #d97757';}
-              const exercises=days[dayName]?days[dayName].exercises:[];
+              const progExercises=days[dayName]?days[dayName].exercises:[];
+              const histExercises=(history||[]).find(h=>h.date&&h.date.slice(0,10)===dateStr)?.exercises||[];
+              const exercises=progExercises.length>0?progExercises:histExercises;
               return(
                 <div key={i} data-cal-date={dateStr}
                   onClick={()=>{if(!dragSrc&&(hasWorkout||isDone))setSelectedDay(isSel?null:{d,dayName,dateStr});}}
@@ -3161,6 +3162,69 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[importMsg,setImportMsg]=React.useState(null);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
+
+  // ── Long-press drag (coach) ──
+  const[nutriDragSrc,setNutriDragSrc]=React.useState(null);  // {dateStr, dayName}
+  const[nutriDragOver,setNutriDragOver]=React.useState(null);
+  const[nutriDragPos,setNutriDragPos]=React.useState({x:0,y:0});
+  const nutriLongPressTimer=React.useRef(null);
+  const nutriDragActive=React.useRef(false);
+
+  const startNutriLongPress=(e,dateStr,dayName,hasPlan,isDone)=>{
+    if(!isCoach||(!hasPlan&&!isDone))return;
+    const touch=e.touches[0];
+    setNutriDragPos({x:touch.clientX,y:touch.clientY});
+    nutriLongPressTimer.current=setTimeout(()=>{
+      nutriDragActive.current=true;
+      setNutriDragSrc({dateStr,dayName});
+      if(navigator.vibrate)navigator.vibrate(40);
+    },500);
+  };
+
+  const onNutriDragMove=React.useCallback(e=>{
+    if(!nutriDragActive.current)return;
+    e.preventDefault();
+    const touch=e.touches[0];
+    setNutriDragPos({x:touch.clientX,y:touch.clientY});
+    const el=document.elementFromPoint(touch.clientX,touch.clientY);
+    const cell=el&&el.closest('[data-nutri-date]');
+    setNutriDragOver(cell?cell.getAttribute('data-nutri-date'):null);
+  },[]);
+
+  const onNutriDragEnd=React.useCallback(async()=>{
+    clearTimeout(nutriLongPressTimer.current);
+    if(!nutriDragActive.current){nutriDragActive.current=false;setNutriDragSrc(null);setNutriDragOver(null);return;}
+    nutriDragActive.current=false;
+    const target=nutriDragOver;
+    const src=nutriDragSrc;
+    setNutriDragSrc(null);setNutriDragOver(null);
+    if(!target||!src||target===src.dateStr)return;
+    const srcLog=history[src.dateStr]||{};
+    try{
+      await apiCall('/api/nutrition/copy-day',{method:'POST',body:{fromDate:src.dateStr,toDate:target,validatedEntries:srcLog.validated||{}}});
+      await load();
+      setImportMsg(`✓ Journée copiée au ${new Date(target+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}`);
+      setTimeout(()=>setImportMsg(null),3000);
+    }catch(e){setImportMsg('✗ Erreur lors de la copie');setTimeout(()=>setImportMsg(null),3000);}
+  },[nutriDragOver,nutriDragSrc,history,load]);
+
+  React.useEffect(()=>{
+    if(!nutriDragSrc)return;
+    window.addEventListener('touchmove',onNutriDragMove,{passive:false});
+    window.addEventListener('touchend',onNutriDragEnd);
+    return()=>{
+      window.removeEventListener('touchmove',onNutriDragMove);
+      window.removeEventListener('touchend',onNutriDragEnd);
+    };
+  },[nutriDragSrc,onNutriDragMove,onNutriDragEnd]);
+
+  // ── Note /5 (athlète) ──
+  const rateDay=async(date,rating)=>{
+    try{
+      await apiCall('/api/nutrition/rate',{method:'POST',body:{date,rating}});
+      setHistory(h=>({...h,[date]:{...(h[date]||{validated:{},validatedAt:{}}),rating}}));
+    }catch(e){console.error(e);}
+  };
   const nowN=new Date();
   const[calYear,setCalYear]=React.useState(nowN.getFullYear());
   const[calMonth,setCalMonth]=React.useState(nowN.getMonth());
@@ -3353,22 +3417,39 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const histLog=history[dateStr];
             const isDone=histLog&&Object.values(histLog.validated||{}).some(Boolean);
+            const cellRating=histLog?.rating||0;
             const isToday2=dateStr===todayStrN;
             const isSel=selectedDate===dateStr;
+            const isDragSrc=nutriDragSrc&&nutriDragSrc.dateStr===dateStr;
+            const isDragOver=nutriDragOver===dateStr;
             let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)',color=T.textFaint;
             if(isDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';color='#7cc4a1';}
             else if(hasPlan){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.25)';color='#d97757';}
             if(isToday2)border='2px solid rgba(217,119,87,0.6)';
             if(isSel){bg='rgba(217,119,87,0.2)';border='2px solid #d97757';}
+            if(isDragOver){bg='rgba(124,196,161,0.25)';border='2px solid #7cc4a1';}
+            if(isDragSrc){bg='rgba(217,119,87,0.35)';border='2px dashed #d97757';}
             return(
-              <div key={i} onClick={()=>{if(hasPlan||isDone){setSelectedDate(isSel?null:dateStr);setViewDay(dayName);setExpandedMeal(null);}}}
-                style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasPlan||isDone)?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
-                <span style={{fontSize:11,fontWeight:600,color}}>{d}</span>
-                {(hasPlan||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:1}}/>}
+              <div key={i} data-nutri-date={dateStr}
+                onClick={()=>{if(!nutriDragActive.current&&(hasPlan||isDone)){setSelectedDate(isSel?null:dateStr);setViewDay(dayName);setExpandedMeal(null);}}}
+                onTouchStart={e=>startNutriLongPress(e,dateStr,dayName,hasPlan,isDone)}
+                onTouchEnd={()=>{if(!nutriDragActive.current)clearTimeout(nutriLongPressTimer.current);}}
+                style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasPlan||isDone)?'pointer':'default',background:bg,border,transition:'background 0.15s,border 0.15s',userSelect:'none',WebkitUserSelect:'none'}}>
+                <span style={{fontSize:11,fontWeight:600,color,opacity:isDragSrc?0.5:1}}>{d}</span>
+                {(hasPlan||isDone)&&!cellRating&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:1}}/>}
+                {cellRating>0&&<div style={{fontSize:6,lineHeight:1,marginTop:1,letterSpacing:-0.5}}>{'★'.repeat(cellRating)}</div>}
+                {isDragOver&&<div style={{fontSize:8,color:'#7cc4a1',fontWeight:700}}>+</div>}
               </div>
             );
           })}
         </div>
+        {/* Ghost drag nutrition */}
+        {nutriDragSrc&&(
+          <div style={{position:'fixed',left:nutriDragPos.x-24,top:nutriDragPos.y-24,width:48,height:48,borderRadius:14,background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',boxShadow:'0 8px 24px rgba(124,196,161,0.5)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:9999,opacity:0.9}}>
+            <span style={{fontSize:20}}>🍎</span>
+            <div style={{fontSize:8,color:'rgba(255,255,255,0.9)',fontWeight:700,marginTop:1}}>COPIER</div>
+          </div>
+        )}
         {selectedDate&&(
           <div style={{marginTop:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',fontSize:12,color:T.textDim,textAlign:'center',textTransform:'capitalize'}}>
             {new Date(selectedDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} · <span style={{color:T.accent,fontWeight:700}}>{viewDay}</span>
@@ -3519,6 +3600,39 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           );
         })}
       </div>
+
+      {/* ── Note /5 (athlète uniquement) ── */}
+      {!isCoach&&(()=>{
+        const ratingDate=selectedDate||todayStrN;
+        const currentRating=(ratingDate===todayStrN?todayLog?.rating:history[ratingDate]?.rating)||0;
+        return(
+          <div style={{marginTop:16,padding:'14px 16px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>
+              Ta journée nutrition
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:13,color:T.textDim,fontWeight:500}}>Note du jour</div>
+              <div style={{display:'flex',gap:6}}>
+                {[1,2,3,4,5].map(star=>(
+                  <button key={star} onClick={()=>rateDay(ratingDate,star)} style={{
+                    width:36,height:36,borderRadius:10,border:'none',cursor:'pointer',
+                    background:star<=currentRating?'rgba(194,160,66,0.15)':'rgba(255,255,255,0.04)',
+                    fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',
+                    transition:'transform 0.15s,background 0.15s',
+                  }} onMouseDown={e=>e.currentTarget.style.transform='scale(0.88)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                    {star<=currentRating?'⭐':'☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {currentRating>0&&(
+              <div style={{fontSize:11,color:T.textFaint,marginTop:8,textAlign:'right'}}>
+                {['','😞 Mauvaise journée','😕 Passable','😐 Correct','😊 Bonne journée','🔥 Parfaite !'][currentRating]}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -5224,6 +5338,11 @@ function CoachScreen({authToken,authUser}){
     }catch(e){alert('Erreur: '+e.message);}
   };
 
+  // ── Calendar view (must come before detail check) ───────────────────────────
+  if(coachView==='calendar'){
+    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
+  }
+
   // ── Detail view ─────────────────────────────────
   if(selected){
     const a=detail||selected;
@@ -5505,10 +5624,6 @@ function CoachScreen({authToken,authUser}){
 
   // ── List view ───────────────────────────────────
   const unusedInvites=invites.filter(i=>!i.used);
-
-  if(coachView==='calendar'){
-    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
-  }
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
@@ -6325,8 +6440,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         )}
         {!screen&&(
           <div className="tab-content" style={{height:'100%',overflow:'auto'}} key={tab}>
-            {tab==='programme'&&<HomeScreen workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram} onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')} onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll} refreshing={refreshing} history={history} onRefreshHistory={refreshAll}/>}
-            {tab==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={refreshAll} refreshing={refreshing}/>}
+            {tab==='programme'&&<ProgrammeTab
+              workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
+              onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
+              onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
+              refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
+              authToken={authToken} nutriRefreshKey={nutriRefreshKey}
+            />}
             {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
             {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}
             {tab==='explorer'&&<ExplorerScreen profile={profile} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>}
@@ -6353,18 +6473,50 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   );
 }
 
+// ── Programme Tab (Séances + Nutrition réunis) ───────────────────────────────
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey}){
+  const[sub,setSub]=React.useState('seances');
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      {/* Sous-navigation */}
+      <div style={{padding:'10px 16px 0',flexShrink:0}}>
+        <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`}}>
+          {[{id:'seances',label:'🏋️ Séances'},{id:'nutrition',label:'🍎 Nutrition'}].map(s=>(
+            <button key={s.id} onClick={()=>setSub(s.id)} style={{
+              flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+              background:sub===s.id?T.accentSoft:'transparent',
+              color:sub===s.id?T.accent:T.textFaint,
+              transition:'all 0.2s',letterSpacing:0.2,
+            }}>{s.label}</button>
+          ))}
+        </div>
+      </div>
+      {/* Contenu */}
+      <div style={{flex:1,overflow:'auto'}}>
+        {sub==='seances'&&<HomeScreen
+          workout={workout} importedPrograms={importedPrograms} onImportPrograms={onImportPrograms}
+          onStartWorkout={onStartWorkout} onEdit={onEdit} onResume={onResume}
+          onEditDay={onEditDay} profile={profile} programMeta={programMeta}
+          onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
+        />}
+        {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
+      </div>
+    </div>
+  );
+}
+
 function BottomTabBar({tab,onTab,role,unreadMessages}){
   const items=role==='coach'?[
     {id:'coach',icon:'users',label:'Coach'},
-    {id:'programme',icon:'grid',label:'Prog'},
+    {id:'programme',icon:'grid',label:'Programme'},
     {id:'explorer',icon:'compass',label:'Explorer'},
     {id:'messages',icon:'message',label:'Chat'},
     {id:'profile',icon:'user',label:'Profil'},
   ]:[
     {id:'programme',icon:'grid',label:'Programme'},
-    {id:'nutrition',icon:'apple',label:'Nutri'},
     {id:'explorer',icon:'compass',label:'Explorer'},
     {id:'messages',icon:'message',label:'Chat'},
+    {id:'stats',icon:'chart',label:'Stats'},
     {id:'profile',icon:'user',label:'Profil'},
   ];
   return(
