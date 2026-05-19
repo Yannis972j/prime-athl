@@ -765,6 +765,15 @@ app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => 
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   const data = req.body?.data || {};
   const ts = Date.now();
+  // Auto-archiver l'ancien programme avant de l'écraser
+  const prev = DATA.programs[req.params.athleteId];
+  if (prev && prev.data && Object.keys(prev.data).length > 0) {
+    if (!DATA.savedPrograms[req.params.athleteId]) DATA.savedPrograms[req.params.athleteId] = [];
+    const already = DATA.savedPrograms[req.params.athleteId];
+    const autoName = 'Programme du ' + new Date(prev.assignedAt || ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    already.unshift({ id: Date.now().toString(36) + 'a', name: autoName, savedAt: Date.now(), data: prev.data });
+    if (already.length > 5) DATA.savedPrograms[req.params.athleteId] = already.slice(0, 5);
+  }
   DATA.programs[req.params.athleteId] = { data, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: ts });
