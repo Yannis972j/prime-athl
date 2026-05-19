@@ -1,0 +1,19 @@
+{
+  "id": "bras-biceps-triceps",
+  "name": "Bras — Biceps & Triceps",
+  "category": "bras",
+  "categoryLabel": "Bras",
+  "emoji": "💪",
+  "duration": 50,
+  "level": "Tous niveaux",
+  "random": true,
+  "description": "Séance bras en supersets antagonistes pour un maximum de pump.",
+  "exercises": [
+    { "name": "Curl barre EZ", "muscle": "Biceps", "style": "SUPERSET", "sets": 4, "reps": "10-12", "rest": "60s", "weightHint": "" },
+    { "name": "Pushdown corde", "muscle": "Triceps", "style": "SUPERSET", "sets": 4, "reps": "12-15", "rest": "60s", "weightHint": "" },
+    { "name": "Curl incliné haltères", "muscle": "Biceps Long", "style": "SUPERSET", "sets": 3, "reps": "12", "rest": "60s", "weightHint": "" },
+    { "name": "Extension triceps couché", "muscle": "Triceps Long", "style": "SUPERSET", "sets": 3, "reps": "12", "rest": "60s", "weightHint": "" },
+    { "name": "Curl marteau câble", "muscle": "Brachial / Biceps", "style": "SUPERSET", "sets": 3, "reps": "12", "rest": "60s", "weightHint": "" },
+    { "name": "Dips banc", "muscle": "Triceps", "style": "SUPERSET", "sets": 3, "reps": "MAX", "rest": "60s", "weightHint": "" }
+  ]
+}

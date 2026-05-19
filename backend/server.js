@@ -57,7 +57,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -193,6 +193,7 @@ const profileOf = u => u && {
   isMainCoach: !!u.isMainCoach,
   onboardedAt: u.onboardedAt || null,
   requestedRole: u.requestedRole || u.role || 'athlete',
+  premium: !!u.premium,
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -1118,7 +1119,7 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
   const PALETTE = ['#d97757','#7cc4a1','#7ca8c4','#c97586','#c2a042','#a08fd4','#78b4b4'];
 
   const athletes = Object.values(DATA.users)
-    .filter(u => u.coachId === req.user.id && u.status === 'active');
+    .filter(u => u.coachId === req.user.id && u.role === 'athlete');
 
   const result = athletes.map((u, idx) => {
     // Sessions du mois
@@ -1431,6 +1432,87 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   socket.join('user:' + socket.user.id);
+});
+
+// ── Séances Premium ──────────────────────────────────────────────────────────
+
+const SEANCES_DIR = path.join(__dirname, 'seances');
+
+// Charge toutes les séances depuis le dossier au démarrage
+function loadSeances() {
+  const seances = [];
+  if (!fs.existsSync(SEANCES_DIR)) return seances;
+  const categories = fs.readdirSync(SEANCES_DIR, { withFileTypes: true })
+    .filter(d => d.isDirectory()).map(d => d.name);
+  for (const cat of categories) {
+    const catDir = path.join(SEANCES_DIR, cat);
+    const files = fs.readdirSync(catDir).filter(f => f.endsWith('.json'));
+    for (const file of files) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(catDir, file), 'utf8'));
+        seances.push(data);
+      } catch (e) { console.warn('[seances] Erreur lecture', file, e.message); }
+    }
+  }
+  return seances;
+}
+let SEANCES_CACHE = loadSeances();
+
+// Liste des séances (premium only)
+app.get('/api/seances', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(401).json({ error: 'not_found' });
+  if (!u.premium) return res.status(403).json({ error: 'premium_required' });
+  const category = req.query.category;
+  const list = category ? SEANCES_CACHE.filter(s => s.category === category) : SEANCES_CACHE;
+  res.json(list);
+});
+
+// Séance aléatoire (premium only)
+app.get('/api/seances/random', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(401).json({ error: 'not_found' });
+  if (!u.premium) return res.status(403).json({ error: 'premium_required' });
+  const category = req.query.category;
+  const pool = SEANCES_CACHE.filter(s => s.random !== false && (!category || s.category === category));
+  if (!pool.length) return res.status(404).json({ error: 'no_seance' });
+  res.json(pool[Math.floor(Math.random() * pool.length)]);
+});
+
+// Activer premium via code d'accès
+app.post('/api/premium/unlock', authRequired, (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'code_required' });
+  const rawCodes = (process.env.PREMIUM_CODES || '').split(',').map(c => c.trim()).filter(Boolean);
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(401).json({ error: 'not_found' });
+  if (u.premium) return res.json({ ok: true, already: true });
+  // Vérifier code valide et non déjà utilisé
+  const used = DATA.premiumCodes || {};
+  if (!rawCodes.includes(code)) return res.status(400).json({ error: 'invalid_code' });
+  if (used[code]) return res.status(400).json({ error: 'code_already_used' });
+  // Activer
+  DATA.premiumCodes[code] = { usedBy: req.user.id, usedAt: Date.now() };
+  u.premium = true;
+  persist();
+  res.json({ ok: true });
+});
+
+// Statut premium
+app.get('/api/premium/status', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(401).json({ error: 'not_found' });
+  res.json({ premium: !!u.premium });
+});
+
+// Coach principal : activer premium manuellement pour un utilisateur
+app.post('/api/premium/grant/:userId', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  const u = DATA.users[req.params.userId];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  u.premium = !!req.body.enabled;
+  persist();
+  io.to('user:' + u.id).emit('premium-updated', { premium: u.premium });
+  res.json({ ok: true, premium: u.premium });
 });
 
 // Global error handlers — keep server alive on unexpected errors

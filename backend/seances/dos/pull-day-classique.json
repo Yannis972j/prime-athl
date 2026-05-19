@@ -1,0 +1,21 @@
+{
+  "id": "pull-day-classique",
+  "name": "Pull Day Classique",
+  "category": "dos",
+  "categoryLabel": "Dos & Biceps",
+  "emoji": "🔙",
+  "duration": 65,
+  "level": "Intermédiaire",
+  "random": false,
+  "description": "Séance pull complète : grand dorsal, trapèzes, rhomboïdes et biceps.",
+  "exercises": [
+    { "name": "Tractions pronation", "muscle": "Grand Dorsal", "style": "CLASSIQUE", "sets": 4, "reps": "6-8", "rest": "90s", "weightHint": "Lestées si possible" },
+    { "name": "Rowing barre", "muscle": "Dos Épais", "style": "CLASSIQUE", "sets": 4, "reps": "8-10", "rest": "90s", "weightHint": "" },
+    { "name": "Tirage vertical prise large", "muscle": "Grand Dorsal", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Rowing haltère unilatéral", "muscle": "Dos / Trapèzes", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "60s", "weightHint": "" },
+    { "name": "Face pull poulie", "muscle": "Trapèzes / Épaules Arrière", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Shrugs haltères", "muscle": "Trapèzes", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Curl barre", "muscle": "Biceps", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Curl marteau haltères", "muscle": "Biceps / Brachial", "style": "CLASSIQUE", "sets": 3, "reps": "12", "rest": "60s", "weightHint": "" }
+  ]
+}

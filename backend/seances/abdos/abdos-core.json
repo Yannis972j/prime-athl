@@ -1,0 +1,19 @@
+{
+  "id": "abdos-core",
+  "name": "Abdos & Core",
+  "category": "abdos",
+  "categoryLabel": "Abdos & Core",
+  "emoji": "⚡",
+  "duration": 30,
+  "level": "Tous niveaux",
+  "random": true,
+  "description": "Circuit abdominaux complet : gainage, crunchs, obliques et lombaires.",
+  "exercises": [
+    { "name": "Planche frontale", "muscle": "Abdominaux", "style": "ABDOS", "sets": 3, "reps": "60s", "rest": "30s", "weightHint": "" },
+    { "name": "Crunch câble", "muscle": "Droit Abdominal", "style": "ABDOS", "sets": 3, "reps": "15-20", "rest": "45s", "weightHint": "" },
+    { "name": "Relevé de jambes suspendu", "muscle": "Droit Abdominal / Fléchisseurs", "style": "ABDOS", "sets": 3, "reps": "12-15", "rest": "45s", "weightHint": "" },
+    { "name": "Planche latérale", "muscle": "Obliques", "style": "ABDOS", "sets": 3, "reps": "45s chaque côté", "rest": "30s", "weightHint": "" },
+    { "name": "Rotation russe lestée", "muscle": "Obliques", "style": "ABDOS", "sets": 3, "reps": "20", "rest": "45s", "weightHint": "" },
+    { "name": "Superman", "muscle": "Lombaires", "style": "ABDOS", "sets": 3, "reps": "15", "rest": "45s", "weightHint": "" }
+  ]
+}

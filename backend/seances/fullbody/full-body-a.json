@@ -1,0 +1,20 @@
+{
+  "id": "full-body-a",
+  "name": "Full Body A",
+  "category": "fullbody",
+  "categoryLabel": "Full Body",
+  "emoji": "🔥",
+  "duration": 60,
+  "level": "Intermédiaire",
+  "random": false,
+  "description": "Séance Full Body A — mouvements polyarticulaires pour travailler tout le corps en une séance.",
+  "exercises": [
+    { "name": "Squat barre", "muscle": "Quadriceps / Fessiers", "style": "CLASSIQUE", "sets": 4, "reps": "6-8", "rest": "90s", "weightHint": "" },
+    { "name": "Développé couché barre", "muscle": "Pectoraux", "style": "CLASSIQUE", "sets": 4, "reps": "8-10", "rest": "90s", "weightHint": "" },
+    { "name": "Tractions", "muscle": "Dos / Biceps", "style": "CLASSIQUE", "sets": 4, "reps": "6-8", "rest": "90s", "weightHint": "" },
+    { "name": "Développé militaire haltères", "muscle": "Épaules", "style": "CLASSIQUE", "sets": 3, "reps": "10", "rest": "75s", "weightHint": "" },
+    { "name": "Romanian Deadlift", "muscle": "Ischio-Jambiers", "style": "CLASSIQUE", "sets": 3, "reps": "10", "rest": "75s", "weightHint": "" },
+    { "name": "Planche", "muscle": "Abdominaux", "style": "ABDOS", "sets": 3, "reps": "60s", "rest": "45s", "weightHint": "" },
+    { "name": "Crunch câble", "muscle": "Abdominaux", "style": "ABDOS", "sets": 3, "reps": "15", "rest": "45s", "weightHint": "" }
+  ]
+}
