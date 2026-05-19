@@ -501,6 +501,7 @@ function parseYannisExcel(file, onSuccess, onError) {
         let currentDay = null;
         let currentCategory = '';
         let lastSeriesCount = 3;
+        let lastExplicitStyle = 'CLASSIQUE';
 
         rows.forEach(row => {
           if (!row || row.every(c => !String(c||'').trim())) return;
@@ -511,12 +512,15 @@ function parseYannisExcel(file, onSuccess, onError) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; }
           if (!currentDay) return;
 
           if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
 
-          const styleVal = String(row[colStyle]||'').trim().toUpperCase() || 'CLASSIQUE';
+          const rawStyle = String(row[colStyle]||'').trim().toUpperCase();
+          // Cellule fusionnée Excel : si vide et style précédent était SUPERSET/TRISET, hériter
+          const styleVal = rawStyle || ((lastExplicitStyle==='SUPERSET'||lastExplicitStyle==='TRISET') ? lastExplicitStyle : 'CLASSIQUE');
+          if (rawStyle) lastExplicitStyle = rawStyle;
           const seriesNum = parseFloat(String(row[colSeries]||'').replace(',','.'));
           const numSets = (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
           if (!isNaN(seriesNum) && seriesNum > 0) lastSeriesCount = numSets;
