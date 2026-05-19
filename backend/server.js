@@ -259,6 +259,7 @@ const authLimiter = rateLimit({
 // Root = landing page (index.html). L'app vit sur /Muscu.html.
 // Le express.static plus bas servira automatiquement /index.html sur "/", mais on garde un fallback explicite :
 app.get('/app', (req, res) => res.redirect('/Muscu.html'));
+app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Si build.js a généré Muscu.app.html (vanilla JS, sans Babel — bien plus rapide),
 // on le sert à la place de Muscu.html. Sinon fallback sur la version source (Babel CDN).

@@ -936,6 +936,60 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     }
   });
 });
+
+// Cold start Render : overlay de chargement si /Muscu.html met plus de 1.5s à répondre
+(function(){
+  const overlay = document.createElement('div');
+  overlay.id = 'cold-overlay';
+  overlay.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:18px">
+      <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px">PA</div>
+      <div style="color:#f4f1ed;font-size:17px;font-weight:700">Lancement en cours…</div>
+      <div style="color:rgba(244,241,237,0.5);font-size:13px;text-align:center;max-width:260px;line-height:1.6">Le serveur se réveille.<br>Prêt dans quelques secondes ☕</div>
+      <div style="width:140px;height:3px;background:rgba(255,255,255,0.10);border-radius:2px;overflow:hidden;margin-top:4px">
+        <div id="cold-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#d97757,#c97586);border-radius:2px;transition:width 0.5s ease"></div>
+      </div>
+    </div>`;
+  Object.assign(overlay.style, {
+    position:'fixed',inset:'0',background:'rgba(10,10,14,0.94)',
+    backdropFilter:'blur(12px)',display:'none',alignItems:'center',
+    justifyContent:'center',zIndex:'9999',transition:'opacity 0.3s ease'
+  });
+  document.body.appendChild(overlay);
+
+  let barW = 0, barT;
+  function startBar(){
+    barT = setInterval(() => {
+      barW = Math.min(barW + (barW < 60 ? 5 : 0.8), 90);
+      const b = document.getElementById('cold-bar');
+      if(b) b.style.width = barW + '%';
+    }, 300);
+  }
+
+  let timer;
+  function showOverlay(){
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => { overlay.style.opacity = '1'; startBar(); });
+  }
+  function hideOverlay(){
+    clearInterval(barT);
+    const b = document.getElementById('cold-bar');
+    if(b) b.style.width = '100%';
+    setTimeout(() => { overlay.style.opacity = '0'; setTimeout(() => overlay.remove(), 300); }, 200);
+  }
+
+  // Intercepte tous les liens vers /Muscu.html
+  document.querySelectorAll('a[href="/Muscu.html"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const dest = a.href;
+      timer = setTimeout(showOverlay, 1500); // affiche seulement si > 1.5s
+      fetch('/api/health', { signal: AbortSignal.timeout(500) })
+        .then(() => { clearTimeout(timer); window.location.href = dest; })
+        .catch(() => { showOverlay(); setTimeout(() => { hideOverlay(); window.location.href = dest; }, 3500); });
+    });
+  });
+})();
 </script>
 </body>
 </html>
