@@ -1074,6 +1074,40 @@ app.post('/api/nutrition/validate/:mealId', authRequired, (req, res) => {
   res.json({ ok: true, validated: newVal, date: today });
 });
 
+// Athlete rates their nutrition day (1-5 stars)
+app.post('/api/nutrition/rate', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const { date, rating } = req.body || {};
+  const dateStr = date || ymd(Date.now());
+  const r = parseInt(rating);
+  if (!r || r < 1 || r > 5) return res.status(400).json({ error: 'invalid_rating' });
+  if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
+  if (!DATA.nutritionLogs[u.id][dateStr]) DATA.nutritionLogs[u.id][dateStr] = { validated: {}, validatedAt: {} };
+  DATA.nutritionLogs[u.id][dateStr].rating = r;
+  persist();
+  if (u.coachId) io.to('user:' + u.coachId).emit('nutrition-rated', { athleteId: u.id, date: dateStr, rating: r });
+  res.json({ ok: true, rating: r });
+});
+
+// Coach copies a nutrition day to another date
+app.post('/api/nutrition/copy-day', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const { fromDate, toDate, validatedEntries } = req.body || {};
+  if (!fromDate || !toDate) return res.status(400).json({ error: 'dates_required' });
+  if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
+  // Copy the validated entries from source to target
+  const srcLog = DATA.nutritionLogs[u.id][fromDate] || {};
+  DATA.nutritionLogs[u.id][toDate] = {
+    validated: { ...(validatedEntries || srcLog.validated || {}) },
+    validatedAt: Object.fromEntries(Object.entries(validatedEntries || srcLog.validated || {}).map(([k,v]) => [k, v ? Date.now() : null])),
+    copiedFrom: fromDate,
+  };
+  persist();
+  res.json({ ok: true });
+});
+
 // User imports / updates their OWN nutrition plan (coach for himself, or athlete without coach)
 app.put('/api/my-nutrition', authRequired, (req, res) => {
   const plan = req.body && req.body.plan ? req.body.plan : null;

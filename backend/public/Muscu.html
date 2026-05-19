@@ -3161,6 +3161,69 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[importMsg,setImportMsg]=React.useState(null);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
+
+  // ── Long-press drag (coach) ──
+  const[nutriDragSrc,setNutriDragSrc]=React.useState(null);  // {dateStr, dayName}
+  const[nutriDragOver,setNutriDragOver]=React.useState(null);
+  const[nutriDragPos,setNutriDragPos]=React.useState({x:0,y:0});
+  const nutriLongPressTimer=React.useRef(null);
+  const nutriDragActive=React.useRef(false);
+
+  const startNutriLongPress=(e,dateStr,dayName,hasPlan,isDone)=>{
+    if(!isCoach||(!hasPlan&&!isDone))return;
+    const touch=e.touches[0];
+    setNutriDragPos({x:touch.clientX,y:touch.clientY});
+    nutriLongPressTimer.current=setTimeout(()=>{
+      nutriDragActive.current=true;
+      setNutriDragSrc({dateStr,dayName});
+      if(navigator.vibrate)navigator.vibrate(40);
+    },500);
+  };
+
+  const onNutriDragMove=React.useCallback(e=>{
+    if(!nutriDragActive.current)return;
+    e.preventDefault();
+    const touch=e.touches[0];
+    setNutriDragPos({x:touch.clientX,y:touch.clientY});
+    const el=document.elementFromPoint(touch.clientX,touch.clientY);
+    const cell=el&&el.closest('[data-nutri-date]');
+    setNutriDragOver(cell?cell.getAttribute('data-nutri-date'):null);
+  },[]);
+
+  const onNutriDragEnd=React.useCallback(async()=>{
+    clearTimeout(nutriLongPressTimer.current);
+    if(!nutriDragActive.current){nutriDragActive.current=false;setNutriDragSrc(null);setNutriDragOver(null);return;}
+    nutriDragActive.current=false;
+    const target=nutriDragOver;
+    const src=nutriDragSrc;
+    setNutriDragSrc(null);setNutriDragOver(null);
+    if(!target||!src||target===src.dateStr)return;
+    const srcLog=history[src.dateStr]||{};
+    try{
+      await apiCall('/api/nutrition/copy-day',{method:'POST',body:{fromDate:src.dateStr,toDate:target,validatedEntries:srcLog.validated||{}}});
+      await load();
+      setImportMsg(`✓ Journée copiée au ${new Date(target+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}`);
+      setTimeout(()=>setImportMsg(null),3000);
+    }catch(e){setImportMsg('✗ Erreur lors de la copie');setTimeout(()=>setImportMsg(null),3000);}
+  },[nutriDragOver,nutriDragSrc,history,load]);
+
+  React.useEffect(()=>{
+    if(!nutriDragSrc)return;
+    window.addEventListener('touchmove',onNutriDragMove,{passive:false});
+    window.addEventListener('touchend',onNutriDragEnd);
+    return()=>{
+      window.removeEventListener('touchmove',onNutriDragMove);
+      window.removeEventListener('touchend',onNutriDragEnd);
+    };
+  },[nutriDragSrc,onNutriDragMove,onNutriDragEnd]);
+
+  // ── Note /5 (athlète) ──
+  const rateDay=async(date,rating)=>{
+    try{
+      await apiCall('/api/nutrition/rate',{method:'POST',body:{date,rating}});
+      setHistory(h=>({...h,[date]:{...(h[date]||{validated:{},validatedAt:{}}),rating}}));
+    }catch(e){console.error(e);}
+  };
   const nowN=new Date();
   const[calYear,setCalYear]=React.useState(nowN.getFullYear());
   const[calMonth,setCalMonth]=React.useState(nowN.getMonth());
@@ -3353,22 +3416,39 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const histLog=history[dateStr];
             const isDone=histLog&&Object.values(histLog.validated||{}).some(Boolean);
+            const cellRating=histLog?.rating||0;
             const isToday2=dateStr===todayStrN;
             const isSel=selectedDate===dateStr;
+            const isDragSrc=nutriDragSrc&&nutriDragSrc.dateStr===dateStr;
+            const isDragOver=nutriDragOver===dateStr;
             let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)',color=T.textFaint;
             if(isDone){bg='rgba(124,196,161,0.1)';border='1px solid rgba(124,196,161,0.3)';color='#7cc4a1';}
             else if(hasPlan){bg='rgba(217,119,87,0.08)';border='1px solid rgba(217,119,87,0.25)';color='#d97757';}
             if(isToday2)border='2px solid rgba(217,119,87,0.6)';
             if(isSel){bg='rgba(217,119,87,0.2)';border='2px solid #d97757';}
+            if(isDragOver){bg='rgba(124,196,161,0.25)';border='2px solid #7cc4a1';}
+            if(isDragSrc){bg='rgba(217,119,87,0.35)';border='2px dashed #d97757';}
             return(
-              <div key={i} onClick={()=>{if(hasPlan||isDone){setSelectedDate(isSel?null:dateStr);setViewDay(dayName);setExpandedMeal(null);}}}
-                style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasPlan||isDone)?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
-                <span style={{fontSize:11,fontWeight:600,color}}>{d}</span>
-                {(hasPlan||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:1}}/>}
+              <div key={i} data-nutri-date={dateStr}
+                onClick={()=>{if(!nutriDragActive.current&&(hasPlan||isDone)){setSelectedDate(isSel?null:dateStr);setViewDay(dayName);setExpandedMeal(null);}}}
+                onTouchStart={e=>startNutriLongPress(e,dateStr,dayName,hasPlan,isDone)}
+                onTouchEnd={()=>{if(!nutriDragActive.current)clearTimeout(nutriLongPressTimer.current);}}
+                style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasPlan||isDone)?'pointer':'default',background:bg,border,transition:'background 0.15s,border 0.15s',userSelect:'none',WebkitUserSelect:'none'}}>
+                <span style={{fontSize:11,fontWeight:600,color,opacity:isDragSrc?0.5:1}}>{d}</span>
+                {(hasPlan||isDone)&&!cellRating&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#7cc4a1':'#d97757',marginTop:1}}/>}
+                {cellRating>0&&<div style={{fontSize:6,lineHeight:1,marginTop:1,letterSpacing:-0.5}}>{'★'.repeat(cellRating)}</div>}
+                {isDragOver&&<div style={{fontSize:8,color:'#7cc4a1',fontWeight:700}}>+</div>}
               </div>
             );
           })}
         </div>
+        {/* Ghost drag nutrition */}
+        {nutriDragSrc&&(
+          <div style={{position:'fixed',left:nutriDragPos.x-24,top:nutriDragPos.y-24,width:48,height:48,borderRadius:14,background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',boxShadow:'0 8px 24px rgba(124,196,161,0.5)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:9999,opacity:0.9}}>
+            <span style={{fontSize:20}}>🍎</span>
+            <div style={{fontSize:8,color:'rgba(255,255,255,0.9)',fontWeight:700,marginTop:1}}>COPIER</div>
+          </div>
+        )}
         {selectedDate&&(
           <div style={{marginTop:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',fontSize:12,color:T.textDim,textAlign:'center',textTransform:'capitalize'}}>
             {new Date(selectedDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} · <span style={{color:T.accent,fontWeight:700}}>{viewDay}</span>
@@ -3519,6 +3599,39 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           );
         })}
       </div>
+
+      {/* ── Note /5 (athlète uniquement) ── */}
+      {!isCoach&&(()=>{
+        const ratingDate=selectedDate||todayStrN;
+        const currentRating=(ratingDate===todayStrN?todayLog?.rating:history[ratingDate]?.rating)||0;
+        return(
+          <div style={{marginTop:16,padding:'14px 16px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>
+              Ta journée nutrition
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:13,color:T.textDim,fontWeight:500}}>Note du jour</div>
+              <div style={{display:'flex',gap:6}}>
+                {[1,2,3,4,5].map(star=>(
+                  <button key={star} onClick={()=>rateDay(ratingDate,star)} style={{
+                    width:36,height:36,borderRadius:10,border:'none',cursor:'pointer',
+                    background:star<=currentRating?'rgba(194,160,66,0.15)':'rgba(255,255,255,0.04)',
+                    fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',
+                    transition:'transform 0.15s,background 0.15s',
+                  }} onMouseDown={e=>e.currentTarget.style.transform='scale(0.88)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                    {star<=currentRating?'⭐':'☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {currentRating>0&&(
+              <div style={{fontSize:11,color:T.textFaint,marginTop:8,textAlign:'right'}}>
+                {['','😞 Mauvaise journée','😕 Passable','😐 Correct','😊 Bonne journée','🔥 Parfaite !'][currentRating]}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
