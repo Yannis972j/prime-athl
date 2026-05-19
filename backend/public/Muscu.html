@@ -5839,10 +5839,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const updateOwnProgram=React.useCallback(async data=>{
     setImportedPrograms(data);
     triggerSave();
-    if(authUser.role==='athlete'){
-      try{await apiCall('/api/my-program',{method:'PUT',body:{data}});}catch(e){console.error('program sync',e);}
-    }
-  },[authUser.role,triggerSave]);
+    try{await apiCall('/api/my-program',{method:'PUT',body:{data}});}catch(e){console.error('program sync',e);}
+  },[triggerSave]);
 
   const startWorkout=w=>{setWorkout(w);setScreen('session');};
 
