@@ -704,7 +704,7 @@ app.post('/api/my-program/save', authRequired, (req, res) => {
   const name = req.body?.name || ('Programme ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }));
   if (!DATA.savedPrograms[req.user.id]) DATA.savedPrograms[req.user.id] = [];
   DATA.savedPrograms[req.user.id].unshift({ id: uid, name, savedAt: Date.now(), data: p.data });
-  // Garder max 20 archives par utilisateur
+  // Garder max 5 archives par utilisateur
   if (DATA.savedPrograms[req.user.id].length > 5) DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].slice(0, 5);
   persist();
   res.json({ ok: true, id: uid });
@@ -1130,7 +1130,7 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
     const logs = DATA.nutritionLogs[u.id] || {};
     const nutriDates = Object.keys(logs).filter(dateStr => {
       const d = new Date(dateStr).getTime();
-      return d >= start && d < end && Object.values(logs[dateStr]||{}).some(v => v);
+      return d >= start && d < end && Object.values(logs[dateStr]?.validated||{}).some(v => v);
     });
 
     // Jours prévus au programme (noms de jours)
