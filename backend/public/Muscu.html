@@ -5008,7 +5008,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
     setLoading(true);
     setCalData(null);
     apiCall(`/api/coach/calendar?year=${year}&month=${month}`)
-      .then(d=>setCalData(d))
+      .then(d=>setCalData(d.athletes||d))
       .catch(console.error)
       .finally(()=>setLoading(false));
   },[year,month]);
