@@ -1,0 +1,19 @@
+{
+  "id": "epaules-volume",
+  "name": "Épaules — Volume",
+  "category": "epaules",
+  "categoryLabel": "Épaules",
+  "emoji": "🏔️",
+  "duration": 50,
+  "level": "Intermédiaire",
+  "random": true,
+  "description": "Séance dédiée aux 3 faisceaux deltoïdes pour des épaules larges et équilibrées.",
+  "exercises": [
+    { "name": "Développé militaire barre", "muscle": "Deltoïde Antérieur", "style": "CLASSIQUE", "sets": 4, "reps": "8-10", "rest": "90s", "weightHint": "" },
+    { "name": "Élévations latérales haltères", "muscle": "Deltoïde Latéral", "style": "CLASSIQUE", "sets": 4, "reps": "12-15", "rest": "60s", "weightHint": "Léger, technique ++" },
+    { "name": "Élévations latérales câble", "muscle": "Deltoïde Latéral", "style": "CLASSIQUE", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Oiseau haltères", "muscle": "Deltoïde Postérieur", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Face pull corde", "muscle": "Deltoïde Postérieur / Trapèzes", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Arnold Press", "muscle": "Deltoïde Complet", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" }
+  ]
+}

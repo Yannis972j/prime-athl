@@ -1,0 +1,18 @@
+{
+  "id": "pecs-express",
+  "name": "Pecs Express 45min",
+  "category": "pecs",
+  "categoryLabel": "Pecs & Épaules",
+  "emoji": "⚡",
+  "duration": 45,
+  "level": "Tous niveaux",
+  "random": true,
+  "description": "Séance pectoraux intensive en 45 minutes, idéale quand le temps manque.",
+  "exercises": [
+    { "name": "Pompes lestées", "muscle": "Pectoraux", "style": "CLASSIQUE", "sets": 4, "reps": "MAX", "rest": "60s", "weightHint": "" },
+    { "name": "Développé couché haltères", "muscle": "Pectoraux", "style": "CLASSIQUE", "sets": 3, "reps": "12", "rest": "75s", "weightHint": "" },
+    { "name": "Écarté haltères plat", "muscle": "Pectoraux", "style": "SUPERSET", "sets": 3, "reps": "12-15", "rest": "60s", "weightHint": "" },
+    { "name": "Pull-over haltère", "muscle": "Pectoraux / Dos", "style": "SUPERSET", "sets": 3, "reps": "12", "rest": "60s", "weightHint": "" },
+    { "name": "Crossover poulie", "muscle": "Pectoraux Intérieur", "style": "CLASSIQUE", "sets": 3, "reps": "15", "rest": "45s", "weightHint": "" }
+  ]
+}

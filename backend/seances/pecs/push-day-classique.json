@@ -1,0 +1,21 @@
+{
+  "id": "push-day-classique",
+  "name": "Push Day Classique",
+  "category": "pecs",
+  "categoryLabel": "Pecs & Épaules",
+  "emoji": "💪",
+  "duration": 60,
+  "level": "Intermédiaire",
+  "random": false,
+  "description": "Séance push complète axée sur les pectoraux, les épaules et les triceps.",
+  "exercises": [
+    { "name": "Développé couché barre", "muscle": "Pectoraux", "style": "CLASSIQUE", "sets": 4, "reps": "8-10", "rest": "90s", "weightHint": "70-80% 1RM" },
+    { "name": "Développé incliné haltères", "muscle": "Pectoraux Haut", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Écarté poulie basse", "muscle": "Pectoraux", "style": "CLASSIQUE", "sets": 3, "reps": "12-15", "rest": "60s", "weightHint": "" },
+    { "name": "Développé militaire haltères", "muscle": "Épaules", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Élévations latérales", "muscle": "Épaules", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Oiseau haltères", "muscle": "Épaules Arrière", "style": "SUPERSET", "sets": 3, "reps": "15", "rest": "60s", "weightHint": "" },
+    { "name": "Dips lestés", "muscle": "Triceps", "style": "CLASSIQUE", "sets": 3, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Extension triceps poulie haute", "muscle": "Triceps", "style": "CLASSIQUE", "sets": 3, "reps": "12-15", "rest": "60s", "weightHint": "" }
+  ]
+}

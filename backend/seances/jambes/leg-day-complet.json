@@ -1,0 +1,21 @@
+{
+  "id": "leg-day-complet",
+  "name": "Leg Day Complet",
+  "category": "jambes",
+  "categoryLabel": "Jambes",
+  "emoji": "🦵",
+  "duration": 75,
+  "level": "Intermédiaire",
+  "random": false,
+  "description": "Quadriceps, ischio-jambiers, fessiers et mollets — séance complète membres inférieurs.",
+  "exercises": [
+    { "name": "Squat barre", "muscle": "Quadriceps / Fessiers", "style": "CLASSIQUE", "sets": 5, "reps": "5", "rest": "120s", "weightHint": "80% 1RM" },
+    { "name": "Leg press", "muscle": "Quadriceps", "style": "CLASSIQUE", "sets": 4, "reps": "10-12", "rest": "90s", "weightHint": "" },
+    { "name": "Fentes marchées haltères", "muscle": "Quadriceps / Fessiers", "style": "CLASSIQUE", "sets": 3, "reps": "12 chaque jambe", "rest": "75s", "weightHint": "" },
+    { "name": "Leg curl couché", "muscle": "Ischio-Jambiers", "style": "CLASSIQUE", "sets": 4, "reps": "10-12", "rest": "75s", "weightHint": "" },
+    { "name": "Romanian Deadlift", "muscle": "Ischio-Jambiers / Fessiers", "style": "CLASSIQUE", "sets": 3, "reps": "10", "rest": "90s", "weightHint": "" },
+    { "name": "Hip thrust barre", "muscle": "Fessiers", "style": "CLASSIQUE", "sets": 4, "reps": "12-15", "rest": "75s", "weightHint": "" },
+    { "name": "Mollets debout machine", "muscle": "Mollets", "style": "SUPERSET", "sets": 4, "reps": "15-20", "rest": "60s", "weightHint": "" },
+    { "name": "Mollets assis machine", "muscle": "Soléaires", "style": "SUPERSET", "sets": 4, "reps": "15-20", "rest": "60s", "weightHint": "" }
+  ]
+}
