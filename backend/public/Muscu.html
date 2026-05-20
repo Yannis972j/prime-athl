@@ -4721,6 +4721,8 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   const[modalLoading,setModalLoading]=React.useState(false);
   const[moveDate,setMoveDate]=React.useState('');
   const[confirmDelete,setConfirmDelete]=React.useState(false);
+  const[deleteMode,setDeleteMode]=React.useState(false);
+  const pressTimer=React.useRef(null);
 
   const reload=()=>{
     setLoading(true);
@@ -4862,10 +4864,24 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
               const dots=dotsForDay(d);
               const today=isToday(d);
               const selected=selectedDay===d;
+              const startPress=()=>{
+                pressTimer.current=setTimeout(()=>{
+                  if(dots.some(dot=>dot.hasSession)){
+                    if(navigator.vibrate)navigator.vibrate(40);
+                    setSelectedDay(d);
+                    setDeleteMode(true);
+                  }
+                },500);
+              };
+              const cancelPress=()=>clearTimeout(pressTimer.current);
               return(
-                <button key={d} onClick={()=>setSelectedDay(selected?null:d)} style={{
-                  aspectRatio:'1',borderRadius:10,border:selected?`2px solid #7ca8c4`:`1px solid ${today?'rgba(217,119,87,0.5)':T.border}`,
-                  background:selected?'rgba(124,168,196,0.15)':today?'rgba(217,119,87,0.08)':'rgba(255,255,255,0.02)',
+                <button key={d}
+                  onClick={()=>{setSelectedDay(selected?null:d);setDeleteMode(false);}}
+                  onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+                  onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                  style={{
+                  aspectRatio:'1',borderRadius:10,border:selected&&deleteMode?`2px solid rgba(201,117,134,0.8)`:selected?`2px solid #7ca8c4`:`1px solid ${today?'rgba(217,119,87,0.5)':T.border}`,
+                  background:selected&&deleteMode?'rgba(201,117,134,0.12)':selected?'rgba(124,168,196,0.15)':today?'rgba(217,119,87,0.08)':'rgba(255,255,255,0.02)',
                   cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,padding:'4px 2px',position:'relative'
                 }}>
                   <span style={{fontSize:12,fontWeight:today?800:500,color:today?T.accent:T.text}}>{d}</span>
@@ -4884,9 +4900,12 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
 
           {/* Day detail panel */}
           {selectedDay&&(
-            <div style={{marginTop:16,padding:14,borderRadius:16,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:T.textDim}}>
-                {new Date(year,month-1,selectedDay).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+            <div style={{marginTop:16,padding:14,borderRadius:16,background:deleteMode?'rgba(201,117,134,0.06)':'rgba(255,255,255,0.04)',border:`1px solid ${deleteMode?'rgba(201,117,134,0.3)':T.border}`,transition:'all 0.2s'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:700,color:deleteMode?'#c97586':T.textDim}}>
+                  {deleteMode?'🗑️ Mode suppression — ':''}{new Date(year,month-1,selectedDay).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+                </div>
+                {deleteMode&&<button onClick={()=>setDeleteMode(false)} style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer'}}>Annuler</button>}
               </div>
               {selectedAths.length===0?(
                 <div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'10px 0'}}>Aucune activité ce jour</div>
@@ -4901,9 +4920,9 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                     const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
                     const hasProg=ath.programDays.some(pd=>pd===DAYS[jsDay]);
                     return(
-                      <div key={ath.id} style={{borderRadius:11,background:'rgba(255,255,255,0.03)',border:`1px solid ${ath.color}33`,overflow:'hidden'}}>
+                      <div key={ath.id} style={{borderRadius:11,background:'rgba(255,255,255,0.03)',border:`1px solid ${deleteMode&&hasSession?'rgba(201,117,134,0.4)':ath.color+'33'}`,overflow:'hidden'}}>
                         <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',cursor:'pointer'}}
-                          onClick={()=>hasSession?openSession(ath,dateStr):onOpenAthlete(athletes.find(x=>x.id===ath.id)||{id:ath.id,email:ath.name})}>
+                          onClick={()=>{if(deleteMode&&hasSession){openSession(ath,dateStr);setConfirmDelete(true);}else if(hasSession)openSession(ath,dateStr);else onOpenAthlete(athletes.find(x=>x.id===ath.id)||{id:ath.id,email:ath.name});}}>
                           <div style={{width:8,height:32,borderRadius:4,background:ath.color,flexShrink:0}}/>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ath.name}</div>
@@ -4913,7 +4932,10 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                               {hasProg&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(217,119,87,0.12)',color:T.accent,border:'1px solid rgba(217,119,87,0.3)'}}>📋 Programme</span>}
                             </div>
                           </div>
-                          <Icon name={hasSession?'dumbbell':'chevronRight'} size={14} stroke={hasSession?'#7cc4a1':T.textFaint}/>
+                          {deleteMode&&hasSession
+                            ?<span style={{fontSize:16,animation:'pulse 1s infinite'}}>🗑️</span>
+                            :<Icon name={hasSession?'dumbbell':'chevronRight'} size={14} stroke={hasSession?'#7cc4a1':T.textFaint}/>
+                          }
                         </div>
                       </div>
                     );
@@ -6272,7 +6294,7 @@ function ExplorerScreen({profile,onStartWorkout}){
 // ── Univers Picker ────────────────────────────────────────────────────────────
 function UniversePickerScreen({onSelect,authUser}){
   const UNIVERSES=[
-    {id:'coach',emoji:'👥',title:'Coach',desc:'Programme assigné par ton coach + nutrition',
+    {id:'coach',emoji:'👥',title:'Coaching',desc:'Programme assigné par ton coach + nutrition',
      grad:'linear-gradient(135deg,#d97757,#c97586)',glow:'rgba(217,119,87,0.4)',border:'rgba(217,119,87,0.3)',bg:'rgba(217,119,87,0.07)'},
     {id:'ia',emoji:'🤖',title:'IA Programme',desc:'Programme personnalisé généré par intelligence artificielle',
      grad:'linear-gradient(135deg,#6366f1,#8b5cf6)',glow:'rgba(99,102,241,0.4)',border:'rgba(99,102,241,0.3)',bg:'rgba(99,102,241,0.07)'},
@@ -6539,7 +6561,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               </div>
             )}
             {tab==='univers'&&activeUniverse==='coach'&&(
-              <UniverseShell title="👥 Univers Coach" grad="linear-gradient(135deg,#d97757,#c97586)" onBack={()=>setActiveUniverse(null)}>
+              <UniverseShell title="👥 Coaching" grad="linear-gradient(135deg,#d97757,#c97586)" onBack={()=>setActiveUniverse(null)}>
                 <ProgrammeTab
                   workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
                   onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
