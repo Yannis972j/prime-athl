@@ -1350,13 +1350,6 @@ function MiniBarChart({data,todayIdx}){
   </div>);
 }
 
-// ── Programs ──────────────────────────────────────────────
-const PROGRAMS=[
-  {id:'ppl',name:'Push / Pull / Legs',days:6,weeks:8,level:'Intermédiaire',active:true,progress:0.42,week:3,splits:['Push','Pull','Legs','Push','Pull','Legs'],tag:'HYPERTROPHIE',accentA:'#d97757',accentB:'#c97586'},
-  {id:'ul',name:'Upper / Lower',days:4,weeks:12,level:'Intermédiaire',active:false,splits:['Upper','Lower','Upper','Lower'],tag:'FORCE + HYPERTROPHIE',accentA:'#7ca8c4',accentB:'#8e6cb6'},
-  {id:'sbd',name:'Powerlifting · 5/3/1',days:4,weeks:16,level:'Avancé',active:false,splits:['Squat','Bench','Deadlift','OHP'],tag:'FORCE',accentA:'#c2a042',accentB:'#d97757'},
-  {id:'fb',name:'Full Body Express',days:3,weeks:6,level:'Débutant',active:false,splits:['FB-A','FB-B','FB-C'],tag:'CONDITIONNEMENT',accentA:'#7cc4a1',accentB:'#7ca8c4'},
-];
 
 
 
@@ -1948,34 +1941,6 @@ function VolumeAreaChart({data}){
   );
 }
 
-function MiniAreaChart(){
-  const pts=[42,48,55,50,58,62,60,0,65,72,68,75,80,82,0,78,85,88,92,0,90,95,0,88,92,98,100,95,0,100];
-  const max=Math.max(...pts);const w=320,h=100;const step=w/(pts.length-1);
-  const d=pts.map((p,i)=>`${i===0?'M':'L'} ${i*step} ${h-(p/max)*h*0.85-8}`).join(' ');
-  return(<div style={{marginTop:12}}>
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d97757" stopOpacity="0.6"/><stop offset="100%" stopColor="#d97757" stopOpacity="0"/></linearGradient><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#d97757"/><stop offset="40%" stopColor="#c97586"/><stop offset="80%" stopColor="#8e6cb6"/><stop offset="100%" stopColor="#7ca8c4"/></linearGradient></defs>
-      <path d={d+` L ${w} ${h} L 0 ${h} Z`} fill="url(#vg)"/>
-      <path d={d} fill="none" stroke="url(#lg)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(217,119,87,0.6))'}}/>
-    </svg>
-    <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}><span>10 avr</span><span>20 avr</span><span>30 avr</span><span>10 mai</span></div>
-  </div>);
-}
-
-function ProgressChart(){
-  const pts=[70,70,72.5,72.5,75,75,77.5,80,80,82.5,82.5,85];
-  const w=320,h=90,min=65,max=90;const step=w/(pts.length-1);
-  const d=pts.map((p,i)=>`${i===0?'M':'L'} ${i*step} ${h-((p-min)/(max-min))*h*0.8-10}`).join(' ');
-  return(<div>
-    <div style={{display:'flex',alignItems:'baseline',gap:6,marginBottom:4}}><span style={{fontSize:22,fontWeight:700}}>85<span style={{fontSize:13,color:T.textDim,fontWeight:500,marginLeft:2}}>kg × 5</span></span><span style={{fontSize:11,color:T.good,fontWeight:700,marginLeft:'auto'}}>+15kg / 12 sem</span></div>
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#7ca8c4"/><stop offset="50%" stopColor="#d97757"/><stop offset="100%" stopColor="#c97586"/></linearGradient></defs>
-      {[0.25,0.5,0.75].map(t=><line key={t} x1="0" y1={h*t} x2={w} y2={h*t} stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4"/>)}
-      <path d={d} fill="none" stroke="url(#pg)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 6px rgba(217,119,87,0.5))'}}/>
-      {pts.map((p,i)=><circle key={i} cx={i*step} cy={h-((p-min)/(max-min))*h*0.8-10} r={i===pts.length-1?5:3} fill={i===pts.length-1?'#fff':'#d97757'} stroke={i===pts.length-1?'#d97757':'none'} strokeWidth="2"/>)}
-    </svg>
-  </div>);
-}
 
 // ── Profile ───────────────────────────────────────────────
 function ProfileField({label,value,onChange,suffix,type='text',inputMode}){
@@ -5994,7 +5959,7 @@ function AIGeneratorCard({onStartWorkout,standalone=false}){
         <div style={{padding:'18px 16px',borderRadius:18,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.05)'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
             <div style={{fontSize:15,fontWeight:800,color:T.text}}>🤖 Générer avec l'IA</div>
-            <button onClick={()=>setOpen(false)} style={{background:'none',border:'none',color:T.textFaint,cursor:'pointer',padding:4}}><Icon name="x" size={16} stroke={T.textFaint}/></button>
+            {!standalone&&<button onClick={()=>setOpen(false)} style={{background:'none',border:'none',color:T.textFaint,cursor:'pointer',padding:4}}><Icon name="x" size={16} stroke={T.textFaint}/></button>}
           </div>
 
           <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Niveau</div>
@@ -6257,8 +6222,6 @@ function ExplorerScreen({profile,onStartWorkout}){
         <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Explorer</div>
         <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}><HoloText>Séances prêtes</HoloText></div>
       </div>
-
-      <AIGeneratorCard onStartWorkout={onStartWorkout}/>
 
       {/* Filtre catégories */}
       <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:4,marginBottom:16}}>
