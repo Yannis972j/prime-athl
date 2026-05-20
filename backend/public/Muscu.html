@@ -4792,7 +4792,7 @@ function CoachProgramMirror({athleteData}){
   );
 }
 
-function CoachNutritionMirror({athleteId,athleteName,authToken}){
+function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   const[data,setData]=React.useState(null);
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
   const[expandedMeal,setExpandedMeal]=React.useState(null);
@@ -4829,6 +4829,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken}){
       setApplyMsg('✓ Plan assigné et notifié !');
       setTimeout(()=>setApplyMsg(null),3000);
       load();
+      if(onPlanApplied)onPlanApplied();
     }catch(e){setApplyMsg('✗ Erreur : '+e.message);}
     setApplying(false);
   };
@@ -5707,8 +5708,8 @@ function CoachScreen({authToken,authUser}){
               </button>
             ):null}/>
             <div style={{marginBottom:18}}>
-              {nutriDetail&&nutriDetail.plan&&nutriMode==='mirror'?(
-                <CoachNutritionMirror key={(nutriDetail.plan.assignedAt)||0} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} authToken={authToken}/>
+              {nutriMode==='mirror'?(
+                <CoachNutritionMirror key={(nutriDetail&&nutriDetail.plan&&nutriDetail.plan.assignedAt)||0} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} authToken={authToken} onPlanApplied={()=>reloadDetail(a.id)}/>
               ):(
                 <NutritionEditor
                   athleteId={a.id}
