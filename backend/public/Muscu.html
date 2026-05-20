@@ -6350,15 +6350,417 @@ function UniverseShell({title,grad,onBack,children}){
 }
 
 // ── AI Universe Screen ────────────────────────────────────────────────────────
-function AIUniverseScreen({onStartWorkout}){
-  return(
-    <div style={{padding:'20px 18px 90px'}}>
-      <div style={{marginBottom:20}}>
-        <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Intelligence Artificielle</div>
-        <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Ton programme sur mesure</div>
-        <div style={{fontSize:13,color:T.textDim,marginTop:6,lineHeight:1.5}}>Remplis ton profil et l'IA génère une séance parfaitement adaptée à toi.</div>
+// ── NutritionAIWizard ─────────────────────────────────────────────────────────
+function NutritionAIWizard({authUser}){
+  const[view,setView]=React.useState('home'); // home|form|loading|result
+  const[step,setStep]=React.useState(1);
+  const[form,setForm]=React.useState({
+    gender:authUser?.gender||'',age:authUser?.age||'',weight:authUser?.weight||'',height:authUser?.height||'',
+    activity:'Modérément actif',goal:'Maintien',mealsPerDay:3,allergies:'',targetCalories:'',
+  });
+  const[plan,setPlan]=React.useState(null);
+  const[error,setError]=React.useState('');
+  const[loadMsg,setLoadMsg]=React.useState(0);
+  const[selDay,setSelDay]=React.useState('LUNDI');
+  const[expandMeal,setExpandMeal]=React.useState(null);
+  const[regenLoading,setRegenLoading]=React.useState(null);
+  const[applyLoading,setApplyLoading]=React.useState(false);
+  const[applyDone,setApplyDone]=React.useState(false);
+  const[coachSheet,setCoachSheet]=React.useState(false);
+  const[athletes,setAthletes]=React.useState([]);
+  const[assignLoading,setAssignLoading]=React.useState(null);
+  const loadMsgs=['Analyse de ton profil…','Calcul des besoins caloriques…','Construction des repas…','Équilibre des macronutriments…'];
+  const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const IA='#6366f1';
+  const IA2='#8b5cf6';
+
+  const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  const generate=async()=>{
+    setError('');setView('loading');setLoadMsg(0);
+    const iv=setInterval(()=>setLoadMsg(m=>(m+1)%4),1500);
+    try{
+      const r=await apiCall('/api/ai/generate-nutrition',{method:'POST',body:{
+        gender:form.gender,age:Number(form.age),weight:Number(form.weight),height:Number(form.height),
+        activity:form.activity,goal:form.goal,mealsPerDay:Number(form.mealsPerDay),
+        allergies:form.allergies,targetCalories:form.targetCalories?Number(form.targetCalories):undefined,
+      }});
+      clearInterval(iv);
+      if(r.error)throw new Error(r.error);
+      setPlan(r.plan);setSelDay('LUNDI');setExpandMeal(null);setApplyDone(false);setView('result');
+    }catch(e){
+      clearInterval(iv);
+      setError(e.message==='ai_not_configured'?'IA non configurée sur ce serveur.':e.message||'Erreur génération.');
+      setView('form');
+    }
+  };
+
+  const regenMeal=async(dayKey,mealIdx)=>{
+    if(!plan)return;
+    const meal=plan.days[dayKey].meals[mealIdx];
+    const key=`${dayKey}-${mealIdx}`;
+    setRegenLoading(key);
+    try{
+      const r=await apiCall('/api/ai/regenerate-meal',{method:'POST',body:{
+        dayLabel:dayKey,mealLabel:meal.label,goal:form.goal,
+        targetKcal:Math.round(plan.dailyCalories/plan.days[dayKey].meals.length),
+        targetProtein:Math.round(plan.dailyProtein/plan.days[dayKey].meals.length),
+        allergies:form.allergies,
+      }});
+      if(r.items){
+        setPlan(p=>{
+          const np={...p,days:{...p.days}};
+          np.days[dayKey]={...np.days[dayKey],meals:[...np.days[dayKey].meals]};
+          np.days[dayKey].meals[mealIdx]={...np.days[dayKey].meals[mealIdx],items:r.items};
+          return np;
+        });
+      }
+    }catch(e){console.error(e);}
+    setRegenLoading(null);
+  };
+
+  const applyToSelf=async()=>{
+    if(!plan)return;
+    setApplyLoading(true);
+    try{
+      await apiCall('/api/my-nutrition',{method:'PUT',body:{plan}});
+      setApplyDone(true);
+    }catch(e){console.error(e);}
+    setApplyLoading(false);
+  };
+
+  const openCoachSheet=async()=>{
+    setCoachSheet(true);
+    try{const r=await apiCall('/api/coach/athletes');setAthletes(r||[]);}catch(e){}
+  };
+
+  const assignToAthlete=async(athleteId)=>{
+    if(!plan)return;
+    setAssignLoading(athleteId);
+    try{
+      await apiCall(`/api/coach/nutrition/${athleteId}`,{method:'PUT',body:{plan}});
+      try{await apiCall(`/api/coach/nutrition/${athleteId}/notify`,{method:'POST'});}catch(e){}
+      setAssignLoading(null);setCoachSheet(false);
+    }catch(e){setAssignLoading(null);}
+  };
+
+  const inputStyle={
+    width:'100%',padding:'11px 13px',borderRadius:11,border:`1px solid rgba(99,102,241,0.25)`,
+    background:'rgba(99,102,241,0.08)',color:T.text,fontSize:14,boxSizing:'border-box',outline:'none',
+  };
+  const selectStyle={...inputStyle,appearance:'none',WebkitAppearance:'none',cursor:'pointer'};
+
+  if(view==='home') return(
+    <div style={{padding:'24px 18px 90px'}}>
+      <div style={{textAlign:'center',marginBottom:32}}>
+        <div style={{fontSize:52,marginBottom:12}}>🥗</div>
+        <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5,background:`linear-gradient(135deg,${IA},${IA2})`,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+          Plan Nutrition IA
+        </div>
+        <div style={{fontSize:13,color:T.textDim,marginTop:8,lineHeight:1.6,maxWidth:300,margin:'8px auto 0'}}>
+          L'IA analyse ton profil et génère un plan nutritionnel complet sur 7 jours, avec les macros et les repas détaillés.
+        </div>
       </div>
-      <AIGeneratorCard onStartWorkout={onStartWorkout} standalone={true}/>
+      <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:28}}>
+        {[
+          {emoji:'🎯',title:'Adapté à ton objectif',desc:'Prise de masse, sèche, maintien ou rééquilibrage'},
+          {emoji:'📊',title:'Macros calculées',desc:'Calories, protéines, glucides, lipides optimaux'},
+          {emoji:'🔄',title:'Repas régénérables',desc:'Remplace un repas qui ne te convient pas d\'un clic'},
+        ].map(f=>(
+          <div key={f.title} style={{display:'flex',gap:12,alignItems:'flex-start',padding:'12px 14px',borderRadius:14,background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)'}}>
+            <div style={{fontSize:20,flexShrink:0,marginTop:1}}>{f.emoji}</div>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:2}}>{f.title}</div>
+              <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>{f.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={()=>{setView('form');setStep(1);}} style={{
+        width:'100%',padding:'14px',borderRadius:14,border:'none',cursor:'pointer',
+        background:`linear-gradient(135deg,${IA},${IA2})`,color:'#fff',fontWeight:800,fontSize:15,
+        boxShadow:`0 6px 22px rgba(99,102,241,0.35)`,
+      }}>Générer mon plan nutrition →</button>
+    </div>
+  );
+
+  if(view==='loading') return(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'60px 32px',minHeight:360}}>
+      <div style={{fontSize:48,marginBottom:24,animation:'pulse 1.5s infinite'}}>🥗</div>
+      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:8,textAlign:'center',minHeight:24}}>{loadMsgs[loadMsg]}</div>
+      <div style={{width:'100%',maxWidth:260,height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',marginTop:16,overflow:'hidden'}}>
+        <div style={{height:'100%',borderRadius:2,background:`linear-gradient(90deg,${IA},${IA2})`,animation:'holoShift 2s linear infinite',backgroundSize:'200% 100%'}}/>
+      </div>
+      <div style={{fontSize:12,color:T.textFaint,marginTop:14}}>⏱ ~15 secondes</div>
+    </div>
+  );
+
+  if(view==='form') return(
+    <div style={{padding:'20px 18px 90px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
+        {step===2&&<button onClick={()=>setStep(1)} style={{width:34,height:34,borderRadius:10,border:`1px solid rgba(99,102,241,0.3)`,background:'rgba(99,102,241,0.08)',color:T.textDim,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="chevronLeft" size={16} stroke={T.textDim}/></button>}
+        <div>
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Étape {step}/2</div>
+          <div style={{fontSize:18,fontWeight:800,letterSpacing:-0.3,color:T.text}}>{step===1?'Ton profil':'Tes objectifs'}</div>
+        </div>
+      </div>
+      {/* Progress bar */}
+      <div style={{height:3,borderRadius:2,background:'rgba(255,255,255,0.06)',marginBottom:22,overflow:'hidden'}}>
+        <div style={{width:`${step*50}%`,height:'100%',borderRadius:2,background:`linear-gradient(90deg,${IA},${IA2})`,transition:'width 0.4s ease'}}/>
+      </div>
+
+      {step===1&&(
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Genre</div>
+            <div style={{display:'flex',gap:8}}>
+              {['Homme','Femme'].map(g=>(
+                <button key={g} onClick={()=>setF('gender',g)} style={{
+                  flex:1,padding:'10px',borderRadius:11,border:`1px solid ${form.gender===g?IA:'rgba(99,102,241,0.2)'}`,
+                  background:form.gender===g?'rgba(99,102,241,0.18)':'rgba(99,102,241,0.05)',
+                  color:form.gender===g?'#a5b4fc':T.textDim,fontWeight:700,fontSize:13,cursor:'pointer',
+                }}>{g==='Homme'?'👨 Homme':'👩 Femme'}</button>
+              ))}
+            </div>
+          </div>
+          {[{k:'age',label:'Âge',unit:'ans',min:10,max:100},{k:'weight',label:'Poids',unit:'kg',min:30,max:250},{k:'height',label:'Taille',unit:'cm',min:100,max:250}].map(f=>(
+            <div key={f.k}>
+              <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>{f.label}</div>
+              <div style={{position:'relative'}}>
+                <input type="number" placeholder={f.min+''} value={form[f.k]} onChange={e=>setF(f.k,e.target.value)} min={f.min} max={f.max} style={inputStyle}/>
+                <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',fontSize:12,color:T.textFaint}}>{f.unit}</span>
+              </div>
+            </div>
+          ))}
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Niveau d'activité</div>
+            <select value={form.activity} onChange={e=>setF('activity',e.target.value)} style={selectStyle}>
+              {['Sédentaire','Légèrement actif','Modérément actif','Très actif','Extrêmement actif'].map(a=><option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <button onClick={()=>{
+            if(!form.gender||!form.age||!form.weight||!form.height){setError('Remplis tous les champs.');return;}
+            setError('');setStep(2);
+          }} style={{marginTop:8,padding:'13px',borderRadius:13,border:'none',cursor:'pointer',background:`linear-gradient(135deg,${IA},${IA2})`,color:'#fff',fontWeight:800,fontSize:14}}>
+            Continuer →
+          </button>
+          {error&&<div style={{fontSize:12,color:T.danger,textAlign:'center'}}>{error}</div>}
+        </div>
+      )}
+
+      {step===2&&(
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Objectif</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
+              {[{v:'Prise de masse',e:'💪'},{v:'Sèche',e:'🔥'},{v:'Maintien',e:'⚖️'},{v:'Rééquilibrage',e:'🥗'}].map(g=>(
+                <button key={g.v} onClick={()=>setF('goal',g.v)} style={{
+                  flex:'1 1 40%',padding:'10px 6px',borderRadius:11,border:`1px solid ${form.goal===g.v?IA:'rgba(99,102,241,0.2)'}`,
+                  background:form.goal===g.v?'rgba(99,102,241,0.18)':'rgba(99,102,241,0.05)',
+                  color:form.goal===g.v?'#a5b4fc':T.textDim,fontWeight:700,fontSize:12,cursor:'pointer',
+                }}>{g.e} {g.v}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Repas par jour</div>
+            <div style={{display:'flex',gap:7}}>
+              {[3,4,5,6].map(n=>(
+                <button key={n} onClick={()=>setF('mealsPerDay',n)} style={{
+                  flex:1,padding:'10px 0',borderRadius:11,border:`1px solid ${form.mealsPerDay===n?IA:'rgba(99,102,241,0.2)'}`,
+                  background:form.mealsPerDay===n?'rgba(99,102,241,0.18)':'rgba(99,102,241,0.05)',
+                  color:form.mealsPerDay===n?'#a5b4fc':T.textDim,fontWeight:800,fontSize:14,cursor:'pointer',
+                }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Allergies / exclusions <span style={{fontWeight:400,color:T.textFaint}}>(optionnel)</span></div>
+            <input placeholder="ex: gluten, lactose, noix…" value={form.allergies} onChange={e=>setF('allergies',e.target.value)} style={inputStyle}/>
+          </div>
+          <div>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Calories cibles <span style={{fontWeight:400,color:T.textFaint}}>(optionnel, calculé auto sinon)</span></div>
+            <div style={{position:'relative'}}>
+              <input type="number" placeholder="ex: 2200" value={form.targetCalories} onChange={e=>setF('targetCalories',e.target.value)} style={inputStyle}/>
+              <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',fontSize:12,color:T.textFaint}}>kcal</span>
+            </div>
+          </div>
+          {error&&<div style={{fontSize:12,color:T.danger,textAlign:'center'}}>{error}</div>}
+          <button onClick={generate} style={{marginTop:4,padding:'14px',borderRadius:13,border:'none',cursor:'pointer',background:`linear-gradient(135deg,${IA},${IA2})`,color:'#fff',fontWeight:800,fontSize:15,boxShadow:`0 6px 22px rgba(99,102,241,0.35)`}}>
+            🥗 Générer mon plan 7 jours
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Result view ────────────────────────────────────────────────────────────
+  if(view==='result'&&plan) return(
+    <div style={{padding:'16px 14px 100px'}}>
+      {/* Macro summary */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:7,marginBottom:16}}>
+        {[
+          {label:'Calories',val:plan.dailyCalories,unit:'kcal',color:'#e6c269'},
+          {label:'Protéines',val:plan.dailyProtein,unit:'g',color:T.macroP},
+          {label:'Glucides',val:plan.dailyCarbs,unit:'g',color:T.macroC},
+          {label:'Lipides',val:plan.dailyFat,unit:'g',color:T.macroL},
+        ].map(m=>(
+          <div key={m.label} style={{borderRadius:12,padding:'10px 7px',background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)',textAlign:'center'}}>
+            <div style={{fontSize:15,fontWeight:800,color:m.color}}>{m.val}</div>
+            <div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{m.unit}</div>
+            <div style={{fontSize:9,color:T.textDim,fontWeight:600,letterSpacing:0.3,marginTop:2,textTransform:'uppercase'}}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Day pills */}
+      <div style={{display:'flex',gap:5,overflowX:'auto',paddingBottom:4,marginBottom:12}}>
+        {DAYS.map(d=>(
+          <button key={d} onClick={()=>{setSelDay(d);setExpandMeal(null);}} style={{
+            flexShrink:0,padding:'6px 10px',borderRadius:20,border:`1px solid ${selDay===d?IA:'rgba(255,255,255,0.08)'}`,
+            background:selDay===d?`rgba(99,102,241,0.2)`:'rgba(255,255,255,0.04)',
+            color:selDay===d?'#a5b4fc':T.textDim,fontWeight:700,fontSize:11,cursor:'pointer',letterSpacing:0.3,
+          }}>{d.slice(0,3)}</button>
+        ))}
+      </div>
+
+      {/* Meals list */}
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {(plan.days[selDay]?.meals||[]).map((meal,idx)=>{
+          const key=`${selDay}-${idx}`;
+          const isOpen=expandMeal===key;
+          const mealKcal=meal.items.reduce((s,it)=>s+it.kcal,0);
+          const mealP=meal.items.reduce((s,it)=>s+it.p,0);
+          return(
+            <div key={key} style={{borderRadius:14,background:'rgba(99,102,241,0.07)',border:`1px solid ${isOpen?'rgba(99,102,241,0.35)':'rgba(99,102,241,0.15)'}`,overflow:'hidden'}}>
+              {/* Header */}
+              <div onClick={()=>setExpandMeal(isOpen?null:key)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer'}}>
+                <div style={{fontSize:20}}>{meal.emoji}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{meal.label}</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{meal.timeStart} · {mealKcal} kcal · {Math.round(mealP)}g prot</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <button onClick={e=>{e.stopPropagation();regenMeal(selDay,idx);}} style={{
+                    width:28,height:28,borderRadius:8,border:'1px solid rgba(99,102,241,0.3)',background:'rgba(99,102,241,0.1)',
+                    color:'#a5b4fc',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+                  }} title="Régénérer ce repas">
+                    {regenLoading===key?'…':'🔄'}
+                  </button>
+                  <Icon name={isOpen?'chevronUp':'chevronDown'} size={14} stroke={T.textFaint}/>
+                </div>
+              </div>
+              {/* Items */}
+              {isOpen&&(
+                <div style={{padding:'0 13px 12px',borderTop:'1px solid rgba(99,102,241,0.12)'}}>
+                  {meal.items.length===0
+                    ?<div style={{fontSize:12,color:T.textFaint,padding:'8px 0'}}>Aucun aliment</div>
+                    :meal.items.map((it,i)=>(
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<meal.items.length-1?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{it.name}</div>
+                          <div style={{fontSize:11,color:T.textFaint}}>{it.qty}{it.unit} · P:{it.p}g G:{it.c}g L:{it.f}g</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:'#e6c269',flexShrink:0}}>{it.kcal} kcal</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Actions */}
+      <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:10}}>
+        <button onClick={applyToSelf} disabled={applyLoading||applyDone} style={{
+          width:'100%',padding:'13px',borderRadius:13,border:'none',cursor:applyDone?'default':'pointer',
+          background:applyDone?'rgba(124,196,161,0.15)':`linear-gradient(135deg,${IA},${IA2})`,
+          color:applyDone?T.good:'#fff',fontWeight:800,fontSize:14,
+          opacity:applyLoading?0.7:1,
+        }}>
+          {applyDone?'✓ Plan appliqué à ta nutrition':applyLoading?'Enregistrement…':'✅ Appliquer à ma nutrition'}
+        </button>
+        {authUser?.role==='coach'&&(
+          <button onClick={openCoachSheet} style={{
+            width:'100%',padding:'13px',borderRadius:13,border:`1px solid rgba(99,102,241,0.35)`,cursor:'pointer',
+            background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:14,
+          }}>
+            👥 Assigner à un athlète
+          </button>
+        )}
+        <button onClick={()=>{setPlan(null);setView('form');setStep(1);}} style={{
+          width:'100%',padding:'11px',borderRadius:13,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',
+          background:'transparent',color:T.textDim,fontWeight:600,fontSize:13,
+        }}>
+          ↺ Regénérer un nouveau plan
+        </button>
+      </div>
+
+      {/* Coach assign bottom sheet */}
+      {coachSheet&&(
+        <BottomSheet onClose={()=>setCoachSheet(false)} title="Assigner à un athlète">
+          {athletes.length===0
+            ?<div style={{color:T.textDim,fontSize:14,padding:'12px 0'}}>Aucun athlète trouvé.</div>
+            :athletes.map(a=>(
+              <button key={a.id} onClick={()=>assignToAthlete(a.id)} disabled={!!assignLoading} style={{
+                width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px 0',border:'none',background:'transparent',cursor:'pointer',borderBottom:'1px solid rgba(255,255,255,0.05)',
+              }}>
+                <div style={{width:36,height:36,borderRadius:11,background:a.color||`linear-gradient(135deg,${IA},${IA2})`,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:14}}>
+                  {(a.firstName||a.name||'?')[0].toUpperCase()}
+                </div>
+                <div style={{flex:1,textAlign:'left'}}>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{a.firstName||a.name}</div>
+                  <div style={{fontSize:11,color:T.textFaint}}>{a.email||''}</div>
+                </div>
+                <div style={{fontSize:13,color:'#a5b4fc',fontWeight:700}}>
+                  {assignLoading===a.id?'…':'Assigner'}
+                </div>
+              </button>
+            ))
+          }
+        </BottomSheet>
+      )}
+    </div>
+  );
+
+  return null;
+}
+
+// ── IA Universe Screen ────────────────────────────────────────────────────────
+function AIUniverseScreen({onStartWorkout,authUser}){
+  const[sub,setSub]=React.useState('seances');
+  const IA='#6366f1';const IA2='#8b5cf6';
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      {/* Sub-tabs */}
+      <div style={{padding:'10px 16px 0',flexShrink:0}}>
+        <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.18)'}}>
+          {[{id:'seances',label:'🏋️ Séances'},{id:'nutrition',label:'🥗 Nutrition'}].map(s=>(
+            <button key={s.id} onClick={()=>setSub(s.id)} style={{
+              flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+              background:sub===s.id?`rgba(99,102,241,0.22)`:'transparent',
+              color:sub===s.id?'#a5b4fc':T.textFaint,
+              transition:'all 0.2s',letterSpacing:0.2,
+            }}>{s.label}</button>
+          ))}
+        </div>
+      </div>
+      {/* Content */}
+      <div style={{flex:1,overflow:'auto'}}>
+        {sub==='seances'&&(
+          <div style={{padding:'20px 18px 90px'}}>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Intelligence Artificielle</div>
+              <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5,background:`linear-gradient(135deg,${IA},${IA2})`,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Ton programme sur mesure</div>
+              <div style={{fontSize:13,color:T.textDim,marginTop:6,lineHeight:1.5}}>Remplis ton profil et l'IA génère une séance parfaitement adaptée à toi.</div>
+            </div>
+            <AIGeneratorCard onStartWorkout={onStartWorkout} standalone={true}/>
+          </div>
+        )}
+        {sub==='nutrition'&&<NutritionAIWizard authUser={authUser}/>}
+      </div>
     </div>
   );
 }
@@ -6573,7 +6975,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             )}
             {tab==='univers'&&activeUniverse==='ia'&&(
               <UniverseShell title="🤖 IA Programme" grad="linear-gradient(135deg,#6366f1,#8b5cf6)" onBack={()=>setActiveUniverse(null)}>
-                <AIUniverseScreen onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
+                <AIUniverseScreen onStartWorkout={w=>{startWorkout(w);setScreen('session');}} authUser={authUser}/>
               </UniverseShell>
             )}
             {tab==='univers'&&activeUniverse==='explorer'&&(

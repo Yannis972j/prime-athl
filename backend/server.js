@@ -1446,6 +1446,105 @@ function pushToUser(userId, payload) {
     .catch(() => { delete DATA.pushSubscriptions[userId]; persist(); });
 }
 
+// ── IA — Nutrition helpers ───────────────────────────
+const AI_MEAL_TEMPLATES = {
+  3:[{id:'breakfast',label:'Petit-déjeuner',emoji:'🍳',timeStart:'07:00',timeEnd:'09:00'},{id:'lunch',label:'Déjeuner',emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},{id:'dinner',label:'Dîner',emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'}],
+  4:[{id:'breakfast',label:'Petit-déjeuner',emoji:'🍳',timeStart:'07:00',timeEnd:'09:00'},{id:'snack1',label:'Collation',emoji:'🥜',timeStart:'10:30',timeEnd:'11:30'},{id:'lunch',label:'Déjeuner',emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},{id:'dinner',label:'Dîner',emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'}],
+  5:[{id:'breakfast',label:'Petit-déjeuner',emoji:'🍳',timeStart:'07:00',timeEnd:'09:00'},{id:'snack1',label:'Collation matin',emoji:'🥜',timeStart:'10:00',timeEnd:'11:00'},{id:'lunch',label:'Déjeuner',emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},{id:'snack2',label:'Collation',emoji:'🍎',timeStart:'16:00',timeEnd:'17:00'},{id:'dinner',label:'Dîner',emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'}],
+  6:[{id:'breakfast',label:'Petit-déjeuner',emoji:'🍳',timeStart:'07:00',timeEnd:'09:00'},{id:'snack1',label:'Collation matin',emoji:'🥜',timeStart:'10:00',timeEnd:'11:00'},{id:'lunch',label:'Déjeuner',emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},{id:'snack2',label:'Collation',emoji:'🍎',timeStart:'16:00',timeEnd:'17:00'},{id:'dinner',label:'Dîner',emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'},{id:'eveningSnack',label:'Collation soir',emoji:'🥛',timeStart:'21:00',timeEnd:'22:00'}],
+};
+
+function calcNutritionTargets({ gender, age, weight, height, activity, goal }) {
+  const bmr = gender === 'Homme'
+    ? 10*weight + 6.25*height - 5*age + 5
+    : 10*weight + 6.25*height - 5*age - 161;
+  const act = { 'Sédentaire':1.2,'Légèrement actif':1.375,'Modérément actif':1.55,'Très actif':1.725,'Extrêmement actif':1.9 }[activity] || 1.55;
+  const tdee = Math.round(bmr * act);
+  const calMult = { 'Prise de masse':1.12,'Sèche':0.82,'Maintien':1.0,'Rééquilibrage':0.90 }[goal] || 1.0;
+  const cals = Math.round(tdee * calMult);
+  const r = { 'Prise de masse':{p:0.30,c:0.45,f:0.25},'Sèche':{p:0.38,c:0.32,f:0.30},'Maintien':{p:0.28,c:0.45,f:0.27},'Rééquilibrage':{p:0.33,c:0.40,f:0.27} }[goal] || {p:0.30,c:0.45,f:0.25};
+  return { calories:cals, protein:Math.round(cals*r.p/4), carbs:Math.round(cals*r.c/4), fat:Math.round(cals*r.f/9) };
+}
+
+function enrichAIPlan(rawDays, mealsPerDay, targets) {
+  const templates = AI_MEAL_TEMPLATES[mealsPerDay] || AI_MEAL_TEMPLATES[3];
+  const DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const days = {};
+  for (const day of DAYS) {
+    const raw = rawDays[day];
+    const meals = templates.map((tpl, i) => {
+      const items = (raw?.meals?.[i]?.items || []).map(it => ({
+        name:String(it.name||'').trim(), qty:Number(it.qty)||0, unit:String(it.unit||'g'),
+        kcal:Number(it.kcal)||0, p:Number(it.p)||0, c:Number(it.c)||0, f:Number(it.f)||0,
+      }));
+      return { ...tpl, items, note:'' };
+    });
+    days[day] = { meals };
+  }
+  return { dailyCalories:targets.calories, dailyProtein:targets.protein, dailyCarbs:targets.carbs, dailyFat:targets.fat, days };
+}
+
+// ── IA — Génération de plan nutrition 7 jours ───────
+app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
+  const { gender, age, weight, height, activity, goal, mealsPerDay=3, allergies='', targetCalories } = req.body || {};
+  if (!gender || !age || !weight || !height || !activity || !goal) return res.status(400).json({ error: 'missing_fields' });
+  const targets = targetCalories
+    ? (() => { const c=Number(targetCalories); const r={p:0.30,c:0.45,f:0.25}; return {calories:c,protein:Math.round(c*r.p/4),carbs:Math.round(c*r.c/4),fat:Math.round(c*r.f/9)}; })()
+    : calcNutritionTargets({ gender, age:Number(age), weight:Number(weight), height:Number(height), activity, goal });
+  const mealCount = Math.min(6, Math.max(3, Number(mealsPerDay)));
+  const mealNames = (AI_MEAL_TEMPLATES[mealCount]||AI_MEAL_TEMPLATES[3]).map(t=>t.label).join(', ');
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const msg = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8000,
+      messages: [{ role: 'user', content: `Tu es un nutritionniste expert. Génère un plan nutrition sur 7 jours.
+
+OBJECTIFS JOURNALIERS (respecte ±5%) :
+- Calories : ${targets.calories} kcal  - Protéines : ${targets.protein}g  - Glucides : ${targets.carbs}g  - Lipides : ${targets.fat}g
+
+REPAS (${mealCount}/jour dans cet ordre) : ${mealNames}
+CONTRAINTES : Allergies: ${allergies||'aucune'} | Objectif: ${goal} | Aliments réels supermarché français | Quantités précises en g/ml | Varie les protéines chaque jour | Max 2 répétitions du même repas sur 7 jours
+
+RÉPONDS UNIQUEMENT en JSON valide sans markdown :
+{"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},...}}}
+Chaque jour a exactement ${mealCount} objets dans meals[]. Macros cohérentes avec les quantités.` }]
+    });
+    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const parsed = JSON.parse(raw);
+    const plan = enrichAIPlan(parsed.days, mealCount, targets);
+    res.json({ targets, plan });
+  } catch(e) {
+    console.error('AI nutrition error:', e.message);
+    res.status(500).json({ error: 'generation_failed', detail: e.message });
+  }
+});
+
+// ── IA — Régénérer un repas ──────────────────────────
+app.post('/api/ai/regenerate-meal', authRequired, async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
+  const { day, mealLabel, targetKcal, targetProtein, allergies, goal } = req.body || {};
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: `Régénère le repas "${mealLabel}" du ${day}.
+Budget: ~${targetKcal} kcal, ~${targetProtein}g protéines | Objectif: ${goal} | Allergies: ${allergies||'aucune'}
+Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
+    });
+    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const { items } = JSON.parse(raw);
+    res.json({ items: items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
+  } catch(e) {
+    console.error('AI regen meal error:', e.message);
+    res.status(500).json({ error: 'regeneration_failed', detail: e.message });
+  }
+});
+
 // ── IA — Génération de programme ────────────────────
 app.post('/api/ai/generate-program', authRequired, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
