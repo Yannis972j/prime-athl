@@ -1449,11 +1449,17 @@ function pushToUser(userId, payload) {
 // ── IA — Génération de programme ────────────────────
 app.post('/api/ai/generate-program', authRequired, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
-  const { level, goal, days, equipment } = req.body || {};
+  const { level, goal, days, equipment, gender, age, weight, height } = req.body || {};
   if (!level || !goal || !days || !equipment) return res.status(400).json({ error: 'missing_fields' });
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const profileExtra = [
+      gender && `- Genre : ${gender}`,
+      age && `- Âge : ${age} ans`,
+      weight && `- Poids : ${weight} kg`,
+      height && `- Taille : ${height} cm`,
+    ].filter(Boolean).join('\n');
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1200,
@@ -1461,7 +1467,7 @@ app.post('/api/ai/generate-program', authRequired, async (req, res) => {
 - Niveau : ${level}
 - Objectif : ${goal}
 - Jours dispo par semaine : ${days}
-- Équipement : ${equipment}
+- Équipement : ${equipment}${profileExtra?'\n'+profileExtra:''}
 
 Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans ce format exact :
 {"name":"Nom de la séance","muscles":"Groupes musculaires","tip":"Conseil global en 1 phrase","exercises":[{"name":"Nom exercice","muscle":"Groupe musculaire","sets":3,"reps":"10-12","rest":"60s","tip":"Conseil technique en 1 phrase courte"}]}

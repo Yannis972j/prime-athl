@@ -5923,22 +5923,26 @@ function OnboardingModal({user,onClose}){
 }
 
 // ── AI Program Generator ─────────────────────────────────────────────────────
-function AIGeneratorCard({onStartWorkout}){
+function AIGeneratorCard({onStartWorkout,standalone=false}){
   const[level,setLevel]=React.useState('');
   const[goal,setGoal]=React.useState('');
   const[days,setDays]=React.useState('');
   const[equip,setEquip]=React.useState('');
+  const[gender,setGender]=React.useState('');
+  const[age,setAge]=React.useState('');
+  const[weight,setWeight]=React.useState('');
+  const[height,setHeight]=React.useState('');
   const[loading,setLoading]=React.useState(false);
   const[result,setResult]=React.useState(null);
   const[err,setErr]=React.useState(null);
-  const[open,setOpen]=React.useState(false);
+  const[open,setOpen]=React.useState(standalone);
 
-  const canGenerate=level&&goal&&days&&equip;
+  const canGenerate=level&&goal&&days&&equip&&gender;
 
   const generate=async()=>{
     setLoading(true);setErr(null);setResult(null);
     try{
-      const d=await apiCall('/api/ai/generate-program',{method:'POST',body:{level,goal,days,equipment:equip}});
+      const d=await apiCall('/api/ai/generate-program',{method:'POST',body:{level,goal,days,equipment:equip,gender,age:age||null,weight:weight||null,height:height||null}});
       setResult(d.program);
     }catch(e){
       if(e.message==='ai_not_configured')setErr('Clé API Anthropic non configurée sur le serveur.');
@@ -6015,10 +6019,35 @@ function AIGeneratorCard({onStartWorkout}){
           </div>
 
           <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Équipement</div>
-          <div style={{display:'flex',gap:6,marginBottom:18}}>
+          <div style={{display:'flex',gap:6,marginBottom:14}}>
             {['Salle complète','Haltères','Poids du corps'].map(v=>(
               <button key={v} onClick={()=>setEquip(v)} style={SEL_STYLE(equip===v,'#6366f1')}>{v}</button>
             ))}
+          </div>
+
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Genre</div>
+          <div style={{display:'flex',gap:6,marginBottom:14}}>
+            {['Homme','Femme'].map(v=>(
+              <button key={v} onClick={()=>setGender(v)} style={SEL_STYLE(gender===v,'#8b5cf6')}>{v==='Homme'?'♂ Homme':'♀ Femme'}</button>
+            ))}
+          </div>
+
+          <div style={{display:'flex',gap:8,marginBottom:18}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Âge</div>
+              <input type="number" value={age} onChange={e=>setAge(e.target.value)} placeholder="Ex: 25" min="10" max="80"
+                style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,textAlign:'center',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Poids (kg)</div>
+              <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Ex: 75" min="30" max="200"
+                style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,textAlign:'center',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Taille (cm)</div>
+              <input type="number" value={height} onChange={e=>setHeight(e.target.value)} placeholder="Ex: 175" min="100" max="250"
+                style={{width:'100%',height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,textAlign:'center',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>
           </div>
 
           {err&&<div style={{fontSize:12,color:'#c97586',fontWeight:600,marginBottom:12,textAlign:'center'}}>{err}</div>}
@@ -6277,6 +6306,78 @@ function ExplorerScreen({profile,onStartWorkout}){
   );
 }
 
+// ── Univers Picker ────────────────────────────────────────────────────────────
+function UniversePickerScreen({onSelect,authUser}){
+  const UNIVERSES=[
+    {id:'coach',emoji:'👥',title:'Coach',desc:'Programme assigné par ton coach + nutrition',
+     grad:'linear-gradient(135deg,#d97757,#c97586)',glow:'rgba(217,119,87,0.4)',border:'rgba(217,119,87,0.3)',bg:'rgba(217,119,87,0.07)'},
+    {id:'ia',emoji:'🤖',title:'IA Programme',desc:'Programme personnalisé généré par intelligence artificielle',
+     grad:'linear-gradient(135deg,#6366f1,#8b5cf6)',glow:'rgba(99,102,241,0.4)',border:'rgba(99,102,241,0.3)',bg:'rgba(99,102,241,0.07)'},
+    {id:'explorer',emoji:'🧭',title:'Explorer',desc:'Séances prêtes à démarrer, classées par groupe musculaire',
+     grad:'linear-gradient(135deg,#0d9488,#06b6d4)',glow:'rgba(13,148,136,0.4)',border:'rgba(13,148,136,0.3)',bg:'rgba(13,148,136,0.07)'},
+  ];
+  return(
+    <div style={{padding:'28px 20px 100px',color:T.text,height:'100%',boxSizing:'border-box',overflowY:'auto'}}>
+      <div style={{marginBottom:32}}>
+        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Prime Athl</div>
+        <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.6,lineHeight:1.1}}><HoloText>Tes Univers</HoloText></div>
+        <div style={{fontSize:13,color:T.textDim,marginTop:8}}>Choisis ton mode d'entraînement</div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:16}}>
+        {UNIVERSES.map(u=>(
+          <button key={u.id} onClick={()=>onSelect(u.id)} style={{
+            width:'100%',padding:'22px 20px',borderRadius:24,
+            border:`1px solid ${u.border}`,background:u.bg,
+            cursor:'pointer',textAlign:'left',
+            display:'flex',alignItems:'center',gap:18,
+            boxShadow:`0 4px 28px ${u.glow.replace('0.4','0.10')}`,
+            position:'relative',overflow:'hidden',
+          }}>
+            <div style={{position:'absolute',top:-20,right:-20,width:130,height:130,borderRadius:'50%',background:u.grad,opacity:0.07,filter:'blur(25px)',pointerEvents:'none'}}/>
+            <div style={{width:60,height:60,borderRadius:20,background:u.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,flexShrink:0,boxShadow:`0 8px 22px ${u.glow}`}}>{u.emoji}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:19,fontWeight:800,color:T.text,letterSpacing:-0.4,marginBottom:5}}>{u.title}</div>
+              <div style={{fontSize:13,color:T.textDim,lineHeight:1.45}}>{u.desc}</div>
+            </div>
+            <div style={{flexShrink:0,width:32,height:32,borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Universe Shell (header + back) ───────────────────────────────────────────
+function UniverseShell({title,grad,onBack,children}){
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'14px 16px 10px',display:'flex',alignItems:'center',gap:10,flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
+        <button onClick={onBack} style={{width:34,height:34,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          <Icon name="chevronLeft" size={16} stroke={T.textDim}/>
+        </button>
+        <div style={{fontSize:15,fontWeight:800,background:grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',letterSpacing:-0.3}}>{title}</div>
+      </div>
+      <div style={{flex:1,overflow:'auto'}}>{children}</div>
+    </div>
+  );
+}
+
+// ── AI Universe Screen ────────────────────────────────────────────────────────
+function AIUniverseScreen({onStartWorkout}){
+  return(
+    <div style={{padding:'20px 18px 90px'}}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Intelligence Artificielle</div>
+        <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Ton programme sur mesure</div>
+        <div style={{fontSize:13,color:T.textDim,marginTop:6,lineHeight:1.5}}>Remplis ton profil et l'IA génère une séance parfaitement adaptée à toi.</div>
+      </div>
+      <AIGeneratorCard onStartWorkout={onStartWorkout} standalone={true}/>
+    </div>
+  );
+}
+
 function ThemePicker(){
   const[cur,setCur]=React.useState(localStorage.getItem('prime-theme')||'dark');
   const swatches=[
@@ -6306,16 +6407,19 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   React.useEffect(()=>{_themeUpdate=forceUpdate;return()=>{_themeUpdate=null};},[]);
   const[showOnboarding,setShowOnboarding]=React.useState(!authUser.onboardedAt&&authUser.role!=='coach');
   // Deep-link via ?action=...
+  const CREATOR_EMAIL='yannisgym972@gmail.com';
+  const isCreator=authUser.email===CREATOR_EMAIL;
   const initialTab=(()=>{
-    if(typeof window==='undefined')return authUser.role==='coach'?'coach':'programme';
+    if(typeof window==='undefined')return authUser.role==='coach'?'coach':'univers';
     const p=new URLSearchParams(window.location.search);
     const a=p.get('action');
     if(a==='stats')return'stats';
     if(a==='profile')return'profile';
     if(a==='coach'&&authUser.role==='coach')return'coach';
-    return authUser.role==='coach'?'coach':'programme';
+    return authUser.role==='coach'?'coach':'univers';
   })();
   const[tab,setTab]=React.useState(initialTab);
+  const[activeUniverse,setActiveUniverse]=React.useState(null);
   const[screen,setScreen]=React.useState(()=>{
     if(typeof window==='undefined')return null;
     const a=new URLSearchParams(window.location.search).get('action');
@@ -6465,23 +6569,41 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           </div>
         )}
         {!screen&&(
-          <div className="tab-content" style={{height:'100%',overflow:'auto'}} key={tab}>
-            {tab==='programme'&&<ProgrammeTab
-              workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
-              onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
-              onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
-              refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
-              authToken={authToken} nutriRefreshKey={nutriRefreshKey}
-            />}
-            {tab==='stats'&&<StatsScreen history={history} profile={profile}/>}
-            {tab==='profile'&&<ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/>}
-            {tab==='explorer'&&<ExplorerScreen profile={profile} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>}
-            {tab==='coach'&&authUser.role==='coach'&&<CoachScreen authToken={authToken} authUser={authUser}/>}
-            {tab==='messages'&&<MessagesScreen authUser={authUser}/>}
+          <div className="tab-content" style={{height:'100%',overflow:'hidden',display:'flex',flexDirection:'column'}} key={tab+(activeUniverse||'')}>
+            {tab==='univers'&&!activeUniverse&&(
+              <div style={{flex:1,overflow:'auto'}}>
+                <UniversePickerScreen authUser={authUser} onSelect={u=>{setActiveUniverse(u);}}/>
+              </div>
+            )}
+            {tab==='univers'&&activeUniverse==='coach'&&(
+              <UniverseShell title="👥 Univers Coach" grad="linear-gradient(135deg,#d97757,#c97586)" onBack={()=>setActiveUniverse(null)}>
+                <ProgrammeTab
+                  workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
+                  onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
+                  onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
+                  refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
+                  authToken={authToken} nutriRefreshKey={nutriRefreshKey}
+                />
+              </UniverseShell>
+            )}
+            {tab==='univers'&&activeUniverse==='ia'&&(
+              <UniverseShell title="🤖 IA Programme" grad="linear-gradient(135deg,#6366f1,#8b5cf6)" onBack={()=>setActiveUniverse(null)}>
+                <AIUniverseScreen onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
+              </UniverseShell>
+            )}
+            {tab==='univers'&&activeUniverse==='explorer'&&(
+              <UniverseShell title="🧭 Explorer" grad="linear-gradient(135deg,#0d9488,#06b6d4)" onBack={()=>setActiveUniverse(null)}>
+                <ExplorerScreen profile={profile} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
+              </UniverseShell>
+            )}
+            {tab==='stats'&&<div style={{flex:1,overflow:'auto'}}><StatsScreen history={history} profile={profile}/></div>}
+            {tab==='profile'&&<div style={{flex:1,overflow:'auto'}}><ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/></div>}
+            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser}/></div>}
+            {tab==='messages'&&<div style={{flex:1,overflow:'auto'}}><MessagesScreen authUser={authUser}/></div>}
           </div>
         )}
       </div>
-      {!screen&&<BottomTabBar tab={tab} onTab={t=>{setTab(t);if(t==='messages')setUnreadMessages(0);}} role={authUser.role} unreadMessages={unreadMessages}/>}
+      {!screen&&<BottomTabBar tab={tab} onTab={t=>{setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
     </div>
   );
 
@@ -6531,16 +6653,14 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
   );
 }
 
-function BottomTabBar({tab,onTab,role,unreadMessages}){
-  const items=role==='coach'?[
+function BottomTabBar({tab,onTab,role,unreadMessages,isCreator}){
+  const items=role==='coach'||isCreator?[
     {id:'coach',icon:'users',label:'Coach'},
-    {id:'programme',icon:'grid',label:'Programme'},
-    {id:'explorer',icon:'compass',label:'Explorer'},
+    {id:'univers',icon:'grid',label:'Univers'},
     {id:'messages',icon:'message',label:'Chat'},
     {id:'profile',icon:'user',label:'Profil'},
   ]:[
-    {id:'programme',icon:'grid',label:'Programme'},
-    {id:'explorer',icon:'compass',label:'Explorer'},
+    {id:'univers',icon:'grid',label:'Univers'},
     {id:'messages',icon:'message',label:'Chat'},
     {id:'stats',icon:'chart',label:'Stats'},
     {id:'profile',icon:'user',label:'Profil'},
