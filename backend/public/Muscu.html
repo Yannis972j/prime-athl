@@ -5942,7 +5942,7 @@ function AIGeneratorCard({onStartWorkout}){
       setResult(d.program);
     }catch(e){
       if(e.message==='ai_not_configured')setErr('Clé API Anthropic non configurée sur le serveur.');
-      else setErr('Génération échouée, réessaie.');
+      else setErr('Erreur : '+(e.message||'génération échouée'));
     }finally{setLoading(false);}
   };
 

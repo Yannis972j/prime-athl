@@ -1472,7 +1472,7 @@ Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. 
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
-    res.status(500).json({ error: 'generation_failed' });
+    res.status(500).json({ error: 'generation_failed', detail: e.message });
   }
 });
 
