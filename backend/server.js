@@ -1468,7 +1468,8 @@ Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans
 
 Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. Avancé = mouvements composés lourds. Adapte les séries/reps à l'objectif (masse=6-10 reps lourds, sèche=12-15 reps légers, force=3-5 reps max).` }]
     });
-    const program = JSON.parse(msg.content[0].text.trim());
+    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const program = JSON.parse(raw);
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
