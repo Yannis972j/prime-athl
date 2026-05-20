@@ -1510,8 +1510,20 @@ Format EXACT (pas de texte autour):
 {"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
 Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
-    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    const parsed = JSON.parse(raw);
+    let raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    // Réparer un JSON tronqué : fermer les accolades/crochets manquants
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch(parseErr) {
+      // Tentative de réparation : trouver le dernier objet complet et fermer
+      const lastCompleteDay = raw.lastIndexOf('"meals":[');
+      if (lastCompleteDay === -1) throw parseErr;
+      // Trouver la fin du dernier tableau d'items complet
+      let repaired = raw.slice(0, raw.lastIndexOf(']}'));
+      repaired += ']}]}}}';
+      try { parsed = JSON.parse(repaired); } catch(e2) { throw parseErr; }
+    }
     const plan = enrichAIPlan(parsed.days, mealCount, targets);
     res.json({ targets, plan });
   } catch(e) {
