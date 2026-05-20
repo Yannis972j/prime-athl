@@ -5922,6 +5922,159 @@ function OnboardingModal({user,onClose}){
   );
 }
 
+// ── AI Program Generator ─────────────────────────────────────────────────────
+function AIGeneratorCard({onStartWorkout}){
+  const[level,setLevel]=React.useState('');
+  const[goal,setGoal]=React.useState('');
+  const[days,setDays]=React.useState('');
+  const[equip,setEquip]=React.useState('');
+  const[loading,setLoading]=React.useState(false);
+  const[result,setResult]=React.useState(null);
+  const[err,setErr]=React.useState(null);
+  const[open,setOpen]=React.useState(false);
+
+  const canGenerate=level&&goal&&days&&equip;
+
+  const generate=async()=>{
+    setLoading(true);setErr(null);setResult(null);
+    try{
+      const d=await apiCall('/api/ai/generate-program',{method:'POST',body:{level,goal,days,equipment:equip}});
+      setResult(d.program);
+    }catch(e){
+      if(e.message==='ai_not_configured')setErr('Clé API Anthropic non configurée sur le serveur.');
+      else setErr('Génération échouée, réessaie.');
+    }finally{setLoading(false);}
+  };
+
+  const launch=()=>{
+    if(!result)return;
+    const exercises=result.exercises.map(ex=>({
+      id:Math.random().toString(36).slice(2),
+      name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
+      rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
+      weightStr:'',repsStr:String(ex.reps||''),cardio:null,
+      sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
+        weight:0,reps:0,done:false,
+        target:parseInt(String(ex.reps))||10,
+        targetStr:String(ex.reps||''),
+      })),
+    }));
+    onStartWorkout({name:result.name,muscles:result.muscles||'',exercises});
+    setResult(null);setOpen(false);
+  };
+
+  const reset=()=>{setResult(null);setErr(null);};
+
+  const SEL_STYLE=(active,color='#6366f1')=>({
+    flex:1,height:36,borderRadius:10,border:active?`1px solid ${color}60`:'1px solid rgba(255,255,255,0.08)',
+    background:active?`${color}18`:'rgba(255,255,255,0.03)',
+    color:active?color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',
+  });
+
+  return(
+    <div style={{marginBottom:20}}>
+      {/* Carte fermée */}
+      {!open&&!result&&(
+        <button onClick={()=>setOpen(true)} style={{width:'100%',padding:'16px 18px',borderRadius:18,border:'1px solid rgba(99,102,241,0.35)',background:'linear-gradient(135deg,rgba(99,102,241,0.10),rgba(139,92,246,0.06))',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:14,boxShadow:'0 4px 20px rgba(99,102,241,0.12)'}}>
+          <div style={{width:46,height:46,borderRadius:14,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,boxShadow:'0 6px 18px rgba(99,102,241,0.4)'}}>🤖</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:800,color:T.text,letterSpacing:-0.3}}>Générer avec l'IA</div>
+            <div style={{fontSize:12,color:T.textDim,marginTop:2}}>Programme personnalisé en 5 secondes</div>
+          </div>
+          <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+        </button>
+      )}
+
+      {/* Formulaire ouvert */}
+      {open&&!result&&(
+        <div style={{padding:'18px 16px',borderRadius:18,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.05)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+            <div style={{fontSize:15,fontWeight:800,color:T.text}}>🤖 Générer avec l'IA</div>
+            <button onClick={()=>setOpen(false)} style={{background:'none',border:'none',color:T.textFaint,cursor:'pointer',padding:4}}><Icon name="x" size={16} stroke={T.textFaint}/></button>
+          </div>
+
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Niveau</div>
+          <div style={{display:'flex',gap:6,marginBottom:14}}>
+            {['Débutant','Intermédiaire','Avancé'].map(v=>(
+              <button key={v} onClick={()=>setLevel(v)} style={SEL_STYLE(level===v,'#6366f1')}>{v}</button>
+            ))}
+          </div>
+
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Objectif</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+            {['Prise de masse','Sèche','Force','Fitness'].map(v=>(
+              <button key={v} onClick={()=>setGoal(v)} style={{...SEL_STYLE(goal===v,'#8b5cf6'),flex:'0 0 auto',padding:'0 12px'}}>{v}</button>
+            ))}
+          </div>
+
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Jours / semaine</div>
+          <div style={{display:'flex',gap:6,marginBottom:14}}>
+            {['2-3','3-4','5-6'].map(v=>(
+              <button key={v} onClick={()=>setDays(v)} style={SEL_STYLE(days===v,'#6366f1')}>{v}j</button>
+            ))}
+          </div>
+
+          <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Équipement</div>
+          <div style={{display:'flex',gap:6,marginBottom:18}}>
+            {['Salle complète','Haltères','Poids du corps'].map(v=>(
+              <button key={v} onClick={()=>setEquip(v)} style={SEL_STYLE(equip===v,'#6366f1')}>{v}</button>
+            ))}
+          </div>
+
+          {err&&<div style={{fontSize:12,color:'#c97586',fontWeight:600,marginBottom:12,textAlign:'center'}}>{err}</div>}
+
+          <button onClick={generate} disabled={!canGenerate||loading} style={{width:'100%',height:50,borderRadius:14,border:'none',background:canGenerate?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.06)',color:canGenerate?'#fff':T.textFaint,fontSize:14,fontWeight:800,cursor:canGenerate?'pointer':'default',boxShadow:canGenerate?'0 8px 24px rgba(99,102,241,0.4)':'none',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2}}>
+            {loading?(
+              <><span style={{fontSize:16,animation:'pulse 1s infinite'}}>⏳</span>Génération en cours…</>
+            ):(
+              <><span>✨</span>Générer mon programme</>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Résultat */}
+      {result&&(
+        <div style={{padding:'18px 16px',borderRadius:18,border:'1px solid rgba(99,102,241,0.3)',background:'rgba(99,102,241,0.06)'}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,gap:8}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:T.text,letterSpacing:-0.3}}>{result.name}</div>
+              <div style={{fontSize:12,color:'#a5b4fc',marginTop:2}}>{result.muscles}</div>
+            </div>
+            <button onClick={reset} style={{flexShrink:0,background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer'}}>↩ Refaire</button>
+          </div>
+
+          {result.tip&&(
+            <div style={{padding:'10px 12px',borderRadius:12,background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.15)',marginBottom:12,fontSize:12,color:'#c4b5fd',fontStyle:'italic',lineHeight:1.5}}>
+              💡 {result.tip}
+            </div>
+          )}
+
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:16}}>
+            {(result.exercises||[]).map((ex,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+                <div style={{width:24,height:24,borderRadius:7,background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#a5b4fc',flexShrink:0}}>{i+1}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                  <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.tip?' · '+ex.tip:''}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#a5b4fc'}}>{ex.sets}×{ex.reps}</div>
+                  <div style={{fontSize:10,color:T.textFaint}}>{ex.rest}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={launch} style={{width:'100%',height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.45)',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2}}>
+            <Icon name="play" size={18} stroke="#fff"/>Démarrer cette séance
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Explorer Screen ───────────────────────────────────────────────────────────
 const CATEGORIES=[
   {id:'pecs',label:'Pecs & Épaules',emoji:'💪',color:'#d97757'},
@@ -6075,6 +6228,8 @@ function ExplorerScreen({profile,onStartWorkout}){
         <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Explorer</div>
         <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}><HoloText>Séances prêtes</HoloText></div>
       </div>
+
+      <AIGeneratorCard onStartWorkout={onStartWorkout}/>
 
       {/* Filtre catégories */}
       <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:4,marginBottom:16}}>

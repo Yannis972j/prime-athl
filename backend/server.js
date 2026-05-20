@@ -1446,6 +1446,36 @@ function pushToUser(userId, payload) {
     .catch(() => { delete DATA.pushSubscriptions[userId]; persist(); });
 }
 
+// ── IA — Génération de programme ────────────────────
+app.post('/api/ai/generate-program', authRequired, async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
+  const { level, goal, days, equipment } = req.body || {};
+  if (!level || !goal || !days || !equipment) return res.status(400).json({ error: 'missing_fields' });
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      messages: [{ role: 'user', content: `Tu es un coach sportif expert. Génère une séance d'entraînement adaptée :
+- Niveau : ${level}
+- Objectif : ${goal}
+- Jours dispo par semaine : ${days}
+- Équipement : ${equipment}
+
+Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans ce format exact :
+{"name":"Nom de la séance","muscles":"Groupes musculaires","tip":"Conseil global en 1 phrase","exercises":[{"name":"Nom exercice","muscle":"Groupe musculaire","sets":3,"reps":"10-12","rest":"60s","tip":"Conseil technique en 1 phrase courte"}]}
+
+Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. Avancé = mouvements composés lourds. Adapte les séries/reps à l'objectif (masse=6-10 reps lourds, sèche=12-15 reps légers, force=3-5 reps max).` }]
+    });
+    const program = JSON.parse(msg.content[0].text.trim());
+    res.json({ program });
+  } catch(e) {
+    console.error('AI generate error:', e.message);
+    res.status(500).json({ error: 'generation_failed' });
+  }
+});
+
 // ── Push subscriptions ────────────────────────────────
 app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ key: VAPID_PUBLIC_KEY || null });
