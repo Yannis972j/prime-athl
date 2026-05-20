@@ -1499,7 +1499,7 @@ app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 5000,
+      max_tokens: 7000,
       messages: [{ role: 'user', content: `Nutritionniste expert. Plan nutrition 7 jours en JSON pur (sans markdown).
 
 Cibles/jour: ${targets.calories}kcal | P:${targets.protein}g G:${targets.carbs}g L:${targets.fat}g
@@ -1508,7 +1508,7 @@ Contraintes: allergies=${allergies||'aucune'} | objectif=${goal} | aliments supe
 
 Format EXACT (pas de texte autour):
 {"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
-Chaque jour: exactement ${mealCount} repas. Items: 3-5 aliments par repas. Macros cohérentes.` }]
+Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
     const parsed = JSON.parse(raw);
