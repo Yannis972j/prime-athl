@@ -1498,19 +1498,17 @@ app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
-      messages: [{ role: 'user', content: `Tu es un nutritionniste expert. Génère un plan nutrition sur 7 jours.
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 5000,
+      messages: [{ role: 'user', content: `Nutritionniste expert. Plan nutrition 7 jours en JSON pur (sans markdown).
 
-OBJECTIFS JOURNALIERS (respecte ±5%) :
-- Calories : ${targets.calories} kcal  - Protéines : ${targets.protein}g  - Glucides : ${targets.carbs}g  - Lipides : ${targets.fat}g
+Cibles/jour: ${targets.calories}kcal | P:${targets.protein}g G:${targets.carbs}g L:${targets.fat}g
+Repas (${mealCount}/j): ${mealNames}
+Contraintes: allergies=${allergies||'aucune'} | objectif=${goal} | aliments supermarché français | varie les protéines
 
-REPAS (${mealCount}/jour dans cet ordre) : ${mealNames}
-CONTRAINTES : Allergies: ${allergies||'aucune'} | Objectif: ${goal} | Aliments réels supermarché français | Quantités précises en g/ml | Varie les protéines chaque jour | Max 2 répétitions du même repas sur 7 jours
-
-RÉPONDS UNIQUEMENT en JSON valide sans markdown :
-{"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},...}}}
-Chaque jour a exactement ${mealCount} objets dans meals[]. Macros cohérentes avec les quantités.` }]
+Format EXACT (pas de texte autour):
+{"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
+Chaque jour: exactement ${mealCount} repas. Items: 3-5 aliments par repas. Macros cohérentes.` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
     const parsed = JSON.parse(raw);
