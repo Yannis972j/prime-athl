@@ -3457,6 +3457,42 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         )}
       </div>
 
+      {/* ── Navigation jour de la semaine ── */}
+      {data&&(()=>{
+        const DAY_LABELS=['L','M','M','J','V','S','D'];
+        const today=todayDayName();
+        const todayIdx=DAYS_OF_WEEK.indexOf(today);
+        const viewIdx=DAYS_OF_WEEK.indexOf(viewDay);
+        const prevDay=()=>{const i=(viewIdx-1+7)%7;setViewDay(DAYS_OF_WEEK[i]);setExpandedMeal(null);};
+        const nextDay=()=>{const i=(viewIdx+1)%7;setViewDay(DAYS_OF_WEEK[i]);setExpandedMeal(null);};
+        return(
+          <div style={{marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+              <button onClick={prevDay} style={{flexShrink:0,width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+              <div style={{flex:1,display:'flex',gap:4,justifyContent:'space-between'}}>
+                {DAYS_OF_WEEK.map((d,i)=>{
+                  const isActive=d===viewDay;
+                  const isTodayDay=i===todayIdx;
+                  const dayMeals=getDayMeals(data,d);
+                  const hasMeals=dayMeals.some(m=>(m.items||[]).length>0);
+                  return(
+                    <button key={d} onClick={()=>{setViewDay(d);setExpandedMeal(null);}} style={{flex:1,minWidth:0,padding:'6px 0',borderRadius:10,border:isActive?'2px solid #d97757':'1px solid rgba(255,255,255,0.08)',background:isActive?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.03)',color:isActive?'#d97757':isTodayDay?T.text:T.textFaint,fontSize:11,fontWeight:isActive||isTodayDay?700:500,cursor:'pointer',position:'relative',transition:'all 0.15s'}}>
+                      {DAY_LABELS[i]}
+                      {isTodayDay&&!isActive&&<div style={{position:'absolute',bottom:3,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:2,background:'#d97757'}}/>}
+                      {hasMeals&&isActive&&<div style={{position:'absolute',bottom:3,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:2,background:'#d97757'}}/>}
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={nextDay} style={{flexShrink:0,width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+            </div>
+            <div style={{textAlign:'center',fontSize:12,fontWeight:700,color:viewDay===todayDayName()?T.accent:T.textDim,textTransform:'capitalize',letterSpacing:0.2}}>
+              {viewDay===todayDayName()?'Aujourd\'hui — '+viewDay:viewDay}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Big calorie gauge */}
       <HoloCard intense padding={0} style={{marginBottom:14}}>
         <div style={{padding:'18px',position:'relative',display:'flex',alignItems:'center',gap:14}}>
