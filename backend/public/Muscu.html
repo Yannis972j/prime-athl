@@ -4722,7 +4722,9 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   const[moveDate,setMoveDate]=React.useState('');
   const[confirmDelete,setConfirmDelete]=React.useState(false);
   const[deleteMode,setDeleteMode]=React.useState(false);
+  const deleteModeRef=React.useRef(false);
   const pressTimer=React.useRef(null);
+  const setDeleteModeSync=(v)=>{deleteModeRef.current=v;setDeleteMode(v);};
 
   const reload=()=>{
     setLoading(true);
@@ -4869,14 +4871,17 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                   if(dots.some(dot=>dot.hasSession)){
                     if(navigator.vibrate)navigator.vibrate(40);
                     setSelectedDay(d);
-                    setDeleteMode(true);
+                    setDeleteModeSync(true);
                   }
                 },500);
               };
               const cancelPress=()=>clearTimeout(pressTimer.current);
               return(
                 <button key={d}
-                  onClick={()=>{setSelectedDay(selected?null:d);setDeleteMode(false);}}
+                  onClick={()=>{
+                    if(deleteModeRef.current){return;}
+                    setSelectedDay(selected?null:d);setDeleteModeSync(false);
+                  }}
                   onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
                   onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                   style={{
@@ -4905,7 +4910,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                 <div style={{fontSize:13,fontWeight:700,color:deleteMode?'#c97586':T.textDim}}>
                   {deleteMode?'🗑️ Mode suppression — ':''}{new Date(year,month-1,selectedDay).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
                 </div>
-                {deleteMode&&<button onClick={()=>setDeleteMode(false)} style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer'}}>Annuler</button>}
+                {deleteMode&&<button onClick={()=>setDeleteModeSync(false)} style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer'}}>Annuler</button>}
               </div>
               {selectedAths.length===0?(
                 <div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'10px 0'}}>Aucune activité ce jour</div>
