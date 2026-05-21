@@ -16,6 +16,7 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
+import Stripe from 'stripe';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -43,6 +44,41 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 *
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
+
+// ── Stripe ───────────────────────────────────────────
+const STRIPE_SECRET_KEY      = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
+const STRIPE_PRICE_EXPLORER  = process.env.STRIPE_PRICE_EXPLORER || '';  // 4,99€/mois
+const STRIPE_PRICE_IA        = process.env.STRIPE_PRICE_IA || '';         // 14,99€/mois
+const STRIPE_PRICE_COACHING  = process.env.STRIPE_PRICE_COACHING || '';   // 24,99€/mois
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+
+// Mapping price_id → plan slug
+const PRICE_TO_PLAN = {};
+if (STRIPE_PRICE_EXPLORER) PRICE_TO_PLAN[STRIPE_PRICE_EXPLORER] = 'explorer';
+if (STRIPE_PRICE_IA)       PRICE_TO_PLAN[STRIPE_PRICE_IA]       = 'ia';
+if (STRIPE_PRICE_COACHING) PRICE_TO_PLAN[STRIPE_PRICE_COACHING] = 'coaching';
+
+// Accès par plan (cascade) : coaching > ia > explorer
+const PLAN_UNIVERSES = {
+  explorer: ['explorer'],
+  ia:       ['explorer', 'ia'],
+  coaching: ['explorer', 'ia', 'coach'],
+};
+
+// Durée de l'essai gratuit
+const TRIAL_MS = 7 * 24 * 3600 * 1000;
+
+function userHasAccess(u, universe) {
+  if (!u) return false;
+  if (u.email === MAIN_COACH_EMAIL) return true;
+  if (u.role === 'coach') return true;
+  if (Date.now() < (u.createdAt || 0) + TRIAL_MS) return true;
+  if (u.stripeStatus === 'active' && u.stripePlan) {
+    return (PLAN_UNIVERSES[u.stripePlan] || []).includes(universe);
+  }
+  return false;
+}
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
@@ -194,6 +230,9 @@ const profileOf = u => u && {
   onboardedAt: u.onboardedAt || null,
   requestedRole: u.requestedRole || u.role || 'athlete',
   premium: !!u.premium,
+  stripeStatus: u.stripeStatus || null,
+  stripePlan: u.stripePlan || null,
+  stripeCustomerId: u.stripeCustomerId || null,
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -1811,6 +1850,117 @@ app.post('/api/premium/grant/:userId', authRequired, coachOnly, mainCoachOnly, (
   persist();
   io.to('user:' + u.id).emit('premium-updated', { premium: u.premium });
   res.json({ ok: true, premium: u.premium });
+});
+
+// ── Stripe routes ────────────────────────────────────
+
+// Statut abonnement de l'utilisateur connecté
+app.get('/api/stripe/status', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const inTrial = Date.now() < (u.createdAt || 0) + TRIAL_MS;
+  const trialDaysLeft = inTrial ? Math.ceil(((u.createdAt || 0) + TRIAL_MS - Date.now()) / 86400000) : 0;
+  const access = {
+    explorer: userHasAccess(u, 'explorer'),
+    ia:       userHasAccess(u, 'ia'),
+    coach:    userHasAccess(u, 'coach'),
+  };
+  res.json({
+    plan: u.stripePlan || null,
+    status: u.stripeStatus || null,
+    inTrial, trialDaysLeft,
+    access,
+    stripeEnabled: !!stripe,
+  });
+});
+
+// Créer une session Checkout Stripe
+app.post('/api/stripe/checkout', authRequired, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  const { plan } = req.body || {};
+  const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING };
+  const priceId = priceMap[plan];
+  if (!priceId) return res.status(400).json({ error: 'invalid_plan' });
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  try {
+    // Récupérer ou créer le customer Stripe
+    let customerId = u.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: u.email, metadata: { userId: u.id } });
+      customerId = customer.id;
+      u.stripeCustomerId = customerId;
+      persist();
+    }
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${PUBLIC_URL}/Muscu.html?stripe=success&plan=${plan}`,
+      cancel_url: `${PUBLIC_URL}/Muscu.html?stripe=cancel`,
+      allow_promotion_codes: true,
+      subscription_data: { metadata: { userId: u.id, plan } },
+    });
+    res.json({ url: session.url });
+  } catch(e) {
+    console.error('[stripe] checkout error:', e.message);
+    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+  }
+});
+
+// Portail client (gérer / annuler l'abonnement)
+app.post('/api/stripe/portal', authRequired, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  const u = DATA.users[req.user.id];
+  if (!u?.stripeCustomerId) return res.status(400).json({ error: 'no_subscription' });
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: u.stripeCustomerId,
+      return_url: `${PUBLIC_URL}/Muscu.html`,
+    });
+    res.json({ url: session.url });
+  } catch(e) {
+    console.error('[stripe] portal error:', e.message);
+    res.status(500).json({ error: 'portal_failed', detail: e.message });
+  }
+});
+
+// Webhook Stripe — raw body obligatoire
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(200).json({ ok: true });
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
+  } catch(e) {
+    console.error('[stripe] webhook signature error:', e.message);
+    return res.status(400).json({ error: 'invalid_signature' });
+  }
+
+  const applySubscription = (sub) => {
+    const userId = sub.metadata?.userId;
+    const plan   = sub.metadata?.plan || PRICE_TO_PLAN[sub.items?.data?.[0]?.price?.id];
+    if (!userId || !DATA.users[userId]) return;
+    const u = DATA.users[userId];
+    u.stripePlan         = plan || u.stripePlan;
+    u.stripeStatus       = sub.status; // active | past_due | canceled | ...
+    u.stripeSubscriptionId = sub.id;
+    persist();
+    io.to('user:' + userId).emit('subscription-updated', { plan: u.stripePlan, status: u.stripeStatus });
+    console.log(`[stripe] user ${u.email} → plan=${u.stripePlan} status=${u.stripeStatus}`);
+  };
+
+  switch(event.type) {
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+      applySubscription(event.data.object);
+      break;
+    case 'customer.subscription.deleted':
+      applySubscription({ ...event.data.object, status: 'canceled' });
+      break;
+    default:
+      break;
+  }
+  res.json({ received: true });
 });
 
 // Global error handlers — keep server alive on unexpected errors
