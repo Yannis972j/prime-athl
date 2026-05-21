@@ -392,10 +392,14 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       await sendVerifyEmail(lowEmail, link).catch(e => console.error('[verify] email error:', e.message));
     }
 
-    // Notify main coach of new pending request (seulement si email vérifié ou pas de Resend)
+    // Notify main coach of new pending request
     if (!isMain) {
       const main = Object.values(DATA.users).find(x => x.isMainCoach && x.status === 'active');
-      if (main) io.to('user:' + main.id).emit('pending-request', { user: profileOf(u) });
+      if (main) {
+        io.to('user:' + main.id).emit('pending-request', { user: profileOf(u) });
+        const athleteName = [u.firstName, u.lastName].filter(Boolean).join(' ') || lowEmail.split('@')[0];
+        sendCoachNewAthleteEmail(main.email, lowEmail, athleteName).catch(e => console.error('[email] coach notify error:', e.message));
+      }
     }
 
     if (status === 'pending') {
@@ -445,67 +449,69 @@ import crypto from 'crypto';
 const RESET_TTL_MS = 60 * 60 * 1000; // 1h
 const hashToken = t => crypto.createHash('sha256').update(t).digest('hex');
 
-async function sendResetEmail(toEmail, link) {
+// ── Envoi email centralisé ───────────────────────────
+async function sendEmail({ to, subject, html }) {
   if (!RESEND_API_KEY) {
-    console.log(`[reset] (no RESEND_API_KEY) Lien pour ${toEmail} : ${link}`);
+    console.log(`[email] (no RESEND_API_KEY) To: ${to} | Subject: ${subject}`);
     return { sent: false, reason: 'no_provider' };
   }
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: [toEmail],
-        subject: 'Prime Athl — Réinitialise ton mot de passe',
-        html: `
-          <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
-            <h1 style="font-size:22px;margin:0 0 12px;color:#d97757;">Prime Athl</h1>
-            <p>Tu as demandé à réinitialiser ton mot de passe.</p>
-            <p style="margin:24px 0;">
-              <a href="${link}" style="display:inline-block;padding:12px 24px;background:#d97757;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">Choisir un nouveau mot de passe</a>
-            </p>
-            <p style="font-size:12px;color:#666;">Ce lien est valable 1 heure. Si tu n'es pas à l'origine de cette demande, ignore ce message.</p>
-            <p style="font-size:11px;color:#999;margin-top:24px;">Lien complet : <br>${link}</p>
-          </div>`,
-      }),
+      body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html }),
     });
-    if (!r.ok) {
-      const txt = await r.text();
-      console.error('[resend] HTTP', r.status, txt);
-      return { sent: false, reason: 'provider_error' };
-    }
+    if (!r.ok) { const txt = await r.text(); console.error('[resend] HTTP', r.status, txt); return { sent: false, reason: 'provider_error', status: r.status }; }
+    console.log(`[email] ✓ sent to ${to} | ${subject}`);
     return { sent: true };
-  } catch (e) {
-    console.error('[resend] error:', e.message);
-    return { sent: false, reason: 'network' };
-  }
+  } catch(e) { console.error('[resend] error:', e.message); return { sent: false, reason: 'network' }; }
 }
 
-// ── Email de vérification ────────────────────────────
+const emailBase = (content) => `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
+  <div style="margin-bottom:20px;"><span style="font-size:18px;font-weight:800;color:#d97757;">Prime Athl</span></div>
+  ${content}
+  <div style="margin-top:32px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;">Prime Athl · <a href="${PUBLIC_URL}" style="color:#d97757;">prime-athl.onrender.com</a></div>
+</div>`;
+
+const btn = (href, label) => `<p style="margin:24px 0;"><a href="${href}" style="display:inline-block;padding:12px 24px;background:#d97757;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">${label}</a></p>`;
+
+async function sendResetEmail(toEmail, link) {
+  return sendEmail({
+    to: toEmail,
+    subject: 'Prime Athl — Réinitialise ton mot de passe',
+    html: emailBase(`
+      <p>Tu as demandé à réinitialiser ton mot de passe.</p>
+      ${btn(link, 'Choisir un nouveau mot de passe')}
+      <p style="font-size:12px;color:#666;">Ce lien est valable <strong>1 heure</strong>. Si tu n'es pas à l'origine de cette demande, ignore ce message.</p>
+      <p style="font-size:11px;color:#999;">Lien complet : ${link}</p>
+    `),
+  });
+}
+
 async function sendVerifyEmail(toEmail, link) {
-  if (!RESEND_API_KEY) { console.log(`[verify] (no RESEND_API_KEY) Lien : ${link}`); return; }
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: [toEmail],
-        subject: 'Prime Athl — Confirme ton adresse email',
-        html: `
-          <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
-            <h1 style="font-size:22px;margin:0 0 12px;color:#d97757;">Prime Athl</h1>
-            <p>Bienvenue ! Clique sur le bouton ci-dessous pour confirmer ton adresse email et activer ton compte.</p>
-            <p style="margin:24px 0;">
-              <a href="${link}" style="display:inline-block;padding:12px 24px;background:#d97757;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">Confirmer mon email</a>
-            </p>
-            <p style="font-size:12px;color:#666;">Ce lien est valable 24 heures. Si tu n'es pas à l'origine de cette inscription, ignore ce message.</p>
-            <p style="font-size:11px;color:#999;margin-top:24px;">Lien complet : <br>${link}</p>
-          </div>`,
-      }),
-    });
-  } catch(e) { console.error('[verify] resend error:', e.message); }
+  return sendEmail({
+    to: toEmail,
+    subject: 'Prime Athl — Confirme ton adresse email ✅',
+    html: emailBase(`
+      <h2 style="font-size:20px;margin:0 0 10px;">Bienvenue sur Prime Athl 👋</h2>
+      <p>Clique sur le bouton ci-dessous pour confirmer ton adresse email et activer ton compte.</p>
+      ${btn(link, 'Confirmer mon email')}
+      <p style="font-size:12px;color:#666;">Ce lien est valable <strong>24 heures</strong>. Si tu n'es pas à l'origine de cette inscription, ignore ce message.</p>
+    `),
+  });
+}
+
+async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
+  return sendEmail({
+    to: coachEmail,
+    subject: `Prime Athl — Nouvelle demande d'inscription : ${athleteName}`,
+    html: emailBase(`
+      <h2 style="font-size:20px;margin:0 0 10px;">Nouvelle demande d'inscription 🏋️</h2>
+      <p><strong>${athleteName}</strong> (<a href="mailto:${athleteEmail}" style="color:#d97757;">${athleteEmail}</a>) vient de s'inscrire et attend ton approbation.</p>
+      ${btn(`${PUBLIC_URL}/Muscu.html`, 'Ouvrir Prime Athl')}
+      <p style="font-size:12px;color:#666;">Connecte-toi et va dans l'onglet <strong>Coach</strong> pour approuver ou refuser sa demande.</p>
+    `),
+  });
 }
 
 app.get('/api/auth/verify-email', async (req, res) => {
@@ -954,6 +960,21 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   persist();
   io.to('user:' + s.userId).emit('session-moved', { sessionId: req.params.sessionId, date: s.date });
   res.json({ ok: true, date: s.date });
+});
+
+// ── Test email (main coach only) ────────────────────
+app.post('/api/admin/test-email', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
+  const u = DATA.users[req.user.id];
+  const result = await sendEmail({
+    to: u.email,
+    subject: 'Prime Athl — Test email ✅',
+    html: emailBase(`
+      <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
+      <p>Ton serveur d'emails Resend est correctement configuré.</p>
+      <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
+    `),
+  });
+  res.json(result);
 });
 
 // ── Backup / Restore (main coach only) ──────────────

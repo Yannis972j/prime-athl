@@ -2182,6 +2182,41 @@ function PushNotifToggle(){
   );
 }
 
+function TestEmailCard(){
+  const[status,setStatus]=React.useState(null); // null | 'loading' | 'ok' | 'error' | 'no_key'
+  const test=async()=>{
+    setStatus('loading');
+    try{
+      const r=await apiCall('/api/admin/test-email',{method:'POST'});
+      setStatus(r.sent?'ok':r.reason==='no_provider'?'no_key':'error');
+    }catch(e){setStatus('error');}
+  };
+  return(
+    <div style={{marginBottom:12}}>
+      <SectionHeader title="Emails"/>
+      <div style={{padding:'13px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:T.text}}>Test Resend</div>
+          <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>
+            {status==='ok'&&<span style={{color:T.good}}>✓ Email envoyé avec succès</span>}
+            {status==='no_key'&&<span style={{color:T.warn}}>⚠ RESEND_API_KEY non configuré</span>}
+            {status==='error'&&<span style={{color:T.danger}}>✗ Erreur d'envoi</span>}
+            {!status&&'Envoie un email de test sur ton adresse'}
+          </div>
+        </div>
+        <button onClick={test} disabled={status==='loading'} style={{
+          padding:'8px 14px',borderRadius:9,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0,
+          background:status==='ok'?'rgba(124,196,161,0.15)':status==='error'?'rgba(201,117,134,0.15)':'rgba(255,255,255,0.07)',
+          color:status==='ok'?T.good:status==='error'?T.danger:T.text,
+          opacity:status==='loading'?0.6:1,
+        }}>
+          {status==='loading'?'Envoi…':'📧 Tester'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProfileScreen({profile,onChange,onLogout}){
   const upd=(k,v)=>onChange({[k]:v});
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
@@ -2228,6 +2263,7 @@ function ProfileScreen({profile,onChange,onLogout}){
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
+      {profile.isMainCoach&&<TestEmailCard/>}
 
       <SectionHeader title="Apparence"/>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,marginBottom:8}}>
