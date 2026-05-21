@@ -369,7 +369,9 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     if (isMain) userRole = 'coach';
 
     const id = uid();
-    const passwordHash = await bcrypt.hash(password, 12); // 10 → 12 (plus résistant)
+    const passwordHash = await bcrypt.hash(password, 12);
+    // Vérification email : générer token sauf pour le coach principal
+    const verifyToken = isMain ? null : crypto.randomBytes(32).toString('hex');
     const u = {
       id, email: lowEmail, passwordHash, role: userRole, coachId,
       firstName: '', lastName: '', height: '', weight: '', objective: '',
@@ -377,19 +379,27 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       createdAt: Date.now(),
       status, isMainCoach: isMain,
       loginFails: [], lockedUntil: null,
-      requestedRole, // ce qu'il a coché à l'inscription (pour info coach principal)
+      requestedRole,
+      emailVerified: isMain, // coach principal auto-vérifié
+      emailVerifyToken: verifyToken ? hashToken(verifyToken) : null,
     };
     DATA.users[id] = u;
     persist();
 
-    // Notify main coach of new pending request
+    // Envoyer email de vérification
+    if (verifyToken) {
+      const link = `${PUBLIC_URL}/Muscu.html?verify=${verifyToken}`;
+      await sendVerifyEmail(lowEmail, link).catch(e => console.error('[verify] email error:', e.message));
+    }
+
+    // Notify main coach of new pending request (seulement si email vérifié ou pas de Resend)
     if (!isMain) {
       const main = Object.values(DATA.users).find(x => x.isMainCoach && x.status === 'active');
       if (main) io.to('user:' + main.id).emit('pending-request', { user: profileOf(u) });
     }
 
     if (status === 'pending') {
-      return res.json({ pending: true, message: "Demande envoyée. En attente d'approbation du coach principal." });
+      return res.json({ pending: true, emailVerification: !!RESEND_API_KEY, message: "Demande envoyée. En attente d'approbation du coach principal." });
     }
     const token = sign({ id: u.id, role: u.role });
     setAuthCookie(res, token);
@@ -413,6 +423,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       persist();
       return res.status(401).json({ error: 'invalid_credentials' });
     }
+    // Bloquer si email non vérifié (seulement quand Resend est configuré)
+    if (RESEND_API_KEY && u.emailVerified === false) return res.status(403).json({ error: 'email_not_verified', detail: 'Confirme ton adresse email avant de te connecter.' });
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     clearLoginFailures(u);
     persist();
@@ -469,6 +481,58 @@ async function sendResetEmail(toEmail, link) {
     return { sent: false, reason: 'network' };
   }
 }
+
+// ── Email de vérification ────────────────────────────
+async function sendVerifyEmail(toEmail, link) {
+  if (!RESEND_API_KEY) { console.log(`[verify] (no RESEND_API_KEY) Lien : ${link}`); return; }
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [toEmail],
+        subject: 'Prime Athl — Confirme ton adresse email',
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
+            <h1 style="font-size:22px;margin:0 0 12px;color:#d97757;">Prime Athl</h1>
+            <p>Bienvenue ! Clique sur le bouton ci-dessous pour confirmer ton adresse email et activer ton compte.</p>
+            <p style="margin:24px 0;">
+              <a href="${link}" style="display:inline-block;padding:12px 24px;background:#d97757;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">Confirmer mon email</a>
+            </p>
+            <p style="font-size:12px;color:#666;">Ce lien est valable 24 heures. Si tu n'es pas à l'origine de cette inscription, ignore ce message.</p>
+            <p style="font-size:11px;color:#999;margin-top:24px;">Lien complet : <br>${link}</p>
+          </div>`,
+      }),
+    });
+  } catch(e) { console.error('[verify] resend error:', e.message); }
+}
+
+app.get('/api/auth/verify-email', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'token_required' });
+  const tokenHash = hashToken(token);
+  const u = Object.values(DATA.users).find(x => x.emailVerifyToken === tokenHash);
+  if (!u) return res.status(400).json({ error: 'invalid_token' });
+  u.emailVerified = true;
+  u.emailVerifyToken = null;
+  persist();
+  res.json({ ok: true, email: u.email });
+});
+
+// Renvoyer l'email de vérification
+app.post('/api/auth/resend-verify', signupLimiter, async (req, res) => {
+  const email = (req.body?.email || '').toLowerCase().trim();
+  const u = findUserByEmail(email);
+  if (u && !u.emailVerified) {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    u.emailVerifyToken = hashToken(rawToken);
+    persist();
+    const link = `${PUBLIC_URL}/Muscu.html?verify=${rawToken}`;
+    await sendVerifyEmail(u.email, link).catch(() => {});
+  }
+  res.json({ ok: true });
+});
 
 // Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
 app.post('/api/auth/forgot-password', forgotLimiter, async (req, res) => {

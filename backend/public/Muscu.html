@@ -371,6 +371,7 @@ function useAuth(){
       const err=new Error('pending_approval');
       err.pending=true;
       err.detail=res.message;
+      err.emailVerification=res.emailVerification;
       throw err;
     }
     localStorage.setItem('pa_token',res.token);
@@ -5679,20 +5680,41 @@ const AUTH_ERR_FR={
   account_locked:'Trop de tentatives. Compte verrouillé temporairement.',
   too_many_auth_attempts:'Trop de tentatives. Réessaie dans 15 minutes.',
   too_many_requests:'Trop de requêtes. Patiente un peu.',
+  email_not_verified:'Confirme ton adresse email avant de te connecter.',
+  invalid_token:'Lien de vérification invalide ou expiré.',
 };
 
 function AuthScreen({onLogin,onSignup}){
-  // Si l'URL contient ?reset=TOKEN → on bascule directement sur l'écran de réinitialisation
-  const resetTokenFromUrl=(()=>{try{return new URLSearchParams(window.location.search).get('reset');}catch{return null;}})();
-  const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
+  const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
+  const resetTokenFromUrl=params.get('reset');
+  const verifyTokenFromUrl=params.get('verify');
+  const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':verifyTokenFromUrl?'verifying':'login');
   const[email,setEmail]=React.useState('');
   const[password,setPassword]=React.useState('');
   const[role,setRole]=React.useState('athlete');
   const[code,setCode]=React.useState('');
   const[err,setErr]=React.useState(null);
   const[loading,setLoading]=React.useState(false);
-  const[pendingMsg,setPendingMsg]=React.useState(null);
+  const[pendingMsg,setPendingMsg]=React.useState(null); // {email, emailVerification}
   const[infoMsg,setInfoMsg]=React.useState(null);
+  const[verifyDone,setVerifyDone]=React.useState(false);
+  const[resendLoading,setResendLoading]=React.useState(false);
+  const[resendDone,setResendDone]=React.useState(false);
+
+  // Auto-vérifier si ?verify=TOKEN dans l'URL
+  React.useEffect(()=>{
+    if(!verifyTokenFromUrl)return;
+    apiCall(`/api/auth/verify-email?token=${verifyTokenFromUrl}`,{noAuth:true,method:'GET'})
+      .then(r=>{
+        setVerifyDone(true);
+        window.history.replaceState({},'',window.location.pathname);
+      })
+      .catch(ex=>{
+        setErr(AUTH_ERR_FR[ex.message]||'Lien invalide ou expiré.');
+        setMode('login');
+        window.history.replaceState({},'',window.location.pathname);
+      });
+  },[]);
 
   // Demande de réinitialisation : envoie un email avec le lien (ou log côté serveur)
   const submitForgot=async e=>{
@@ -5727,12 +5749,60 @@ function AuthScreen({onLogin,onSignup}){
       if(mode==='login')await onLogin(email.trim(),password);
       else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
     }catch(ex){
-      if(ex.pending){setPendingMsg(ex.detail||'Demande envoyée. En attente d\'approbation.');}
+      if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', emailVerification:ex.emailVerification, email:email.trim()});}
+      else if(ex.message==='email_not_verified'){setMode('unverified');setEmail(email.trim());}
       else setErr(AUTH_ERR_FR[ex.message]||ex.message||'Erreur');
     }
     setLoading(false);
   };
 
+  const resendVerify=async()=>{
+    setResendLoading(true);
+    try{await apiCall('/api/auth/resend-verify',{method:'POST',body:{email:email||pendingMsg?.email},noAuth:true});}catch(e){}
+    setResendDone(true);setResendLoading(false);
+  };
+
+  // ── Écran vérification en cours ───────────────────
+  if(mode==='verifying'){
+    return(
+      <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
+        <div style={{maxWidth:380,width:'100%',textAlign:'center'}}>
+          <div style={{fontSize:52,marginBottom:16}}>{verifyDone?'✅':'⏳'}</div>
+          <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5,marginBottom:10}}>
+            <HoloText>{verifyDone?'Email confirmé !':'Vérification…'}</HoloText>
+          </div>
+          {verifyDone&&<div style={{fontSize:13,color:T.textDim,lineHeight:1.6,marginBottom:24}}>Ton adresse email est confirmée. Tu peux maintenant te connecter.</div>}
+          {verifyDone&&<button onClick={()=>setMode('login')} style={{height:46,padding:'0 28px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>Se connecter →</button>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Écran email non vérifié (tentative login bloquée) ───
+  if(mode==='unverified'){
+    return(
+      <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
+        <div style={{maxWidth:380,width:'100%',textAlign:'center'}}>
+          <div style={{fontSize:52,marginBottom:16}}>📧</div>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Email non confirmé</div>
+          <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5,marginBottom:10}}><HoloText>Vérifie ta boîte mail</HoloText></div>
+          <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,marginBottom:24}}>
+            Un email de confirmation a été envoyé à <strong style={{color:T.text}}>{email}</strong>.<br/>Clique sur le lien pour activer ton compte.
+          </div>
+          {!resendDone
+            ?<button onClick={resendVerify} disabled={resendLoading} style={{height:44,padding:'0 24px',borderRadius:13,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:10,opacity:resendLoading?0.6:1}}>
+              {resendLoading?'Envoi…':'Renvoyer l\'email'}
+            </button>
+            :<div style={{fontSize:12,color:T.good,marginBottom:10}}>✓ Email renvoyé !</div>
+          }
+          <br/>
+          <button onClick={()=>{setMode('login');setErr(null);}} style={{height:40,padding:'0 20px',borderRadius:12,border:'1px solid rgba(255,255,255,0.08)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>← Retour</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Écran en attente d'approbation ────────────────
   if(pendingMsg){
     return(
       <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
@@ -5742,9 +5812,14 @@ function AuthScreen({onLogin,onSignup}){
           </div>
           <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Demande envoyée</div>
           <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.5,marginBottom:12}}><HoloText>En attente d'approbation</HoloText></div>
-          <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,marginBottom:24,maxWidth:320,margin:'0 auto 24px'}}>
+          <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,marginBottom:16,maxWidth:320,margin:'0 auto 16px'}}>
             Le coach principal doit valider ta demande. Tu recevras l'accès dès qu'il approuve ton compte.
           </div>
+          {pendingMsg.emailVerification&&(
+            <div style={{fontSize:13,color:T.good,background:'rgba(124,196,161,0.1)',border:'1px solid rgba(124,196,161,0.25)',borderRadius:12,padding:'10px 14px',marginBottom:16,lineHeight:1.5}}>
+              📧 Un email de confirmation a été envoyé à <strong>{pendingMsg.email}</strong>. Confirme-le pour activer ton compte.
+            </div>
+          )}
           <button onClick={()=>{setPendingMsg(null);setMode('login');setPassword('');}} style={{height:46,padding:'0 26px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>
             ← Retour
           </button>
