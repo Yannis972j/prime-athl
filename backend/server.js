@@ -137,12 +137,12 @@ function persist() {
     } catch (e) { console.error('persist error:', e); }
     saving = false;
   }, 200);
-  // Postgres : debounce 2s, source de vérité durable
+  // Postgres : debounce 500ms (aligné proche du local pour réduire la fenêtre d'inconsistance)
   if (USE_PG) {
     if (pgSaveTimer) clearTimeout(pgSaveTimer);
     pgSaveTimer = setTimeout(() => {
       pgSave(DATA).catch(e => console.error('[pg] save error:', e.message));
-    }, 2000);
+    }, 500);
   }
 }
 
@@ -262,7 +262,7 @@ const globalLimiter = rateLimit({
 });
 app.use('/api/', globalLimiter);
 
-// Rate-limit serré sur les endpoints d'authentification
+// Rate-limit serré sur les endpoints d'authentification (login uniquement)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10, // 10 tentatives / 15 min / IP
@@ -270,6 +270,19 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true, // ne pénalise pas les login réussis
   message: { error: 'too_many_auth_attempts', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
+});
+// Rate-limit strict pour signup/forgot-password (toutes requêtes comptent, succès inclus)
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 8, // 8 signups / heure / IP
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives. Réessaie dans 1h.' },
+});
+const forgotLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1h
+  max: 5, // 5 demandes / heure / IP
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de demandes de réinitialisation. Réessaie dans 1h.' },
 });
 
 // Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
@@ -323,7 +336,7 @@ function clearLoginFailures(user) {
   if (user) { user.loginFails = []; user.lockedUntil = null; }
 }
 
-app.post('/api/auth/signup', authLimiter, async (req, res) => {
+app.post('/api/auth/signup', signupLimiter, async (req, res) => {
   try {
     const { email, password, role, inviteCode: ic } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_password_required' });
@@ -458,7 +471,7 @@ async function sendResetEmail(toEmail, link) {
 }
 
 // Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
-app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+app.post('/api/auth/forgot-password', forgotLimiter, async (req, res) => {
   const email = (req.body?.email || '').toLowerCase().trim();
   if (!email) return res.status(400).json({ error: 'email_required' });
   const u = findUserByEmail(email);
@@ -591,7 +604,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   const sessions = Object.values(DATA.sessions)
     .filter(s => s.userId === u.id)
     .sort((a, b) => b.date - a.date)
-    .slice(0, 200);
+    .slice(0, 500);
   res.json({
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
@@ -1306,9 +1319,11 @@ app.post('/api/weight', authRequired, (req, res) => {
   if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = [];
   DATA.weightLogs[req.user.id].push(entry);
   // Garder max 365 entrées de poids par user
-  if (DATA.weightLogs[req.user.id].length > 365) DATA.weightLogs[req.user.id] = DATA.weightLogs[req.user.id].slice(-365);
+  const MAX_WEIGHT = 365;
+  if (DATA.weightLogs[req.user.id].length > MAX_WEIGHT) DATA.weightLogs[req.user.id] = DATA.weightLogs[req.user.id].slice(-MAX_WEIGHT);
   persist();
-  res.json({ ok: true, entry });
+  const count = DATA.weightLogs[req.user.id].length;
+  res.json({ ok: true, entry, nearLimit: count >= MAX_WEIGHT - 10, count, max: MAX_WEIGHT });
 });
 
 app.delete('/api/weight/:id', authRequired, (req, res) => {
@@ -1342,7 +1357,8 @@ app.post('/api/upload', authRequired, upload.single('file'), async (req, res) =>
       return res.status(500).json({ error: 'upload_failed', detail: e.message });
     }
   }
-  // Fallback base64 si Cloudinary non configuré
+  // Fallback base64 si Cloudinary non configuré — limité à 500KB pour ne pas gonfler la DB
+  if (req.file.buffer.length > 500 * 1024) return res.status(400).json({ error: 'upload_failed', detail: 'Configure Cloudinary pour les photos > 500KB.' });
   const b64 = req.file.buffer.toString('base64');
   res.json({ url: `data:${req.file.mimetype};base64,${b64}` });
 });
