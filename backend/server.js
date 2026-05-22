@@ -1876,11 +1876,12 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
 
 // Créer une session Checkout Stripe
 app.post('/api/stripe/checkout', authRequired, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  if (!stripe) { console.error('[stripe] checkout: stripe not configured'); return res.status(503).json({ error: 'stripe_not_configured' }); }
   const { plan } = req.body || {};
   const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING };
   const priceId = priceMap[plan];
-  if (!priceId) return res.status(400).json({ error: 'invalid_plan' });
+  console.log(`[stripe] checkout plan=${plan} priceId=${priceId} userId=${req.user.id}`);
+  if (!priceId) return res.status(400).json({ error: 'invalid_plan', detail: `plan '${plan}' not found in price map` });
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   try {
