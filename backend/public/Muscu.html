@@ -2966,6 +2966,42 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   },[]);
   React.useEffect(()=>{load();},[load]);
 
+  // ── Aliment libre (logging ad hoc hors plan) ─────────────────────────────
+  const[freeFoodModal,setFreeFoodModal]=React.useState(null); // {mealId, mealLabel}
+  const[freeFoodForm,setFreeFoodForm]=React.useState({name:'',kcal:'',p:'',c:'',f:''});
+  const[freeFoodSaving,setFreeFoodSaving]=React.useState(false);
+  const openFreeFood=(mealId,mealLabel)=>{setFreeFoodForm({name:'',kcal:'',p:'',c:'',f:''});setFreeFoodModal({mealId,mealLabel});};
+  const submitFreeFood=async e=>{
+    e.preventDefault();
+    if(!freeFoodModal||!freeFoodForm.name.trim())return;
+    setFreeFoodSaving(true);
+    try{
+      const r=await apiCall('/api/nutrition/free-food',{method:'POST',body:{
+        mealId:freeFoodModal.mealId,
+        name:freeFoodForm.name.trim(),
+        kcal:freeFoodForm.kcal,p:freeFoodForm.p,c:freeFoodForm.c,f:freeFoodForm.f,
+      }});
+      // Mise à jour locale immédiate
+      setTodayLog(prev=>{
+        const ff={...(prev.freeFoods||{})};
+        ff[freeFoodModal.mealId]=[...(ff[freeFoodModal.mealId]||[]),r.entry];
+        return{...prev,freeFoods:ff};
+      });
+      setFreeFoodModal(null);
+    }catch(err){alert('Erreur : '+err.message);}
+    setFreeFoodSaving(false);
+  };
+  const removeFreeFood=async(mealId,entryId)=>{
+    try{
+      await apiCall('/api/nutrition/free-food/'+entryId,{method:'DELETE'});
+      setTodayLog(prev=>{
+        const ff={...(prev.freeFoods||{})};
+        ff[mealId]=(ff[mealId]||[]).filter(e=>e.id!==entryId);
+        return{...prev,freeFoods:ff};
+      });
+    }catch(err){alert('Erreur : '+err.message);}
+  };
+
   // ── Long-press drag (coach) ──
   const[nutriDragSrc,setNutriDragSrc]=React.useState(null);  // {dateStr, dayName}
   const[nutriDragOver,setNutriDragOver]=React.useState(null);
@@ -3112,7 +3148,11 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
     return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};
   },{kcal:0,p:0,c:0,f:0});
 
-  // TODAY : somme des items validés (progression réelle)
+  // Aliments libres (logged ad hoc, hors plan) — comptent toujours dès qu'ils sont ajoutés
+  const freeFoodsToday=(isToday?todayLog.freeFoods:{})||{};
+  const allFreeFoodsToday=Object.values(freeFoodsToday).flat();
+
+  // TODAY : somme des items validés (progression réelle) + aliments libres
   // AUTRES JOURS : somme totale des items (aperçu du plan complet)
   const totals=meals.reduce((acc,m)=>{
     const include=isToday?todayLog.validated[m.id]:true;
@@ -3122,6 +3162,11 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
     }
     return acc;
   },{kcal:0,p:0,c:0,f:0});
+  if(isToday){
+    for(const e of allFreeFoodsToday){
+      totals.kcal+=(+e.kcal||0);totals.p+=(+e.p||0);totals.c+=(+e.c||0);totals.f+=(+e.f||0);
+    }
+  }
 
   const nowHM=(()=>{const d=new Date();return d.getHours()*60+d.getMinutes();})();
   const validatedCount=isToday?meals.filter(m=>todayLog.validated[m.id]).length:0;
@@ -3460,6 +3505,37 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                   ):(
                     <div style={{fontSize:12,color:T.textFaint,padding:'10px 0',fontStyle:'italic',textAlign:'center'}}>Aucun aliment renseigné pour ce repas</div>
                   )}
+
+                  {/* Aliments libres déjà loggés pour ce repas (aujourd'hui uniquement) */}
+                  {isToday&&(freeFoodsToday[m.id]||[]).length>0&&(
+                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px dashed rgba(255,255,255,0.08)'}}>
+                      <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>+ Aliments libres ({(freeFoodsToday[m.id]||[]).length})</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {(freeFoodsToday[m.id]||[]).map(e=>(
+                          <div key={e.id} style={{display:'flex',gap:8,fontSize:12,padding:'6px 10px',borderRadius:8,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.18)'}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontWeight:600}}>{e.name}</div>
+                              <div style={{fontSize:10,color:T.textFaint,marginTop:1,display:'flex',gap:6}}>
+                                <span>{Math.round(e.kcal)} kcal</span>
+                                {e.p>0&&<span style={{color:'#c97586'}}>P{Math.round(e.p)}</span>}
+                                {e.c>0&&<span style={{color:'#7ca8c4'}}>C{Math.round(e.c)}</span>}
+                                {e.f>0&&<span style={{color:'#c2a042'}}>L{Math.round(e.f)}</span>}
+                              </div>
+                            </div>
+                            <button onClick={ev=>{ev.stopPropagation();removeFreeFood(m.id,e.id);}} style={{width:28,height:28,borderRadius:8,border:'none',background:'transparent',color:T.textFaint,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}} title="Retirer">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bouton + Aliment libre (today seulement) */}
+                  {isToday&&(
+                    <button onClick={ev=>{ev.stopPropagation();openFreeFood(m.id,m.label);}} style={{marginTop:10,width:'100%',minHeight:44,padding:'0 14px',borderRadius:11,border:'1px dashed rgba(124,168,196,0.4)',background:'rgba(124,168,196,0.04)',color:'#7ca8c4',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3}}>
+                      + Ajouter un aliment libre
+                    </button>
+                  )}
+
                   {m.note&&(
                     <div style={{marginTop:10,padding:'8px 12px',borderRadius:10,background:'rgba(194,160,66,0.06)',border:'1px solid rgba(194,160,66,0.25)',fontSize:11,color:T.warn,lineHeight:1.4}}>
                       💡 {m.note}
@@ -3504,6 +3580,49 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           </div>
         );
       })()}
+
+      {/* Modal : ajouter un aliment libre */}
+      {freeFoodModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setFreeFoodModal(null);}}>
+          <div style={{background:'#13131e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:22,padding:24,width:'100%',maxWidth:380}}>
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:6}}>
+              <div>
+                <div style={{fontSize:17,fontWeight:700}}>Aliment libre</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>Ajouté à <strong>{freeFoodModal.mealLabel}</strong></div>
+              </div>
+              <button onClick={()=>setFreeFoodModal(null)} style={{width:30,height:30,borderRadius:15,border:'none',background:'rgba(255,255,255,0.06)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            </div>
+            <form onSubmit={submitFreeFood} style={{display:'flex',flexDirection:'column',gap:12,marginTop:18}}>
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Nom *</div>
+                <input required autoFocus value={freeFoodForm.name} onChange={e=>setFreeFoodForm(f=>({...f,name:e.target.value}))} placeholder="Ex: Colombo poulet, banane..." maxLength={80} style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Calories (kcal) *</div>
+                <input required type="number" inputMode="decimal" min="0" value={freeFoodForm.kcal} onChange={e=>setFreeFoodForm(f=>({...f,kcal:e.target.value}))} placeholder="0" style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
+                  <div style={{fontSize:10,color:'#c97586',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Protéines</div>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.p} onChange={e=>setFreeFoodForm(f=>({...f,p:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                </div>
+                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
+                  <div style={{fontSize:10,color:'#7ca8c4',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Glucides</div>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.c} onChange={e=>setFreeFoodForm(f=>({...f,c:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                </div>
+                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
+                  <div style={{fontSize:10,color:'#c2a042',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Lipides</div>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.f} onChange={e=>setFreeFoodForm(f=>({...f,f:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(194,160,66,0.25)',background:'rgba(194,160,66,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:T.textFaint,lineHeight:1.5,marginTop:2}}>Protéines / Glucides / Lipides optionnels. Compteront immédiatement dans tes macros du jour.</div>
+              <button type="submit" disabled={freeFoodSaving||!freeFoodForm.name.trim()} style={{minHeight:46,borderRadius:13,border:'none',background:freeFoodForm.name.trim()?'linear-gradient(135deg,#7ca8c4,#7cc4a1)':'rgba(255,255,255,0.1)',color:freeFoodForm.name.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:freeFoodSaving||!freeFoodForm.name.trim()?'not-allowed':'pointer',opacity:freeFoodSaving?0.6:1,marginTop:4}}>
+                {freeFoodSaving?'Enregistrement…':'Ajouter'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

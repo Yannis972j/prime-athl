@@ -95,7 +95,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -1259,15 +1259,67 @@ try {
 app.get('/api/nutrition', authRequired, (req, res) => {
   const plan = DATA.nutritionPrograms[req.user.id] || null;
   const logs = DATA.nutritionLogs[req.user.id] || {};
+  const ff = (DATA.freeFoodLogs[req.user.id] || {});
   const today = ymd(Date.now());
   const todayLog = logs[today] || { validated: {}, validatedAt: {} };
-  // 14-day history
+  // 14-day history (logs + aliments libres)
   const history = {};
   for (let i = 0; i < 14; i++) {
     const d = ymd(Date.now() - i * 24*3600*1000);
-    history[d] = logs[d] || { validated: {}, validatedAt: {} };
+    history[d] = { ...(logs[d] || { validated: {}, validatedAt: {} }), freeFoods: ff[d] || {} };
   }
-  res.json({ plan, today: { date: today, ...todayLog }, history });
+  res.json({ plan, today: { date: today, ...todayLog, freeFoods: ff[today] || {} }, history });
+});
+
+// ── Aliments libres (logged ad hoc hors plan) ────────────────────────────────
+// Structure: DATA.freeFoodLogs[userId][YYYY-MM-DD][mealId] = [{id,name,kcal,p,c,f,createdAt}]
+app.post('/api/nutrition/free-food', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const { mealId, name, kcal, p, c, f, date } = req.body || {};
+  if (!mealId || !name) return res.status(400).json({ error: 'meal_and_name_required' });
+  if (String(name).length > 80) return res.status(400).json({ error: 'name_too_long' });
+  const dateStr = date || ymd(Date.now());
+  if (!DATA.freeFoodLogs[u.id]) DATA.freeFoodLogs[u.id] = {};
+  if (!DATA.freeFoodLogs[u.id][dateStr]) DATA.freeFoodLogs[u.id][dateStr] = {};
+  if (!DATA.freeFoodLogs[u.id][dateStr][mealId]) DATA.freeFoodLogs[u.id][dateStr][mealId] = [];
+  const entry = {
+    id: uid(),
+    name: String(name).slice(0, 80),
+    kcal: Math.max(0, parseFloat(kcal) || 0),
+    p:    Math.max(0, parseFloat(p)    || 0),
+    c:    Math.max(0, parseFloat(c)    || 0),
+    f:    Math.max(0, parseFloat(f)    || 0),
+    createdAt: Date.now(),
+  };
+  DATA.freeFoodLogs[u.id][dateStr][mealId].push(entry);
+  persist();
+  if (u.coachId) io.to('user:' + u.coachId).emit('nutrition-free-food-added', { athleteId: u.id, date: dateStr, mealId, entry });
+  res.json({ ok: true, entry });
+});
+
+app.delete('/api/nutrition/free-food/:id', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const id = req.params.id;
+  const userLogs = DATA.freeFoodLogs[u.id] || {};
+  let removed = false;
+  for (const dateStr of Object.keys(userLogs)) {
+    for (const mealId of Object.keys(userLogs[dateStr])) {
+      const arr = userLogs[dateStr][mealId];
+      const idx = arr.findIndex(e => e.id === id);
+      if (idx >= 0) {
+        arr.splice(idx, 1);
+        removed = true;
+        if (u.coachId) io.to('user:' + u.coachId).emit('nutrition-free-food-removed', { athleteId: u.id, date: dateStr, mealId, id });
+        break;
+      }
+    }
+    if (removed) break;
+  }
+  if (!removed) return res.status(404).json({ error: 'not_found' });
+  persist();
+  res.json({ ok: true });
 });
 
 // Athlete toggles a meal as validated for today
