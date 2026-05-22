@@ -5970,9 +5970,8 @@ function CoachScreen({authToken,authUser}){
           })}
         </div>
       )}
-    </div>
 
-    {/* Menu appui long */}
+      {/* Menu appui long */}
     {longPressMenu&&(
       <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9000,display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={()=>setLongPressMenu(null)}>
         <div style={{background:'#1a1a28',borderRadius:'20px 20px 0 0',padding:'8px 0 32px',width:'100%',maxWidth:480}} onClick={e=>e.stopPropagation()}>
@@ -6072,6 +6071,7 @@ function CoachScreen({authToken,authUser}){
         </div>
       </div>
     )}
+    </div>
   );
 }
 
