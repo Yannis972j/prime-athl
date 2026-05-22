@@ -440,17 +440,31 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     }
 
     // Notify main coach of new pending request
+    let coachDisplayName = null;
     if (!isMain) {
       const main = Object.values(DATA.users).find(x => x.isMainCoach && x.status === 'active');
       if (main) {
+        coachDisplayName = [main.firstName, main.lastName].filter(Boolean).join(' ') || main.email.split('@')[0];
         io.to('user:' + main.id).emit('pending-request', { user: profileOf(u) });
         const athleteName = [u.firstName, u.lastName].filter(Boolean).join(' ') || lowEmail.split('@')[0];
         sendCoachNewAthleteEmail(main.email, lowEmail, athleteName).catch(e => console.error('[email] coach notify error:', e.message));
+        // Push notification au coach (clic → onglet Coach)
+        pushToUser(main.id, {
+          title: '🆕 Nouvelle demande d\'inscription',
+          body: `${athleteName} demande à rejoindre tes athlètes`,
+          url: '/Muscu.html?tab=coach',
+          tag: 'pending-' + u.id,
+        });
       }
     }
 
     if (status === 'pending') {
-      return res.json({ pending: true, emailVerification: !!RESEND_API_KEY, message: "Demande envoyée. En attente d'approbation du coach principal." });
+      return res.json({
+        pending: true,
+        emailVerification: !!RESEND_API_KEY,
+        coachName: coachDisplayName,
+        message: "Demande envoyée. En attente d'approbation du coach principal.",
+      });
     }
     const token = sign({ id: u.id, role: u.role });
     setAuthCookie(res, token);

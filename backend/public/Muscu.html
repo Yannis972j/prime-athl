@@ -375,6 +375,7 @@ function useAuth(){
       err.pending=true;
       err.detail=res.message;
       err.emailVerification=res.emailVerification;
+      err.coachName=res.coachName;
       throw err;
     }
     localStorage.setItem('pa_token',res.token);
@@ -6337,7 +6338,7 @@ function AuthScreen({onLogin,onSignup}){
       if(mode==='login')await onLogin(email.trim(),password);
       else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
     }catch(ex){
-      if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', emailVerification:ex.emailVerification, email:email.trim()});}
+      if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', emailVerification:ex.emailVerification, email:email.trim(), coachName:ex.coachName});}
       else setErr(AUTH_ERR_FR[ex.message]||ex.message||'Erreur');
     }
     setLoading(false);
@@ -6352,20 +6353,73 @@ function AuthScreen({onLogin,onSignup}){
 
   // ── Écran en attente d'approbation ────────────────
   if(pendingMsg){
+    const coachLabel=pendingMsg.coachName||'ton coach';
     return(
       <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 20px',color:T.text}}>
-        <div style={{maxWidth:380,width:'100%',textAlign:'center'}}>
-          <div style={{width:72,height:72,margin:'0 auto 16px',borderRadius:20,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#c2a042,#d97757)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36}}>⏳</div>
+        <div style={{maxWidth:420,width:'100%'}}>
+
+          {/* Icône animée */}
+          <div style={{width:84,height:84,margin:'0 auto 18px',borderRadius:22,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
+            <div style={{width:'100%',height:'100%',borderRadius:20,background:'linear-gradient(135deg,#c2a042,#d97757)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:42,animation:'pulse 2s ease-in-out infinite'}}>⏳</div>
           </div>
-          <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Demande envoyée</div>
-          <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.5,marginBottom:12}}><HoloText>En attente d'approbation</HoloText></div>
-          <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,marginBottom:16,maxWidth:320,margin:'0 auto 16px'}}>
-            Le coach principal doit valider ta demande. Tu recevras l'accès dès qu'il approuve ton compte.
+
+          {/* Titre */}
+          <div style={{textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Demande envoyée</div>
+            <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginBottom:10}}><HoloText>Bienvenue !</HoloText></div>
+            <div style={{fontSize:14,color:T.textDim,lineHeight:1.55,maxWidth:340,margin:'0 auto'}}>
+              Ta demande a été envoyée à <strong style={{color:T.text}}>{coachLabel}</strong>. Tu recevras un accès dès qu'il approuve ton compte.
+            </div>
           </div>
-          <button onClick={()=>{setPendingMsg(null);setMode('login');setPassword('');}} style={{height:46,padding:'0 26px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-            ← Retour
-          </button>
+
+          {/* Statut visuel des étapes */}
+          <div style={{marginBottom:22,padding:'14px 16px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+              <div style={{width:26,height:26,borderRadius:13,background:'rgba(124,196,161,0.18)',border:'1px solid rgba(124,196,161,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14,color:T.good,fontWeight:700}}>✓</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text}}>Compte créé</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{pendingMsg.email}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+              <div style={{width:26,height:26,borderRadius:13,background:'rgba(217,119,87,0.15)',border:'1px solid rgba(217,119,87,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.accent}}>📬</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text}}>{coachLabel} a été notifié</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Email + notification push envoyés</div>
+              </div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{width:26,height:26,borderRadius:13,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.textFaint}}>⏳</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.textDim}}>En attente d'approbation</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Tu seras prévenu par email</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Boutons */}
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <button onClick={async()=>{
+              try{
+                const r=await apiCall('/api/auth/login',{method:'POST',body:{email:pendingMsg.email,password}});
+                if(r.token){localStorage.setItem('pa_token',r.token);window.location.reload();}
+              }catch(e){
+                if(e.message==='pending_approval'){alert('Ton compte est toujours en attente. Patiente un peu...');}
+                else{setPendingMsg(null);setMode('login');setErr(AUTH_ERR_FR[e.message]||e.message);}
+              }
+            }} style={{minHeight:48,padding:'0 22px',borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 18px rgba(217,119,87,0.4)'}}>
+              🔄 Vérifier si je suis approuvé
+            </button>
+            <button onClick={()=>{setPendingMsg(null);setMode('login');setPassword('');}} style={{minHeight:44,padding:'0 22px',borderRadius:13,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              ← Revenir à la connexion
+            </button>
+          </div>
+
+          {/* Aide */}
+          <div style={{marginTop:18,padding:'10px 14px',borderRadius:11,background:'rgba(124,168,196,0.05)',border:'1px solid rgba(124,168,196,0.18)',fontSize:11,color:T.textFaint,lineHeight:1.5,textAlign:'center'}}>
+            💡 Conserve l'onglet ouvert pour être prévenu en temps réel quand ton coach t'approuve.
+          </div>
+
         </div>
       </div>
     );
