@@ -725,9 +725,18 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
 app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   const u = DATA.users[req.params.id];
   if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
-  u.coachId = null;
+  // Suppression complète du compte et toutes ses données
+  delete DATA.users[u.id];
+  delete DATA.programs[u.id];
+  delete DATA.sessions[u.id];
+  delete DATA.nutritionLogs[u.id];
+  delete DATA.nutritionPrograms[u.id];
+  delete DATA.weightLogs[u.id];
+  delete DATA.progressPhotos[u.id];
+  // Retirer des invites
+  DATA.invites = (DATA.invites || []).filter(i => i.usedBy !== u.id);
   persist();
-  res.json({ removed: true });
+  res.json({ deleted: true });
 });
 
 // Coach creates an athlete account directly (no approval needed)
@@ -795,18 +804,29 @@ app.post('/api/coach/claim/:athleteId', authRequired, coachOnly, (req, res) => {
 });
 
 // Coach edits athlete profile fields (firstName, lastName, height, weight, objective, PRs)
-// Does NOT touch email, password, role, coachId
-app.patch('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
-  const u = DATA.users[req.params.id];
-  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
-  for (const k of PROFILE_FIELDS) {
-    if (req.body[k] !== undefined) u[k] = req.body[k];
-  }
-  persist();
-  const p = profileOf(u);
-  // Notify athlete in real-time that their profile was updated by coach
-  io.to('user:' + u.id).emit('my-profile-updated', { profile: p });
-  res.json(p);
+// Peut aussi modifier email et password
+app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) => {
+  try {
+    const u = DATA.users[req.params.id];
+    if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+    for (const k of PROFILE_FIELDS) {
+      if (req.body[k] !== undefined) u[k] = req.body[k];
+    }
+    if (req.body.email) {
+      const newEmail = req.body.email.toLowerCase().trim();
+      const existing = findUserByEmail(newEmail);
+      if (existing && existing.id !== u.id) return res.status(409).json({ error: 'email_already_used' });
+      u.email = newEmail;
+    }
+    if (req.body.password) {
+      if (req.body.password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+      u.passwordHash = await bcrypt.hash(req.body.password, 12);
+    }
+    persist();
+    const p = profileOf(u);
+    io.to('user:' + u.id).emit('my-profile-updated', { profile: p });
+    res.json(p);
+  } catch (e) { res.status(500).json({ error: 'update_failed' }); }
 });
 
 // Coach resets athlete data (profile / program / history)
