@@ -730,6 +730,39 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   res.json({ removed: true });
 });
 
+// Coach creates an athlete account directly (no approval needed)
+app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) => {
+  try {
+    const { email, password, firstName, lastName } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
+    if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+    const lowEmail = email.toLowerCase().trim();
+    if (findUserByEmail(lowEmail)) return res.status(409).json({ error: 'email_already_used' });
+
+    const me = DATA.users[req.user.id];
+    const id = uid();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const u = {
+      id, email: lowEmail, passwordHash, role: 'athlete',
+      coachId: me.id,
+      firstName: (firstName || '').trim(),
+      lastName: (lastName || '').trim(),
+      height: '', weight: '', objective: '',
+      prSquat: '', prBench: '', prDeadlift: '',
+      createdAt: Date.now(),
+      status: 'active',
+      isMainCoach: false,
+      loginFails: [], lockedUntil: null,
+      requestedRole: 'athlete',
+      emailVerified: true,
+      emailVerifyToken: null,
+    };
+    DATA.users[id] = u;
+    persist();
+    res.json({ user: profileOf(u) });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'create_athlete_failed' }); }
+});
+
 // All athletes without a coach (can be claimed by any coach)
 app.get('/api/coach/available-athletes', authRequired, coachOnly, (req, res) => {
   const list = Object.values(DATA.users)
