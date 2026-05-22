@@ -16,7 +16,9 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
-import Stripe from 'stripe';
+import { createRequire } from 'module';
+const _require = createRequire(import.meta.url);
+let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
