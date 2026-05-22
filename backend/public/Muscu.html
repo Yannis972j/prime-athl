@@ -828,6 +828,32 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
 
+  // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
+  // Critique pour utilisation à la salle : sinon l'écran s'éteint entre les séries.
+  // Fallback silencieux si l'API n'est pas supportée (iOS < 16.4, vieux Android).
+  React.useEffect(()=>{
+    let wakeLock=null;
+    let released=false;
+    const acquire=async()=>{
+      if(!('wakeLock' in navigator))return;
+      try{
+        wakeLock=await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release',()=>{wakeLock=null;});
+      }catch(e){/* permission denied ou tab non visible — ignoré */}
+    };
+    const onVisibility=()=>{
+      if(released)return;
+      if(document.visibilityState==='visible'&&!wakeLock)acquire();
+    };
+    acquire();
+    document.addEventListener('visibilitychange',onVisibility);
+    return()=>{
+      released=true;
+      document.removeEventListener('visibilitychange',onVisibility);
+      if(wakeLock){try{wakeLock.release();}catch{}wakeLock=null;}
+    };
+  },[]);
+
   const ex=exercises[currentEx]||exercises[0];
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
