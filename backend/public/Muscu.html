@@ -1019,7 +1019,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
                 <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,flex:1,minWidth:0}}>{ex.name}</div>
                 {restSeconds>0&&(
-                  <button onClick={()=>setRestSeconds(0)} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:7,padding:'5px 11px 5px 7px',borderRadius:999,border:'1px solid rgba(217,119,87,0.4)',background:'linear-gradient(135deg,rgba(217,119,87,0.22),rgba(201,117,134,0.12))',color:T.accent,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 14px rgba(217,119,87,0.25)',animation:'celebrationPop 0.35s ease'}}>
+                  <button onClick={()=>setRestSeconds(0)} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:8,minHeight:44,padding:'0 14px 0 10px',borderRadius:999,border:'1px solid rgba(217,119,87,0.4)',background:'linear-gradient(135deg,rgba(217,119,87,0.22),rgba(201,117,134,0.12))',color:T.accent,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 14px rgba(217,119,87,0.25)',animation:'celebrationPop 0.35s ease'}}>
                     <svg width="22" height="22" viewBox="0 0 24 24" style={{transform:'rotate(-90deg)',flexShrink:0}}>
                       <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="2.6"/>
                       <circle cx="12" cy="12" r="10" fill="none" stroke="#d97757" strokeWidth="2.6" strokeLinecap="round"
@@ -1086,11 +1086,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                         <div style={{flex:1}}/>
                         {/* Action droite : check / volume */}
                         {!s.done?(
-                          <button onClick={()=>validateSet(i)} style={{width:38,height:34,borderRadius:10,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
-                            <Icon name="check" size={16} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
+                          <button onClick={()=>validateSet(i)} style={{minWidth:44,minHeight:44,borderRadius:10,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                            <Icon name="check" size={18} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
                           </button>
                         ):(
-                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler" style={{minWidth:42,height:32,padding:'0 6px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:9,color:T.accent,fontWeight:700,fontSize:10,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1}}>
+                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler" style={{minWidth:48,minHeight:44,padding:'0 8px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:9,color:T.accent,fontWeight:700,fontSize:10,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1}}>
                             <span style={{fontSize:11,fontVariantNumeric:'tabular-nums'}}>{Math.round(s.weight*(s.reps||0))}</span>
                             <span style={{fontSize:7,opacity:0.65,fontWeight:600,marginTop:1}}>kg</span>
                           </button>
@@ -1249,7 +1249,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
 
       {/* Rest +30s discret (le chrono principal est inline près de la série active) */}
       {restSeconds>0&&(
-        <button onClick={()=>{setRestSeconds(s=>{const ns=s+30;if(!restTotal)setRestTotal(ns);return ns;})}} style={{position:'absolute',right:14,bottom:14,height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
+        <button onClick={()=>{setRestSeconds(s=>{const ns=s+30;if(!restTotal)setRestTotal(ns);return ns;})}} style={{position:'absolute',right:14,bottom:14,minHeight:44,padding:'0 16px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
       )}
     </div>
   );
@@ -3331,9 +3331,9 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
       {/* Calendar selector */}
       <div style={{marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-          <button onClick={prevMonthN} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <button onClick={prevMonthN} style={{minWidth:44,minHeight:44,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
           <div style={{fontSize:13,fontWeight:700,textTransform:'capitalize'}}>{new Date(calYear,calMonth).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</div>
-          <button onClick={nextMonthN} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+          <button onClick={nextMonthN} style={{minWidth:44,minHeight:44,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
         </div>
         <div style={{display:'flex',gap:12,marginBottom:8}}>
           {[['#7cc4a1','Validé'],['#d97757','Planifié']].map(([c,l])=>(
@@ -3537,11 +3537,11 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                   )}
                 </div>
                 {isToday?(
-                  <button onClick={e=>{e.stopPropagation();toggleMeal(m.id);}} style={{width:40,height:40,borderRadius:12,border:'none',cursor:'pointer',background:validated?'linear-gradient(135deg,#7cc4a1,#7ca8c4)':status==='now'?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:validated?'#000':status==='now'?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:validated?'0 4px 14px rgba(124,196,161,0.4)':status==='now'?'0 4px 14px rgba(217,119,87,0.4)':'none',animation:validated?'celebrationPop 0.5s ease':'none'}}>
-                    <Icon name="check" size={17} stroke={validated?'#000':status==='now'?'#fff':T.textFaint} strokeWidth={2.6}/>
+                  <button onClick={e=>{e.stopPropagation();toggleMeal(m.id);}} style={{minWidth:44,minHeight:44,borderRadius:12,border:'none',cursor:'pointer',background:validated?'linear-gradient(135deg,#7cc4a1,#7ca8c4)':status==='now'?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:validated?'#000':status==='now'?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:validated?'0 4px 14px rgba(124,196,161,0.4)':status==='now'?'0 4px 14px rgba(217,119,87,0.4)':'none',animation:validated?'celebrationPop 0.5s ease':'none'}}>
+                    <Icon name="check" size={19} stroke={validated?'#000':status==='now'?'#fff':T.textFaint} strokeWidth={2.6}/>
                   </button>
                 ):(
-                  <div style={{width:40,height:40,borderRadius:12,background:'rgba(255,255,255,0.03)',color:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:9,fontWeight:700,letterSpacing:0.3}}>{Math.round(mm.kcal)}<br/>kcal</div>
+                  <div style={{minWidth:44,minHeight:44,padding:'0 4px',borderRadius:12,background:'rgba(255,255,255,0.03)',color:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:9,fontWeight:700,letterSpacing:0.3,textAlign:'center'}}>{Math.round(mm.kcal)}<br/>kcal</div>
                 )}
               </div>
               {isExpanded&&(
