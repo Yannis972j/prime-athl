@@ -1545,12 +1545,22 @@ app.get('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =>
 // ── Messages ─────────────────────────────────────────
 function chatId(a, b) { return [a, b].sort().join('_'); }
 
+// Vérifie que 2 users sont bien en relation coach↔athlete
+function canChat(userA, userB) {
+  if (!userA || !userB) return false;
+  if (userA.role === 'coach' && userB.coachId === userA.id) return true;
+  if (userB.role === 'coach' && userA.coachId === userB.id) return true;
+  if (userA.isMainCoach || userB.isMainCoach) return true;
+  return false;
+}
+
 app.get('/api/messages/:partnerId', authRequired, (req, res) => {
   const me = req.user.id;
   const partner = req.params.partnerId;
-  // Verify partner exists and is accessible (coach↔athlete)
+  const meUser = DATA.users[me];
   const partnerUser = DATA.users[partner];
   if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  if (!canChat(meUser, partnerUser)) return res.status(403).json({ error: 'forbidden' });
   const key = chatId(me, partner);
   const msgs = (DATA.messages[key] || []).slice().sort((a,b) => a.createdAt - b.createdAt);
   res.json({ messages: msgs });
@@ -1561,8 +1571,10 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   const partner = req.params.partnerId;
   const { text } = req.body || {};
   if (!text || !text.trim()) return res.status(400).json({ error: 'text_required' });
+  const meUser = DATA.users[me];
   const partnerUser = DATA.users[partner];
   if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  if (!canChat(meUser, partnerUser)) return res.status(403).json({ error: 'forbidden' });
   const key = chatId(me, partner);
   const msg = { id: uid(), senderId: me, text: text.trim(), createdAt: Date.now() };
   if (!DATA.messages[key]) DATA.messages[key] = [];
