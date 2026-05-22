@@ -3153,6 +3153,49 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         </div>
       </div>
 
+      {/* ── Synthèse macros journalière ── */}
+      {isToday&&dayTargets.kcal>0&&(()=>{
+        // Couleur selon ratio : <50% rouge, 50-90% orange, 90-110% vert, >110% orange
+        const barColor=ratio=>{
+          if(ratio<0.5)return{c:'#c97586',bg:'rgba(201,117,134,0.15)'};
+          if(ratio<0.9)return{c:'#c2a042',bg:'rgba(194,160,66,0.15)'};
+          if(ratio<=1.1)return{c:'#7cc4a1',bg:'rgba(124,196,161,0.15)'};
+          return{c:'#c2a042',bg:'rgba(194,160,66,0.15)'};
+        };
+        const Bar=({label,cur,target,unit,ratio})=>{
+          const{c,bg}=barColor(ratio);
+          const pct=Math.round(ratio*100);
+          const widthPct=Math.min(100,ratio*100);
+          return(
+            <div style={{marginBottom:9}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
+                <span style={{fontSize:11,fontWeight:700,color:T.textDim,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</span>
+                <span style={{fontSize:11,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>
+                  <span style={{color:c,fontWeight:700}}>{Math.round(cur)}</span>
+                  <span> / {Math.round(target)} {unit}</span>
+                  <span style={{marginLeft:6,fontWeight:700,color:c}}>{pct}%</span>
+                </span>
+              </div>
+              <div style={{height:8,borderRadius:4,background:bg,overflow:'hidden',position:'relative'}}>
+                <div style={{height:'100%',width:widthPct+'%',background:c,borderRadius:4,transition:'width 0.4s cubic-bezier(.16,1,.3,1)'}}/>
+              </div>
+            </div>
+          );
+        };
+        return(
+          <GlassCard padding={14} style={{marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Aujourd'hui</div>
+              <div style={{fontSize:10,color:T.textFaint}}>{validatedCount}/{totalMeals} repas validés</div>
+            </div>
+            <Bar label="Calories"  cur={totals.kcal} target={dayTargets.kcal} unit="kcal" ratio={kcalRatio}/>
+            <Bar label="Protéines" cur={totals.p}    target={dayTargets.p}    unit="g"    ratio={pRatio}/>
+            <Bar label="Glucides"  cur={totals.c}    target={dayTargets.c}    unit="g"    ratio={cRatio}/>
+            <Bar label="Lipides"   cur={totals.f}    target={dayTargets.f}    unit="g"    ratio={fRatio} />
+          </GlassCard>
+        );
+      })()}
+
       {/* Calendar selector */}
       <div style={{marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
