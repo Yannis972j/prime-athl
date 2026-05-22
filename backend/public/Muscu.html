@@ -5795,15 +5795,13 @@ const AUTH_ERR_FR={
   account_locked:'Trop de tentatives. Compte verrouillé temporairement.',
   too_many_auth_attempts:'Trop de tentatives. Réessaie dans 15 minutes.',
   too_many_requests:'Trop de requêtes. Patiente un peu.',
-  email_not_verified:'Confirme ton adresse email avant de te connecter.',
-  invalid_token:'Lien de vérification invalide ou expiré.',
 };
 
 function AuthScreen({onLogin,onSignup}){
   const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
   const resetTokenFromUrl=params.get('reset');
   const verifyTokenFromUrl=params.get('verify');
-  const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':verifyTokenFromUrl?'verifying':'login');
+  const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
   const[email,setEmail]=React.useState('');
   const[password,setPassword]=React.useState('');
   const[role,setRole]=React.useState('athlete');
