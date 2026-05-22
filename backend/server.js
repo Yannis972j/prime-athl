@@ -1188,26 +1188,6 @@ app.get('/api/admin/pg-backup/:id', authRequired, coachOnly, mainCoachOnly, asyn
   } catch (e) { res.status(500).json({ error: 'download_failed', detail: e.message }); }
 });
 
-// ── Admin (main coach only) ─────────────────────────
-// ONE-SHOT: supprimer tous les non-coachs (athletes) sauf le coach principal
-app.post('/api/admin/purge-athletes', authRequired, coachOnly, mainCoachOnly, (req, res) => {
-  const before = Object.keys(DATA.users).length;
-  const toDelete = Object.values(DATA.users).filter(u => u.role !== 'coach');
-  for (const u of toDelete) {
-    delete DATA.users[u.id];
-    delete DATA.programs[u.id];
-    delete DATA.sessions[u.id];
-    delete DATA.nutritionLogs[u.id];
-    delete DATA.nutritionPrograms[u.id];
-    delete DATA.weightLogs[u.id];
-    delete DATA.progressPhotos[u.id];
-  }
-  persist();
-  const after = Object.keys(DATA.users).length;
-  console.log(`[purge] deleted ${before - after} athletes, ${after} users remaining`);
-  res.json({ deleted: before - after, remaining: after });
-});
-
 app.get('/api/admin/pending', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   const list = Object.values(DATA.users)
     .filter(u => u.status === 'pending')
