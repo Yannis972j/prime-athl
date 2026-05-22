@@ -133,7 +133,7 @@ function setAppTheme(name){
   Object.assign(T,THEMES[name]);
   localStorage.setItem('prime-theme',name);
   document.body.style.background=T.bg;
-  if(_themeUpdate)_themeUpdate(n=>n+1);
+  if(typeof _themeUpdate==='function')_themeUpdate(n=>n+1);
 }
 let T={...(THEMES[localStorage.getItem('prime-theme')]||THEMES.dark)};
 

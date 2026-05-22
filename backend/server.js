@@ -172,8 +172,7 @@ function persist() {
       const tmp = DB_PATH + '.tmp';
       fs.writeFileSync(tmp, JSON.stringify(DATA));
       fs.renameSync(tmp, DB_PATH);
-    } catch (e) { console.error('persist error:', e); }
-    saving = false;
+    } catch (e) { console.error('persist error:', e); } finally { saving = false; }
   }, 200);
   // Postgres : debounce 500ms (aligné proche du local pour réduire la fenêtre d'inconsistance)
   if (USE_PG) {
@@ -1145,7 +1144,10 @@ app.post('/api/admin/purge-athletes', authRequired, coachOnly, mainCoachOnly, (r
     delete DATA.users[u.id];
     delete DATA.programs[u.id];
     delete DATA.sessions[u.id];
-    delete DATA.nutrition[u.id];
+    delete DATA.nutritionLogs[u.id];
+    delete DATA.nutritionPrograms[u.id];
+    delete DATA.weightLogs[u.id];
+    delete DATA.progressPhotos[u.id];
   }
   persist();
   const after = Object.keys(DATA.users).length;
@@ -1284,6 +1286,7 @@ app.post('/api/nutrition/copy-day', authRequired, (req, res) => {
 app.put('/api/my-nutrition', authRequired, (req, res) => {
   const plan = req.body && req.body.plan ? req.body.plan : null;
   if (!plan) return res.status(400).json({ error: 'plan_required' });
+  if (JSON.stringify(plan).length > 2 * 1024 * 1024) return res.status(413).json({ error: 'plan_too_large' });
   const ts = Date.now();
   DATA.nutritionPrograms[req.user.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts };
   persist();
