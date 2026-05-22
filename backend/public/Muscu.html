@@ -2968,18 +2968,78 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   React.useEffect(()=>{load();},[load]);
 
   // ── Aliment libre (logging ad hoc hors plan) ─────────────────────────────
-  const[freeFoodModal,setFreeFoodModal]=React.useState(null); // {mealId, mealLabel}
-  const[freeFoodForm,setFreeFoodForm]=React.useState({name:'',kcal:'',p:'',c:'',f:''});
+  // Form fields :
+  //   - searchQuery / searchResults : barre de recherche (custom foods + Open Food Facts)
+  //   - selectedFood : aliment choisi dans les résultats (avec macros /100g)
+  //   - qty : quantité en g (default 100). Si selectedFood, macros calculées; sinon valeur manuelle.
+  //   - name/kcal/p/c/f : valeurs finales envoyées au backend
+  const[freeFoodModal,setFreeFoodModal]=React.useState(null);
+  const[freeFoodForm,setFreeFoodForm]=React.useState({name:'',kcal:'',p:'',c:'',f:'',qty:'100'});
   const[freeFoodSaving,setFreeFoodSaving]=React.useState(false);
-  const openFreeFood=(mealId,mealLabel)=>{setFreeFoodForm({name:'',kcal:'',p:'',c:'',f:''});setFreeFoodModal({mealId,mealLabel});};
+  const[searchQuery,setSearchQuery]=React.useState('');
+  const[searchResults,setSearchResults]=React.useState([]);
+  const[searching,setSearching]=React.useState(false);
+  const[selectedFood,setSelectedFood]=React.useState(null); // {kcal,p,c,f} par 100g
+  const searchTimer=React.useRef(null);
+
+  // Debounce recherche : 300ms après dernière frappe
+  React.useEffect(()=>{
+    clearTimeout(searchTimer.current);
+    if(searchQuery.trim().length<2){setSearchResults([]);return;}
+    setSearching(true);
+    searchTimer.current=setTimeout(async()=>{
+      try{
+        const r=await apiCall('/api/foods/search?q='+encodeURIComponent(searchQuery));
+        setSearchResults(r.results||[]);
+      }catch(e){setSearchResults([]);}
+      setSearching(false);
+    },300);
+    return()=>clearTimeout(searchTimer.current);
+  },[searchQuery]);
+
+  // Sélection d'un aliment → préremplit le formulaire (100g par défaut)
+  const pickFood=food=>{
+    setSelectedFood(food);
+    setFreeFoodForm({
+      name:food.name,
+      kcal:String(food.kcal||0),
+      p:String(food.p||0),c:String(food.c||0),f:String(food.f||0),
+      qty:'100',
+    });
+    setSearchQuery('');setSearchResults([]);
+  };
+
+  // Recalcul macros quand qty change ET un aliment a été sélectionné
+  const updateQty=v=>{
+    setFreeFoodForm(prev=>{
+      const next={...prev,qty:v};
+      if(selectedFood){
+        const ratio=(parseFloat(v)||0)/100;
+        next.kcal=String(Math.round((selectedFood.kcal||0)*ratio));
+        next.p=   String(Math.round((selectedFood.p||0)*ratio*10)/10);
+        next.c=   String(Math.round((selectedFood.c||0)*ratio*10)/10);
+        next.f=   String(Math.round((selectedFood.f||0)*ratio*10)/10);
+      }
+      return next;
+    });
+  };
+
+  const openFreeFood=(mealId,mealLabel)=>{
+    setFreeFoodForm({name:'',kcal:'',p:'',c:'',f:'',qty:'100'});
+    setSearchQuery('');setSearchResults([]);setSelectedFood(null);
+    setFreeFoodModal({mealId,mealLabel});
+  };
+
   const submitFreeFood=async e=>{
     e.preventDefault();
     if(!freeFoodModal||!freeFoodForm.name.trim())return;
     setFreeFoodSaving(true);
     try{
+      const qtyG=parseFloat(freeFoodForm.qty)||0;
+      const displayName=selectedFood&&qtyG&&qtyG!==100?`${freeFoodForm.name.trim()} (${qtyG}g)`:freeFoodForm.name.trim();
       const r=await apiCall('/api/nutrition/free-food',{method:'POST',body:{
         mealId:freeFoodModal.mealId,
-        name:freeFoodForm.name.trim(),
+        name:displayName,
         kcal:freeFoodForm.kcal,p:freeFoodForm.p,c:freeFoodForm.c,f:freeFoodForm.f,
       }});
       // Mise à jour locale immédiate
@@ -3594,29 +3654,83 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
               <button onClick={()=>setFreeFoodModal(null)} style={{width:30,height:30,borderRadius:15,border:'none',background:'rgba(255,255,255,0.06)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
             </div>
             <form onSubmit={submitFreeFood} style={{display:'flex',flexDirection:'column',gap:12,marginTop:18}}>
+
+              {/* Barre de recherche aliment (base créole + Open Food Facts) */}
+              <div style={{display:'flex',flexDirection:'column',gap:4,position:'relative'}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>🔍 Chercher un aliment</div>
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={e=>setSearchQuery(e.target.value)}
+                  placeholder="Colombo, banane, riz..."
+                  style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(124,168,196,0.3)',background:'rgba(124,168,196,0.06)',color:T.text,fontSize:14,outline:'none'}}/>
+                {searching&&<div style={{fontSize:10,color:T.textFaint,marginTop:2}}>Recherche…</div>}
+                {searchResults.length>0&&(
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,maxHeight:280,overflowY:'auto',background:'#0e0e16',border:'1px solid rgba(255,255,255,0.1)',borderRadius:11,zIndex:10,boxShadow:'0 8px 24px rgba(0,0,0,0.5)'}}>
+                    {searchResults.map(r=>(
+                      <button type="button" key={r.id} onClick={()=>pickFood(r)} style={{width:'100%',minHeight:48,padding:'8px 12px',border:'none',borderBottom:'1px solid rgba(255,255,255,0.05)',background:'transparent',color:T.text,fontSize:13,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{flexShrink:0,fontSize:11,fontWeight:700,padding:'2px 7px',borderRadius:5,background:r.source==='creole'?'rgba(217,119,87,0.15)':r.source==='custom'?'rgba(124,196,161,0.12)':'rgba(124,168,196,0.12)',color:r.source==='creole'?'#d97757':r.source==='custom'?T.good:'#7ca8c4'}}>
+                          {r.source==='creole'?'🌴':r.source==='custom'?'👤':'🌐'}
+                        </span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                          <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{r.kcal} kcal · P{r.p}g · C{r.c}g · L{r.f}g <span style={{opacity:0.6}}>/100g</span></div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Aliment sélectionné : badge + quantité */}
+              {selectedFood&&(
+                <div style={{padding:'10px 12px',borderRadius:11,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.25)'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#7ca8c4'}}>📌 {selectedFood.name}</div>
+                    <button type="button" onClick={()=>{setSelectedFood(null);setFreeFoodForm({name:'',kcal:'',p:'',c:'',f:'',qty:'100'});}} style={{fontSize:10,color:T.textFaint,background:'transparent',border:'none',cursor:'pointer'}}>✕ Annuler</button>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Quantité consommée (g)</div>
+                    <input type="number" inputMode="decimal" min="0" value={freeFoodForm.qty} onChange={e=>updateQty(e.target.value)} style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                  </div>
+                </div>
+              )}
+
+              {/* Séparateur */}
+              <div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0'}}>
+                <div style={{flex:1,height:1,background:'rgba(255,255,255,0.08)'}}/>
+                <span style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{selectedFood?'Macros calculées':'Ou saisis manuellement'}</span>
+                <div style={{flex:1,height:1,background:'rgba(255,255,255,0.08)'}}/>
+              </div>
+
+              {/* Nom */}
               <div style={{display:'flex',flexDirection:'column',gap:4}}>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Nom *</div>
-                <input required autoFocus value={freeFoodForm.name} onChange={e=>setFreeFoodForm(f=>({...f,name:e.target.value}))} placeholder="Ex: Colombo poulet, banane..." maxLength={80} style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                <input required value={freeFoodForm.name} onChange={e=>setFreeFoodForm(f=>({...f,name:e.target.value}))} placeholder="Ex: Colombo poulet, banane..." maxLength={80} style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
               </div>
+
+              {/* Calories */}
               <div style={{display:'flex',flexDirection:'column',gap:4}}>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Calories (kcal) *</div>
-                <input required type="number" inputMode="decimal" min="0" value={freeFoodForm.kcal} onChange={e=>setFreeFoodForm(f=>({...f,kcal:e.target.value}))} placeholder="0" style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                <input required type="number" inputMode="decimal" min="0" value={freeFoodForm.kcal} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,kcal:e.target.value}));}} placeholder="0" style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
               </div>
+
+              {/* P / G / L */}
               <div style={{display:'flex',gap:8}}>
                 <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
                   <div style={{fontSize:10,color:'#c97586',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Protéines</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.p} onChange={e=>setFreeFoodForm(f=>({...f,p:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.p} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,p:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
                 </div>
                 <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
                   <div style={{fontSize:10,color:'#7ca8c4',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Glucides</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.c} onChange={e=>setFreeFoodForm(f=>({...f,c:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.c} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,c:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
                 </div>
                 <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
                   <div style={{fontSize:10,color:'#c2a042',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Lipides</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.f} onChange={e=>setFreeFoodForm(f=>({...f,f:e.target.value}))} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(194,160,66,0.25)',background:'rgba(194,160,66,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.f} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,f:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(194,160,66,0.25)',background:'rgba(194,160,66,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
                 </div>
               </div>
-              <div style={{fontSize:10,color:T.textFaint,lineHeight:1.5,marginTop:2}}>Protéines / Glucides / Lipides optionnels. Compteront immédiatement dans tes macros du jour.</div>
+
               <button type="submit" disabled={freeFoodSaving||!freeFoodForm.name.trim()} style={{minHeight:46,borderRadius:13,border:'none',background:freeFoodForm.name.trim()?'linear-gradient(135deg,#7ca8c4,#7cc4a1)':'rgba(255,255,255,0.1)',color:freeFoodForm.name.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:freeFoodSaving||!freeFoodForm.name.trim()?'not-allowed':'pointer',opacity:freeFoodSaving?0.6:1,marginTop:4}}>
                 {freeFoodSaving?'Enregistrement…':'Ajouter'}
               </button>

@@ -95,7 +95,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -158,6 +158,51 @@ async function ensureMainCoach() {
   try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
 }
 await ensureMainCoach();
+
+// ── Seed aliments créoles (Martinique) — exécuté une seule fois ──────────────
+// Valeurs nutritionnelles approximatives basées sur CIQUAL / FoodData / sources publiques.
+// Tous marqués is_public=true (accessibles à tous les coachs et athlètes).
+function seedCreoleFoods() {
+  const seeded = Object.values(DATA.customFoods).some(f => f.isSeed);
+  if (seeded) return;
+  const CREOLE_FOODS = [
+    { name: 'Colombo de poulet',   kcal: 165, p: 14, c: 8,  f: 8,  unit: 'g' },
+    { name: 'Accras de morue',     kcal: 280, p: 11, c: 25, f: 16, unit: 'g' },
+    { name: 'Boudin créole',       kcal: 295, p: 14, c: 5,  f: 25, unit: 'g' },
+    { name: 'Christophine',        kcal: 19,  p: 0.8, c: 4.5, f: 0.1, unit: 'g' },
+    { name: 'Ti-nain (banane verte cuite)', kcal: 122, p: 1.3, c: 28, f: 0.4, unit: 'g' },
+    { name: 'Fruit à pain cuit',   kcal: 105, p: 1.1, c: 27, f: 0.2, unit: 'g' },
+    { name: 'Lambis (chair cuite)', kcal: 137, p: 26, c: 2.4, f: 1.2, unit: 'g' },
+    { name: 'Igname cuite',        kcal: 116, p: 1.5, c: 27, f: 0.2, unit: 'g' },
+    { name: 'Giraumon (potiron antillais)', kcal: 26, p: 1, c: 6, f: 0.1, unit: 'g' },
+    { name: 'Dachine (madère cuite)', kcal: 142, p: 2, c: 34, f: 0.1, unit: 'g' },
+    { name: 'Riz collé pois rouges', kcal: 145, p: 5, c: 26, f: 1.5, unit: 'g' },
+    { name: 'Bokit (pain frit)',   kcal: 380, p: 9, c: 45, f: 18, unit: 'g' },
+    { name: 'Court-bouillon de poisson', kcal: 110, p: 18, c: 3, f: 3, unit: 'g' },
+    { name: 'Sauce chien',         kcal: 60,  p: 1, c: 4, f: 5, unit: 'g' },
+    { name: 'Plantain mûr poêlé',  kcal: 165, p: 1.3, c: 36, f: 3, unit: 'g' },
+  ];
+  const mkId = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  for (const f of CREOLE_FOODS) {
+    const id = mkId();
+    DATA.customFoods[id] = {
+      id,
+      coachId: null,            // null = aliment système (créole ou OFF)
+      name: f.name,
+      nameNormalized: f.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''),
+      kcalPer100g: f.kcal,
+      pPer100g:    f.p,
+      cPer100g:    f.c,
+      fPer100g:    f.f,
+      isPublic: true,
+      isSeed: true,
+      source: 'creole',
+      createdAt: Date.now(),
+    };
+  }
+  console.log(`[seed] ${CREOLE_FOODS.length} aliments créoles ajoutés`);
+}
+seedCreoleFoods();
 
 let saveTimer = null;
 let pgSaveTimer = null;
@@ -1332,6 +1377,95 @@ app.delete('/api/nutrition/free-food/:id', authRequired, (req, res) => {
     if (removed) break;
   }
   if (!removed) return res.status(404).json({ error: 'not_found' });
+  persist();
+  res.json({ ok: true });
+});
+
+// ── Base d'aliments (custom + Open Food Facts) ───────────────────────────────
+// Normalise une chaîne pour comparaison search (sans accents, lowercase, trim)
+const normFoodName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+// GET /api/foods/search?q=... : cherche d'abord dans customFoods (instant),
+// puis enrichit avec Open Food Facts (timeout 3s, fallback silencieux).
+app.get('/api/foods/search', authRequired, async (req, res) => {
+  const q = normFoodName(req.query.q);
+  if (q.length < 2) return res.json({ results: [] });
+
+  // 1. Recherche locale customFoods
+  const u = DATA.users[req.user.id];
+  const visibleFoods = Object.values(DATA.customFoods).filter(f =>
+    f.isPublic || f.coachId === req.user.id || (u && u.coachId && f.coachId === u.coachId)
+  );
+  const localResults = visibleFoods
+    .filter(f => normFoodName(f.name).includes(q))
+    .slice(0, 8)
+    .map(f => ({
+      id: f.id,
+      source: f.source === 'creole' ? 'creole' : 'custom',
+      name: f.name,
+      kcal: f.kcalPer100g, p: f.pPer100g, c: f.cPer100g, f: f.fPer100g,
+    }));
+
+  // 2. Open Food Facts (timeout 3s, fallback silencieux si réseau lent/HS)
+  let offResults = [];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const url = `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(q)}&fields=product_name,product_name_fr,nutriments&page_size=8&lang=fr`;
+    const r = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'PrimeAthl/1.0' } });
+    clearTimeout(timeout);
+    if (r.ok) {
+      const data = await r.json();
+      offResults = (data.products || [])
+        .filter(p => p.nutriments && p.nutriments['energy-kcal_100g'] != null)
+        .slice(0, 6)
+        .map(p => ({
+          id: 'off:' + (p.code || Math.random().toString(36).slice(2)),
+          source: 'off',
+          name: p.product_name_fr || p.product_name || 'Produit inconnu',
+          kcal: Math.round(p.nutriments['energy-kcal_100g'] || 0),
+          p:    Math.round((p.nutriments['proteins_100g']      || 0) * 10) / 10,
+          c:    Math.round((p.nutriments['carbohydrates_100g'] || 0) * 10) / 10,
+          f:    Math.round((p.nutriments['fat_100g']           || 0) * 10) / 10,
+        }))
+        .filter(p => p.kcal > 0);
+    }
+  } catch (e) { /* timeout ou erreur réseau — ignoré, on retourne seulement le local */ }
+
+  res.json({ results: [...localResults, ...offResults].slice(0, 12) });
+});
+
+// POST /api/foods : un coach crée un aliment custom (visible par ses athlètes)
+app.post('/api/foods', authRequired, coachOnly, (req, res) => {
+  const { name, kcal, p, c, f, isPublic } = req.body || {};
+  if (!name || name.length < 2) return res.status(400).json({ error: 'name_required' });
+  if (kcal == null || +kcal < 0) return res.status(400).json({ error: 'kcal_required' });
+  const id = Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  DATA.customFoods[id] = {
+    id,
+    coachId: req.user.id,
+    name: String(name).slice(0, 80),
+    nameNormalized: normFoodName(name),
+    kcalPer100g: Math.max(0, parseFloat(kcal) || 0),
+    pPer100g:    Math.max(0, parseFloat(p)    || 0),
+    cPer100g:    Math.max(0, parseFloat(c)    || 0),
+    fPer100g:    Math.max(0, parseFloat(f)    || 0),
+    isPublic: !!isPublic,
+    isSeed: false,
+    source: 'custom',
+    createdAt: Date.now(),
+  };
+  persist();
+  res.json({ ok: true, food: DATA.customFoods[id] });
+});
+
+// DELETE /api/foods/:id : seul le coach créateur peut supprimer son aliment
+app.delete('/api/foods/:id', authRequired, coachOnly, (req, res) => {
+  const food = DATA.customFoods[req.params.id];
+  if (!food) return res.status(404).json({ error: 'not_found' });
+  if (food.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  if (food.isSeed) return res.status(403).json({ error: 'cannot_delete_seed' });
+  delete DATA.customFoods[req.params.id];
   persist();
   res.json({ ok: true });
 });
