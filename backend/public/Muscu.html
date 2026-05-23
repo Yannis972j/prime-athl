@@ -825,9 +825,31 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   const[restTotal,setRestTotal]=React.useState(0);
   const[sessionTime,setSessionTime]=React.useState(0);
   const[editMode,setEditMode]=React.useState(false);
+  // Focus mode : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono repos plein écran
+  // Persisté localStorage pour respecter le choix utilisateur entre séances
+  const[focusMode,setFocusMode]=React.useState(()=>{try{return localStorage.getItem('pa_focus_mode')==='1';}catch{return false;}});
+  React.useEffect(()=>{try{localStorage.setItem('pa_focus_mode',focusMode?'1':'0');}catch{}},[focusMode]);
 
   React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
+
+  // Vibration + bip quand le chrono repos arrive à 0 (uniquement après avoir démarré un repos)
+  const prevRestRef=React.useRef(0);
+  React.useEffect(()=>{
+    if(prevRestRef.current>0&&restSeconds===0){
+      try{if(navigator.vibrate)navigator.vibrate([200,100,200,100,400]);}catch{}
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext;
+        if(AC){const a=new AC();const o=a.createOscillator();const g=a.createGain();
+          o.connect(g);g.connect(a.destination);
+          o.frequency.value=880;g.gain.setValueAtTime(0.001,a.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.25,a.currentTime+0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+0.6);
+          o.start();o.stop(a.currentTime+0.65);}
+      }catch{}
+    }
+    prevRestRef.current=restSeconds;
+  },[restSeconds]);
 
   // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
   // Critique pour utilisation à la salle : sinon l'écran s'éteint entre les séries.
@@ -953,6 +975,150 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
     );
   }
 
+  // ── FOCUS MODE : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono plein écran ──
+  if(focusMode){
+    const nextSetIdx=ex.sets.findIndex(s=>!s.done);
+    const allExDone=nextSetIdx===-1;
+    const set=allExDone?ex.sets[ex.sets.length-1]:ex.sets[nextSetIdx];
+    const setNumber=allExDone?ex.sets.length:(nextSetIdx+1);
+    const totalSetsEx=ex.sets.length;
+    const isLastEx=currentEx>=exercises.length-1;
+    const nextExHas=!isLastEx;
+    const exDoneCount=exercises.filter(e=>e.sets.every(s=>s.done)).length;
+    const restPct=restTotal>0?Math.min(1,(restTotal-restSeconds)/restTotal):0;
+
+    return(
+      <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',background:T.bg,position:'relative',overflow:'hidden'}}>
+
+        {/* Overlay chrono repos plein écran */}
+        {restSeconds>0&&(
+          <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%, rgba(217,119,87,0.25) 0%, rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
+            <div style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:18}}>Repos</div>
+            <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
+              <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
+                <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10"/>
+                <circle cx="120" cy="120" r="108" fill="none" stroke="#d97757" strokeWidth="10" strokeLinecap="round"
+                  strokeDasharray={2*Math.PI*108} strokeDashoffset={2*Math.PI*108*(1-restPct)}
+                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 12px rgba(217,119,87,0.7))'}}/>
+              </svg>
+              <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{restSeconds}</div>
+                <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
+              <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>+30s</button>
+              <button onClick={()=>setRestSeconds(0)} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(124,196,161,0.35)'}}>Passer le repos</button>
+            </div>
+          </div>
+        )}
+
+        {/* Header minimal */}
+        <div style={{padding:'8px 18px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <button onClick={handleClose} style={{minWidth:44,minHeight:44,borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Icon name="chevronLeft" size={18}/>
+          </button>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>{fmt(sessionTime)}</div>
+            <div style={{fontSize:11,color:T.textDim,fontWeight:600,marginTop:2}}>{doneSets}/{totalSets} séries</div>
+          </div>
+          <button onClick={()=>setFocusMode(false)} title="Quitter le focus" style={{minWidth:44,minHeight:44,borderRadius:22,border:'1px solid rgba(124,196,161,0.5)',background:'rgba(124,196,161,0.15)',color:T.good,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🎯</button>
+        </div>
+
+        {/* Barre de progression exercices */}
+        <div style={{display:'flex',gap:4,padding:'0 18px',marginBottom:24}}>
+          {exercises.map((e,i)=>{
+            const done=e.sets.every(s=>s.done);const active=i===currentEx;const partial=e.sets.some(s=>s.done)&&!done;
+            return <div key={i} style={{flex:1,height:4,borderRadius:2,background:done?T.good:active?T.accent:partial?'rgba(217,119,87,0.4)':'rgba(255,255,255,0.08)'}}/>;
+          })}
+        </div>
+
+        {/* Contenu principal — exercice courant */}
+        <div style={{flex:1,display:'flex',flexDirection:'column',padding:'0 24px 32px',overflow:'auto'}}>
+
+          {/* Nom exercice + numéro de série */}
+          <div style={{textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Exercice {currentEx+1}/{exercises.length} · {ex.muscle||''}</div>
+            <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:14}}>{ex.name}</div>
+            {!allExDone&&(
+              <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'8px 18px',borderRadius:999,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.35)'}}>
+                <span style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Série</span>
+                <span style={{fontSize:22,fontWeight:800,color:T.accent,fontVariantNumeric:'tabular-nums',lineHeight:1}}>{setNumber}<span style={{fontSize:14,color:T.textFaint,fontWeight:600}}>/{totalSetsEx}</span></span>
+              </div>
+            )}
+            {allExDone&&(
+              <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'8px 18px',borderRadius:999,background:'rgba(124,196,161,0.15)',border:'1px solid rgba(124,196,161,0.4)'}}>
+                <span style={{fontSize:13,color:T.good,fontWeight:800,letterSpacing:0.5}}>✓ Exercice terminé</span>
+              </div>
+            )}
+          </div>
+
+          {/* Cible (poids × reps) */}
+          {!allExDone&&(set.targetWeight||set.targetReps||set.target||set.targetStr)&&(
+            <div style={{textAlign:'center',marginBottom:18}}>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:4}}>Objectif</div>
+              <div style={{fontSize:18,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>
+                {set.targetWeight?<><span>{set.targetWeight}</span><span style={{fontSize:12,color:T.textFaint,marginLeft:3}}>kg</span></>:''}
+                {(set.targetWeight&&(set.targetReps||set.target||set.targetStr))?<span style={{color:T.textFaint,margin:'0 8px'}}>×</span>:''}
+                {set.targetReps||set.target||set.targetStr||''}
+                {(!set.targetWeight&&(set.targetReps||set.target))?<span style={{fontSize:12,color:T.textFaint,marginLeft:3}}>reps</span>:''}
+              </div>
+            </div>
+          )}
+
+          {/* Steppers poids + reps (gros) — édition de la série en cours */}
+          {!allExDone&&(
+            <div style={{display:'flex',gap:14,justifyContent:'center',marginBottom:32}}>
+              <div style={{flex:1,maxWidth:160,padding:'14px 12px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',textAlign:'center'}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8}}>Poids</div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:Math.max(0,(parseFloat(set.weight)||0)-2.5)})} style={{minWidth:44,minHeight:44,borderRadius:11,border:'none',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:22,fontWeight:600,cursor:'pointer'}}>−</button>
+                  <input type="number" value={set.weight||0} onChange={e=>updSet(currentEx,nextSetIdx,{weight:parseFloat(e.target.value)||0})} style={{width:64,background:'transparent',border:'none',color:T.text,fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:(parseFloat(set.weight)||0)+2.5})} style={{minWidth:44,minHeight:44,borderRadius:11,border:'none',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:22,fontWeight:600,cursor:'pointer'}}>+</button>
+                </div>
+                <div style={{fontSize:9,color:T.textFaint,fontWeight:600,marginTop:4}}>kg</div>
+              </div>
+              <div style={{flex:1,maxWidth:160,padding:'14px 12px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',textAlign:'center'}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8}}>Reps</div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{reps:Math.max(0,(parseFloat(set.reps)||0)-1)})} style={{minWidth:44,minHeight:44,borderRadius:11,border:'none',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:22,fontWeight:600,cursor:'pointer'}}>−</button>
+                  <input type="number" value={set.reps||0} onChange={e=>updSet(currentEx,nextSetIdx,{reps:parseFloat(e.target.value)||0})} style={{width:64,background:'transparent',border:'none',color:T.text,fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{reps:(parseFloat(set.reps)||0)+1})} style={{minWidth:44,minHeight:44,borderRadius:11,border:'none',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:22,fontWeight:600,cursor:'pointer'}}>+</button>
+                </div>
+                <div style={{fontSize:9,color:T.textFaint,fontWeight:600,marginTop:4}}>répétitions</div>
+              </div>
+            </div>
+          )}
+
+          {/* Gros bouton ✓ FAIT — ou Suivant si exercice terminé */}
+          <div style={{marginTop:'auto'}}>
+            {!allExDone?(
+              <button onClick={()=>validateSet(nextSetIdx)} style={{width:'100%',minHeight:88,borderRadius:22,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:22,fontWeight:800,letterSpacing:0.8,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:12,boxShadow:'0 12px 32px rgba(217,119,87,0.45)',textTransform:'uppercase'}}>
+                <Icon name="check" size={28} stroke="#fff" strokeWidth={3}/>
+                FAIT
+              </button>
+            ):nextExHas?(
+              <button onClick={()=>setCurrentEx(c=>Math.min(exercises.length-1,c+1))} style={{width:'100%',minHeight:88,borderRadius:22,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:20,fontWeight:800,letterSpacing:0.6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,boxShadow:'0 12px 32px rgba(124,196,161,0.4)'}}>
+                Exercice suivant →
+              </button>
+            ):(
+              <button onClick={handleClose} style={{width:'100%',minHeight:88,borderRadius:22,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:20,fontWeight:800,letterSpacing:0.6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,boxShadow:'0 12px 32px rgba(124,196,161,0.4)'}}>
+                🏆 Terminer la séance
+              </button>
+            )}
+          </div>
+
+          {/* Nav exercices (petite, en bas) */}
+          <div style={{display:'flex',gap:10,marginTop:18,justifyContent:'center'}}>
+            <button onClick={()=>setCurrentEx(c=>Math.max(0,c-1))} disabled={currentEx===0} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:currentEx===0?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:currentEx===0?'not-allowed':'pointer',opacity:currentEx===0?0.4:1}}>← Précédent</button>
+            <button onClick={()=>setCurrentEx(c=>Math.min(exercises.length-1,c+1))} disabled={isLastEx} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:isLastEx?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:isLastEx?'not-allowed':'pointer',opacity:isLastEx?0.4:1}}>Suivant →</button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
       {/* Image illustrative — bandeau borné en haut (s'adapte à la taille du téléphone, plus jamais trop gros) */}
@@ -973,9 +1139,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
             <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{workout.name}</div>
             <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',letterSpacing:-0.2,marginTop:1}}>{fmt(sessionTime)}</div>
           </div>
-          <button onClick={()=>setEditMode(true)} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(217,119,87,0.35)',background:T.accentSoft,color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <Icon name="edit" size={16} stroke={T.accent}/>
-          </button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setFocusMode(f=>!f)} title={focusMode?'Quitter le mode focus':'Mode focus (1 exercice à la fois)'} style={{minWidth:44,minHeight:44,borderRadius:22,border:focusMode?'1px solid rgba(124,196,161,0.5)':'1px solid rgba(255,255,255,0.1)',background:focusMode?'rgba(124,196,161,0.15)':'rgba(255,255,255,0.04)',color:focusMode?T.good:T.textDim,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>
+              🎯
+            </button>
+            <button onClick={()=>setEditMode(true)} style={{minWidth:44,minHeight:44,borderRadius:22,border:'1px solid rgba(217,119,87,0.35)',background:T.accentSoft,color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="edit" size={16} stroke={T.accent}/>
+            </button>
+          </div>
         </div>
         {/* progress dots */}
         <div style={{display:'flex',gap:4,marginTop:14}}>
