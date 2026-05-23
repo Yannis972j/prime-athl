@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v5';
+const CACHE = 'prime-athl-v6';
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;

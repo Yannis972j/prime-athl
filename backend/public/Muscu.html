@@ -8238,9 +8238,17 @@ const _root = ReactDOM.createRoot(document.getElementById('root'));
 _root.render(<ErrorBoundary><App/></ErrorBoundary>);
 if(window.__splashDone) window.__splashDone();
 
-// Register Service Worker for push notifications
+// Register Service Worker for push notifications + auto-update
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/sw.js').catch(e=>console.warn('[SW] registration failed:',e));
+  navigator.serviceWorker.register('/sw.js').then(reg=>{
+    // Vérifie une mise à jour à chaque chargement (sinon il faut attendre 24h)
+    reg.update().catch(()=>{});
+    // Quand un nouveau SW prend la main → recharge la page pour avoir la dernière version
+    let reloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(reloading)return;reloading=true;window.location.reload();
+    });
+  }).catch(e=>console.warn('[SW] registration failed:',e));
 }
 </script>
 </body>

@@ -13,8 +13,10 @@ export function pgEnabled() { return USE_PG; }
 
 export async function pgInit() {
   if (!USE_PG) return false;
+  // On retire sslmode de l'URL (sinon warning pg-connection-string v3) — on passe ssl via options.
+  const cleanedUrl = DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?&/, '?').replace(/\?$/, '');
   pool = new Pool({
-    connectionString: DATABASE_URL,
+    connectionString: cleanedUrl,
     // Neon/Supabase/Render Postgres exigent SSL en prod
     ssl: DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
     max: 4,
