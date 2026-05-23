@@ -3886,20 +3886,16 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                 <input required type="number" inputMode="decimal" min="0" value={freeFoodForm.kcal} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,kcal:e.target.value}));}} placeholder="0" style={{height:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
               </div>
 
-              {/* P / G / L */}
-              <div style={{display:'flex',gap:8}}>
-                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
-                  <div style={{fontSize:10,color:'#c97586',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Protéines</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.p} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,p:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
-                </div>
-                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
-                  <div style={{fontSize:10,color:'#7ca8c4',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Glucides</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.c} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,c:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
-                </div>
-                <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
-                  <div style={{fontSize:10,color:'#c2a042',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Lipides</div>
-                  <input type="number" inputMode="decimal" min="0" value={freeFoodForm.f} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,f:e.target.value}));}} placeholder="g" style={{height:44,padding:'0 10px',borderRadius:11,border:'1px solid rgba(194,160,66,0.25)',background:'rgba(194,160,66,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
-                </div>
+              {/* P / G / L — empilés verticalement (3 lignes) pour éviter rognage sur mobile étroit */}
+              <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 12px',alignItems:'center'}}>
+                <div style={{fontSize:11,color:'#c97586',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Protéines</div>
+                <input type="number" inputMode="decimal" min="0" value={freeFoodForm.p} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,p:e.target.value}));}} placeholder="g" style={{minHeight:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(201,117,134,0.25)',background:'rgba(201,117,134,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+
+                <div style={{fontSize:11,color:'#7ca8c4',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Glucides</div>
+                <input type="number" inputMode="decimal" min="0" value={freeFoodForm.c} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,c:e.target.value}));}} placeholder="g" style={{minHeight:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+
+                <div style={{fontSize:11,color:'#c2a042',fontWeight:700,textTransform:'uppercase',letterSpacing:0.4}}>Lipides</div>
+                <input type="number" inputMode="decimal" min="0" value={freeFoodForm.f} onChange={e=>{setSelectedFood(null);setFreeFoodForm(f=>({...f,f:e.target.value}));}} placeholder="g" style={{minHeight:44,padding:'0 12px',borderRadius:11,border:'1px solid rgba(194,160,66,0.25)',background:'rgba(194,160,66,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
               </div>
 
               <button type="submit" disabled={freeFoodSaving||!freeFoodForm.name.trim()} style={{minHeight:46,borderRadius:13,border:'none',background:freeFoodForm.name.trim()?'linear-gradient(135deg,#7ca8c4,#7cc4a1)':'rgba(255,255,255,0.1)',color:freeFoodForm.name.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:freeFoodSaving||!freeFoodForm.name.trim()?'not-allowed':'pointer',opacity:freeFoodSaving?0.6:1,marginTop:4}}>
