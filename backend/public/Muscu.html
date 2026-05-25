@@ -3990,6 +3990,62 @@ function exportNutritionExcel(plan,athleteName){
 }
 
 // Parse: 7 sheets → days dict
+// Catégorisation pour la liste de courses (ordre + couleur)
+const SHOP_CATEGORIES=[
+  {name:'VIANDES & POISSONS',color:'#d97757',kw:['poulet','blanc de poulet','dinde','steak','boeuf','bœuf','viande','jambon','thon','sardine','saumon','cabillaud','poisson','fruits de mer','lambis']},
+  {name:'ŒUFS & LAITAGES',   color:'#c2a042',kw:['oeuf','œuf','fromage blanc','yaourt','petit suisse','whey','caseine','fromage','lait','skyr','cottage','quark']},
+  {name:'FÉCULENTS',         color:'#c97586',kw:['riz','pomme de terre','patate douce','lentille','haricot rouge','pois chiche','flocon','avoine','galette','epeautre','épeautre','dattes','datte','pain','pates','pâtes','quinoa','semoule','boulgour','muesli','granola']},
+  {name:'LÉGUMES',           color:'#7cc4a1',kw:['haricot vert','brocoli','mache','roquette','salade','epinard','épinard','courgette','tomate','poivron','carotte','chou','champignon','aubergine','concombre','christophine','giraumon','potiron','dachine']},
+  {name:'FRUITS',            color:'#e6925a',kw:['banane','pomme','kiwi','fruit rouge','orange','poire','mangue','ananas','fraise','myrtille','framboise','raisin','peche','pêche','prune','melon','pasteque','pastèque','citron']},
+  {name:'MATIÈRES GRASSES',  color:'#7ca8c4',kw:['huile','beurre de cacahouete','beurre de cacahouète','chia','chocolat noir','noix','amande','noisette','avocat','olive']},
+  {name:'AUTRES',            color:'#888888',kw:[]},
+];
+const _normShop=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+function categorizeProduct(name){
+  const n=_normShop(name);
+  for(const cat of SHOP_CATEGORIES){
+    for(const kw of cat.kw){ if(n.includes(kw)) return cat; }
+  }
+  return SHOP_CATEGORIES[SHOP_CATEGORIES.length-1];
+}
+function buildShoppingList(plan){
+  // { "NOM": { grams, units } }
+  const agg={};
+  for(const day of DAYS_OF_WEEK){
+    const meals=getDayMeals(plan,day);
+    for(const m of meals){
+      for(const it of (m.items||[])){
+        const name=String(it.name||'').trim();
+        const qty=parseFloat(it.qty)||0;
+        const unit=String(it.unit||'').toUpperCase().trim();
+        if(!name||qty<=0)continue;
+        if(!agg[name])agg[name]={grams:0,units:0};
+        if(unit==='G'||unit==='GR'||unit==='GRAMME'||unit==='ML')agg[name].grams+=qty;
+        else if(unit===''||unit==='U'||unit==='UNITE'||unit==='UNITES'||unit==='UNITÉ'||unit==='UNITÉS'||unit==='PIECE'||unit==='PIÈCE'||unit==='PORTION')agg[name].units+=qty;
+        else agg[name].grams+=qty; // fallback : kg, oz, cl... → considère comme grammes
+      }
+    }
+  }
+  // Group par catégorie
+  const byCat={};
+  for(const[name,t] of Object.entries(agg)){
+    const cat=categorizeProduct(name);
+    if(!byCat[cat.name])byCat[cat.name]={cat,items:[]};
+    byCat[cat.name].items.push({name,grams:t.grams,units:t.units});
+  }
+  for(const c of Object.values(byCat))c.items.sort((a,b)=>a.name.localeCompare(b.name));
+  return{byCat,total:Object.keys(agg).length};
+}
+function formatShopQty(item){
+  const parts=[];
+  if(item.grams>0){
+    if(item.grams>=1000)parts.push(`${(item.grams/1000).toFixed(2)} kg`);
+    else parts.push(`${Math.round(item.grams)} g`);
+  }
+  if(item.units>0)parts.push(`${Math.round(item.units)} ${item.units>1?'unités':'unité'}`);
+  return parts.join(' + ');
+}
+
 function exportNutritionPDF(plan,athleteName){
   const win=window.open('','_blank','width=860,height=1000');
   if(!win)return alert('Autorise les popups pour exporter le PDF.');
@@ -3998,6 +4054,7 @@ function exportNutritionPDF(plan,athleteName){
     const tot=meals.reduce((a,m)=>{const mm=mealMacros(m.items);return{kcal:a.kcal+mm.kcal,p:a.p+mm.p,c:a.c+mm.c,f:a.f+mm.f};},{kcal:0,p:0,c:0,f:0});
     return{day,meals,tot};
   }).filter(d=>d.meals.length>0);
+  const shop=buildShoppingList(plan);
 
   // Moyenne semaine
   const avg=days.length?days.reduce((a,d)=>({kcal:a.kcal+d.tot.kcal,p:a.p+d.tot.p,c:a.c+d.tot.c,f:a.f+d.tot.f}),{kcal:0,p:0,c:0,f:0}):{kcal:0,p:0,c:0,f:0};
@@ -4073,9 +4130,28 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
 .footer-brand{font-size:10px;font-weight:800;color:#d97757;letter-spacing:0.8px;text-transform:uppercase}
 .footer-note{font-size:9.5px;color:#a1a1aa}
 
+/* ── Liste de courses ── */
+.shop-section{margin-bottom:28px;page-break-after:always}
+.shop-title-row{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.shop-h1{font-size:18px;font-weight:800;color:#18181b;letter-spacing:-0.3px}
+.shop-meta{font-size:10.5px;color:#71717a;font-weight:500}
+.shop-intro{font-size:11px;color:#71717a;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid #f0f0f0}
+.shop-cat{margin-bottom:14px;page-break-inside:avoid}
+.shop-cat-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.shop-cat-bar{width:4px;height:13px;border-radius:2px}
+.shop-cat-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px}
+.shop-cat-count{font-size:10px;color:#a1a1aa;font-weight:600}
+.shop-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden}
+.shop-table td{padding:6px 12px;font-size:11px;border-bottom:1px solid #f9f9f9}
+.shop-table tr:last-child td{border-bottom:none}
+.shop-table tr.alt td{background:#fafafa}
+.shop-prod{color:#18181b;font-weight:600}
+.shop-qty{text-align:right;color:#d97757;font-weight:700;font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+
 @media print{
   .page{padding:20px 24px}
   .day{page-break-inside:avoid}
+  .shop-section{page-break-after:always}
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style></head><body>
@@ -4092,6 +4168,32 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
       <div class="badge">${days.length} jour${days.length>1?'s':''} planifié${days.length>1?'s':''}</div>
     </div>
   </div>
+
+  <!-- Liste des courses (1ère page) -->
+  ${shop.total>0?`<div class="shop-section">
+    <div class="shop-title-row">
+      <div class="shop-h1">Liste des courses</div>
+      <div class="shop-meta">· ${shop.total} produits · ${days.length} jour${days.length>1?'s':''} planifié${days.length>1?'s':''}</div>
+    </div>
+    <div class="shop-intro">Quantités totales nécessaires pour couvrir l'ensemble du plan nutritionnel.</div>
+    ${SHOP_CATEGORIES.map(catDef=>{
+      const grp=shop.byCat[catDef.name];
+      if(!grp||!grp.items.length)return'';
+      return`<div class="shop-cat">
+        <div class="shop-cat-head">
+          <div class="shop-cat-bar" style="background:${catDef.color}"></div>
+          <div class="shop-cat-name" style="color:${catDef.color}">${catDef.name}</div>
+          <div class="shop-cat-count">${grp.items.length} produit${grp.items.length>1?'s':''}</div>
+        </div>
+        <table class="shop-table"><tbody>
+          ${grp.items.map((it,i)=>`<tr${i%2===1?' class="alt"':''}>
+            <td class="shop-prod">${it.name}</td>
+            <td class="shop-qty">${formatShopQty(it)}</td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>`;
+    }).join('')}
+  </div>`:''}
 
   <!-- Résumé hebdomadaire -->
   ${days.length>0?`<div class="week-summary">
@@ -4130,14 +4232,18 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
           <th class="r">Lipides</th>
         </tr></thead>
         <tbody>
-          ${m.items.map((it,i)=>`<tr${i%2===1?' class="alt"':''}>
+          ${m.items.map((it,i)=>{
+            const u=String(it.unit||'').trim().toLowerCase();
+            const unitLabel=(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
+            return`<tr${i%2===1?' class="alt"':''}>
             <td>${it.name||'—'}</td>
-            <td class="r">${it.qty||0}<span class="unit">${it.unit||'g'}</span></td>
+            <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
             <td class="r">${Math.round(it.kcal||0)}<span class="unit">kcal</span></td>
             <td class="r">${Math.round(it.p||0)}<span class="unit">g</span></td>
             <td class="r">${Math.round(it.c||0)}<span class="unit">g</span></td>
             <td class="r">${Math.round(it.f||0)}<span class="unit">g</span></td>
-          </tr>`).join('')}
+          </tr>`;
+          }).join('')}
           <tr class="subtotal">
             <td colspan="2">Sous-total ${m.label}</td>
             <td class="r">${Math.round(mm.kcal)} kcal</td>

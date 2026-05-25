@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v6';
+const CACHE = 'prime-athl-v7';
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -11,7 +11,6 @@ function schedulePing() {
     schedulePing();
   }, PING_INTERVAL);
 }
-self.addEventListener('activate', () => schedulePing());
 // Ne jamais mettre Muscu.html en cache : il change à chaque deploy
 const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
@@ -20,6 +19,7 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
+  schedulePing();
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 

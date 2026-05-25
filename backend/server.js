@@ -799,8 +799,10 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.nutritionPrograms[u.id];
   delete DATA.weightLogs[u.id];
   delete DATA.progressPhotos[u.id];
-  // Retirer des invites
-  DATA.invites = (DATA.invites || []).filter(i => i.usedBy !== u.id);
+  // Retirer des invites (DATA.invites est un objet keyé par code)
+  for (const code of Object.keys(DATA.invites || {})) {
+    if (DATA.invites[code].usedBy === u.id) delete DATA.invites[code];
+  }
   persist();
   res.json({ deleted: true });
 });
@@ -943,14 +945,14 @@ app.delete('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res
 app.post('/api/my-program/save', authRequired, (req, res) => {
   const p = DATA.programs[req.user.id];
   if (!p || !p.data || !Object.keys(p.data).length) return res.status(400).json({ error: 'no_program' });
-  const uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = uid();
   const name = req.body?.name || ('Programme ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }));
   if (!DATA.savedPrograms[req.user.id]) DATA.savedPrograms[req.user.id] = [];
-  DATA.savedPrograms[req.user.id].unshift({ id: uid, name, savedAt: Date.now(), data: p.data });
+  DATA.savedPrograms[req.user.id].unshift({ id, name, savedAt: Date.now(), data: p.data });
   // Garder max 5 archives par utilisateur
   if (DATA.savedPrograms[req.user.id].length > 5) DATA.savedPrograms[req.user.id] = DATA.savedPrograms[req.user.id].slice(0, 5);
   persist();
-  res.json({ ok: true, id: uid });
+  res.json({ ok: true, id });
 });
 
 // Lister les programmes archivés
@@ -1170,6 +1172,9 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       progressPhotos: body.progressPhotos || {},
       pushSubscriptions: body.pushSubscriptions || {},
       savedPrograms: body.savedPrograms || {},
+      premiumCodes: body.premiumCodes || {},
+      freeFoodLogs: body.freeFoodLogs || {},
+      customFoods: body.customFoods || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -1177,6 +1182,7 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       programs: Object.keys(DATA.programs).length,
       sessions: Object.keys(DATA.sessions).length,
       nutritionPrograms: Object.keys(DATA.nutritionPrograms).length,
+      customFoods: Object.keys(DATA.customFoods).length,
     }});
   } catch (e) {
     console.error('restore', e);
@@ -1236,6 +1242,9 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       progressPhotos: body.progressPhotos || {},
       pushSubscriptions: body.pushSubscriptions || {},
       savedPrograms: body.savedPrograms || {},
+      premiumCodes: body.premiumCodes || {},
+      freeFoodLogs: body.freeFoodLogs || {},
+      customFoods: body.customFoods || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
