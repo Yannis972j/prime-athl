@@ -1906,16 +1906,36 @@ function enrichAIPlan(rawDays, mealsPerDay, targets) {
   return { dailyCalories:targets.calories, dailyProtein:targets.protein, dailyCarbs:targets.carbs, dailyFat:targets.fat, days };
 }
 
+// ── Liste de produits Prime Athl (base Michel + Yohan) ──────────────────────
+const PRIME_ATHL_PRODUCTS = [
+  'Blanc de poulet','Poulet (filet/cuisse)','Steak','Sardines en boîte','Thon en boîte',
+  'Œuf entier','Œufs durs','Fromage blanc 0%','Yaourt sport','Petit suisse','Whey protéine',
+  "Flocons d'avoine","Galette d'épeautre",'Riz blanc','Pomme de terre','Patate douce',
+  'Lentilles','Haricots rouges','Dattes','Haricots verts','Brocoli','Mâche / roquette',
+  'Banane','Pomme','Kiwi','Fruits rouges',
+  "Huile d'olive",'Beurre de cacahuète','Graines de chia','Chocolat noir 70%','Miel',
+];
+
 // ── IA — Génération de plan nutrition 7 jours ───────
 app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
-  const { gender, age, weight, height, activity, goal, mealsPerDay=3, allergies='', targetCalories } = req.body || {};
+  const { gender, age, weight, height, activity, goal, mealsPerDay=3, allergies='',
+          targetCalories, targetProtein, targetCarbs, targetFat, useProductList=false } = req.body || {};
   if (!gender || !age || !weight || !height || !activity || !goal) return res.status(400).json({ error: 'missing_fields' });
-  const targets = targetCalories
-    ? (() => { const c=Number(targetCalories); const r={p:0.30,c:0.45,f:0.25}; return {calories:c,protein:Math.round(c*r.p/4),carbs:Math.round(c*r.c/4),fat:Math.round(c*r.f/9)}; })()
-    : calcNutritionTargets({ gender, age:Number(age), weight:Number(weight), height:Number(height), activity, goal });
+  let targets;
+  if (targetCalories && targetProtein && targetCarbs && targetFat) {
+    targets = { calories:Number(targetCalories), protein:Number(targetProtein), carbs:Number(targetCarbs), fat:Number(targetFat) };
+  } else if (targetCalories) {
+    const c=Number(targetCalories); const r={p:0.30,c:0.45,f:0.25};
+    targets = { calories:c, protein:Math.round(c*r.p/4), carbs:Math.round(c*r.c/4), fat:Math.round(c*r.f/9) };
+  } else {
+    targets = calcNutritionTargets({ gender, age:Number(age), weight:Number(weight), height:Number(height), activity, goal });
+  }
   const mealCount = Math.min(6, Math.max(3, Number(mealsPerDay)));
   const mealNames = (AI_MEAL_TEMPLATES[mealCount]||AI_MEAL_TEMPLATES[3]).map(t=>t.label).join(', ');
+  const productConstraint = useProductList
+    ? `\nALIMENTS AUTORISÉS — utilise UNIQUEMENT cette liste (adapte les quantités librement): ${PRIME_ATHL_PRODUCTS.join(' | ')}.`
+    : '\nAliments variés du supermarché français.';
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1926,7 +1946,7 @@ app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
 
 Cibles/jour: ${targets.calories}kcal | P:${targets.protein}g G:${targets.carbs}g L:${targets.fat}g
 Repas (${mealCount}/j): ${mealNames}
-Contraintes: allergies=${allergies||'aucune'} | objectif=${goal} | aliments supermarché français | varie les protéines
+Contraintes: allergies=${allergies||'aucune'} | objectif=${goal}${productConstraint} | varie les protéines
 
 Format EXACT (pas de texte autour):
 {"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}

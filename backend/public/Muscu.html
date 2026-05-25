@@ -7555,13 +7555,95 @@ function UniverseShell({title,grad,onBack,children}){
 }
 
 // ── AI Universe Screen ────────────────────────────────────────────────────────
+// ── Export PDF plan IA nutrition ─────────────────────────────────────────────
+function exportAINutritionPDF(plan, goalLabel){
+  const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const dateStr=new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+  const daysHtml=DAYS.map(dayKey=>{
+    const dayData=plan.days[dayKey]; if(!dayData)return'';
+    const meals=dayData.meals||[];
+    const dayKcal=meals.reduce((s,m)=>s+m.items.reduce((ss,it)=>ss+it.kcal,0),0);
+    const dayP=meals.reduce((s,m)=>s+m.items.reduce((ss,it)=>ss+it.p,0),0);
+    const dayC=meals.reduce((s,m)=>s+m.items.reduce((ss,it)=>ss+it.c,0),0);
+    const dayF=meals.reduce((s,m)=>s+m.items.reduce((ss,it)=>ss+it.f,0),0);
+    const mealsHtml=meals.map(meal=>{
+      const mKcal=meal.items.reduce((s,it)=>s+it.kcal,0);
+      const rows=meal.items.map((it,i)=>`<tr class="${i%2===1?'alt':''}">`+
+        `<td>${it.name}</td><td class="r">${it.qty}<span class="unit">${it.unit}</span></td>`+
+        `<td class="r">${it.p}<span class="unit">g</span></td>`+
+        `<td class="r">${it.c}<span class="unit">g</span></td>`+
+        `<td class="r">${it.f}<span class="unit">g</span></td>`+
+        `<td class="r">${it.kcal}<span class="unit">kcal</span></td></tr>`).join('');
+      return`<div class="meal"><div class="meal-head"><span class="meal-emoji">${meal.emoji||'🍽️'}</span>`+
+        `<span class="meal-name">${meal.label}</span><span class="meal-time">${meal.timeStart||''}</span>`+
+        `<span class="meal-kcal-badge">${Math.round(mKcal)} kcal</span></div>`+
+        `<table><thead><tr><th>Aliment</th><th class="r">Qté</th><th class="r">Prot</th><th class="r">Gluc</th><th class="r">Lip</th><th class="r">Kcal</th></tr></thead>`+
+        `<tbody>${rows}</tbody></table></div>`;
+    }).join('');
+    return`<div class="day"><div class="day-header">`+
+      `<div class="day-name">${dayKey}</div>`+
+      `<div class="day-chip">${Math.round(dayKcal)} kcal · P${Math.round(dayP)}g G${Math.round(dayC)}g L${Math.round(dayF)}g</div>`+
+      `</div>${mealsHtml}</div>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Plan nutrition IA</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',Arial,sans-serif;color:#18181b;background:#fff;font-size:11.5px;line-height:1.45}
+.page{max-width:760px;margin:0 auto;padding:36px 40px 48px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #f0f0f0}
+.brand{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#6366f1;margin-bottom:6px}
+.title{font-size:22px;font-weight:800;color:#18181b;letter-spacing:-0.4px}
+.subtitle{font-size:11px;color:#71717a;margin-top:4px}
+.badge{display:inline-block;padding:4px 10px;border-radius:6px;background:#eef2ff;border:1px solid #c7d2fe;font-size:10px;font-weight:700;color:#6366f1}
+.week-summary{display:flex;gap:10px;margin-bottom:28px;padding:14px 16px;background:linear-gradient(135deg,#eef2ff,#fff);border:1px solid #c7d2fe;border-radius:10px}
+.week-macro{flex:1;text-align:center}.week-macro-val{font-size:17px;font-weight:800;color:#18181b}
+.week-macro-lbl{font-size:9px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-top:1px}
+.week-sep{width:1px;background:#e0e7ff;align-self:stretch;margin:0 2px}
+.day{margin-bottom:26px;page-break-inside:avoid}
+.day-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.day-name{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#18181b;position:relative;padding-left:10px}
+.day-name::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:14px;background:#6366f1;border-radius:2px}
+.day-chip{font-size:10px;font-weight:700;color:#6366f1;background:#eef2ff;border:1px solid #c7d2fe;border-radius:20px;padding:2px 10px}
+.meal{margin-bottom:12px;border:1px solid #f4f4f5;border-radius:8px;overflow:hidden}
+.meal-head{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fafafa;border-bottom:1px solid #f4f4f5}
+.meal-emoji{font-size:15px}.meal-name{font-size:11.5px;font-weight:700;color:#27272a}
+.meal-time{font-size:10px;color:#a1a1aa;margin-left:auto;font-weight:500}
+.meal-kcal-badge{font-size:10px;font-weight:700;color:#6366f1;background:#eef2ff;border-radius:4px;padding:2px 7px;margin-left:8px}
+table{width:100%;border-collapse:collapse}thead tr{background:#f9f9f9}
+th{padding:5px 10px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:0.3px;text-align:left;border-bottom:1px solid #f0f0f0}
+th.r,td.r{text-align:right}td{padding:5px 10px;border-bottom:1px solid #f9f9f9;font-size:11px;color:#3f3f46}
+tr:last-child td{border-bottom:none}tr.alt{background:#fafafa}.unit{color:#a1a1aa;font-size:10px;margin-left:2px}
+.footer{margin-top:32px;padding-top:14px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center}
+.footer-brand{font-size:10px;font-weight:800;color:#6366f1;letter-spacing:0.8px;text-transform:uppercase}
+.footer-note{font-size:9.5px;color:#a1a1aa}
+@media print{.page{padding:20px 24px}.day{page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head>
+<body><div class="page">
+<div class="header"><div class="header-left">
+  <div class="brand">Prime Athl · Plan nutrition IA</div>
+  <div class="title">Plan 7 jours — ${goalLabel||'Objectif personnalisé'}</div>
+  <div class="subtitle">Généré le ${dateStr}</div>
+</div><div class="header-right"><div class="badge">7 jours · IA</div></div></div>
+<div class="week-summary">
+  ${[['Calories',plan.dailyCalories,'kcal'],['Protéines',plan.dailyProtein,'g/j'],['Glucides',plan.dailyCarbs,'g/j'],['Lipides',plan.dailyFat,'g/j']].map(([lbl,val,unit],i,arr)=>
+    `${i>0?'<div class="week-sep"></div>':''}<div class="week-macro"><div class="week-macro-val">${val}</div><div class="week-macro-lbl">${lbl}<br><span style="font-weight:400">${unit}</span></div></div>`
+  ).join('')}
+</div>
+${daysHtml}
+<div class="footer"><div class="footer-brand">Prime Athl</div><div class="footer-note">Plan généré par IA — à adapter avec ton coach</div></div>
+</div><script>window.onload=()=>{window.print();}</script></body></html>`;
+
+  const w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+}
+
 // ── NutritionAIWizard ─────────────────────────────────────────────────────────
 function NutritionAIWizard({authUser}){
   const[view,setView]=React.useState('home'); // home|form|loading|result
   const[step,setStep]=React.useState(1);
   const[form,setForm]=React.useState({
     gender:authUser?.gender||'',age:authUser?.age||'',weight:authUser?.weight||'',height:authUser?.height||'',
-    activity:'Modérément actif',goal:'Maintien',mealsPerDay:3,allergies:'',targetCalories:'',
+    activity:'Modérément actif',goal:'Maintien',mealsPerDay:3,allergies:'',
+    targetCalories:'',targetProtein:'',targetCarbs:'',targetFat:'',useProductList:true,
   });
   const[plan,setPlan]=React.useState(null);
   const[error,setError]=React.useState('');
@@ -7588,7 +7670,12 @@ function NutritionAIWizard({authUser}){
       const r=await apiCall('/api/ai/generate-nutrition',{method:'POST',body:{
         gender:form.gender,age:Number(form.age),weight:Number(form.weight),height:Number(form.height),
         activity:form.activity,goal:form.goal,mealsPerDay:Number(form.mealsPerDay),
-        allergies:form.allergies,targetCalories:form.targetCalories?Number(form.targetCalories):undefined,
+        allergies:form.allergies,
+        targetCalories:form.targetCalories?Number(form.targetCalories):undefined,
+        targetProtein:form.targetProtein?Number(form.targetProtein):undefined,
+        targetCarbs:form.targetCarbs?Number(form.targetCarbs):undefined,
+        targetFat:form.targetFat?Number(form.targetFat):undefined,
+        useProductList:form.useProductList,
       }});
       clearInterval(iv);
       if(r.error)throw new Error(r.error);
@@ -7784,12 +7871,38 @@ function NutritionAIWizard({authUser}){
             <input placeholder="ex: gluten, lactose, noix…" value={form.allergies} onChange={e=>setF('allergies',e.target.value)} style={inputStyle}/>
           </div>
           <div>
-            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Calories cibles <span style={{fontWeight:400,color:T.textFaint}}>(optionnel, calculé auto sinon)</span></div>
-            <div style={{position:'relative'}}>
-              <input type="number" placeholder="ex: 2200" value={form.targetCalories} onChange={e=>setF('targetCalories',e.target.value)} style={inputStyle}/>
-              <span style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',fontSize:12,color:T.textFaint}}>kcal</span>
+            <div style={{fontSize:12,color:T.textDim,fontWeight:600,marginBottom:6}}>Objectifs macros <span style={{fontWeight:400,color:T.textFaint}}>(optionnel — calculé auto sinon)</span></div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+              {[{k:'targetCalories',ph:'2200',lbl:'kcal'},{k:'targetProtein',ph:'200',lbl:'P g'}].map(f=>(
+                <div key={f.k} style={{position:'relative'}}>
+                  <input type="number" placeholder={f.ph} value={form[f.k]} onChange={e=>setF(f.k,e.target.value)} style={{...inputStyle,paddingRight:34}}/>
+                  <span style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:T.textFaint,fontWeight:600}}>{f.lbl}</span>
+                </div>
+              ))}
+              {[{k:'targetCarbs',ph:'220',lbl:'G g'},{k:'targetFat',ph:'70',lbl:'L g'}].map(f=>(
+                <div key={f.k} style={{position:'relative'}}>
+                  <input type="number" placeholder={f.ph} value={form[f.k]} onChange={e=>setF(f.k,e.target.value)} style={{...inputStyle,paddingRight:34}}/>
+                  <span style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:11,color:T.textFaint,fontWeight:600}}>{f.lbl}</span>
+                </div>
+              ))}
             </div>
           </div>
+          <button onClick={()=>setF('useProductList',!form.useProductList)} style={{
+            display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',
+            padding:'11px 13px',borderRadius:11,border:`1px solid ${form.useProductList?'rgba(99,102,241,0.4)':'rgba(255,255,255,0.08)'}`,
+            background:form.useProductList?'rgba(99,102,241,0.12)':'rgba(255,255,255,0.03)',cursor:'pointer',
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:15}}>🛒</span>
+              <div style={{textAlign:'left'}}>
+                <div style={{fontSize:12,fontWeight:700,color:form.useProductList?'#a5b4fc':T.textDim}}>Produits Prime Athl uniquement</div>
+                <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>Blanc de poulet, œufs, riz, patate douce…</div>
+              </div>
+            </div>
+            <div style={{width:34,height:20,borderRadius:10,background:form.useProductList?IA:'rgba(255,255,255,0.1)',position:'relative',flexShrink:0,transition:'background 0.2s'}}>
+              <div style={{position:'absolute',top:2,left:form.useProductList?16:2,width:16,height:16,borderRadius:8,background:'#fff',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.3)'}}/>
+            </div>
+          </button>
           {error&&<div style={{fontSize:12,color:T.danger,textAlign:'center'}}>{error}</div>}
           <button onClick={generate} style={{marginTop:4,padding:'14px',borderRadius:13,border:'none',cursor:'pointer',background:`linear-gradient(135deg,${IA},${IA2})`,color:'#fff',fontWeight:800,fontSize:15,boxShadow:`0 6px 22px rgba(99,102,241,0.35)`}}>
             🥗 Générer mon plan 7 jours
@@ -7887,14 +8000,22 @@ function NutritionAIWizard({authUser}){
         }}>
           {applyDone?'✓ Plan appliqué à ta nutrition':applyLoading?'Enregistrement…':'✅ Appliquer à ma nutrition'}
         </button>
-        {authUser?.role==='coach'&&(
-          <button onClick={openCoachSheet} style={{
-            width:'100%',padding:'13px',borderRadius:13,border:`1px solid rgba(99,102,241,0.35)`,cursor:'pointer',
-            background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:14,
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>exportAINutritionPDF(plan,form.goal)} style={{
+            flex:1,padding:'12px 8px',borderRadius:13,border:`1px solid rgba(99,102,241,0.35)`,cursor:'pointer',
+            background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:13,
           }}>
-            👥 Assigner à un athlète
+            📄 Exporter PDF
           </button>
-        )}
+          {authUser?.role==='coach'&&(
+            <button onClick={openCoachSheet} style={{
+              flex:1,padding:'12px 8px',borderRadius:13,border:`1px solid rgba(99,102,241,0.35)`,cursor:'pointer',
+              background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:13,
+            }}>
+              👥 Assigner athlète
+            </button>
+          )}
+        </div>
         <button onClick={()=>{setPlan(null);setView('form');setStep(1);}} style={{
           width:'100%',padding:'11px',borderRadius:13,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',
           background:'transparent',color:T.textDim,fontWeight:600,fontSize:13,
