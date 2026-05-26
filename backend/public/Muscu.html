@@ -684,7 +684,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
   return(
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
       {/* hidden file input */}
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleFile}/>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
 
       {/* header */}
       <div style={{padding:'6px 18px 12px',background:`linear-gradient(180deg,${T.bg} 60%,transparent)`,zIndex:5,flexShrink:0}}>
@@ -2766,7 +2766,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
 
   return(
     <div style={{padding:'18px 18px 30px',color:T.text}}>
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleFile}/>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
 
       {/* BottomSheet : voir une archive */}
       <BottomSheet open={!!viewArchive} onClose={()=>{setViewArchive(null);setConfirmDel(null);}}>
@@ -3352,7 +3352,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   if(!plan||!plan.data){
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleSelfImport}/>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>Mon plan</HoloText></div>
@@ -3427,7 +3427,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleSelfImport}/>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
       {importMsg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div>
@@ -6085,7 +6085,7 @@ function CoachScreen({authToken,authUser}){
 
     return(
       <div style={{padding:'18px 0 100px',color:T.text}}>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream" style={{display:'none'}} onChange={handleExcel}/>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
