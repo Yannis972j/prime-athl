@@ -3123,6 +3123,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[loading,setLoading]=React.useState(true);
   const[expandedMeal,setExpandedMeal]=React.useState(null);
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
+  const[activeWeek,setActiveWeek]=React.useState(0);
   const[importMsg,setImportMsg]=React.useState(null);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
@@ -3372,7 +3373,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
 
   const data=normalizePlan(plan.data);
   const isToday=viewDay===todayDayName();
-  const meals=getDayMeals(data,viewDay);
+  const meals=getDayMeals(data,viewDay,activeWeek);
 
   // Objectifs = somme des aliments du jour vu (toujours synchronisé avec les items)
   const dayTargets=meals.reduce((acc,m)=>{
@@ -3524,7 +3525,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             if(!d)return<div key={i}/>;
             const dow=new Date(calYear,calMonth,d).getDay();
             const dayName=JS_TO_DAY_N[dow];
-            const dayMeals=getDayMeals(data,dayName);
+            const dayMeals=getDayMeals(data,dayName,activeWeek);
             const hasPlan=dayMeals.some(m=>(m.items||[]).length>0);
             const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const histLog=history[dateStr];
@@ -3569,6 +3570,17 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         )}
       </div>
 
+      {/* ── Sélecteur semaine (si plan multi-semaines) ── */}
+      {data&&data.weeks&&data.weeks.length>1&&(
+        <div style={{display:'flex',gap:4,marginBottom:10}}>
+          {data.weeks.map((w,i)=>(
+            <button key={w.label} onClick={()=>{setActiveWeek(i);setExpandedMeal(null);}} style={{flex:1,height:30,borderRadius:9,border:i===activeWeek?'1px solid rgba(217,119,87,0.6)':'1px solid rgba(255,255,255,0.1)',background:i===activeWeek?'rgba(217,119,87,0.15)':'rgba(255,255,255,0.03)',color:i===activeWeek?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Navigation jour de la semaine ── */}
       {data&&(()=>{
         const DAY_LABELS=['L','M','M','J','V','S','D'];
@@ -3585,7 +3597,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                 {DAYS_OF_WEEK.map((d,i)=>{
                   const isActive=d===viewDay;
                   const isTodayDay=i===todayIdx;
-                  const dayMeals=getDayMeals(data,d);
+                  const dayMeals=getDayMeals(data,d,activeWeek);
                   const hasMeals=dayMeals.some(m=>(m.items||[]).length>0);
                   return(
                     <button key={d} onClick={()=>{setViewDay(d);setExpandedMeal(null);}} style={{flex:1,minWidth:0,padding:'6px 0',borderRadius:10,border:isActive?'2px solid #d97757':'1px solid rgba(255,255,255,0.08)',background:isActive?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.03)',color:isActive?'#d97757':isTodayDay?T.text:T.textFaint,fontSize:11,fontWeight:isActive||isTodayDay?700:500,cursor:'pointer',position:'relative',transition:'all 0.15s'}}>
@@ -3926,8 +3938,12 @@ const ymdKey=(d=new Date())=>{const x=new Date(d);return`${x.getFullYear()}-${St
 const emptyDay=()=>({meals:NUTRI_MEAL_TEMPLATES.map(t=>({...t,items:[],note:''}))});
 const emptyWeek=()=>{const d={};for(const day of DAYS_OF_WEEK)d[day]=emptyDay();return d;};
 
-// Backward-compat: get meals for a specific day
-function getDayMeals(plan,dayName){
+// Backward-compat: get meals for a specific day (weekIdx optional, defaults to 0)
+function getDayMeals(plan,dayName,weekIdx){
+  if(plan&&plan.weeks&&plan.weeks.length>0){
+    const w=plan.weeks[weekIdx||0]||plan.weeks[0];
+    if(w&&w.days&&w.days[dayName])return w.days[dayName].meals||[];
+  }
   if(plan&&plan.days&&plan.days[dayName])return plan.days[dayName].meals||[];
   if(plan&&plan.meals)return plan.meals; // legacy single-day plan
   return emptyDay().meals;
@@ -4293,43 +4309,29 @@ function parseNutritionExcel(file,onSuccess,onError){
         const n=normLabel(lbl);
         return NUTRI_MEAL_TEMPLATES.find(m=>normLabel(m.label)===n);
       };
-
-      const days={};
-      let nbItems=0;
       const upperSheetNames=wb.SheetNames.map(n=>({orig:n,norm:normLabel(n)}));
       const dayNamesNorm=DAYS_OF_WEEK.map(d=>({orig:d,norm:normLabel(d)}));
 
-      for(const{orig:day,norm:dayNorm} of dayNamesNorm){
-        // find matching sheet
-        const match=upperSheetNames.find(s=>s.norm===dayNorm||s.norm.startsWith(dayNorm));
-        if(!match){days[day]=emptyDay();continue;}
-        const rows=XLSX.utils.sheet_to_json(wb.Sheets[match.orig],{header:1,defval:'',raw:true});
-
-        // Detect header row (contains "PRODUITS" or "REPAS")
+      // Parse a single sheet into a day object
+      function parseSheet(sheetOrig){
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetOrig],{header:1,defval:'',raw:true});
         let headerIdx=-1;
         for(let i=0;i<Math.min(rows.length,10);i++){
           const r=rows[i].map(c=>String(c||'').toUpperCase());
           if(r.includes('PRODUITS')||r.includes('REPAS')){headerIdx=i;break;}
         }
-        if(headerIdx===-1){days[day]=emptyDay();continue;}
-
+        if(headerIdx===-1)return null;
         const header=rows[headerIdx].map(c=>normLabel(c));
         const col={
-          jour:header.indexOf('JOUR'),
-          repas:header.indexOf('REPAS'),
-          heure:header.indexOf('HEURE'),
-          produits:header.indexOf('PRODUITS'),
-          qty:header.indexOf('QUANTITE'),
+          repas:header.indexOf('REPAS'),heure:header.indexOf('HEURE'),
+          produits:header.indexOf('PRODUITS'),qty:header.indexOf('QUANTITE'),
           unite:header.indexOf('UNITE'),
           kcal:header.findIndex(h=>h==='CALORIE'||h==='CALORIES'),
           p:header.findIndex(h=>h==='PROTEINE'||h==='PROTEINES'),
           c:header.findIndex(h=>h==='GLUCIDE'||h==='GLUCIDES'),
           f:header.findIndex(h=>h==='LIPIDE'||h==='LIPIDES'),
         };
-
-        const mealById={};
-        let currentId=null;
-
+        const mealById={};let currentId=null;
         for(let i=headerIdx+1;i<rows.length;i++){
           const row=rows[i];
           if(!row||row.every(c=>!String(c||'').trim()))continue;
@@ -4342,7 +4344,6 @@ function parseNutritionExcel(file,onSuccess,onError){
           const p=parseFloat(row[col.p])||0;
           const cc=parseFloat(row[col.c])||0;
           const fat=parseFloat(row[col.f])||0;
-
           if(label){
             const t=findMeal(label);
             if(t){
@@ -4357,39 +4358,52 @@ function parseNutritionExcel(file,onSuccess,onError){
           }
           if(name&&currentId&&mealById[currentId]){
             mealById[currentId].items.push({name,qty,unit,kcal,p,c:cc,f:fat});
-            nbItems++;
           }
         }
-
-        days[day]={meals:NUTRI_MEAL_TEMPLATES.map(t=>mealById[t.id]||{...t,items:[],note:''})};
+        return{meals:NUTRI_MEAL_TEMPLATES.map(t=>mealById[t.id]||{...t,items:[],note:''})};
       }
 
-      // Compute default daily targets = average of all days
-      let totalDays=0;
-      const sums={kcal:0,p:0,c:0,f:0};
-      for(const d of DAYS_OF_WEEK){
-        const meals=days[d].meals;
-        const has=meals.some(m=>m.items.length>0);
-        if(!has)continue;
-        totalDays++;
-        for(const m of meals){
-          for(const it of m.items){
-            sums.kcal+=+it.kcal||0;
-            sums.p+=+it.p||0;
-            sums.c+=+it.c||0;
-            sums.f+=+it.f||0;
-          }
+      // Detect and parse S1→S4 (suffix: none, " 2", " 3", " 4")
+      const parsedWeeks=[];
+      let totalNbItems=0;
+      for(let wn=1;wn<=4;wn++){
+        const days={};let weekHasContent=false;
+        for(const{orig:day,norm:dayNorm} of dayNamesNorm){
+          const targetNorm=wn===1?dayNorm:dayNorm+' '+wn;
+          const match=upperSheetNames.find(s=>s.norm===targetNorm);
+          if(!match){days[day]=emptyDay();continue;}
+          const parsed=parseSheet(match.orig);
+          if(!parsed){days[day]=emptyDay();continue;}
+          days[day]=parsed;
+          const cnt=parsed.meals.reduce((a,m)=>a+m.items.length,0);
+          if(cnt>0){weekHasContent=true;totalNbItems+=cnt;}
         }
+        if(weekHasContent)parsedWeeks.push({label:'S'+wn,days});
+      }
+
+      if(parsedWeeks.length===0){
+        onSuccess({dailyCalories:0,dailyProtein:0,dailyCarbs:0,dailyFat:0,days:emptyWeek(),weeks:[],_itemsImported:0,_sheetsFound:upperSheetNames.map(s=>s.orig).join(', ')});
+        return;
+      }
+
+      // Compute daily targets from S1 average
+      const s1days=parsedWeeks[0].days;
+      let totalDays=0;const sums={kcal:0,p:0,c:0,f:0};
+      for(const d of DAYS_OF_WEEK){
+        const meals=s1days[d]&&s1days[d].meals||[];
+        if(!meals.some(m=>m.items.length>0))continue;
+        totalDays++;
+        for(const m of meals)for(const it of m.items){sums.kcal+=+it.kcal||0;sums.p+=+it.p||0;sums.c+=+it.c||0;sums.f+=+it.f||0;}
       }
       const denom=totalDays||1;
-
       onSuccess({
         dailyCalories:Math.round(sums.kcal/denom),
         dailyProtein:Math.round(sums.p/denom),
         dailyCarbs:Math.round(sums.c/denom),
         dailyFat:Math.round(sums.f/denom),
-        days,
-        _itemsImported:nbItems,
+        days:parsedWeeks[0].days,
+        weeks:parsedWeeks,
+        _itemsImported:totalNbItems,
         _sheetsFound:upperSheetNames.map(s=>s.orig).join(', '),
       });
     }catch(e){onError('Excel invalide : '+(e.message||e));}
@@ -4403,26 +4417,34 @@ const DEFAULT_NUTRI_TEMPLATE={
   days:emptyWeek(),
 };
 
-// Normalize plan: ensure 7-day structure
+// Normalize plan: ensure 7-day structure + weeks array
 function normalizePlan(p){
   if(!p)return DEFAULT_NUTRI_TEMPLATE;
-  const out={
+  function ensureWeekDays(days){
+    const out=days?{...days}:{};
+    if(!days&&p.meals){
+      for(const d of DAYS_OF_WEEK)out[d]={meals:p.meals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))})),note:''};
+    }
+    for(const d of DAYS_OF_WEEK){
+      if(!out[d])out[d]=emptyDay();
+      if(!out[d].meals)out[d].meals=emptyDay().meals;
+    }
+    return out;
+  }
+  let weeks;
+  if(p.weeks&&p.weeks.length>0){
+    weeks=p.weeks.map(w=>({label:w.label||'S?',days:ensureWeekDays(w.days)}));
+  } else {
+    weeks=[{label:'S1',days:ensureWeekDays(p.days)}];
+  }
+  return{
     dailyCalories:p.dailyCalories||0,
     dailyProtein:p.dailyProtein||0,
     dailyCarbs:p.dailyCarbs||0,
     dailyFat:p.dailyFat||0,
-    days:p.days?{...p.days}:{},
+    days:weeks[0].days,
+    weeks,
   };
-  // Migrate legacy plan.meals → applied to every day
-  if(!p.days&&p.meals){
-    for(const d of DAYS_OF_WEEK)out.days[d]={meals:p.meals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))})),note:''};
-  }
-  // Ensure all days exist
-  for(const d of DAYS_OF_WEEK){
-    if(!out.days[d])out.days[d]=emptyDay();
-    if(!out.days[d].meals)out.days[d].meals=emptyDay().meals;
-  }
-  return out;
 }
 
 function findFirstFilledDay(plan){
@@ -4686,6 +4708,7 @@ function FoodSearch({onSelect,onClose}){
 
 function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported}){
   const[data,setData]=React.useState(()=>normalizePlan(initialPlan));
+  const[activeWeek,setActiveWeek]=React.useState(0);
   const[activeDay,setActiveDay]=React.useState(()=>{
     const plan=normalizePlan(initialPlan);
     const t=todayDayName();
@@ -4766,12 +4789,14 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         }
         const norm=normalizePlan(plan);
         setData(norm);
+        setActiveWeek(0);
         const firstFilledDay=findFirstFilledDay(norm);
         setActiveDay(firstFilledDay);
         setOpenMeal(findFirstFilledMeal(norm,firstFilledDay));
         lastSyncedRef.current=norm;
         const ok=await saveImmediate(norm);
-        setImportMsg(ok?`✓ ${plan._itemsImported} aliments importés`:'✗ Échec sauvegarde');
+        const wc=norm.weeks&&norm.weeks.length||1;
+        setImportMsg(ok?`✓ ${plan._itemsImported} aliments · ${wc} semaine${wc>1?'s':''} importées`:'✗ Échec sauvegarde');
         setTimeout(()=>setImportMsg(null),3500);
       }catch(ex){
         setImportMsg('✗ '+(ex.message||ex));
@@ -4785,7 +4810,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
   };
 
   const handleExcelExport=()=>{
-    exportNutritionExcel(data,athleteName);
+    exportNutritionExcel({...data,days:activeDays},athleteName);
   };
 
 
@@ -4802,31 +4827,40 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
     },500);
   },[athleteId,onSaved]);
 
+  // activeDays = jours de la semaine active
+  const activeDays=data.weeks&&data.weeks[activeWeek]?data.weeks[activeWeek].days:data.days;
+
   const updField=(k,v)=>{const nd={...data,[k]:v};setData(nd);save(nd);};
   const updMeals=(dayName,newMeals)=>{
-    const nd={...data,days:{...data.days,[dayName]:{...data.days[dayName],meals:newMeals}}};
+    let nd;
+    if(data.weeks&&data.weeks.length>0){
+      const weeks=data.weeks.map((w,i)=>i===activeWeek?{...w,days:{...w.days,[dayName]:{...w.days[dayName],meals:newMeals}}}:w);
+      nd={...data,weeks,days:weeks[0].days};
+    } else {
+      nd={...data,days:{...data.days,[dayName]:{...data.days[dayName],meals:newMeals}}};
+    }
     setData(nd);save(nd);
   };
   const updMeal=(mid,patch)=>{
-    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,...patch}:m);
+    const ms=activeDays[activeDay].meals.map(m=>m.id===mid?{...m,...patch}:m);
     updMeals(activeDay,ms);
   };
   const addItem=(mid,foodData)=>{
     const item=foodData||{name:'',qty:100,unit:'g',kcal:0,p:0,c:0,f:0};
-    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,items:[...(m.items||[]),item]}:m);
+    const ms=activeDays[activeDay].meals.map(m=>m.id===mid?{...m,items:[...(m.items||[]),item]}:m);
     updMeals(activeDay,ms);
   };
   const updItem=(mid,idx,patch)=>{
-    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,items:m.items.map((it,i)=>i===idx?{...it,...patch}:it)}:m);
+    const ms=activeDays[activeDay].meals.map(m=>m.id===mid?{...m,items:m.items.map((it,i)=>i===idx?{...it,...patch}:it)}:m);
     updMeals(activeDay,ms);
   };
   const delItem=(mid,idx)=>{
-    const ms=data.days[activeDay].meals.map(m=>m.id===mid?{...m,items:m.items.filter((_,i)=>i!==idx)}:m);
+    const ms=activeDays[activeDay].meals.map(m=>m.id===mid?{...m,items:m.items.filter((_,i)=>i!==idx)}:m);
     updMeals(activeDay,ms);
   };
   const copyFromDay=fromDay=>{
     if(!confirm(`Copier le plan de ${fromDay} vers ${activeDay} ?`))return;
-    const src=data.days[fromDay]&&data.days[fromDay].meals||emptyDay().meals;
+    const src=activeDays[fromDay]&&activeDays[fromDay].meals||emptyDay().meals;
     const cloned=src.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))}));
     updMeals(activeDay,cloned);
   };
@@ -4846,7 +4880,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         <button onClick={handleExcelExport} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📤</span> Excel
         </button>
-        <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+        <button onClick={()=>exportNutritionPDF({...data,days:activeDays},athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📄</span> PDF
         </button>
         <button onClick={async()=>{
@@ -4871,9 +4905,20 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         {notifyStatus==='sending'?'Envoi en cours…':notifyStatus==='done'?'Notification envoyée !':notifyStatus==='error'?'Erreur — réessaie':"Valider & notifier l'athlète"}
       </button>
 
+      {/* Sélecteur semaine */}
+      {data.weeks&&data.weeks.length>1&&(
+        <div style={{display:'flex',gap:4,marginBottom:8}}>
+          {data.weeks.map((w,i)=>(
+            <button key={w.label} onClick={()=>setActiveWeek(i)} style={{flex:1,height:30,borderRadius:9,border:i===activeWeek?'1px solid rgba(217,119,87,0.6)':'1px solid rgba(255,255,255,0.1)',background:i===activeWeek?T.accentSoft:'rgba(255,255,255,0.03)',color:i===activeWeek?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Totaux auto-calculés depuis les aliments du jour actif */}
       {(()=>{
-        const dayMeals=(data.days&&data.days[activeDay]&&data.days[activeDay].meals)||[];
+        const dayMeals=(activeDays&&activeDays[activeDay]&&activeDays[activeDay].meals)||[];
         const t=dayMeals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
         return(
           <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(217,119,87,0.08),rgba(124,168,196,0.04))',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
@@ -4903,7 +4948,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       {/* Day selector */}
       <div style={{display:'flex',gap:4,marginBottom:10,overflowX:'auto',paddingBottom:4}}>
         {DAYS_OF_WEEK.map(d=>{
-          const hasContent=(data.days[d]&&data.days[d].meals||[]).some(m=>(m.items||[]).length>0);
+          const hasContent=(activeDays[d]&&activeDays[d].meals||[]).some(m=>(m.items||[]).length>0);
           const isToday=d===todayDayName();
           const active=d===activeDay;
           return(
@@ -4918,7 +4963,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
       {/* Copy-from — visible uniquement si d'autres jours ont du contenu */}
       {(()=>{
-        const srcDays=DAYS_OF_WEEK.filter(d=>d!==activeDay&&(data.days[d]&&data.days[d].meals||[]).some(m=>(m.items||[]).length>0));
+        const srcDays=DAYS_OF_WEEK.filter(d=>d!==activeDay&&(activeDays[d]&&activeDays[d].meals||[]).some(m=>(m.items||[]).length>0));
         if(!srcDays.length)return null;
         return(
           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,padding:'8px 12px',borderRadius:11,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.15)'}}>
@@ -4936,7 +4981,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
       {/* Dupliquer vers — visible si le jour actif a du contenu */}
       {(()=>{
-        const curMeals=(data.days[activeDay]&&data.days[activeDay].meals)||[];
+        const curMeals=(activeDays[activeDay]&&activeDays[activeDay].meals)||[];
         const hasCur=curMeals.some(m=>(m.items||[]).length>0);
         if(!hasCur)return null;
         const targets=DAYS_OF_WEEK.filter(d=>d!==activeDay);
@@ -4948,8 +4993,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
                 <button key={d} onClick={()=>{
                   if(!confirm(`Dupliquer ${activeDay} → ${d} ? Le contenu de ${d} sera remplacé.`))return;
                   const src=curMeals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))}));
-                  const nd={...data,days:{...data.days,[d]:{...data.days[d],meals:src}}};
-                  setData(nd);save(nd);
+                  updMeals(d,src);
                 }} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(217,119,87,0.35)',background:'rgba(217,119,87,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>
                   {d.slice(0,3)}
                 </button>
@@ -4961,7 +5005,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 
       {/* Real-time preview gauges: somme des aliments du jour actif vs objectifs */}
       {(()=>{
-        const dayMeals=data.days[activeDay].meals||[];
+        const dayMeals=activeDays[activeDay]&&activeDays[activeDay].meals||[];
         const totals=dayMeals.reduce((acc,m)=>{
           const mm=mealMacros(m.items);
           acc.kcal+=mm.kcal;acc.p+=mm.p;acc.c+=mm.c;acc.f+=mm.f;
@@ -5003,7 +5047,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       {foodSearchMeal&&<FoodSearch onClose={()=>setFoodSearchMeal(null)} onSelect={food=>{addItem(foodSearchMeal,food);setFoodSearchMeal(null);}}/>}
 
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
-        {(data.days[activeDay].meals||[]).map(m=>{
+        {(activeDays[activeDay]&&activeDays[activeDay].meals||[]).map(m=>{
           const mm=mealMacros(m.items);
           const isOpen=openMeal===m.id;
           return(
@@ -5299,6 +5343,7 @@ function CoachProgramMirror({athleteData}){
 function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   const[data,setData]=React.useState(null);
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
+  const[activeWeek,setActiveWeek]=React.useState(0);
   const[expandedMeal,setExpandedMeal]=React.useState(null);
   const[loading,setLoading]=React.useState(true);
   const[justUpdated,setJustUpdated]=React.useState(false);
@@ -5357,7 +5402,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   const isToday=viewDay===todayDayName();
   const todayKey=ymdKey(new Date());
   const log=isToday?((data.history&&data.history[todayKey])||{validated:{},validatedAt:{}}):{validated:{},validatedAt:{}};
-  const meals=getDayMeals(plan,viewDay);
+  const meals=getDayMeals(plan,viewDay,activeWeek);
 
   // dayTargets = somme des aliments du jour vu (toujours synchronisé)
   const dayTargets=meals.reduce((acc,m)=>{
@@ -5424,10 +5469,21 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
         </div>
       </div>
 
+      {/* Sélecteur semaine */}
+      {plan.weeks&&plan.weeks.length>1&&(
+        <div style={{display:'flex',gap:4,marginBottom:8}}>
+          {plan.weeks.map((w,i)=>(
+            <button key={w.label} onClick={()=>{setActiveWeek(i);setExpandedMeal(null);}} style={{flex:1,height:30,borderRadius:9,border:i===activeWeek?'1px solid rgba(217,119,87,0.6)':'1px solid rgba(255,255,255,0.1)',background:i===activeWeek?T.accentSoft:'rgba(255,255,255,0.03)',color:i===activeWeek?T.accent:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Day selector */}
       <div style={{display:'flex',gap:4,marginBottom:10,overflowX:'auto',paddingBottom:4}}>
         {DAYS_OF_WEEK.map(d=>{
-          const dayMeals=getDayMeals(plan,d);
+          const dayMeals=getDayMeals(plan,d,activeWeek);
           const hasContent=dayMeals.some(m=>(m.items||[]).length>0);
           const isCurDay=d===todayDayName();
           const active=d===viewDay;
