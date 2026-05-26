@@ -4019,10 +4019,11 @@ function buildShoppingList(plan){
         const qty=parseFloat(it.qty)||0;
         const unit=String(it.unit||'').toUpperCase().trim();
         if(!name||qty<=0)continue;
-        if(!agg[name])agg[name]={grams:0,units:0};
+        if(!agg[name])agg[name]={grams:0,units:0,boites:0};
         if(unit==='G'||unit==='GR'||unit==='GRAMME'||unit==='ML')agg[name].grams+=qty;
+        else if(unit==='BOITE'||unit==='BOÎTE'||unit==='BOITES'||unit==='BOÎTES')agg[name].boites+=qty;
         else if(unit===''||unit==='U'||unit==='UNITE'||unit==='UNITES'||unit==='UNITÉ'||unit==='UNITÉS'||unit==='PIECE'||unit==='PIÈCE'||unit==='PORTION')agg[name].units+=qty;
-        else agg[name].grams+=qty; // fallback : kg, oz, cl... → considère comme grammes
+        else agg[name].grams+=qty;
       }
     }
   }
@@ -4042,6 +4043,7 @@ function formatShopQty(item){
     if(item.grams>=1000)parts.push(`${(item.grams/1000).toFixed(2)} kg`);
     else parts.push(`${Math.round(item.grams)} g`);
   }
+  if((item.boites||0)>0)parts.push(`${Math.round(item.boites)} ${item.boites>1?'boîtes':'boîte'}`);
   if(item.units>0)parts.push(`${Math.round(item.units)} ${item.units>1?'unités':'unité'}`);
   return parts.join(' + ');
 }
@@ -4234,7 +4236,7 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
         <tbody>
           ${m.items.map((it,i)=>{
             const u=String(it.unit||'').trim().toLowerCase();
-            const unitLabel=(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
+            const unitLabel=(u==='boite'||u==='boîte')?(it.qty>1?'boîtes':'boîte'):(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
             return`<tr${i%2===1?' class="alt"':''}>
             <td>${it.name||'—'}</td>
             <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
