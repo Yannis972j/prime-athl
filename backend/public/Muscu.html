@@ -4025,11 +4025,14 @@ function categorizeProduct(name){
   return SHOP_CATEGORIES[SHOP_CATEGORIES.length-1];
 }
 function buildShoppingList(plan){
-  // { "NOM": { grams, units } }
+  // { "NOM": { grams, units } } — agrège toutes les semaines
   const agg={};
-  for(const day of DAYS_OF_WEEK){
-    const meals=getDayMeals(plan,day);
-    for(const m of meals){
+  const allWeeksDays=plan.weeks&&plan.weeks.length>0
+    ?plan.weeks.flatMap(w=>DAYS_OF_WEEK.map(d=>w.days&&w.days[d]))
+    :DAYS_OF_WEEK.map(d=>plan.days&&plan.days[d]);
+  for(const dayObj of allWeeksDays){
+    if(!dayObj)continue;
+    for(const m of dayObj.meals||[]){
       for(const it of (m.items||[])){
         const name=String(it.name||'').trim();
         const qty=parseFloat(it.qty)||0;
@@ -4043,12 +4046,11 @@ function buildShoppingList(plan){
       }
     }
   }
-  // Group par catégorie
   const byCat={};
   for(const[name,t] of Object.entries(agg)){
     const cat=categorizeProduct(name);
     if(!byCat[cat.name])byCat[cat.name]={cat,items:[]};
-    byCat[cat.name].items.push({name,grams:t.grams,units:t.units});
+    byCat[cat.name].items.push({name,grams:t.grams,units:t.units,boites:t.boites||0});
   }
   for(const c of Object.values(byCat))c.items.sort((a,b)=>a.name.localeCompare(b.name));
   return{byCat,total:Object.keys(agg).length};
@@ -4067,19 +4069,45 @@ function formatShopQty(item){
 function exportNutritionPDF(plan,athleteName){
   const win=window.open('','_blank','width=860,height=1000');
   if(!win)return alert('Autorise les popups pour exporter le PDF.');
-  const days=DAYS_OF_WEEK.map(day=>{
-    const meals=getDayMeals(plan,day).filter(m=>(m.items||[]).length>0);
-    const tot=meals.reduce((a,m)=>{const mm=mealMacros(m.items);return{kcal:a.kcal+mm.kcal,p:a.p+mm.p,c:a.c+mm.c,f:a.f+mm.f};},{kcal:0,p:0,c:0,f:0});
-    return{day,meals,tot};
-  }).filter(d=>d.meals.length>0);
+
+  // Construire les semaines à afficher
+  const weeks=plan.weeks&&plan.weeks.length>0
+    ?plan.weeks
+    :[{label:'S1',days:plan.days}];
+
+  // Préparer les données semaine par semaine
+  const weeksData=weeks.map(w=>{
+    const days=DAYS_OF_WEEK.map(day=>{
+      const meals=(w.days&&w.days[day]&&w.days[day].meals||[]).filter(m=>(m.items||[]).length>0);
+      const tot=meals.reduce((a,m)=>{const mm=mealMacros(m.items);return{kcal:a.kcal+mm.kcal,p:a.p+mm.p,c:a.c+mm.c,f:a.f+mm.f};},{kcal:0,p:0,c:0,f:0});
+      return{day,meals,tot};
+    }).filter(d=>d.meals.length>0);
+    const avg=days.length?{
+      kcal:Math.round(days.reduce((a,d)=>a+d.tot.kcal,0)/days.length),
+      p:Math.round(days.reduce((a,d)=>a+d.tot.p,0)/days.length),
+      c:Math.round(days.reduce((a,d)=>a+d.tot.c,0)/days.length),
+      f:Math.round(days.reduce((a,d)=>a+d.tot.f,0)/days.length),
+    }:{kcal:0,p:0,c:0,f:0};
+    return{label:w.label,days,avg};
+  }).filter(w=>w.days.length>0);
+
+  const totalDays=weeksData.reduce((a,w)=>a+w.days.length,0);
   const shop=buildShoppingList(plan);
-
-  // Moyenne semaine
-  const avg=days.length?days.reduce((a,d)=>({kcal:a.kcal+d.tot.kcal,p:a.p+d.tot.p,c:a.c+d.tot.c,f:a.f+d.tot.f}),{kcal:0,p:0,c:0,f:0}):{kcal:0,p:0,c:0,f:0};
-  if(days.length){avg.kcal=Math.round(avg.kcal/days.length);avg.p=Math.round(avg.p/days.length);avg.c=Math.round(avg.c/days.length);avg.f=Math.round(avg.f/days.length);}
-
   const dateStr=new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
   const name=athleteName||'Athlète';
+
+  function renderMealRow(it,i){
+    const u=String(it.unit||'').trim().toLowerCase();
+    const unitLabel=(u==='boite'||u==='boîte')?(it.qty>1?'boîtes':'boîte'):(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
+    return`<tr${i%2===1?' class="alt"':''}>
+      <td>${it.name||'—'}</td>
+      <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
+      <td class="r">${Math.round(it.kcal||0)}<span class="unit">kcal</span></td>
+      <td class="r">${Math.round(it.p||0)}<span class="unit">g</span></td>
+      <td class="r">${Math.round(it.c||0)}<span class="unit">g</span></td>
+      <td class="r">${Math.round(it.f||0)}<span class="unit">g</span></td>
+    </tr>`;
+  }
 
   const html=`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <title>Plan nutrition – ${name}</title>
@@ -4087,43 +4115,34 @@ function exportNutritionPDF(plan,athleteName){
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',system-ui,Arial,sans-serif;color:#18181b;background:#fff;font-size:11.5px;line-height:1.45}
-
-/* ── Page ── */
 .page{max-width:760px;margin:0 auto;padding:36px 40px 48px}
-
-/* ── Header ── */
 .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #f0f0f0}
-.header-left{}
 .brand{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#d97757;margin-bottom:6px}
 .title{font-size:22px;font-weight:800;color:#18181b;letter-spacing:-0.4px;line-height:1.2}
 .subtitle{font-size:11px;color:#71717a;margin-top:4px}
-.header-right{text-align:right}
 .badge{display:inline-block;padding:4px 10px;border-radius:6px;background:#fff7f4;border:1px solid #fbd5c5;font-size:10px;font-weight:700;color:#d97757;letter-spacing:0.3px}
-
-/* ── Résumé semaine ── */
-.week-summary{display:flex;gap:10px;margin-bottom:28px;padding:14px 16px;background:linear-gradient(135deg,#fff7f4,#fff);border:1px solid #fbd5c5;border-radius:10px}
-.week-summary-label{font-size:10px;font-weight:700;color:#d97757;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:2px}
-.week-macro{flex:1;text-align:center}
-.week-macro-val{font-size:17px;font-weight:800;color:#18181b}
-.week-macro-lbl{font-size:9px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin-top:1px}
-.week-sep{width:1px;background:#f0ebe7;align-self:stretch;margin:0 2px}
-
-/* ── Jour ── */
-.day{margin-bottom:26px;page-break-inside:avoid}
+/* Semaine */
+.week-block{margin-bottom:40px}
+.week-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#fff7f4,#fff);border:1px solid #fbd5c5;border-radius:10px;page-break-before:auto}
+.week-title{font-size:16px;font-weight:800;color:#d97757;letter-spacing:0.4px;text-transform:uppercase}
+.week-avg{display:flex;gap:14px;align-items:center}
+.week-avg-item{text-align:center}
+.week-avg-val{font-size:15px;font-weight:800;color:#18181b}
+.week-avg-lbl{font-size:8px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.3px}
+.week-sep{width:1px;height:28px;background:#f0ebe7}
+/* Jour */
+.day{margin-bottom:24px;page-break-inside:avoid}
 .day-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .day-name{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#18181b;position:relative;padding-left:10px}
 .day-name::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:14px;background:#d97757;border-radius:2px}
 .day-chip{font-size:10px;font-weight:700;color:#d97757;background:#fff7f4;border:1px solid #fbd5c5;border-radius:20px;padding:2px 10px}
-
-/* ── Repas ── */
-.meal{margin-bottom:12px;border:1px solid #f4f4f5;border-radius:8px;overflow:hidden}
+/* Repas */
+.meal{margin-bottom:10px;border:1px solid #f4f4f5;border-radius:8px;overflow:hidden}
 .meal-head{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fafafa;border-bottom:1px solid #f4f4f5}
 .meal-emoji{font-size:15px;line-height:1}
 .meal-name{font-size:11.5px;font-weight:700;color:#27272a}
 .meal-time{font-size:10px;color:#a1a1aa;margin-left:auto;font-weight:500}
 .meal-kcal-badge{font-size:10px;font-weight:700;color:#d97757;background:#fff7f4;border-radius:4px;padding:2px 7px;margin-left:8px}
-
-/* ── Table ── */
 table{width:100%;border-collapse:collapse}
 thead tr{background:#f9f9f9}
 th{padding:5px 10px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:0.3px;text-align:left;border-bottom:1px solid #f0f0f0}
@@ -4133,8 +4152,6 @@ tr:last-child td{border-bottom:none}
 tr.alt{background:#fafafa}
 tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;border-top:1px solid #fbd5c5}
 .unit{color:#a1a1aa;font-size:10px;margin-left:2px}
-
-/* ── Total jour ── */
 .day-total{display:flex;align-items:center;gap:6px;margin-top:8px;padding:8px 14px;background:#f9f9f9;border-radius:8px;font-size:11px}
 .day-total-label{font-weight:700;color:#71717a;margin-right:4px}
 .macro-pill{padding:3px 9px;border-radius:20px;font-weight:700;font-size:10.5px}
@@ -4142,14 +4159,12 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
 .pill-p{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
 .pill-g{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
 .pill-l{background:#fefce8;color:#ca8a04;border:1px solid #fef08a}
-
-/* ── Footer ── */
+/* Footer */
 .footer{margin-top:32px;padding-top:14px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center}
 .footer-brand{font-size:10px;font-weight:800;color:#d97757;letter-spacing:0.8px;text-transform:uppercase}
 .footer-note{font-size:9.5px;color:#a1a1aa}
-
-/* ── Liste de courses ── */
-.shop-section{margin-bottom:28px;page-break-after:always}
+/* Liste de courses */
+.shop-section{margin-bottom:36px;page-break-after:always}
 .shop-title-row{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
 .shop-h1{font-size:18px;font-weight:800;color:#18181b;letter-spacing:-0.3px}
 .shop-meta{font-size:10.5px;color:#71717a;font-weight:500}
@@ -4165,35 +4180,34 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
 .shop-table tr.alt td{background:#fafafa}
 .shop-prod{color:#18181b;font-weight:600}
 .shop-qty{text-align:right;color:#d97757;font-weight:700;font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
-
 @media print{
   .page{padding:20px 24px}
   .day{page-break-inside:avoid}
+  .week-header{page-break-before:always}
+  .week-header:first-of-type{page-break-before:avoid}
   .shop-section{page-break-after:always}
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style></head><body>
 <div class="page">
 
-  <!-- En-tête -->
   <div class="header">
-    <div class="header-left">
+    <div>
       <div class="brand">Prime Athl · Plan nutritionnel</div>
       <div class="title">${name}</div>
-      <div class="subtitle">Généré le ${dateStr}</div>
+      <div class="subtitle">Généré le ${dateStr} · ${weeksData.length} semaine${weeksData.length>1?'s':''} · ${totalDays} jours</div>
     </div>
-    <div class="header-right">
-      <div class="badge">${days.length} jour${days.length>1?'s':''} planifié${days.length>1?'s':''}</div>
+    <div style="text-align:right">
+      <div class="badge">${weeksData.length > 1 ? weeksData.length + ' semaines' : totalDays + ' jour' + (totalDays>1?'s':'')}</div>
     </div>
   </div>
 
-  <!-- Liste des courses (1ère page) -->
   ${shop.total>0?`<div class="shop-section">
     <div class="shop-title-row">
       <div class="shop-h1">Liste des courses</div>
-      <div class="shop-meta">· ${shop.total} produits · ${days.length} jour${days.length>1?'s':''} planifié${days.length>1?'s':''}</div>
+      <div class="shop-meta">· ${shop.total} produits · ${weeksData.length > 1 ? weeksData.length + ' semaines (' + totalDays + ' jours)' : totalDays + ' jours'}</div>
     </div>
-    <div class="shop-intro">Quantités totales nécessaires pour couvrir l'ensemble du plan nutritionnel.</div>
+    <div class="shop-intro">Quantités totales pour l'ensemble du programme (toutes semaines cumulées).</div>
     ${SHOP_CATEGORIES.map(catDef=>{
       const grp=shop.byCat[catDef.name];
       if(!grp||!grp.items.length)return'';
@@ -4213,76 +4227,60 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#d97757;font-size:11px;b
     }).join('')}
   </div>`:''}
 
-  <!-- Résumé hebdomadaire -->
-  ${days.length>0?`<div class="week-summary">
-    <div class="week-macro"><div class="week-macro-val">${avg.kcal}</div><div class="week-macro-lbl">kcal / jour</div></div>
-    <div class="week-sep"></div>
-    <div class="week-macro"><div class="week-macro-val" style="color:#16a34a">${avg.p}g</div><div class="week-macro-lbl">Protéines</div></div>
-    <div class="week-sep"></div>
-    <div class="week-macro"><div class="week-macro-val" style="color:#2563eb">${avg.c}g</div><div class="week-macro-lbl">Glucides</div></div>
-    <div class="week-sep"></div>
-    <div class="week-macro"><div class="week-macro-val" style="color:#ca8a04">${avg.f}g</div><div class="week-macro-lbl">Lipides</div></div>
-  </div>`:''}
-
-  <!-- Jours -->
-  ${days.map(({day,meals,tot})=>`
-  <div class="day">
-    <div class="day-header">
-      <div class="day-name">${day}</div>
-      <div class="day-chip">${Math.round(tot.kcal)} kcal</div>
-    </div>
-    ${meals.map((m,mi)=>{
-      const mm=mealMacros(m.items);
-      return`<div class="meal">
-      <div class="meal-head">
-        <span class="meal-emoji">${m.emoji||'🍽️'}</span>
-        <span class="meal-name">${m.label}</span>
-        <span class="meal-time">${m.timeStart}${m.timeEnd?' – '+m.timeEnd:''}</span>
-        <span class="meal-kcal-badge">${Math.round(mm.kcal)} kcal</span>
+  ${weeksData.map((w,wi)=>`
+  <div class="week-block">
+    <div class="week-header">
+      <div class="week-title">Semaine ${w.label}</div>
+      <div class="week-avg">
+        <div class="week-avg-item"><div class="week-avg-val">${w.avg.kcal}</div><div class="week-avg-lbl">kcal/j</div></div>
+        <div class="week-sep"></div>
+        <div class="week-avg-item"><div class="week-avg-val" style="color:#16a34a">${w.avg.p}g</div><div class="week-avg-lbl">Prot.</div></div>
+        <div class="week-sep"></div>
+        <div class="week-avg-item"><div class="week-avg-val" style="color:#2563eb">${w.avg.c}g</div><div class="week-avg-lbl">Gluc.</div></div>
+        <div class="week-sep"></div>
+        <div class="week-avg-item"><div class="week-avg-val" style="color:#ca8a04">${w.avg.f}g</div><div class="week-avg-lbl">Lip.</div></div>
       </div>
-      <table>
-        <thead><tr>
-          <th>Aliment</th>
-          <th class="r">Quantité</th>
-          <th class="r">Énergie</th>
-          <th class="r">Protéines</th>
-          <th class="r">Glucides</th>
-          <th class="r">Lipides</th>
-        </tr></thead>
-        <tbody>
-          ${m.items.map((it,i)=>{
-            const u=String(it.unit||'').trim().toLowerCase();
-            const unitLabel=(u==='boite'||u==='boîte')?(it.qty>1?'boîtes':'boîte'):(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
-            return`<tr${i%2===1?' class="alt"':''}>
-            <td>${it.name||'—'}</td>
-            <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
-            <td class="r">${Math.round(it.kcal||0)}<span class="unit">kcal</span></td>
-            <td class="r">${Math.round(it.p||0)}<span class="unit">g</span></td>
-            <td class="r">${Math.round(it.c||0)}<span class="unit">g</span></td>
-            <td class="r">${Math.round(it.f||0)}<span class="unit">g</span></td>
-          </tr>`;
-          }).join('')}
-          <tr class="subtotal">
-            <td colspan="2">Sous-total ${m.label}</td>
-            <td class="r">${Math.round(mm.kcal)} kcal</td>
-            <td class="r">${Math.round(mm.p)} g</td>
-            <td class="r">${Math.round(mm.c)} g</td>
-            <td class="r">${Math.round(mm.f)} g</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>`;
-    }).join('')}
-    <div class="day-total">
-      <span class="day-total-label">Total ${day} :</span>
-      <span class="macro-pill pill-kcal">${Math.round(tot.kcal)} kcal</span>
-      <span class="macro-pill pill-p">P ${Math.round(tot.p)} g</span>
-      <span class="macro-pill pill-g">G ${Math.round(tot.c)} g</span>
-      <span class="macro-pill pill-l">L ${Math.round(tot.f)} g</span>
     </div>
+    ${w.days.map(({day,meals,tot})=>`
+    <div class="day">
+      <div class="day-header">
+        <div class="day-name">${day}</div>
+        <div class="day-chip">${Math.round(tot.kcal)} kcal</div>
+      </div>
+      ${meals.map(m=>{
+        const mm=mealMacros(m.items);
+        return`<div class="meal">
+          <div class="meal-head">
+            <span class="meal-emoji">${m.emoji||'🍽️'}</span>
+            <span class="meal-name">${m.label}</span>
+            <span class="meal-time">${m.timeStart}${m.timeEnd?' – '+m.timeEnd:''}</span>
+            <span class="meal-kcal-badge">${Math.round(mm.kcal)} kcal</span>
+          </div>
+          <table><thead><tr>
+            <th>Aliment</th><th class="r">Quantité</th><th class="r">Énergie</th>
+            <th class="r">Protéines</th><th class="r">Glucides</th><th class="r">Lipides</th>
+          </tr></thead><tbody>
+            ${m.items.map((it,i)=>renderMealRow(it,i)).join('')}
+            <tr class="subtotal">
+              <td colspan="2">Sous-total ${m.label}</td>
+              <td class="r">${Math.round(mm.kcal)} kcal</td>
+              <td class="r">${Math.round(mm.p)} g</td>
+              <td class="r">${Math.round(mm.c)} g</td>
+              <td class="r">${Math.round(mm.f)} g</td>
+            </tr>
+          </tbody></table>
+        </div>`;
+      }).join('')}
+      <div class="day-total">
+        <span class="day-total-label">Total ${day} :</span>
+        <span class="macro-pill pill-kcal">${Math.round(tot.kcal)} kcal</span>
+        <span class="macro-pill pill-p">P ${Math.round(tot.p)} g</span>
+        <span class="macro-pill pill-g">G ${Math.round(tot.c)} g</span>
+        <span class="macro-pill pill-l">L ${Math.round(tot.f)} g</span>
+      </div>
+    </div>`).join('')}
   </div>`).join('')}
 
-  <!-- Pied de page -->
   <div class="footer">
     <div class="footer-brand">Prime Athl</div>
     <div class="footer-note">Document généré automatiquement · Ne remplace pas un avis médical</div>
@@ -4880,7 +4878,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         <button onClick={handleExcelExport} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📤</span> Excel
         </button>
-        <button onClick={()=>exportNutritionPDF({...data,days:activeDays},athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
+        <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(124,196,161,0.3)',background:'rgba(124,196,161,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📄</span> PDF
         </button>
         <button onClick={async()=>{
