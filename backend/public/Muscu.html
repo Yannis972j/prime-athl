@@ -3962,44 +3962,63 @@ function parseExcelTime(s){
   return[fmt(m[1],m[2]),fmt(m[3],m[4])];
 }
 
-// Export: one sheet per day (matches user's format)
+// Normalise une unité vers la casse standard (G, U, BOITE)
+function normalizeUnit(u){
+  const s=String(u||'').toUpperCase().trim();
+  if(!s||s==='G'||s==='GR'||s==='GRAMME')return'G';
+  if(s==='U'||s==='UNITE'||s==='UNITÉ'||s==='UNITES'||s==='UNITÉS'||s==='PIECE'||s==='PIÈCE'||s==='PORTION')return'U';
+  if(s==='BOITE'||s==='BOÎTE'||s==='BOITES'||s==='BOÎTES')return'BOITE';
+  if(s==='ML')return'ML';
+  return s||'G';
+}
+
+// Export: toutes les semaines, une feuille par jour (LUNDI, LUNDI 2, LUNDI 3, LUNDI 4)
 function exportNutritionExcel(plan,athleteName){
   const wb=XLSX.utils.book_new();
-  for(const dayName of DAYS_OF_WEEK){
-    const meals=getDayMeals(plan,dayName);
-    const aoa=[];
-    aoa.push(['JOUR','REPAS','HEURE','PRODUITS','QUANTITE','UNITE','CALORIE','PROTEINE','GLUCIDE','LIPIDE','VALIDATION']);
-    let firstMealOfDay=true;
-    for(const m of meals){
-      const horaire=`${m.timeStart.replace(':','H').replace(/H00$/,'H')} - ${m.timeEnd.replace(':','H').replace(/H00$/,'H')}`;
-      if(!m.items||m.items.length===0){
-        aoa.push([firstMealOfDay?dayName:'',m.label,horaire,'','','','','','','','']);
-        firstMealOfDay=false;
-        // Add ~10 empty rows after each meal section for readability (matches user template)
-        for(let i=0;i<10;i++)aoa.push(['','','','','','','','','','','']);
-      }else{
-        m.items.forEach((it,i)=>{
-          aoa.push([
-            firstMealOfDay&&i===0?dayName:'',
-            i===0?m.label:'',
-            i===0?horaire:'',
-            it.name||'',
-            it.qty||0,
-            it.unit||'G',
-            it.kcal||0,
-            it.p||0,
-            it.c||0,
-            it.f||0,
-            'OK',
-          ]);
-        });
-        firstMealOfDay=false;
-        for(let i=0;i<10-m.items.length;i++)aoa.push(['','','','','','','','','','','']);
+  const HEADER=['JOUR','REPAS','HEURE','PRODUITS','QUANTITE','UNITE','CALORIE','PROTEINE','GLUCIDE','LIPIDE','VALIDATION'];
+  const COLS=[{wch:12},{wch:14},{wch:14},{wch:24},{wch:11},{wch:8},{wch:10},{wch:11},{wch:11},{wch:10},{wch:12}];
+
+  const weeks=plan.weeks&&plan.weeks.length>0?plan.weeks:[{label:'S1',days:plan.days}];
+
+  for(let wi=0;wi<weeks.length;wi++){
+    const w=weeks[wi];
+    const suffix=wi===0?'':` ${wi+1}`;
+    for(const dayName of DAYS_OF_WEEK){
+      const sheetName=dayName+suffix;
+      const meals=(w.days&&w.days[dayName]&&w.days[dayName].meals)||[];
+      const aoa=[];
+      aoa.push(HEADER);
+      let firstMealOfDay=true;
+      for(const m of meals){
+        const horaire=`${m.timeStart.replace(':','H').replace(/H00$/,'H')} - ${m.timeEnd.replace(':','H').replace(/H00$/,'H')}`;
+        if(!m.items||m.items.length===0){
+          aoa.push([firstMealOfDay?dayName:'',m.label,horaire,'','','','','','','','']);
+          firstMealOfDay=false;
+          for(let i=0;i<10;i++)aoa.push(['','','','','','','','','','','']);
+        }else{
+          m.items.forEach((it,i)=>{
+            aoa.push([
+              firstMealOfDay&&i===0?dayName:'',
+              i===0?m.label:'',
+              i===0?horaire:'',
+              it.name||'',
+              it.qty||0,
+              normalizeUnit(it.unit),
+              it.kcal||0,
+              it.p||0,
+              it.c||0,
+              it.f||0,
+              'OK',
+            ]);
+          });
+          firstMealOfDay=false;
+          for(let i=0;i<10-m.items.length;i++)aoa.push(['','','','','','','','','','','']);
+        }
       }
+      const ws=XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols']=COLS;
+      XLSX.utils.book_append_sheet(wb,ws,sheetName);
     }
-    const ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols']=[{wch:12},{wch:14},{wch:14},{wch:24},{wch:11},{wch:8},{wch:10},{wch:11},{wch:11},{wch:10},{wch:12}];
-    XLSX.utils.book_append_sheet(wb,ws,dayName);
   }
   const slug=(athleteName||'plan').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
   XLSX.writeFile(wb,`nutrition_${slug}_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -4061,8 +4080,8 @@ function formatShopQty(item){
     if(item.grams>=1000)parts.push(`${(item.grams/1000).toFixed(2)} kg`);
     else parts.push(`${Math.round(item.grams)} g`);
   }
-  if((item.boites||0)>0)parts.push(`${Math.round(item.boites)} ${item.boites>1?'boîtes':'boîte'}`);
-  if(item.units>0)parts.push(`${Math.round(item.units)} ${item.units>1?'unités':'unité'}`);
+  if((item.boites||0)>0){const b=Math.ceil(item.boites);parts.push(`${b} ${b>1?'boîtes':'boîte'}`);}
+  if(item.units>0){const u=Math.ceil(item.units);parts.push(`${u} ${u>1?'unités':'unité'}`);}
   return parts.join(' + ');
 }
 
@@ -4097,8 +4116,8 @@ function exportNutritionPDF(plan,athleteName){
   const name=athleteName||'Athlète';
 
   function renderMealRow(it,i){
-    const u=String(it.unit||'').trim().toLowerCase();
-    const unitLabel=(u==='boite'||u==='boîte')?(it.qty>1?'boîtes':'boîte'):(!u||u==='u'||u==='unite'||u==='unité')?(it.qty>1?'unités':'unité'):(it.unit||'g');
+    const nu=normalizeUnit(it.unit);
+    const unitLabel=nu==='BOITE'?(it.qty>1?'boîtes':'boîte'):nu==='U'?(it.qty>1?'unités':'unité'):nu.toLowerCase();
     return`<tr${i%2===1?' class="alt"':''}>
       <td>${it.name||'—'}</td>
       <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
@@ -4337,7 +4356,7 @@ function parseNutritionExcel(file,onSuccess,onError){
           const horaire=String(row[col.heure]||'').trim();
           const name=String(row[col.produits]||'').trim();
           const qty=parseFloat(row[col.qty])||0;
-          const unit=String(row[col.unite]||'g').trim().toLowerCase()||'g';
+          const unit=normalizeUnit(String(row[col.unite]||'G').trim());
           const kcal=parseFloat(row[col.kcal])||0;
           const p=parseFloat(row[col.p])||0;
           const cc=parseFloat(row[col.c])||0;
@@ -4808,7 +4827,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
   };
 
   const handleExcelExport=()=>{
-    exportNutritionExcel({...data,days:activeDays},athleteName);
+    exportNutritionExcel(data,athleteName);
   };
 
 
@@ -7625,7 +7644,7 @@ function exportAINutritionPDF(plan, goalLabel){
     const mealsHtml=meals.map(meal=>{
       const mKcal=meal.items.reduce((s,it)=>s+it.kcal,0);
       const rows=meal.items.map((it,i)=>`<tr class="${i%2===1?'alt':''}">`+
-        `<td>${it.name}</td><td class="r">${it.qty}<span class="unit">${it.unit}</span></td>`+
+        `<td>${it.name}</td><td class="r">${it.qty}<span class="unit">${normalizeUnit(it.unit).toLowerCase()}</span></td>`+
         `<td class="r">${it.p}<span class="unit">g</span></td>`+
         `<td class="r">${it.c}<span class="unit">g</span></td>`+
         `<td class="r">${it.f}<span class="unit">g</span></td>`+
