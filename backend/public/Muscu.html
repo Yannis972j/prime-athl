@@ -629,6 +629,7 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg) {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
+    if (file.size > 20 * 1024 * 1024) { alert('Fichier trop volumineux (max 20 Mo).'); return; }
     parseYannisExcel(file,
       programs => {
         if (onImportPrograms) onImportPrograms(programs);
@@ -6047,7 +6048,7 @@ function CoachScreen({authToken,authUser}){
       setCreateForm({email:'',password:'',firstName:'',lastName:''});
       load();
     }catch(err){
-      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (6 car. min)',email_and_password_required:'Email et mot de passe requis'};
+      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (8 caractères minimum)',email_and_password_required:'Email et mot de passe requis'};
       alert(msgs[err.message]||'Erreur: '+err.message);
     }
     setCreating(false);
@@ -6084,7 +6085,7 @@ function CoachScreen({authToken,authUser}){
       reloadDetail(selected.id);
       load();
     }catch(err){
-      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (6 car. min)'};
+      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (8 caractères minimum)'};
       alert(msgs[err.message]||'Erreur: '+err.message);
     }
     setEditing(false);
@@ -6097,6 +6098,7 @@ function CoachScreen({authToken,authUser}){
     const file=e.target.files[0];
     if(!file||!selected)return;
     e.target.value='';
+    if(file.size>20*1024*1024){flash('✗ Fichier trop volumineux (max 20 Mo)');return;}
     flash('⏳ Import en cours...');
     parseYannisExcel(file,async data=>{
       try{
@@ -7523,9 +7525,8 @@ function ExplorerScreen({profile,onStartWorkout}){
 const PLAN_UNIVERSES_FE={explorer:['explorer'],ia:['explorer','ia'],coaching:['explorer','ia','coach']};
 function userHasAccessFE(u,universe){
   if(!u)return false;
-  const CREATOR='yannisgym972@gmail.com';
-  if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
+  if(u.isMainCoach)return true;
   if(u.createdAt&&Date.now()<(u.createdAt+7*24*3600*1000))return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
@@ -7557,7 +7558,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           </div>
         </div>
       )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&(
         <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(201,117,134,0.08)',border:'1px solid rgba(201,117,134,0.25)',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={onShowPricing}>
           <span style={{fontSize:18}}>🔒</span>
           <div style={{flex:1}}>
@@ -7599,7 +7600,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           ⚙️ Gérer mon abonnement
         </button>
       )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&(
         <button onClick={onShowPricing} style={{marginTop:16,width:'100%',height:44,borderRadius:13,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>
           🚀 Débloquer Prime Athl
         </button>
@@ -7776,7 +7777,7 @@ function NutritionAIWizard({authUser}){
           return np;
         });
       }
-    }catch(e){console.error(e);}
+    }catch(e){console.error(e);alert('Impossible de régénérer ce repas. Réessaie dans un instant.');}
     setRegenLoading(null);
   };
 
@@ -7786,7 +7787,7 @@ function NutritionAIWizard({authUser}){
     try{
       await apiCall('/api/my-nutrition',{method:'PUT',body:{plan}});
       setApplyDone(true);
-    }catch(e){console.error(e);}
+    }catch(e){console.error(e);alert('Impossible d\'enregistrer le plan. Vérifie ta connexion.');}
     setApplyLoading(false);
   };
 
@@ -7802,7 +7803,10 @@ function NutritionAIWizard({authUser}){
       await apiCall(`/api/coach/nutrition/${athleteId}`,{method:'PUT',body:{plan}});
       try{await apiCall(`/api/coach/nutrition/${athleteId}/notify`,{method:'POST'});}catch(e){}
       setAssignLoading(null);setCoachSheet(false);
-    }catch(e){setAssignLoading(null);}
+    }catch(e){
+      setAssignLoading(null);
+      alert('Impossible d\'assigner le plan. Vérifie ta connexion.');
+    }
   };
 
   const inputStyle={
@@ -8254,13 +8258,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setRefreshing(false);
   },[setUser,triggerSave]);
 
-  // Initial load
+  // Initial load — parallèle pour réduire le temps de démarrage
   React.useEffect(()=>{
-    apiCall('/api/program').then(p=>{
+    Promise.all([apiCall('/api/program'), apiCall('/api/sessions')]).then(([p, sess])=>{
       setImportedPrograms(p.data||{});
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy});
+      setHistory(sess);
     }).catch(()=>{});
-    apiCall('/api/sessions').then(setHistory).catch(()=>{});
   },[]);
 
   React.useEffect(()=>{
@@ -8328,7 +8332,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     if(!snapshot||!snapshot.totalVolume)return;
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
-    try{await apiCall('/api/sessions',{method:'POST',body:snapshot});}catch(e){console.error('session sync',e);}
+    try{await apiCall('/api/sessions',{method:'POST',body:snapshot});}
+    catch(e){
+      console.error('session sync',e);
+      // Retire la séance de l'historique local si la synchro échoue
+      setHistory(h=>h.filter(s=>s.id!==snapshot.id));
+      alert('Séance non sauvegardée — vérifie ta connexion et réessaie.');
+    }
   };
 
   const editDay=(sheet,day)=>{setEditingDayKey({sheet,day});setScreen('programDay');};

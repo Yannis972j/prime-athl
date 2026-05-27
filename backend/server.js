@@ -791,17 +791,28 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
 app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   const u = DATA.users[req.params.id];
   if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  const uid = u.id;
   // Suppression complète du compte et toutes ses données
-  delete DATA.users[u.id];
-  delete DATA.programs[u.id];
-  delete DATA.sessions[u.id];
-  delete DATA.nutritionLogs[u.id];
-  delete DATA.nutritionPrograms[u.id];
-  delete DATA.weightLogs[u.id];
-  delete DATA.progressPhotos[u.id];
-  // Retirer des invites (DATA.invites est un objet keyé par code)
+  delete DATA.users[uid];
+  delete DATA.programs[uid];
+  delete DATA.nutritionLogs[uid];
+  delete DATA.nutritionPrograms[uid];
+  delete DATA.weightLogs[uid];
+  delete DATA.progressPhotos[uid];
+  delete DATA.savedPrograms[uid];
+  delete DATA.freeFoodLogs[uid];
+  delete DATA.pushSubscriptions[uid];
+  // Sessions indexées par sessionId (pas par userId) → boucle obligatoire
+  for (const sid of Object.keys(DATA.sessions)) {
+    if (DATA.sessions[sid].userId === uid) delete DATA.sessions[sid];
+  }
+  // Conversations impliquant cet athlète
+  for (const key of Object.keys(DATA.messages || {})) {
+    if (key.includes(uid)) delete DATA.messages[key];
+  }
+  // Invites utilisées par cet athlète
   for (const code of Object.keys(DATA.invites || {})) {
-    if (DATA.invites[code].usedBy === u.id) delete DATA.invites[code];
+    if (DATA.invites[code].usedBy === uid) delete DATA.invites[code];
   }
   persist();
   res.json({ deleted: true });
@@ -812,7 +823,7 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
   try {
     const { email, password, firstName, lastName } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
-    if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+    if (password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
     const lowEmail = email.toLowerCase().trim();
     if (findUserByEmail(lowEmail)) return res.status(409).json({ error: 'email_already_used' });
 
@@ -1082,11 +1093,11 @@ app.post('/api/sessions', authRequired, (req, res) => {
     exercises: safeExercises,
   };
   DATA.sessions[id] = session;
-  // Garder max 500 sessions au total (FIFO sur les plus vieilles)
-  const allSids = Object.keys(DATA.sessions);
-  if (allSids.length > 500) {
-    const sorted = allSids.sort((a, b) => new Date(DATA.sessions[a].date) - new Date(DATA.sessions[b].date));
-    sorted.slice(0, allSids.length - 500).forEach(sid => delete DATA.sessions[sid]);
+  // Garder max 500 sessions par utilisateur (FIFO sur les plus vieilles)
+  const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === req.user.id);
+  if (userSids.length > 500) {
+    userSids.sort((a, b) => (DATA.sessions[a].date > DATA.sessions[b].date ? 1 : -1));
+    userSids.slice(0, userSids.length - 500).forEach(sid => delete DATA.sessions[sid]);
   }
   persist();
 
@@ -1190,17 +1201,18 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
   }
 });
 
-// Health endpoint
+// Health endpoint — ne pas exposer le chemin DB en production
 app.get('/api/health', (req, res) => {
-  res.json({
+  const info = {
     ok: true,
     uptime: Math.round(process.uptime()),
     users: Object.keys(DATA.users).length,
-    dbPath: DB_PATH,
     persistent: USE_PG || DB_PATH.startsWith('/data'),
     storage: USE_PG ? 'postgres' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral'),
     timestamp: Date.now(),
-  });
+  };
+  if (!IS_PROD) info.dbPath = DB_PATH;
+  res.json(info);
 });
 
 // ── Postgres backups (main coach only) ──────────────
@@ -2287,3 +2299,17 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`DB file: ${DB_PATH}`);
   console.log(`Persistent storage: ${DB_PATH.startsWith('/data') ? 'YES (Render Disk)' : 'NO (ephemeral)'}`);
 });
+
+// Graceful shutdown — sauvegarde les données avant de quitter (SIGTERM Render, SIGINT Ctrl+C)
+async function shutdown(signal) {
+  console.log(`[shutdown] ${signal} received — persisting data…`);
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(DATA));
+    if (USE_PG) await pgSave(DATA);
+    console.log('[shutdown] Data saved OK');
+  } catch (e) { console.error('[shutdown] Save error:', e.message); }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000); // force exit après 5s
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
