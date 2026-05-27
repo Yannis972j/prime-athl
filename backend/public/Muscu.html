@@ -48,7 +48,7 @@
 <body>
 <div id="root"></div>
 <div id="splash" style="position:fixed;inset:0;background:#0a0a0e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:9999;transition:opacity 0.4s ease">
-  <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px">PA</div>
+  <img src="/logo.svg" alt="Prime Athl" style="width:52px;height:52px;border-radius:16px;object-fit:cover;display:block"/>
   <div style="color:rgba(240,240,242,0.5);font-size:13px;font-family:Inter,system-ui,sans-serif;letter-spacing:0.3px">Chargement…</div>
   <div style="width:120px;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">
     <div id="splash-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#d97757,#c97586);border-radius:2px;transition:width 0.4s ease"></div>
@@ -6896,11 +6896,7 @@ function AuthScreen({onLogin,onSignup}){
       <div style={{width:'100%',maxWidth:380}}>
         {/* Logo */}
         <div style={{textAlign:'center',marginBottom:28}}>
-          <div style={{width:72,height:72,margin:'0 auto 14px',borderRadius:20,padding:2,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
-            <div style={{width:'100%',height:'100%',borderRadius:18,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <Icon name="dumbbell" size={32} stroke="#fff" strokeWidth={2}/>
-            </div>
-          </div>
+          <img src="/logo.svg" alt="Prime Athl" style={{width:90,height:90,borderRadius:22,objectFit:'cover',display:'block',margin:'0 auto 14px',boxShadow:'0 8px 32px rgba(0,0,0,0.5)'}}/>
           <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Prime Athl</div>
           <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.6,marginTop:4}}><HoloText>{titleByMode[mode]}</HoloText></div>
         </div>
@@ -6986,9 +6982,7 @@ function Splash(){
   return(
     <div style={{minHeight:'100vh',background:'radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 55%)',display:'flex',alignItems:'center',justifyContent:'center',color:T.text}}>
       <div style={{textAlign:'center'}}>
-        <div style={{width:60,height:60,margin:'0 auto 14px',borderRadius:18,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 4s linear infinite',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <Icon name="dumbbell" size={28} stroke="#fff" strokeWidth={2}/>
-        </div>
+        <img src="/logo.svg" alt="Prime Athl" style={{width:60,height:60,borderRadius:18,objectFit:'cover',display:'block',margin:'0 auto 14px'}}/>
         <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Prime Athl</div>
         <div style={{fontSize:13,color:T.textFaint,marginTop:8}}>Chargement…</div>
       </div>

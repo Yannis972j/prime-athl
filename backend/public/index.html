@@ -118,8 +118,8 @@ img{display:block;max-width:100%}
 .header{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--header-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
 .header-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
 .logo{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-0.3px;font-size:17px}
-.logo-mark{width:34px;height:34px;border-radius:10px;padding:2px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite}
-.logo-mark>div{width:100%;height:100%;border-radius:8px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px}
+.logo-mark{width:34px;height:34px;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.logo-mark>img{width:34px;height:34px;border-radius:10px;object-fit:cover;display:block}
 .nav-links{display:flex;align-items:center;gap:32px}
 .nav-links a{font-size:13px;font-weight:500;color:var(--dim);transition:color 0.2s}
 .nav-links a:hover{color:var(--text)}
@@ -458,7 +458,7 @@ img{display:block;max-width:100%}
 <header class="header">
   <div class="container header-inner">
     <a href="/" class="logo">
-      <div class="logo-mark"><div>PA</div></div>
+      <div class="logo-mark"><img src="/logo.svg" alt="Prime Athl"/></div>
       Prime Athl
     </a>
     <nav class="nav-links">
@@ -928,7 +928,7 @@ img{display:block;max-width:100%}
     <div class="footer-inner">
       <div class="footer-brand">
         <a href="/" class="logo">
-          <div class="logo-mark"><div>PA</div></div>
+          <div class="logo-mark"><img src="/logo.svg" alt="Prime Athl"/></div>
           Prime Athl
         </a>
         <p>Plateforme coach-athlète pour la salle de sport. Programmes, nutrition, suivi en direct.</p>
@@ -1002,7 +1002,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
   overlay.id = 'cold-overlay';
   overlay.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;gap:18px">
-      <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#d97757,#c97586);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px">PA</div>
+      <img src="/logo.svg" alt="Prime Athl" style="width:48px;height:48px;border-radius:14px;object-fit:cover;display:block"/>
       <div style="color:#f4f1ed;font-size:17px;font-weight:700">Lancement en cours…</div>
       <div style="color:rgba(244,241,237,0.5);font-size:13px;text-align:center;max-width:260px;line-height:1.6">Le serveur se réveille.<br>Prêt dans quelques secondes ☕</div>
       <div style="width:140px;height:3px;background:rgba(255,255,255,0.10);border-radius:2px;overflow:hidden;margin-top:4px">
