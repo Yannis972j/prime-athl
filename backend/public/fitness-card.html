@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Prime Athl — Profil Fitness</title>
+<link rel="preconnect" href="https://rsms.me"/>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+<style>
+/* ── Reset ───────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;min-height:100vh;background:#05050b;
+  color:#fff;font-family:'Inter','Segoe UI',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden
+}
+canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ── Layout ──────────────────────────────────── */
+.page{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;padding:44px 20px 64px;
+}
+
+/* ── Top badge ───────────────────────────────── */
+.badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 16px 7px 10px;border-radius:999px;
+  background:rgba(255,107,53,0.10);border:1px solid rgba(255,107,53,0.30);
+  color:#ff6b35;font-size:11px;font-weight:700;letter-spacing:1.2px;
+  text-transform:uppercase;margin-bottom:36px;
+  animation:fadeUp 0.6s ease both
+}
+.badge-dot{
+  width:7px;height:7px;border-radius:50%;background:#ff6b35;
+  box-shadow:0 0 10px #ff6b35;flex-shrink:0;
+  animation:pulseDot 2s ease-in-out infinite
+}
+
+/* ── Photo ───────────────────────────────────── */
+.photo-wrap{
+  position:relative;margin-bottom:26px;
+  animation:fadeUp 0.8s ease 0.1s both
+}
+.ring-outer{
+  width:210px;height:210px;border-radius:50%;
+  padding:3.5px;
+  background:conic-gradient(
+    #ff6b35 0deg,#ff3d71 72deg,#b048ff 144deg,
+    #00d4aa 216deg,#ffca3a 288deg,#ff6b35 360deg
+  );
+  animation:spinRing 5s linear infinite;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 50px rgba(255,107,53,0.25),
+    0 0 100px rgba(176,72,255,0.12)
+}
+.ring-inner{
+  width:100%;height:100%;border-radius:50%;
+  overflow:hidden;background:#0a0a12;
+  border:3px solid #05050b
+}
+.ring-inner img{
+  width:100%;height:100%;
+  object-fit:cover;object-position:top center;
+  display:block
+}
+/* Fallback quand pas d'image */
+.ring-inner .photo-placeholder{
+  width:100%;height:100%;
+  background:linear-gradient(135deg,#1a1a2e 0%,#2d1b3d 50%,#0d1b2a 100%);
+  display:flex;align-items:center;justify-content:center;
+  font-size:56px;
+}
+.photo-glow{
+  position:absolute;inset:-24px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(255,107,53,0.22) 0%,transparent 65%);
+  filter:blur(18px);z-index:-1;
+  animation:glowPulse 3s ease-in-out infinite
+}
+.photo-tag{
+  position:absolute;bottom:10px;right:6px;
+  background:linear-gradient(135deg,#ff6b35,#ff3d71);
+  color:#fff;font-size:9.5px;font-weight:800;letter-spacing:0.5px;
+  padding:4px 11px;border-radius:999px;
+  box-shadow:0 4px 16px rgba(255,61,113,0.5)
+}
+
+/* ── Name ────────────────────────────────────── */
+.name{
+  font-size:30px;font-weight:800;letter-spacing:-0.8px;
+  text-align:center;margin-bottom:4px;
+  animation:fadeUp 0.8s ease 0.18s both
+}
+.name-grad{
+  background:linear-gradient(90deg,#ff6b35,#ff3d71,#b048ff,#00d4aa);
+  background-size:300%;-webkit-background-clip:text;background-clip:text;
+  color:transparent;animation:nameShift 5s linear infinite
+}
+.subtitle{
+  font-size:12px;color:rgba(255,255,255,0.38);font-weight:600;
+  letter-spacing:1.4px;text-transform:uppercase;text-align:center;
+  margin-bottom:32px;animation:fadeUp 0.8s ease 0.24s both
+}
+
+/* ── Macro pills ─────────────────────────────── */
+.pills-row{
+  display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
+  margin-bottom:36px;animation:fadeUp 0.8s ease 0.3s both
+}
+.pill{
+  display:flex;flex-direction:column;align-items:center;
+  padding:11px 18px;border-radius:16px;
+  background:rgba(255,255,255,0.035);
+  border:1px solid rgba(255,255,255,0.07);
+  min-width:72px;transition:transform 0.2s
+}
+.pill:hover{transform:translateY(-3px)}
+.pill strong{font-size:19px;font-weight:800;letter-spacing:-0.3px;line-height:1}
+.pill span{font-size:9.5px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-top:3px}
+
+/* ── Gauges section ──────────────────────────── */
+.section-label{
+  font-size:10px;font-weight:700;letter-spacing:1.8px;
+  color:rgba(255,255,255,0.28);text-transform:uppercase;
+  text-align:center;margin-bottom:18px;
+  animation:fadeUp 0.8s ease 0.36s both
+}
+.gauges{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:14px;
+  width:100%;max-width:420px;
+  animation:fadeUp 0.8s ease 0.42s both
+}
+.g-card{
+  border-radius:22px;padding:20px 14px 16px;
+  background:rgba(12,12,20,0.88);
+  border:1px solid rgba(255,255,255,0.06);
+  backdrop-filter:blur(14px);
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  transition:transform 0.25s ease,box-shadow 0.25s ease;
+  cursor:default
+}
+.g-card:hover{transform:translateY(-5px)}
+
+/* SVG gauge */
+.g-svg-wrap{position:relative;width:104px;height:104px;flex-shrink:0}
+.g-svg-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+circle.bg{fill:none;stroke:rgba(255,255,255,0.05);stroke-width:7}
+circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-dashoffset 1.9s cubic-bezier(0.34,1.28,0.64,1)}
+.g-center{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center
+}
+.g-val{font-size:20px;font-weight:800;line-height:1;letter-spacing:-0.5px}
+.g-unit{font-size:8.5px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:0.5px;text-transform:uppercase;margin-top:2px}
+.g-name{font-size:12px;font-weight:700;letter-spacing:0.1px}
+.g-sub{font-size:10px;font-weight:600;color:rgba(255,255,255,0.32)}
+
+/* Per-gauge theming */
+.g-kcal   circle.track{stroke:url(#g-kcal)}
+.g-kcal   .g-val{color:#ff6b35}
+.g-kcal   {box-shadow:0 6px 28px rgba(255,107,53,0.10)}
+.g-kcal:hover{box-shadow:0 14px 42px rgba(255,107,53,0.22)}
+
+.g-prot   circle.track{stroke:url(#g-prot)}
+.g-prot   .g-val{color:#00d4aa}
+.g-prot   {box-shadow:0 6px 28px rgba(0,212,170,0.08)}
+.g-prot:hover{box-shadow:0 14px 42px rgba(0,212,170,0.20)}
+
+.g-fat    circle.track{stroke:url(#g-fat)}
+.g-fat    .g-val{color:#b048ff}
+.g-fat    {box-shadow:0 6px 28px rgba(176,72,255,0.08)}
+.g-fat:hover{box-shadow:0 14px 42px rgba(176,72,255,0.20)}
+
+.g-carbs  circle.track{stroke:url(#g-carbs)}
+.g-carbs  .g-val{color:#ffca3a}
+.g-carbs  {box-shadow:0 6px 28px rgba(255,202,58,0.08)}
+.g-carbs:hover{box-shadow:0 14px 42px rgba(255,202,58,0.20)}
+
+/* ── Bottom strip ────────────────────────────── */
+.bottom-strip{
+  margin-top:36px;width:100%;max-width:420px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-radius:16px;
+  background:rgba(255,107,53,0.06);border:1px solid rgba(255,107,53,0.16);
+  animation:fadeUp 0.8s ease 0.54s both
+}
+.bs-left{display:flex;flex-direction:column;gap:2px}
+.bs-title{font-size:12px;font-weight:700;color:rgba(255,255,255,0.8)}
+.bs-sub{font-size:10px;color:rgba(255,255,255,0.35);font-weight:500}
+.bs-right{
+  font-size:10px;font-weight:800;letter-spacing:0.4px;
+  padding:5px 12px;border-radius:999px;
+  background:rgba(255,107,53,0.18);color:#ff6b35;
+  border:1px solid rgba(255,107,53,0.30)
+}
+
+/* ── Footer ──────────────────────────────────── */
+.footer{
+  margin-top:28px;display:flex;align-items:center;gap:8px;
+  color:rgba(255,255,255,0.18);font-size:11px;font-weight:700;letter-spacing:0.6px;
+  animation:fadeUp 0.8s ease 0.6s both
+}
+.footer svg{opacity:0.4}
+
+/* ── Keyframes ───────────────────────────────── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spinRing{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes pulseDot{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
+@keyframes glowPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.9;transform:scale(1.1)}}
+@keyframes nameShift{0%{background-position:0%}100%{background-position:300%}}
+
+/* ── Mobile ──────────────────────────────────── */
+@media(max-width:400px){
+  .ring-outer{width:188px;height:188px}
+  .g-svg-wrap{width:92px;height:92px}
+  .g-val{font-size:18px}
+  .name{font-size:26px}
+  .gauges{gap:10px}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<main class="page">
+
+  <!-- Badge statut -->
+  <div class="badge"><span class="badge-dot"></span> Objectifs du jour — En cours</div>
+
+  <!-- Photo + anneau tournant -->
+  <div class="photo-wrap">
+    <div class="ring-outer">
+      <div class="ring-inner">
+        <!--
+          📌 Place ta photo :
+          Option A — fichier local  : src="/ta-photo.jpg"
+          Option B — URL distante   : src="https://..."
+          Option C — base64         : src="data:image/jpeg;base64,..."
+        -->
+        <!--
+          ════════════════════════════════════════════
+          ► POUR AJOUTER TA PHOTO :
+            Option 1 — Sauvegarde-la comme  /profile-photo.jpg
+                        dans backend/public/ (déjà configuré)
+            Option 2 — Change src= par une URL distante
+            Option 3 — Remplace src= par ton base64
+          ════════════════════════════════════════════
+        -->
+        <img
+          src="/profile-photo.jpg"
+          alt="Profil athlète"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+        />
+        <div class="photo-placeholder" style="display:none">🏋️</div>
+      </div>
+    </div>
+    <div class="photo-glow"></div>
+    <div class="photo-tag">⚡ ACTIF</div>
+  </div>
+
+  <!-- Nom -->
+  <div class="name"><span class="name-grad">Yannis</span></div>
+  <div class="subtitle">Athlète · Prime Coaching</div>
+
+  <!-- Résumé macros en pills -->
+  <div class="pills-row">
+    <div class="pill" style="border-color:rgba(255,107,53,0.22)">
+      <strong style="color:#ff6b35">2 200</strong>
+      <span>Kcal</span>
+    </div>
+    <div class="pill" style="border-color:rgba(0,212,170,0.22)">
+      <strong style="color:#00d4aa">209g</strong>
+      <span>Protéines</span>
+    </div>
+    <div class="pill" style="border-color:rgba(176,72,255,0.22)">
+      <strong style="color:#b048ff">70g</strong>
+      <span>Lipides</span>
+    </div>
+    <div class="pill" style="border-color:rgba(255,202,58,0.22)">
+      <strong style="color:#ffca3a">220g</strong>
+      <span>Glucides</span>
+    </div>
+  </div>
+
+  <!-- Label section -->
+  <div class="section-label">Progression journalière</div>
+
+  <!-- Dégradés SVG (invisibles) -->
+  <svg style="width:0;height:0;position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-kcal" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#ff6b35"/><stop offset="100%" stop-color="#ff3d71"/>
+      </linearGradient>
+      <linearGradient id="g-prot" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#00d4aa"/><stop offset="100%" stop-color="#00b4d8"/>
+      </linearGradient>
+      <linearGradient id="g-fat" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#b048ff"/><stop offset="100%" stop-color="#7b2ff7"/>
+      </linearGradient>
+      <linearGradient id="g-carbs" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#ffca3a"/><stop offset="100%" stop-color="#ff9500"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <!-- 4 Jauges -->
+  <div class="gauges">
+
+    <div class="g-card g-kcal">
+      <div class="g-svg-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg" cx="50" cy="50" r="42"/>
+          <circle class="track" id="t-kcal" cx="50" cy="50" r="42"/>
+        </svg>
+        <div class="g-center">
+          <div class="g-val" id="v-kcal">0</div>
+          <div class="g-unit">kcal</div>
+        </div>
+      </div>
+      <div class="g-name">Calories</div>
+      <div class="g-sub" id="s-kcal"></div>
+    </div>
+
+    <div class="g-card g-prot">
+      <div class="g-svg-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg" cx="50" cy="50" r="42"/>
+          <circle class="track" id="t-prot" cx="50" cy="50" r="42"/>
+        </svg>
+        <div class="g-center">
+          <div class="g-val" id="v-prot">0</div>
+          <div class="g-unit">g · prot</div>
+        </div>
+      </div>
+      <div class="g-name">Protéines</div>
+      <div class="g-sub" id="s-prot"></div>
+    </div>
+
+    <div class="g-card g-fat">
+      <div class="g-svg-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg" cx="50" cy="50" r="42"/>
+          <circle class="track" id="t-fat" cx="50" cy="50" r="42"/>
+        </svg>
+        <div class="g-center">
+          <div class="g-val" id="v-fat">0</div>
+          <div class="g-unit">g · lip</div>
+        </div>
+      </div>
+      <div class="g-name">Lipides</div>
+      <div class="g-sub" id="s-fat"></div>
+    </div>
+
+    <div class="g-card g-carbs">
+      <div class="g-svg-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg" cx="50" cy="50" r="42"/>
+          <circle class="track" id="t-carbs" cx="50" cy="50" r="42"/>
+        </svg>
+        <div class="g-center">
+          <div class="g-val" id="v-carbs">0</div>
+          <div class="g-unit">g · gluc</div>
+        </div>
+      </div>
+      <div class="g-name">Glucides</div>
+      <div class="g-sub" id="s-carbs"></div>
+    </div>
+
+  </div>
+
+  <!-- Strip bilan calorique -->
+  <div class="bottom-strip">
+    <div class="bs-left">
+      <div class="bs-title">Bilan calorique</div>
+      <div class="bs-sub">Répartition : 38% prot · 40% gluc · 22% lip</div>
+    </div>
+    <div class="bs-right">On Track ✓</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    PRIME ATHL
+  </div>
+
+</main>
+
+<script>
+/* ═══════════════════════════════════════════
+   CONFIG — modifie ici tes valeurs
+═══════════════════════════════════════════ */
+const DATA = {
+  kcal:  { val: 2200, max: 2800 },
+  prot:  { val: 209,  max: 250  },
+  fat:   { val: 70,   max: 100  },
+  carbs: { val: 220,  max: 280  },
+};
+
+/* ─── SVG gauge ──────────────────────────── */
+const R = 42;
+const CIRC = 2 * Math.PI * R;   // ≈ 263.9
+
+function setupTrack(id) {
+  const el = document.getElementById('t-' + id);
+  el.style.strokeDasharray  = CIRC;
+  el.style.strokeDashoffset = CIRC; // vide au départ
+}
+
+function fillTrack(id, pct) {
+  const el = document.getElementById('t-' + id);
+  el.style.strokeDashoffset = CIRC * (1 - pct / 100);
+}
+
+/* ─── Compteur animé ─────────────────────── */
+function countUp(elId, target, dur) {
+  const el = document.getElementById(elId);
+  const t0 = performance.now();
+  function step(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    const eased = 1 - Math.pow(1 - p, 3);   // ease-out cubic
+    el.textContent = Math.round(target * eased);
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ─── Particules canvas ──────────────────── */
+const cvs = document.getElementById('bg');
+const cx  = cvs.getContext('2d');
+let W, H, pts = [];
+const COLS = [
+  'rgba(255,107,53,','rgba(255,61,113,',
+  'rgba(176,72,255,','rgba(0,212,170,',
+  'rgba(255,202,58,','rgba(0,180,216,'
+];
+
+function resize() {
+  W = cvs.width  = window.innerWidth;
+  H = cvs.height = window.innerHeight;
+}
+function initPts() {
+  pts = [];
+  const n = Math.min(70, Math.round(W * H / 12000));
+  for (let i = 0; i < n; i++) {
+    pts.push({
+      x:  Math.random() * W,
+      y:  Math.random() * H,
+      vx: (Math.random() - .5) * .35,
+      vy: (Math.random() - .5) * .35,
+      r:  Math.random() * 1.8 + .4,
+      a:  Math.random() * .55 + .08,
+      c:  COLS[Math.floor(Math.random() * COLS.length)],
+    });
+  }
+}
+
+function drawBg() {
+  cx.clearRect(0, 0, W, H);
+
+  /* Radial background glow */
+  const g1 = cx.createRadialGradient(W*.5, H*.25, 0, W*.5, H*.25, W*.65);
+  g1.addColorStop(0,   'rgba(255,107,53,0.05)');
+  g1.addColorStop(.5,  'rgba(176,72,255,0.025)');
+  g1.addColorStop(1,   'transparent');
+  cx.fillStyle = g1; cx.fillRect(0, 0, W, H);
+
+  /* Particles */
+  for (const p of pts) {
+    /* glow halo */
+    const halo = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+    halo.addColorStop(0,   p.c + (p.a * .7) + ')');
+    halo.addColorStop(1,   p.c + '0)');
+    cx.beginPath(); cx.arc(p.x, p.y, p.r * 5, 0, Math.PI*2);
+    cx.fillStyle = halo; cx.fill();
+    /* core */
+    cx.beginPath(); cx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    cx.fillStyle = p.c + p.a + ')'; cx.fill();
+
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < -6) p.x = W+6; else if (p.x > W+6) p.x = -6;
+    if (p.y < -6) p.y = H+6; else if (p.y > H+6) p.y = -6;
+  }
+  requestAnimationFrame(drawBg);
+}
+
+resize(); initPts(); drawBg();
+window.addEventListener('resize', () => { resize(); initPts(); });
+
+/* ─── Init + lancement animation ─────────── */
+['kcal','prot','fat','carbs'].forEach(setupTrack);
+
+function launch() {
+  const DURATION = 1800;
+  for (const [key, d] of Object.entries(DATA)) {
+    const pct = Math.min(Math.round(d.val / d.max * 100), 100);
+    fillTrack(key, pct);
+    countUp('v-' + key, d.val, DURATION);
+    document.getElementById('s-' + key).textContent = pct + '% de l\'objectif';
+  }
+}
+
+/* Lance 400ms après le chargement pour que les transitions CSS soient actives */
+if (document.readyState === 'complete') { setTimeout(launch, 400); }
+else { window.addEventListener('load', () => setTimeout(launch, 400)); }
+</script>
+
+</body>
+</html>
