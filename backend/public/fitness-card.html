@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://rsms.me"/>
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
 <style>
-/* ── Reset ───────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{
   width:100%;min-height:100vh;background:#05050b;
@@ -16,14 +15,13 @@ html,body{
 }
 canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
 
-/* ── Layout ──────────────────────────────────── */
 .page{
   position:relative;z-index:1;
   display:flex;flex-direction:column;align-items:center;
-  min-height:100vh;padding:44px 20px 64px;
+  min-height:100vh;padding:44px 20px 64px
 }
 
-/* ── Top badge ───────────────────────────────── */
+/* ── Badge ── */
 .badge{
   display:inline-flex;align-items:center;gap:8px;
   padding:7px 16px 7px 10px;border-radius:999px;
@@ -38,41 +36,50 @@ canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
   animation:pulseDot 2s ease-in-out infinite
 }
 
-/* ── Photo ───────────────────────────────────── */
+/* ── Photo ring ── */
 .photo-wrap{
   position:relative;margin-bottom:26px;
   animation:fadeUp 0.8s ease 0.1s both
 }
 .ring-outer{
-  width:210px;height:210px;border-radius:50%;
-  padding:3.5px;
+  width:210px;height:210px;border-radius:50%;padding:3.5px;
   background:conic-gradient(
     #ff6b35 0deg,#ff3d71 72deg,#b048ff 144deg,
     #00d4aa 216deg,#ffca3a 288deg,#ff6b35 360deg
   );
   animation:spinRing 5s linear infinite;
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
-    0 0 50px rgba(255,107,53,0.25),
-    0 0 100px rgba(176,72,255,0.12)
+  box-shadow:0 0 0 1px rgba(0,0,0,0.6),0 0 50px rgba(255,107,53,0.25),0 0 100px rgba(176,72,255,0.12)
 }
 .ring-inner{
   width:100%;height:100%;border-radius:50%;
   overflow:hidden;background:#0a0a12;
-  border:3px solid #05050b
+  border:3px solid #05050b;
+  cursor:pointer;position:relative
 }
 .ring-inner img{
   width:100%;height:100%;
   object-fit:cover;object-position:top center;
-  display:block
+  display:block;transition:filter 0.3s
 }
-/* Fallback quand pas d'image */
-.ring-inner .photo-placeholder{
+/* Overlay "changer photo" au hover */
+.photo-hover-overlay{
+  position:absolute;inset:0;border-radius:50%;
+  background:rgba(0,0,0,0.55);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  opacity:0;transition:opacity 0.25s;pointer-events:none
+}
+.ring-inner:hover .photo-hover-overlay{opacity:1}
+.photo-hover-overlay span{font-size:11px;font-weight:700;color:#fff;letter-spacing:0.5px}
+/* Placeholder si pas de photo */
+.photo-placeholder{
   width:100%;height:100%;
   background:linear-gradient(135deg,#1a1a2e 0%,#2d1b3d 50%,#0d1b2a 100%);
-  display:flex;align-items:center;justify-content:center;
-  font-size:56px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  cursor:pointer;transition:all 0.3s
 }
+.photo-placeholder:hover .ph-icon{transform:scale(1.1)}
+.ph-icon{font-size:44px;transition:transform 0.3s}
+.ph-text{font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:0.5px;text-align:center;line-height:1.4}
 .photo-glow{
   position:absolute;inset:-24px;border-radius:50%;
   background:radial-gradient(ellipse,rgba(255,107,53,0.22) 0%,transparent 65%);
@@ -86,8 +93,10 @@ canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
   padding:4px 11px;border-radius:999px;
   box-shadow:0 4px 16px rgba(255,61,113,0.5)
 }
+/* Input file caché */
+#photo-input{display:none}
 
-/* ── Name ────────────────────────────────────── */
+/* ── Name ── */
 .name{
   font-size:30px;font-weight:800;letter-spacing:-0.8px;
   text-align:center;margin-bottom:4px;
@@ -104,7 +113,7 @@ canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
   margin-bottom:32px;animation:fadeUp 0.8s ease 0.24s both
 }
 
-/* ── Macro pills ─────────────────────────────── */
+/* ── Pills ── */
 .pills-row{
   display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
   margin-bottom:36px;animation:fadeUp 0.8s ease 0.3s both
@@ -120,7 +129,7 @@ canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
 .pill strong{font-size:19px;font-weight:800;letter-spacing:-0.3px;line-height:1}
 .pill span{font-size:9.5px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-top:3px}
 
-/* ── Gauges section ──────────────────────────── */
+/* ── Gauges ── */
 .section-label{
   font-size:10px;font-weight:700;letter-spacing:1.8px;
   color:rgba(255,255,255,0.28);text-transform:uppercase;
@@ -138,12 +147,9 @@ canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
   border:1px solid rgba(255,255,255,0.06);
   backdrop-filter:blur(14px);
   display:flex;flex-direction:column;align-items:center;gap:8px;
-  transition:transform 0.25s ease,box-shadow 0.25s ease;
-  cursor:default
+  transition:transform 0.25s ease,box-shadow 0.25s ease
 }
 .g-card:hover{transform:translateY(-5px)}
-
-/* SVG gauge */
 .g-svg-wrap{position:relative;width:104px;height:104px;flex-shrink:0}
 .g-svg-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
 circle.bg{fill:none;stroke:rgba(255,255,255,0.05);stroke-width:7}
@@ -157,28 +163,24 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
 .g-name{font-size:12px;font-weight:700;letter-spacing:0.1px}
 .g-sub{font-size:10px;font-weight:600;color:rgba(255,255,255,0.32)}
 
-/* Per-gauge theming */
-.g-kcal   circle.track{stroke:url(#g-kcal)}
-.g-kcal   .g-val{color:#ff6b35}
-.g-kcal   {box-shadow:0 6px 28px rgba(255,107,53,0.10)}
+.g-kcal  circle.track{stroke:url(#g-kcal)}
+.g-kcal  .g-val{color:#ff6b35}
+.g-kcal  {box-shadow:0 6px 28px rgba(255,107,53,0.10)}
 .g-kcal:hover{box-shadow:0 14px 42px rgba(255,107,53,0.22)}
-
-.g-prot   circle.track{stroke:url(#g-prot)}
-.g-prot   .g-val{color:#00d4aa}
-.g-prot   {box-shadow:0 6px 28px rgba(0,212,170,0.08)}
+.g-prot  circle.track{stroke:url(#g-prot)}
+.g-prot  .g-val{color:#00d4aa}
+.g-prot  {box-shadow:0 6px 28px rgba(0,212,170,0.08)}
 .g-prot:hover{box-shadow:0 14px 42px rgba(0,212,170,0.20)}
-
-.g-fat    circle.track{stroke:url(#g-fat)}
-.g-fat    .g-val{color:#b048ff}
-.g-fat    {box-shadow:0 6px 28px rgba(176,72,255,0.08)}
+.g-fat   circle.track{stroke:url(#g-fat)}
+.g-fat   .g-val{color:#b048ff}
+.g-fat   {box-shadow:0 6px 28px rgba(176,72,255,0.08)}
 .g-fat:hover{box-shadow:0 14px 42px rgba(176,72,255,0.20)}
-
-.g-carbs  circle.track{stroke:url(#g-carbs)}
-.g-carbs  .g-val{color:#ffca3a}
-.g-carbs  {box-shadow:0 6px 28px rgba(255,202,58,0.08)}
+.g-carbs circle.track{stroke:url(#g-carbs)}
+.g-carbs .g-val{color:#ffca3a}
+.g-carbs {box-shadow:0 6px 28px rgba(255,202,58,0.08)}
 .g-carbs:hover{box-shadow:0 14px 42px rgba(255,202,58,0.20)}
 
-/* ── Bottom strip ────────────────────────────── */
+/* ── Bottom strip ── */
 .bottom-strip{
   margin-top:36px;width:100%;max-width:420px;
   display:flex;align-items:center;justify-content:space-between;
@@ -196,22 +198,20 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
   border:1px solid rgba(255,107,53,0.30)
 }
 
-/* ── Footer ──────────────────────────────────── */
+/* ── Footer ── */
 .footer{
   margin-top:28px;display:flex;align-items:center;gap:8px;
   color:rgba(255,255,255,0.18);font-size:11px;font-weight:700;letter-spacing:0.6px;
   animation:fadeUp 0.8s ease 0.6s both
 }
-.footer svg{opacity:0.4}
 
-/* ── Keyframes ───────────────────────────────── */
+/* ── Keyframes ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spinRing{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes pulseDot{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
 @keyframes glowPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.9;transform:scale(1.1)}}
 @keyframes nameShift{0%{background-position:0%}100%{background-position:300%}}
 
-/* ── Mobile ──────────────────────────────────── */
 @media(max-width:400px){
   .ring-outer{width:188px;height:188px}
   .g-svg-wrap{width:92px;height:92px}
@@ -224,71 +224,52 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
 <body>
 
 <canvas id="bg"></canvas>
+<input type="file" id="photo-input" accept="image/*"/>
 
 <main class="page">
 
-  <!-- Badge statut -->
   <div class="badge"><span class="badge-dot"></span> Objectifs du jour — En cours</div>
 
-  <!-- Photo + anneau tournant -->
+  <!-- Photo ring (cliquable) -->
   <div class="photo-wrap">
     <div class="ring-outer">
-      <div class="ring-inner">
-        <!--
-          📌 Place ta photo :
-          Option A — fichier local  : src="/ta-photo.jpg"
-          Option B — URL distante   : src="https://..."
-          Option C — base64         : src="data:image/jpeg;base64,..."
-        -->
-        <!--
-          ════════════════════════════════════════════
-          ► POUR AJOUTER TA PHOTO :
-            Option 1 — Sauvegarde-la comme  /profile-photo.jpg
-                        dans backend/public/ (déjà configuré)
-            Option 2 — Change src= par une URL distante
-            Option 3 — Remplace src= par ton base64
-          ════════════════════════════════════════════
-        -->
-        <img
-          src="/profile-photo.jpg"
-          alt="Profil athlète"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-        />
-        <div class="photo-placeholder" style="display:none">🏋️</div>
+      <div class="ring-inner" id="ring-inner" onclick="document.getElementById('photo-input').click()">
+        <!-- La photo s'insère ici dynamiquement -->
+        <div class="photo-placeholder" id="photo-placeholder">
+          <div class="ph-icon">📸</div>
+          <div class="ph-text">Appuie ici<br>pour ajouter<br>ta photo</div>
+        </div>
+        <img id="profile-img" src="" alt="" style="display:none"/>
+        <div class="photo-hover-overlay">
+          <span>✏️ Changer</span>
+        </div>
       </div>
     </div>
     <div class="photo-glow"></div>
     <div class="photo-tag">⚡ ACTIF</div>
   </div>
 
-  <!-- Nom -->
   <div class="name"><span class="name-grad">Yannis</span></div>
   <div class="subtitle">Athlète · Prime Coaching</div>
 
-  <!-- Résumé macros en pills -->
   <div class="pills-row">
     <div class="pill" style="border-color:rgba(255,107,53,0.22)">
-      <strong style="color:#ff6b35">2 200</strong>
-      <span>Kcal</span>
+      <strong style="color:#ff6b35">2 200</strong><span>Kcal</span>
     </div>
     <div class="pill" style="border-color:rgba(0,212,170,0.22)">
-      <strong style="color:#00d4aa">209g</strong>
-      <span>Protéines</span>
+      <strong style="color:#00d4aa">209g</strong><span>Protéines</span>
     </div>
     <div class="pill" style="border-color:rgba(176,72,255,0.22)">
-      <strong style="color:#b048ff">70g</strong>
-      <span>Lipides</span>
+      <strong style="color:#b048ff">70g</strong><span>Lipides</span>
     </div>
     <div class="pill" style="border-color:rgba(255,202,58,0.22)">
-      <strong style="color:#ffca3a">220g</strong>
-      <span>Glucides</span>
+      <strong style="color:#ffca3a">220g</strong><span>Glucides</span>
     </div>
   </div>
 
-  <!-- Label section -->
   <div class="section-label">Progression journalière</div>
 
-  <!-- Dégradés SVG (invisibles) -->
+  <!-- SVG gradients -->
   <svg style="width:0;height:0;position:absolute" aria-hidden="true">
     <defs>
       <linearGradient id="g-kcal" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -308,7 +289,6 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
 
   <!-- 4 Jauges -->
   <div class="gauges">
-
     <div class="g-card g-kcal">
       <div class="g-svg-wrap">
         <svg viewBox="0 0 100 100">
@@ -368,10 +348,8 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
       <div class="g-name">Glucides</div>
       <div class="g-sub" id="s-carbs"></div>
     </div>
-
   </div>
 
-  <!-- Strip bilan calorique -->
   <div class="bottom-strip">
     <div class="bs-left">
       <div class="bs-title">Bilan calorique</div>
@@ -380,7 +358,6 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
     <div class="bs-right">On Track ✓</div>
   </div>
 
-  <!-- Footer -->
   <div class="footer">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
     PRIME ATHL
@@ -389,45 +366,69 @@ circle.track{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-das
 </main>
 
 <script>
-/* ═══════════════════════════════════════════
-   CONFIG — modifie ici tes valeurs
-═══════════════════════════════════════════ */
+/* ══ MACROS ══════════════════════════════════ */
 const DATA = {
-  kcal:  { val: 2200, max: 2800 },
-  prot:  { val: 209,  max: 250  },
-  fat:   { val: 70,   max: 100  },
-  carbs: { val: 220,  max: 280  },
+  kcal:  { val:2200, max:2800 },
+  prot:  { val:209,  max:250  },
+  fat:   { val:70,   max:100  },
+  carbs: { val:220,  max:280  },
 };
 
-/* ─── SVG gauge ──────────────────────────── */
-const R = 42;
-const CIRC = 2 * Math.PI * R;   // ≈ 263.9
+/* ══ PHOTO — sélection depuis le navigateur ══ */
+const photoInput = document.getElementById('photo-input');
+const profileImg = document.getElementById('profile-img');
+const placeholder = document.getElementById('photo-placeholder');
+
+photoInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    profileImg.src = ev.target.result;
+    profileImg.style.display = 'block';
+    placeholder.style.display = 'none';
+    // Sauvegarde locale pour les prochaines visites
+    try { localStorage.setItem('pa-profile-photo', ev.target.result); } catch(_){}
+  };
+  reader.readAsDataURL(file);
+});
+
+// Restaurer la photo depuis localStorage
+(function(){
+  try {
+    const saved = localStorage.getItem('pa-profile-photo');
+    if (saved) {
+      profileImg.src = saved;
+      profileImg.style.display = 'block';
+      placeholder.style.display = 'none';
+    }
+  } catch(_){}
+})();
+
+/* ══ GAUGE SVG ═══════════════════════════════ */
+const R = 42, CIRC = 2 * Math.PI * R;
 
 function setupTrack(id) {
   const el = document.getElementById('t-' + id);
   el.style.strokeDasharray  = CIRC;
-  el.style.strokeDashoffset = CIRC; // vide au départ
+  el.style.strokeDashoffset = CIRC;
 }
-
 function fillTrack(id, pct) {
-  const el = document.getElementById('t-' + id);
-  el.style.strokeDashoffset = CIRC * (1 - pct / 100);
+  document.getElementById('t-' + id).style.strokeDashoffset = CIRC * (1 - pct / 100);
 }
 
-/* ─── Compteur animé ─────────────────────── */
+/* ══ COUNTUP ═════════════════════════════════ */
 function countUp(elId, target, dur) {
   const el = document.getElementById(elId);
   const t0 = performance.now();
-  function step(now) {
+  (function step(now) {
     const p = Math.min((now - t0) / dur, 1);
-    const eased = 1 - Math.pow(1 - p, 3);   // ease-out cubic
-    el.textContent = Math.round(target * eased);
+    el.textContent = Math.round(target * (1 - Math.pow(1-p,3)));
     if (p < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
+  })(t0);
 }
 
-/* ─── Particules canvas ──────────────────── */
+/* ══ PARTICULES CANVAS ═══════════════════════ */
 const cvs = document.getElementById('bg');
 const cx  = cvs.getContext('2d');
 let W, H, pts = [];
@@ -437,74 +438,55 @@ const COLS = [
   'rgba(255,202,58,','rgba(0,180,216,'
 ];
 
-function resize() {
-  W = cvs.width  = window.innerWidth;
-  H = cvs.height = window.innerHeight;
-}
-function initPts() {
+function resize(){ W = cvs.width = innerWidth; H = cvs.height = innerHeight; }
+function initPts(){
   pts = [];
-  const n = Math.min(70, Math.round(W * H / 12000));
-  for (let i = 0; i < n; i++) {
-    pts.push({
-      x:  Math.random() * W,
-      y:  Math.random() * H,
-      vx: (Math.random() - .5) * .35,
-      vy: (Math.random() - .5) * .35,
-      r:  Math.random() * 1.8 + .4,
-      a:  Math.random() * .55 + .08,
-      c:  COLS[Math.floor(Math.random() * COLS.length)],
-    });
-  }
+  const n = Math.min(70, Math.round(W*H/12000));
+  for(let i=0;i<n;i++) pts.push({
+    x:Math.random()*W, y:Math.random()*H,
+    vx:(Math.random()-.5)*.35, vy:(Math.random()-.5)*.35,
+    r:Math.random()*1.8+.4,
+    a:Math.random()*.55+.08,
+    c:COLS[0|Math.random()*COLS.length],
+  });
 }
-
-function drawBg() {
-  cx.clearRect(0, 0, W, H);
-
-  /* Radial background glow */
-  const g1 = cx.createRadialGradient(W*.5, H*.25, 0, W*.5, H*.25, W*.65);
-  g1.addColorStop(0,   'rgba(255,107,53,0.05)');
-  g1.addColorStop(.5,  'rgba(176,72,255,0.025)');
-  g1.addColorStop(1,   'transparent');
-  cx.fillStyle = g1; cx.fillRect(0, 0, W, H);
-
-  /* Particles */
-  for (const p of pts) {
-    /* glow halo */
-    const halo = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
-    halo.addColorStop(0,   p.c + (p.a * .7) + ')');
-    halo.addColorStop(1,   p.c + '0)');
-    cx.beginPath(); cx.arc(p.x, p.y, p.r * 5, 0, Math.PI*2);
-    cx.fillStyle = halo; cx.fill();
-    /* core */
-    cx.beginPath(); cx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    cx.fillStyle = p.c + p.a + ')'; cx.fill();
-
-    p.x += p.vx; p.y += p.vy;
-    if (p.x < -6) p.x = W+6; else if (p.x > W+6) p.x = -6;
-    if (p.y < -6) p.y = H+6; else if (p.y > H+6) p.y = -6;
+function draw(){
+  cx.clearRect(0,0,W,H);
+  const g=cx.createRadialGradient(W*.5,H*.25,0,W*.5,H*.25,W*.65);
+  g.addColorStop(0,'rgba(255,107,53,0.05)');
+  g.addColorStop(.5,'rgba(176,72,255,0.025)');
+  g.addColorStop(1,'transparent');
+  cx.fillStyle=g; cx.fillRect(0,0,W,H);
+  for(const p of pts){
+    const h=cx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*5);
+    h.addColorStop(0,p.c+(p.a*.7)+')');
+    h.addColorStop(1,p.c+'0)');
+    cx.beginPath(); cx.arc(p.x,p.y,p.r*5,0,Math.PI*2);
+    cx.fillStyle=h; cx.fill();
+    cx.beginPath(); cx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    cx.fillStyle=p.c+p.a+')'; cx.fill();
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<-6)p.x=W+6;else if(p.x>W+6)p.x=-6;
+    if(p.y<-6)p.y=H+6;else if(p.y>H+6)p.y=-6;
   }
-  requestAnimationFrame(drawBg);
+  requestAnimationFrame(draw);
 }
+resize(); initPts(); draw();
+window.addEventListener('resize',()=>{resize();initPts();});
 
-resize(); initPts(); drawBg();
-window.addEventListener('resize', () => { resize(); initPts(); });
-
-/* ─── Init + lancement animation ─────────── */
+/* ══ LANCEMENT ANIMATION ═════════════════════ */
 ['kcal','prot','fat','carbs'].forEach(setupTrack);
 
-function launch() {
-  const DURATION = 1800;
-  for (const [key, d] of Object.entries(DATA)) {
-    const pct = Math.min(Math.round(d.val / d.max * 100), 100);
-    fillTrack(key, pct);
-    countUp('v-' + key, d.val, DURATION);
-    document.getElementById('s-' + key).textContent = pct + '% de l\'objectif';
+function launch(){
+  for(const [k,d] of Object.entries(DATA)){
+    const pct = Math.min(Math.round(d.val/d.max*100),100);
+    fillTrack(k, pct);
+    countUp('v-'+k, d.val, 1800);
+    document.getElementById('s-'+k).textContent = pct+'% de l\'objectif';
   }
 }
-
-/* Lance 400ms après le chargement pour que les transitions CSS soient actives */
-if (document.readyState === 'complete') { setTimeout(launch, 400); }
-else { window.addEventListener('load', () => setTimeout(launch, 400)); }
+if(document.readyState==='complete') setTimeout(launch,400);
+else window.addEventListener('load',()=>setTimeout(launch,400));
 </script>
 
 </body>
