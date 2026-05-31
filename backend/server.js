@@ -145,6 +145,7 @@ async function ensureMainCoach() {
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(), status: 'active', isMainCoach: true,
+      tokenVersion: 0,
     };
     DATA.users[id] = main;
     console.log('[bootstrap] Main coach CREATED:', MAIN_COACH_EMAIL);
@@ -264,6 +265,8 @@ const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toS
 const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
 const sign       = p => jwt.sign(p, JWT_SECRET, { expiresIn: '60d' });
 const verify     = t => jwt.verify(t, JWT_SECRET);
+// Signe un token incluant la version du token (pour invalidation à la déconnexion)
+const signForUser = u => sign({ id: u.id, role: u.role, tv: u.tokenVersion || 0 });
 
 const profileOf = u => u && {
   id: u.id, email: u.email, role: u.role, coachId: u.coachId,
@@ -297,6 +300,8 @@ const authRequired = (req, res, next) => {
     req.user = verify(token);
     const u = DATA.users[req.user.id];
     if (!u) return res.status(401).json({ error: 'user_not_found' });
+    // Vérifie que le token n'a pas été révoqué (logout ou changement de mot de passe)
+    if ((req.user.tv ?? 0) !== (u.tokenVersion || 0)) return res.status(401).json({ error: 'token_revoked' });
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     next();
   } catch { res.status(401).json({ error: 'bad_token' }); }
@@ -368,6 +373,15 @@ const forgotLimiter = rateLimit({
   max: 5, // 5 demandes / heure / IP
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests', detail: 'Trop de demandes de réinitialisation. Réessaie dans 1h.' },
+});
+// Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => 'ai:' + (req.user?.id || req.ip),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'ai_rate_limit', detail: 'Limite de 10 générations IA par heure atteinte. Réessaie dans 1h.' },
 });
 
 // Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
@@ -472,8 +486,9 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       status, isMainCoach: isMain,
       loginFails: [], lockedUntil: null,
       requestedRole,
-      emailVerified: isMain, // coach principal auto-vérifié
+      emailVerified: isMain,
       emailVerifyToken: verifyToken ? hashToken(verifyToken) : null,
+      tokenVersion: 0,
     };
     DATA.users[id] = u;
     persist();
@@ -511,7 +526,7 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
         message: "Demande envoyée. En attente d'approbation du coach principal.",
       });
     }
-    const token = sign({ id: u.id, role: u.role });
+    const token = signForUser(u);
     setAuthCookie(res, token);
     res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'signup_failed' }); }
@@ -538,14 +553,28 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     clearLoginFailures(u);
     persist();
-    const token = sign({ id: u.id, role: u.role });
+    const token = signForUser(u);
     setAuthCookie(res, token);
     res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'login_failed' }); }
 });
 
-// Logout : efface le cookie httpOnly
+// Logout : efface le cookie httpOnly ET invalide le token JWT (tokenVersion++)
 app.post('/api/auth/logout', (req, res) => {
+  const cookieToken = req.cookies?.pa_token;
+  const h = req.headers.authorization;
+  const headerToken = h?.startsWith('Bearer ') ? h.slice(7) : null;
+  const token = cookieToken || headerToken;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const u = DATA.users[decoded.id];
+      if (u) {
+        u.tokenVersion = (u.tokenVersion || 0) + 1;
+        persist();
+      }
+    } catch { /* token déjà invalide ou expiré, rien à faire */ }
+  }
   clearAuthCookie(res);
   res.json({ ok: true });
 });
@@ -685,8 +714,10 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
     u.resetTokenExpiry = null;
     u.loginFails = [];
     u.lockedUntil = null;
+    // Invalide tous les tokens existants (changement de mot de passe = déconnexion partout)
+    u.tokenVersion = (u.tokenVersion || 0) + 1;
     persist();
-    const newToken = sign({ id: u.id, role: u.role });
+    const newToken = signForUser(u);
     setAuthCookie(res, newToken);
     res.json({ ok: true, token: newToken, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'reset_failed' }); }
@@ -812,7 +843,7 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
   try {
     const { email, password, firstName, lastName } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
-    if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+    if (password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
     const lowEmail = email.toLowerCase().trim();
     if (findUserByEmail(lowEmail)) return res.status(409).json({ error: 'email_already_used' });
 
@@ -833,6 +864,7 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
       requestedRole: 'athlete',
       emailVerified: true,
       emailVerifyToken: null,
+      tokenVersion: 0,
     };
     DATA.users[id] = u;
     persist();
@@ -887,7 +919,7 @@ app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) =
       u.email = newEmail;
     }
     if (req.body.password) {
-      if (req.body.password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+      if (req.body.password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
       u.passwordHash = await bcrypt.hash(req.body.password, 12);
     }
     persist();
@@ -1823,6 +1855,7 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   const partner = req.params.partnerId;
   const { text } = req.body || {};
   if (!text || !text.trim()) return res.status(400).json({ error: 'text_required' });
+  if (text.trim().length > 2000) return res.status(400).json({ error: 'message_too_long', detail: 'Maximum 2000 caractères.' });
   const meUser = DATA.users[me];
   const partnerUser = DATA.users[partner];
   if (!partnerUser) return res.status(404).json({ error: 'not_found' });
@@ -1916,8 +1949,37 @@ const PRIME_ATHL_PRODUCTS = [
   "Huile d'olive",'Beurre de cacahuète','Graines de chia','Chocolat noir 70%','Miel',
 ];
 
+// ── IA — Helpers de validation JSON ─────────────────
+const AI_DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+
+function validateAINutritionDays(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!parsed.days || typeof parsed.days !== 'object') throw new Error('Réponse IA invalide : champ "days" manquant');
+  for (const day of AI_DAYS) {
+    if (!parsed.days[day] || typeof parsed.days[day] !== 'object') {
+      parsed.days[day] = { meals: [] };
+    }
+    if (!Array.isArray(parsed.days[day].meals)) parsed.days[day].meals = [];
+  }
+  return parsed;
+}
+
+function validateAIMealItems(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!Array.isArray(parsed.items)) throw new Error('Réponse IA invalide : champ "items" manquant ou non-tableau');
+  return parsed;
+}
+
+function validateAIProgram(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!parsed.name || typeof parsed.name !== 'string') throw new Error('Réponse IA invalide : champ "name" manquant');
+  if (!Array.isArray(parsed.exercises)) throw new Error('Réponse IA invalide : champ "exercises" manquant ou non-tableau');
+  if (parsed.exercises.length === 0) throw new Error('Réponse IA invalide : aucun exercice généré');
+  return parsed;
+}
+
 // ── IA — Génération de plan nutrition 7 jours ───────
-app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
+app.post('/api/ai/generate-nutrition', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { gender, age, weight, height, activity, goal, mealsPerDay=3, allergies='',
           targetCalories, targetProtein, targetCarbs, targetFat, useProductList=false } = req.body || {};
@@ -1953,19 +2015,17 @@ Format EXACT (pas de texte autour):
 Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
     let raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    // Réparer un JSON tronqué : fermer les accolades/crochets manquants
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch(parseErr) {
-      // Tentative de réparation : trouver le dernier objet complet et fermer
-      const lastCompleteDay = raw.lastIndexOf('"meals":[');
-      if (lastCompleteDay === -1) throw parseErr;
-      // Trouver la fin du dernier tableau d'items complet
-      let repaired = raw.slice(0, raw.lastIndexOf(']}'));
-      repaired += ']}]}}}';
-      try { parsed = JSON.parse(repaired); } catch(e2) { throw parseErr; }
+      // Tentative de réparation : JSON tronqué par la limite de tokens
+      const lastBracket = raw.lastIndexOf(']}');
+      if (lastBracket === -1) throw new Error('Réponse IA illisible — JSON tronqué');
+      let repaired = raw.slice(0, lastBracket + 2) + ']}}}';
+      try { parsed = JSON.parse(repaired); } catch { throw new Error('Réponse IA illisible — réparation impossible'); }
     }
+    validateAINutritionDays(parsed);
     const plan = enrichAIPlan(parsed.days, mealCount, targets);
     res.json({ targets, plan });
   } catch(e) {
@@ -1975,7 +2035,7 @@ Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par r
 });
 
 // ── IA — Régénérer un repas ──────────────────────────
-app.post('/api/ai/regenerate-meal', authRequired, async (req, res) => {
+app.post('/api/ai/regenerate-meal', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { day, mealLabel, targetKcal, targetProtein, allergies, goal } = req.body || {};
   try {
@@ -1989,8 +2049,8 @@ Budget: ~${targetKcal} kcal, ~${targetProtein}g protéines | Objectif: ${goal} |
 Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    const { items } = JSON.parse(raw);
-    res.json({ items: items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
+    const parsed = validateAIMealItems(JSON.parse(raw));
+    res.json({ items: parsed.items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
   } catch(e) {
     console.error('AI regen meal error:', e.message);
     res.status(500).json({ error: 'regeneration_failed', detail: e.message });
@@ -1998,7 +2058,7 @@ Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"u
 });
 
 // ── IA — Génération de programme ────────────────────
-app.post('/api/ai/generate-program', authRequired, async (req, res) => {
+app.post('/api/ai/generate-program', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { level, goal, days, equipment, gender, age, weight, height } = req.body || {};
   if (!level || !goal || !days || !equipment) return res.status(400).json({ error: 'missing_fields' });
@@ -2026,7 +2086,7 @@ Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans
 Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. Avancé = mouvements composés lourds. Adapte les séries/reps à l'objectif (masse=6-10 reps lourds, sèche=12-15 reps légers, force=3-5 reps max).` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    const program = JSON.parse(raw);
+    const program = validateAIProgram(JSON.parse(raw));
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
