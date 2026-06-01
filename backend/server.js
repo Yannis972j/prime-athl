@@ -598,8 +598,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       persist();
       return res.status(401).json({ error: 'invalid_credentials' });
     }
-    // Bloquer si email non vérifié (seulement quand Resend est configuré)
-    // email verification not required
+    // Bloquer si email non vérifié (seulement quand Resend est configuré — sinon impossible de vérifier)
+    if (RESEND_API_KEY && !u.emailVerified) {
+      return res.status(403).json({ error: 'email_not_verified', detail: 'Vérifie ta boîte mail et clique sur le lien de confirmation.' });
+    }
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     clearLoginFailures(u);
     persist();
