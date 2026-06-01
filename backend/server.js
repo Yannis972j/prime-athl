@@ -35,6 +35,13 @@ const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random()
 // Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev).
 const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
+if (IS_PROD && !PUBLIC_URL.startsWith('https://')) {
+  console.error('[config] FATAL: PUBLIC_URL doit commencer par https:// en production — les liens emails seront cassés.');
+  process.exit(1);
+}
+if (!IS_PROD && !PUBLIC_URL.startsWith('http')) {
+  console.warn('[config] WARNING: PUBLIC_URL invalide — les liens emails ne fonctionneront pas.');
+}
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 // Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
@@ -1344,6 +1351,8 @@ const ymd = d => {
   const x = new Date(d);
   return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
 };
+// Parse une clé YYYY-MM-DD en timestamp local (évite le décalage UTC de new Date('YYYY-MM-DD'))
+const ymdToLocal = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d).getTime(); };
 
 // Charge le template nutrition depuis le fichier JSON généré à partir de l'Excel
 let DEFAULT_NUTRITION;
@@ -1620,7 +1629,8 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
     // Nutrition validée du mois (nutritionLogs)
     const logs = DATA.nutritionLogs[u.id] || {};
     const nutriDates = Object.keys(logs).filter(dateStr => {
-      const d = new Date(dateStr).getTime();
+      // ymdToLocal : parse YYYY-MM-DD en heure locale, cohérent avec start/end (new Date(year, month-1, 1))
+      const d = ymdToLocal(dateStr);
       return d >= start && d < end && Object.values(logs[dateStr]?.validated||{}).some(v => v);
     });
 
@@ -2333,6 +2343,31 @@ process.on('uncaughtException', err => {
 process.on('unhandledRejection', (reason, p) => {
   console.error('unhandledRejection:', reason);
 });
+
+// Graceful shutdown : flush DB avant de mourir (évite la corruption de data.json)
+function gracefulShutdown(signal) {
+  console.log(`[shutdown] ${signal} reçu — arrêt propre en cours`);
+  server.close(() => {
+    console.log('[shutdown] Serveur HTTP fermé');
+    // Annuler les timers de sauvegarde différée et sauvegarder immédiatement
+    if (saveTimer) clearTimeout(saveTimer);
+    if (pgSaveTimer) clearTimeout(pgSaveTimer);
+    try {
+      const tmp = DB_PATH + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(DATA));
+      fs.renameSync(tmp, DB_PATH);
+      console.log('[shutdown] DB vidée sur disque');
+    } catch (e) { console.error('[shutdown] Erreur flush DB:', e.message); }
+    process.exit(0);
+  });
+  // Forcer la sortie après 10s si des connexions restent ouvertes
+  setTimeout(() => {
+    console.error('[shutdown] Sortie forcée après timeout');
+    process.exit(1);
+  }, 10_000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
 // Express error middleware (catches sync errors in routes)
 app.use((err, req, res, next) => {
