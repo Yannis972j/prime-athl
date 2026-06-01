@@ -42,6 +42,22 @@ if (IS_PROD && !PUBLIC_URL.startsWith('https://')) {
 if (!IS_PROD && !PUBLIC_URL.startsWith('http')) {
   console.warn('[config] WARNING: PUBLIC_URL invalide — les liens emails ne fonctionneront pas.');
 }
+
+// ── Validation des variables d'environnement optionnelles ───────────────────
+// Ces features sont désactivées silencieusement si les vars manquent.
+// On log un avertissement clair au boot pour éviter les surprises.
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.warn('[config] ANTHROPIC_API_KEY non défini — génération IA désactivée (/api/ai/*)');
+}
+if (!process.env.CLOUDINARY_URL) {
+  console.warn('[config] CLOUDINARY_URL non défini — upload photos limité à 500KB (base64 fallback)');
+}
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.warn('[config] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY non définis — notifications push désactivées');
+}
+if (!RESEND_API_KEY) {
+  console.warn('[config] RESEND_API_KEY non défini — envoi d\'emails désactivé (reset password, vérification)');
+}
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 // Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
@@ -265,6 +281,33 @@ setInterval(() => {
       if (dateKey < cutoffStr) delete DATA.nutritionLogs[uid][dateKey];
     }
   }
+
+  // Supprime les comptes pending > 30 jours (inscrits mais jamais approuvés)
+  const PENDING_TTL = 30 * 24 * 60 * 60 * 1000;
+  let removedPending = 0;
+  for (const u of Object.values(DATA.users)) {
+    if (u.status === 'pending' && Date.now() - (u.createdAt || 0) > PENDING_TTL) {
+      delete DATA.users[u.id];
+      delete DATA.programs[u.id];
+      delete DATA.savedPrograms[u.id];
+      removedPending++;
+    }
+  }
+  if (removedPending > 0) console.log(`[cleanup] ${removedPending} compte(s) pending expirés supprimés`);
+
+  // Purge les push subscriptions expirées (endpoint invalide depuis > 7 jours)
+  // Elles sont marquées .invalidatedAt lors d'une erreur 410/404 webpush
+  const PUSH_STALE_TTL = 7 * 24 * 60 * 60 * 1000;
+  let removedPush = 0;
+  for (const [userId, sub] of Object.entries(DATA.pushSubscriptions || {})) {
+    if (sub && sub.invalidatedAt && Date.now() - sub.invalidatedAt > PUSH_STALE_TTL) {
+      delete DATA.pushSubscriptions[userId];
+      removedPush++;
+    }
+  }
+  if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
+
+  if (removedPending > 0 || removedPush > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 
 // ── Helpers ─────────────────────────────────────────
@@ -755,6 +798,37 @@ app.get('/api/me', authRequired, (req, res) => {
   res.json(profileOf(u));
 });
 
+// ── Export RGPD : toutes les données personnelles de l'utilisateur ──────────
+// Conforme au droit d'accès RGPD / CCPA — retourne un fichier JSON téléchargeable
+app.get('/api/me/export', authRequired, (req, res) => {
+  const uid = req.user.id;
+  const u = DATA.users[uid];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+
+  // On exclut les champs internes de sécurité (hash, tokens) jamais envoyés au client
+  const { passwordHash, resetTokenHash, resetTokenExpiry, emailVerifyToken, loginFails, lockedUntil, tokenVersion, ...publicUser } = u;
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    profile: publicUser,
+    sessions: Object.values(DATA.sessions).filter(s => s.userId === uid),
+    weightLogs: DATA.weightLogs[uid] || [],
+    nutritionLogs: DATA.nutritionLogs[uid] || {},
+    freeFoodLogs: DATA.freeFoodLogs[uid] || {},
+    nutritionProgram: DATA.nutritionPrograms[uid] || null,
+    program: DATA.programs[uid] || null,
+    savedPrograms: DATA.savedPrograms[uid] || [],
+    progressPhotos: (DATA.progressPhotos[uid] || []).map(p => ({ ...p, url: p.url?.startsWith('data:') ? '[base64 omis]' : p.url })),
+    messages: Object.entries(DATA.messages)
+      .filter(([key]) => key.includes(uid))
+      .map(([key, msgs]) => ({ conversation: key, messages: msgs || [] })),
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="prime-athl-mes-donnees-${new Date().toISOString().slice(0,10)}.json"`);
+  res.send(JSON.stringify(exportData, null, 2));
+});
+
 const PROFILE_FIELDS = ['firstName','lastName','height','weight','objective','prSquat','prBench','prDeadlift'];
 
 app.patch('/api/me', authRequired, (req, res) => {
@@ -794,21 +868,24 @@ app.put('/api/my-program', authRequired, (req, res) => {
 
 // ── Coach ───────────────────────────────────────────
 app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
-  const athletes = Object.values(DATA.users)
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const all = Object.values(DATA.users)
     .filter(u => u.coachId === req.user.id)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map(u => {
-      const p = DATA.programs[u.id];
-      const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
-      const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
-      return {
-        ...profileOf(u),
-        program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
-        sessionCount: userSessions.length,
-        lastSessionAt: lastSession ? lastSession.date : null,
-      };
-    });
-  res.json(athletes);
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const total = all.length;
+  const athletes = all.slice((page - 1) * limit, page * limit).map(u => {
+    const p = DATA.programs[u.id];
+    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
+    return {
+      ...profileOf(u),
+      program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+      sessionCount: userSessions.length,
+      lastSessionAt: lastSession ? lastSession.date : null,
+    };
+  });
+  res.json({ athletes, total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
@@ -881,21 +958,24 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
 
 // All athletes without a coach (can be claimed by any coach)
 app.get('/api/coach/available-athletes', authRequired, coachOnly, (req, res) => {
-  const list = Object.values(DATA.users)
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const all = Object.values(DATA.users)
     .filter(u => u.role === 'athlete' && !u.coachId)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map(u => {
-      const p = DATA.programs[u.id];
-      const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
-      const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
-      return {
-        ...profileOf(u),
-        sessionCount: userSessions.length,
-        lastSessionAt: lastSession ? lastSession.date : null,
-        hasProgram: !!p,
-      };
-    });
-  res.json(list);
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const total = all.length;
+  const list = all.slice((page - 1) * limit, page * limit).map(u => {
+    const p = DATA.programs[u.id];
+    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
+    return {
+      ...profileOf(u),
+      sessionCount: userSessions.length,
+      lastSessionAt: lastSession ? lastSession.date : null,
+      hasProgram: !!p,
+    };
+  });
+  res.json({ athletes: list, total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 // Coach claims an unassigned athlete (links coachId)
@@ -1435,11 +1515,13 @@ app.delete('/api/nutrition/free-food/:id', authRequired, (req, res) => {
 // Normalise une chaîne pour comparaison search (sans accents, lowercase, trim)
 const normFoodName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
-// GET /api/foods/search?q=... : cherche d'abord dans customFoods (instant),
-// puis enrichit avec Open Food Facts (timeout 3s, fallback silencieux).
+// GET /api/foods/search?q=...&page=1&limit=12
+// Cherche d'abord dans customFoods (instant), puis enrichit avec Open Food Facts.
 app.get('/api/foods/search', authRequired, async (req, res) => {
   const q = normFoodName(req.query.q);
-  if (q.length < 2) return res.json({ results: [] });
+  if (q.length < 2) return res.json({ results: [], total: 0, page: 1, pages: 1 });
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
 
   // 1. Recherche locale customFoods
   const u = DATA.users[req.user.id];
@@ -1448,7 +1530,6 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
   );
   const localResults = visibleFoods
     .filter(f => normFoodName(f.name).includes(q))
-    .slice(0, 8)
     .map(f => ({
       id: f.id,
       source: f.source === 'creole' ? 'creole' : 'custom',
@@ -1461,14 +1542,14 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
-    const url = `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(q)}&fields=product_name,product_name_fr,nutriments&page_size=8&lang=fr`;
+    const offPage = Math.max(1, page - Math.ceil(localResults.length / limit));
+    const url = `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(q)}&fields=product_name,product_name_fr,nutriments&page_size=12&page=${offPage}&lang=fr`;
     const r = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'PrimeAthl/1.0' } });
     clearTimeout(timeout);
     if (r.ok) {
       const data = await r.json();
       offResults = (data.products || [])
         .filter(p => p.nutriments && p.nutriments['energy-kcal_100g'] != null)
-        .slice(0, 6)
         .map(p => ({
           id: 'off:' + (p.code || Math.random().toString(36).slice(2)),
           source: 'off',
@@ -1482,7 +1563,10 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
     }
   } catch (e) { /* timeout ou erreur réseau — ignoré, on retourne seulement le local */ }
 
-  res.json({ results: [...localResults, ...offResults].slice(0, 12) });
+  const all = [...localResults, ...offResults];
+  const total = all.length;
+  const results = all.slice((page - 1) * limit, page * limit);
+  res.json({ results, total, page, limit, pages: Math.ceil(total / limit) || 1 });
 });
 
 // POST /api/foods : un coach crée un aliment custom (visible par ses athlètes)
@@ -1895,7 +1979,8 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
       .catch(e => {
         console.error('[push-msg] error:', e.statusCode, e.message);
         if (e.statusCode === 410 || e.statusCode === 404) {
-          delete DATA.pushSubscriptions[partner]; persist();
+          const old = DATA.pushSubscriptions[partner];
+          if (old) { DATA.pushSubscriptions[partner] = { ...old, invalidatedAt: Date.now() }; persist(); }
         }
       });
   }
@@ -1906,9 +1991,15 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
 function pushToUser(userId, payload) {
   if (!VAPID_PUBLIC_KEY) return;
   const sub = DATA.pushSubscriptions[userId];
-  if (!sub) return;
+  if (!sub || sub.invalidatedAt) return;
   webpush.sendNotification(sub, JSON.stringify(payload))
-    .catch(() => { delete DATA.pushSubscriptions[userId]; persist(); });
+    .catch(e => {
+      if (e.statusCode === 410 || e.statusCode === 404) {
+        // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
+        DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
+        persist();
+      }
+    });
 }
 
 // ── IA — Nutrition helpers ───────────────────────────
