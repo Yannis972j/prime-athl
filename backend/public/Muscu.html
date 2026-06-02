@@ -1360,68 +1360,55 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
           </button>
         </div>
 
-        {/* up next — groupé par blocs */}
+        {/* up next — groupé par blocs, présentation uniforme */}
         <SectionHeader title="Suite"/>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {groupExercises(exercises).map((group,gi)=>{
-            // CARDIO : bloc spécial avec distance/vitesse/durée
-            if(group.style==='CARDIO'){
-              const {ex:e,idx:i}=group.items[0];
-              const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
-              const c=e.cardio||{};
-              return(
-                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',padding:'10px 14px',borderRadius:14,border:`1px solid ${isActive?group.color+'88':group.color+'33'}`,background:isActive?`${group.color}12`:'rgba(255,255,255,0.02)',cursor:'pointer'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <div style={{width:6,height:6,borderRadius:3,background:group.color,boxShadow:`0 0 6px ${group.color}aa`}}/>
-                    <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6}}>CARDIO</span>
-                    <span style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,flex:1}}>{e.name}</span>
-                    {isActive&&<Pill color={group.color}>NOW</Pill>}
-                  </div>
-                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                    {c.distance&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>📍 {c.distance} km</span>}
-                    {c.vitesse&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⚡ {c.vitesse} km/h</span>}
-                    {c.inclinaison&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⛰ {c.inclinaison}%</span>}
-                    {c.duree&&<span style={{fontSize:11,color:group.color,fontWeight:700,background:`${group.color}18`,padding:'2px 8px',borderRadius:6}}>⏱ {c.duree}</span>}
-                  </div>
-                </button>
-              );
-            }
-            // CLASSIQUE : exo seul
-            if(group.style==='CLASSIQUE'){
-              const {ex:e,idx:i}=group.items[0];
-              const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
-              return(
-                <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isActive?group.color+'66':'rgba(255,255,255,0.06)'}`,background:isActive?`${group.color}10`:'rgba(255,255,255,0.025)',cursor:'pointer'}}>
-                  <div style={{width:28,height:28,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
-                    {isDone?<Icon name="check" size={14} stroke="#000" strokeWidth={2.6}/>:i+1}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',textDecorationColor:'rgba(255,255,255,0.2)'}}>{e.name}</div>
-                    <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{e.muscle} · {e.sets.length} séries</div>
-                  </div>
-                  {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
-                </button>
-              );
-            }
-            // SUPERSET / TRISET / ABDOS : bloc groupé
             const blockDone=group.items.every(({ex:e})=>e.sets.every(s=>s.done));
             const blockActive=group.items.some(({idx:i})=>i===currentEx);
-            const blockLabel=group.style==='ABDOS'?'ABDOS':group.style==='TRISET'?'TRI-SET':'SUPERSET';
-            const blockSub=group.style==='ABDOS'?'Abdominaux':group.style==='TRISET'?'· 3 exos sans repos':'· 2 exos sans repos';
+            const color=group.color;
+            const borderColor=blockActive?`${color}66`:blockDone?'rgba(255,255,255,0.05)':`${color}30`;
+            const bgColor=blockActive?`${color}0d`:'rgba(255,255,255,0.015)';
+
+            const labelMap={CLASSIQUE:'CLASSIQUE',SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'ABDOS',CARDIO:'CARDIO'};
+            const subMap={CLASSIQUE:'',SUPERSET:'· enchaîner sans repos',TRISET:'· enchaîner sans repos',ABDOS:'· Abdominaux',CARDIO:''};
+            const label=labelMap[group.style]||group.style;
+            const sub=subMap[group.style]||'';
+
             return(
-              <div key={gi} style={{borderRadius:14,border:`1px solid ${blockActive?group.color+'66':blockDone?'rgba(255,255,255,0.06)':group.color+'33'}`,background:blockActive?`${group.color}0d`:'rgba(255,255,255,0.015)',overflow:'hidden'}}>
-                <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px 4px',borderBottom:`1px solid ${group.color}22`}}>
-                  <div style={{width:6,height:6,borderRadius:3,background:group.color,boxShadow:`0 0 6px ${group.color}aa`}}/>
-                  <span style={{fontSize:10,color:group.color,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>{blockLabel}</span>
-                  <span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginLeft:2}}>{blockSub}</span>
+              <div key={gi} style={{borderRadius:14,border:`1px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
+                {/* En-tête commun à tous les styles */}
+                <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px 4px',borderBottom:`1px solid ${color}18`}}>
+                  <div style={{width:5,height:5,borderRadius:3,background:color,boxShadow:`0 0 5px ${color}99`}}/>
+                  <span style={{fontSize:10,color:color,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>{label}</span>
+                  {sub&&<span style={{fontSize:9,color:T.textFaint,fontWeight:600,marginLeft:1}}>{sub}</span>}
                 </div>
+
+                {/* Exercices du bloc */}
                 {group.items.map(({ex:e,idx:i},bi)=>{
                   const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
                   const chargeStr=e.weightStr&&e.weightStr!=='0'?e.weightStr+'kg':'';
-                  const repsStr=e.repsStr||e.sets[0]?.target||'?';
+                  const repsStr=e.repsStr||e.sets[0]?.targetStr||e.sets[0]?.target||'?';
+
+                  if(group.style==='CARDIO'){
+                    const c=e.cardio||{};
+                    return(
+                      <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',padding:'8px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
+                        <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,marginBottom:4}}>{e.name}</div>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {c.distance&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {c.distance} km</span>}
+                          {c.vitesse&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {c.vitesse} km/h</span>}
+                          {c.inclinaison&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {c.inclinaison}%</span>}
+                          {c.duree&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {c.duree}</span>}
+                        </div>
+                        {isActive&&<Pill color={color} style={{marginTop:4}}>NOW</Pill>}
+                      </button>
+                    );
+                  }
+
                   return(
-                    <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:isActive?`${group.color}12`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${group.color}18`:'none'}}>
-                      <div style={{width:26,height:26,borderRadius:8,background:isDone?group.color:isActive?`${group.color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>
+                    <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
+                      <div style={{width:26,height:26,borderRadius:8,background:isDone?color:isActive?`${color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>
                         {isDone?<Icon name="check" size={12} stroke="#000" strokeWidth={2.8}/>:i+1}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
@@ -1429,10 +1416,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
                         <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        {chargeStr&&<div style={{fontSize:12,fontWeight:700,color:group.color}}>{chargeStr}</div>}
+                        {chargeStr&&<div style={{fontSize:11,fontWeight:700,color:color}}>{chargeStr}</div>}
                         <div style={{fontSize:10,color:T.textFaint}}>{e.sets.length}×{repsStr}</div>
                       </div>
-                      {isActive&&<Pill color={group.color} style={{flexShrink:0}}>NOW</Pill>}
+                      {isActive&&<Pill color={color} style={{flexShrink:0}}>NOW</Pill>}
                     </button>
                   );
                 })}
