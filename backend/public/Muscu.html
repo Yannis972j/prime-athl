@@ -652,8 +652,12 @@ function groupExercises(exercises){
     const ex=exercises[i];
     const s=ex.style||'CLASSIQUE';
     if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
+      // SUPERSET = 2 exos max, TRISET = 3 exos max, ABDOS = illimité (bloc ab)
+      const maxItems=s==='SUPERSET'?2:s==='TRISET'?3:Infinity;
       const items=[{ex,idx:i}]; i++;
-      while(i<exercises.length&&exercises[i].style===s){ items.push({ex:exercises[i],idx:i});i++; }
+      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems){
+        items.push({ex:exercises[i],idx:i});i++;
+      }
       groups.push({style:s,color:STYLE_COLORS[s]||T.accent,items});
     } else if(s==='CARDIO'){
       groups.push({style:'CARDIO',color:STYLE_COLORS.CARDIO,items:[{ex,idx:i}]});i++;
