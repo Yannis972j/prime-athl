@@ -3010,39 +3010,30 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                       {(()=>{
                         const groups=groupExercises(displayExercises);
                         let shown=0;const els=[];
+                        const labelMap={CLASSIQUE:'CLASSIQUE',SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'ABDOS',CARDIO:'CARDIO'};
+                        const subMap={CLASSIQUE:'',SUPERSET:'· enchaîner sans repos',TRISET:'· enchaîner sans repos',ABDOS:'',CARDIO:''};
                         for(const group of groups){
                           if(shown>=6)break;
-                          if(group.style==='CLASSIQUE'){
-                            const {ex,idx:i}=group.items[0];
-                            els.push(
-                              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                                <div style={{width:24,height:24,borderRadius:7,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{i+1}</div>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'} reps</div>
-                                </div>
+                          els.push(
+                            <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
+                                <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
+                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{labelMap[group.style]||group.style}</span>
+                                {subMap[group.style]&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>{subMap[group.style]}</span>}
                               </div>
-                            );shown++;
-                          } else {
-                            els.push(
-                              <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
-                                  <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
-                                  <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{group.style==='TRISET'?'TRI-SET':group.style}</span>
-                                  <span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>· enchaîner sans repos</span>
-                                </div>
-                                {group.items.map(({ex,idx:i},bi)=>(
-                                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
-                                    {bi>0&&<span style={{fontSize:9,color:group.color,fontWeight:700}}>↓</span>}
-                                    <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                    </div>
-                                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>
+                              {group.items.map(({ex,idx:i},bi)=>(
+                                <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
+                                  {bi>0&&<span style={{fontSize:9,color:group.color,fontWeight:700}}>↓</span>}
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                                    {group.style==='CLASSIQUE'&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'} reps</div>}
                                   </div>
-                                ))}
-                              </div>
-                            );shown+=group.items.length;
-                          }
+                                  {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>}
+                                  {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          );shown+=group.items.length;
                         }
                         const rem=displayExercises.length-shown;
                         if(rem>0)els.push(<div key="more" style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{rem} exercices</div>);
