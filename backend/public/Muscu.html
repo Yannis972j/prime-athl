@@ -652,8 +652,12 @@ function groupExercises(exercises){
     const ex=exercises[i];
     const s=ex.style||'CLASSIQUE';
     if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
+      // SUPERSET = 2 exos max, TRISET = 3 exos max, ABDOS = illimité (bloc ab)
+      const maxItems=s==='SUPERSET'?2:s==='TRISET'?3:Infinity;
       const items=[{ex,idx:i}]; i++;
-      while(i<exercises.length&&exercises[i].style===s){ items.push({ex:exercises[i],idx:i});i++; }
+      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems){
+        items.push({ex:exercises[i],idx:i});i++;
+      }
       groups.push({style:s,color:STYLE_COLORS[s]||T.accent,items});
     } else if(s==='CARDIO'){
       groups.push({style:'CARDIO',color:STYLE_COLORS.CARDIO,items:[{ex,idx:i}]});i++;
@@ -886,9 +890,29 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onImportPrograms,onSaveS
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
 
   const validateSet=si=>{
-    const rest=ex.restSeconds||90;
-    const set=ex.sets[si];
     updSet(currentEx,si,{done:true});
+
+    // SUPERSET / TRISET : enchaîner sans repos jusqu'au dernier exo du bloc
+    if(ex.style==='SUPERSET'||ex.style==='TRISET'){
+      const group=groupExercises(exercises).find(g=>g.items.some(({idx})=>idx===currentEx));
+      if(group){
+        const myPos=group.items.findIndex(({idx})=>idx===currentEx);
+        const nextPartner=group.items[myPos+1];
+        if(nextPartner){
+          // Pas le dernier → aller directement au suivant, SANS repos
+          setCurrentEx(nextPartner.idx);
+          return;
+        }
+        // Dernier exo du bloc → lancer le repos puis revenir au premier pour le prochain round
+        const rest=ex.restSeconds||90;
+        setRestSeconds(rest);setRestTotal(rest);
+        setCurrentEx(group.items[0].idx);
+        return;
+      }
+    }
+
+    // Exercice classique (CLASSIQUE / ABDOS / CARDIO) → chrono repos normal
+    const rest=ex.restSeconds||90;
     setRestSeconds(rest);setRestTotal(rest);
   };
 

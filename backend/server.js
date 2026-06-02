@@ -35,6 +35,29 @@ const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random()
 // Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev).
 const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
+if (IS_PROD && !PUBLIC_URL.startsWith('https://')) {
+  console.error('[config] FATAL: PUBLIC_URL doit commencer par https:// en production — les liens emails seront cassés.');
+  process.exit(1);
+}
+if (!IS_PROD && !PUBLIC_URL.startsWith('http')) {
+  console.warn('[config] WARNING: PUBLIC_URL invalide — les liens emails ne fonctionneront pas.');
+}
+
+// ── Validation des variables d'environnement optionnelles ───────────────────
+// Ces features sont désactivées silencieusement si les vars manquent.
+// On log un avertissement clair au boot pour éviter les surprises.
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.warn('[config] ANTHROPIC_API_KEY non défini — génération IA désactivée (/api/ai/*)');
+}
+if (!process.env.CLOUDINARY_URL) {
+  console.warn('[config] CLOUDINARY_URL non défini — upload photos limité à 500KB (base64 fallback)');
+}
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.warn('[config] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY non définis — notifications push désactivées');
+}
+if (!RESEND_API_KEY) {
+  console.warn('[config] RESEND_API_KEY non défini — envoi d\'emails désactivé (reset password, vérification)');
+}
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 // Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
@@ -145,6 +168,7 @@ async function ensureMainCoach() {
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(), status: 'active', isMainCoach: true,
+      tokenVersion: 0,
     };
     DATA.users[id] = main;
     console.log('[bootstrap] Main coach CREATED:', MAIN_COACH_EMAIL);
@@ -257,6 +281,33 @@ setInterval(() => {
       if (dateKey < cutoffStr) delete DATA.nutritionLogs[uid][dateKey];
     }
   }
+
+  // Supprime les comptes pending > 30 jours (inscrits mais jamais approuvés)
+  const PENDING_TTL = 30 * 24 * 60 * 60 * 1000;
+  let removedPending = 0;
+  for (const u of Object.values(DATA.users)) {
+    if (u.status === 'pending' && Date.now() - (u.createdAt || 0) > PENDING_TTL) {
+      delete DATA.users[u.id];
+      delete DATA.programs[u.id];
+      delete DATA.savedPrograms[u.id];
+      removedPending++;
+    }
+  }
+  if (removedPending > 0) console.log(`[cleanup] ${removedPending} compte(s) pending expirés supprimés`);
+
+  // Purge les push subscriptions expirées (endpoint invalide depuis > 7 jours)
+  // Elles sont marquées .invalidatedAt lors d'une erreur 410/404 webpush
+  const PUSH_STALE_TTL = 7 * 24 * 60 * 60 * 1000;
+  let removedPush = 0;
+  for (const [userId, sub] of Object.entries(DATA.pushSubscriptions || {})) {
+    if (sub && sub.invalidatedAt && Date.now() - sub.invalidatedAt > PUSH_STALE_TTL) {
+      delete DATA.pushSubscriptions[userId];
+      removedPush++;
+    }
+  }
+  if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
+
+  if (removedPending > 0 || removedPush > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 
 // ── Helpers ─────────────────────────────────────────
@@ -264,6 +315,8 @@ const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toS
 const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
 const sign       = p => jwt.sign(p, JWT_SECRET, { expiresIn: '60d' });
 const verify     = t => jwt.verify(t, JWT_SECRET);
+// Signe un token incluant la version du token (pour invalidation à la déconnexion)
+const signForUser = u => sign({ id: u.id, role: u.role, tv: u.tokenVersion || 0 });
 
 const profileOf = u => u && {
   id: u.id, email: u.email, role: u.role, coachId: u.coachId,
@@ -297,6 +350,8 @@ const authRequired = (req, res, next) => {
     req.user = verify(token);
     const u = DATA.users[req.user.id];
     if (!u) return res.status(401).json({ error: 'user_not_found' });
+    // Vérifie que le token n'a pas été révoqué (logout ou changement de mot de passe)
+    if ((req.user.tv ?? 0) !== (u.tokenVersion || 0)) return res.status(401).json({ error: 'token_revoked' });
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     next();
   } catch { res.status(401).json({ error: 'bad_token' }); }
@@ -368,6 +423,15 @@ const forgotLimiter = rateLimit({
   max: 5, // 5 demandes / heure / IP
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests', detail: 'Trop de demandes de réinitialisation. Réessaie dans 1h.' },
+});
+// Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => 'ai:' + (req.user?.id || req.ip),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'ai_rate_limit', detail: 'Limite de 10 générations IA par heure atteinte. Réessaie dans 1h.' },
 });
 
 // Redirect root to Muscu.html so https://prime-athl.onrender.com loads the app
@@ -472,8 +536,9 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       status, isMainCoach: isMain,
       loginFails: [], lockedUntil: null,
       requestedRole,
-      emailVerified: isMain, // coach principal auto-vérifié
+      emailVerified: isMain,
       emailVerifyToken: verifyToken ? hashToken(verifyToken) : null,
+      tokenVersion: 0,
     };
     DATA.users[id] = u;
     persist();
@@ -511,7 +576,7 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
         message: "Demande envoyée. En attente d'approbation du coach principal.",
       });
     }
-    const token = sign({ id: u.id, role: u.role });
+    const token = signForUser(u);
     setAuthCookie(res, token);
     res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'signup_failed' }); }
@@ -533,19 +598,35 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       persist();
       return res.status(401).json({ error: 'invalid_credentials' });
     }
-    // Bloquer si email non vérifié (seulement quand Resend est configuré)
-    // email verification not required
+    // Bloquer si email non vérifié (seulement quand Resend est configuré — sinon impossible de vérifier)
+    if (RESEND_API_KEY && !u.emailVerified) {
+      return res.status(403).json({ error: 'email_not_verified', detail: 'Vérifie ta boîte mail et clique sur le lien de confirmation.' });
+    }
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
     clearLoginFailures(u);
     persist();
-    const token = sign({ id: u.id, role: u.role });
+    const token = signForUser(u);
     setAuthCookie(res, token);
     res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'login_failed' }); }
 });
 
-// Logout : efface le cookie httpOnly
+// Logout : efface le cookie httpOnly ET invalide le token JWT (tokenVersion++)
 app.post('/api/auth/logout', (req, res) => {
+  const cookieToken = req.cookies?.pa_token;
+  const h = req.headers.authorization;
+  const headerToken = h?.startsWith('Bearer ') ? h.slice(7) : null;
+  const token = cookieToken || headerToken;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const u = DATA.users[decoded.id];
+      if (u) {
+        u.tokenVersion = (u.tokenVersion || 0) + 1;
+        persist();
+      }
+    } catch { /* token déjà invalide ou expiré, rien à faire */ }
+  }
   clearAuthCookie(res);
   res.json({ ok: true });
 });
@@ -685,8 +766,10 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
     u.resetTokenExpiry = null;
     u.loginFails = [];
     u.lockedUntil = null;
+    // Invalide tous les tokens existants (changement de mot de passe = déconnexion partout)
+    u.tokenVersion = (u.tokenVersion || 0) + 1;
     persist();
-    const newToken = sign({ id: u.id, role: u.role });
+    const newToken = signForUser(u);
     setAuthCookie(res, newToken);
     res.json({ ok: true, token: newToken, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'reset_failed' }); }
@@ -715,6 +798,37 @@ app.get('/api/me', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   res.json(profileOf(u));
+});
+
+// ── Export RGPD : toutes les données personnelles de l'utilisateur ──────────
+// Conforme au droit d'accès RGPD / CCPA — retourne un fichier JSON téléchargeable
+app.get('/api/me/export', authRequired, (req, res) => {
+  const uid = req.user.id;
+  const u = DATA.users[uid];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+
+  // On exclut les champs internes de sécurité (hash, tokens) jamais envoyés au client
+  const { passwordHash, resetTokenHash, resetTokenExpiry, emailVerifyToken, loginFails, lockedUntil, tokenVersion, ...publicUser } = u;
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    profile: publicUser,
+    sessions: Object.values(DATA.sessions).filter(s => s.userId === uid),
+    weightLogs: DATA.weightLogs[uid] || [],
+    nutritionLogs: DATA.nutritionLogs[uid] || {},
+    freeFoodLogs: DATA.freeFoodLogs[uid] || {},
+    nutritionProgram: DATA.nutritionPrograms[uid] || null,
+    program: DATA.programs[uid] || null,
+    savedPrograms: DATA.savedPrograms[uid] || [],
+    progressPhotos: (DATA.progressPhotos[uid] || []).map(p => ({ ...p, url: p.url?.startsWith('data:') ? '[base64 omis]' : p.url })),
+    messages: Object.entries(DATA.messages)
+      .filter(([key]) => key.includes(uid))
+      .map(([key, msgs]) => ({ conversation: key, messages: msgs || [] })),
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="prime-athl-mes-donnees-${new Date().toISOString().slice(0,10)}.json"`);
+  res.send(JSON.stringify(exportData, null, 2));
 });
 
 const PROFILE_FIELDS = ['firstName','lastName','height','weight','objective','prSquat','prBench','prDeadlift'];
@@ -756,21 +870,24 @@ app.put('/api/my-program', authRequired, (req, res) => {
 
 // ── Coach ───────────────────────────────────────────
 app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
-  const athletes = Object.values(DATA.users)
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const all = Object.values(DATA.users)
     .filter(u => u.coachId === req.user.id)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map(u => {
-      const p = DATA.programs[u.id];
-      const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
-      const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
-      return {
-        ...profileOf(u),
-        program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
-        sessionCount: userSessions.length,
-        lastSessionAt: lastSession ? lastSession.date : null,
-      };
-    });
-  res.json(athletes);
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const total = all.length;
+  const athletes = all.slice((page - 1) * limit, page * limit).map(u => {
+    const p = DATA.programs[u.id];
+    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
+    return {
+      ...profileOf(u),
+      program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+      sessionCount: userSessions.length,
+      lastSessionAt: lastSession ? lastSession.date : null,
+    };
+  });
+  res.json({ athletes, total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
@@ -812,7 +929,7 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
   try {
     const { email, password, firstName, lastName } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email_and_password_required' });
-    if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+    if (password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
     const lowEmail = email.toLowerCase().trim();
     if (findUserByEmail(lowEmail)) return res.status(409).json({ error: 'email_already_used' });
 
@@ -833,6 +950,7 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
       requestedRole: 'athlete',
       emailVerified: true,
       emailVerifyToken: null,
+      tokenVersion: 0,
     };
     DATA.users[id] = u;
     persist();
@@ -842,21 +960,24 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
 
 // All athletes without a coach (can be claimed by any coach)
 app.get('/api/coach/available-athletes', authRequired, coachOnly, (req, res) => {
-  const list = Object.values(DATA.users)
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+  const all = Object.values(DATA.users)
     .filter(u => u.role === 'athlete' && !u.coachId)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map(u => {
-      const p = DATA.programs[u.id];
-      const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
-      const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
-      return {
-        ...profileOf(u),
-        sessionCount: userSessions.length,
-        lastSessionAt: lastSession ? lastSession.date : null,
-        hasProgram: !!p,
-      };
-    });
-  res.json(list);
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const total = all.length;
+  const list = all.slice((page - 1) * limit, page * limit).map(u => {
+    const p = DATA.programs[u.id];
+    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
+    return {
+      ...profileOf(u),
+      sessionCount: userSessions.length,
+      lastSessionAt: lastSession ? lastSession.date : null,
+      hasProgram: !!p,
+    };
+  });
+  res.json({ athletes: list, total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 // Coach claims an unassigned athlete (links coachId)
@@ -887,7 +1008,7 @@ app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) =
       u.email = newEmail;
     }
     if (req.body.password) {
-      if (req.body.password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+      if (req.body.password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
       u.passwordHash = await bcrypt.hash(req.body.password, 12);
     }
     persist();
@@ -1312,6 +1433,8 @@ const ymd = d => {
   const x = new Date(d);
   return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
 };
+// Parse une clé YYYY-MM-DD en timestamp local (évite le décalage UTC de new Date('YYYY-MM-DD'))
+const ymdToLocal = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d).getTime(); };
 
 // Charge le template nutrition depuis le fichier JSON généré à partir de l'Excel
 let DEFAULT_NUTRITION;
@@ -1394,11 +1517,13 @@ app.delete('/api/nutrition/free-food/:id', authRequired, (req, res) => {
 // Normalise une chaîne pour comparaison search (sans accents, lowercase, trim)
 const normFoodName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
-// GET /api/foods/search?q=... : cherche d'abord dans customFoods (instant),
-// puis enrichit avec Open Food Facts (timeout 3s, fallback silencieux).
+// GET /api/foods/search?q=...&page=1&limit=12
+// Cherche d'abord dans customFoods (instant), puis enrichit avec Open Food Facts.
 app.get('/api/foods/search', authRequired, async (req, res) => {
   const q = normFoodName(req.query.q);
-  if (q.length < 2) return res.json({ results: [] });
+  if (q.length < 2) return res.json({ results: [], total: 0, page: 1, pages: 1 });
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
 
   // 1. Recherche locale customFoods
   const u = DATA.users[req.user.id];
@@ -1407,7 +1532,6 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
   );
   const localResults = visibleFoods
     .filter(f => normFoodName(f.name).includes(q))
-    .slice(0, 8)
     .map(f => ({
       id: f.id,
       source: f.source === 'creole' ? 'creole' : 'custom',
@@ -1420,14 +1544,14 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
-    const url = `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(q)}&fields=product_name,product_name_fr,nutriments&page_size=8&lang=fr`;
+    const offPage = Math.max(1, page - Math.ceil(localResults.length / limit));
+    const url = `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(q)}&fields=product_name,product_name_fr,nutriments&page_size=12&page=${offPage}&lang=fr`;
     const r = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'PrimeAthl/1.0' } });
     clearTimeout(timeout);
     if (r.ok) {
       const data = await r.json();
       offResults = (data.products || [])
         .filter(p => p.nutriments && p.nutriments['energy-kcal_100g'] != null)
-        .slice(0, 6)
         .map(p => ({
           id: 'off:' + (p.code || Math.random().toString(36).slice(2)),
           source: 'off',
@@ -1441,7 +1565,10 @@ app.get('/api/foods/search', authRequired, async (req, res) => {
     }
   } catch (e) { /* timeout ou erreur réseau — ignoré, on retourne seulement le local */ }
 
-  res.json({ results: [...localResults, ...offResults].slice(0, 12) });
+  const all = [...localResults, ...offResults];
+  const total = all.length;
+  const results = all.slice((page - 1) * limit, page * limit);
+  res.json({ results, total, page, limit, pages: Math.ceil(total / limit) || 1 });
 });
 
 // POST /api/foods : un coach crée un aliment custom (visible par ses athlètes)
@@ -1588,7 +1715,8 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
     // Nutrition validée du mois (nutritionLogs)
     const logs = DATA.nutritionLogs[u.id] || {};
     const nutriDates = Object.keys(logs).filter(dateStr => {
-      const d = new Date(dateStr).getTime();
+      // ymdToLocal : parse YYYY-MM-DD en heure locale, cohérent avec start/end (new Date(year, month-1, 1))
+      const d = ymdToLocal(dateStr);
       return d >= start && d < end && Object.values(logs[dateStr]?.validated||{}).some(v => v);
     });
 
@@ -1823,6 +1951,7 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   const partner = req.params.partnerId;
   const { text } = req.body || {};
   if (!text || !text.trim()) return res.status(400).json({ error: 'text_required' });
+  if (text.trim().length > 2000) return res.status(400).json({ error: 'message_too_long', detail: 'Maximum 2000 caractères.' });
   const meUser = DATA.users[me];
   const partnerUser = DATA.users[partner];
   if (!partnerUser) return res.status(404).json({ error: 'not_found' });
@@ -1852,7 +1981,8 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
       .catch(e => {
         console.error('[push-msg] error:', e.statusCode, e.message);
         if (e.statusCode === 410 || e.statusCode === 404) {
-          delete DATA.pushSubscriptions[partner]; persist();
+          const old = DATA.pushSubscriptions[partner];
+          if (old) { DATA.pushSubscriptions[partner] = { ...old, invalidatedAt: Date.now() }; persist(); }
         }
       });
   }
@@ -1863,9 +1993,15 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
 function pushToUser(userId, payload) {
   if (!VAPID_PUBLIC_KEY) return;
   const sub = DATA.pushSubscriptions[userId];
-  if (!sub) return;
+  if (!sub || sub.invalidatedAt) return;
   webpush.sendNotification(sub, JSON.stringify(payload))
-    .catch(() => { delete DATA.pushSubscriptions[userId]; persist(); });
+    .catch(e => {
+      if (e.statusCode === 410 || e.statusCode === 404) {
+        // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
+        DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
+        persist();
+      }
+    });
 }
 
 // ── IA — Nutrition helpers ───────────────────────────
@@ -1916,8 +2052,37 @@ const PRIME_ATHL_PRODUCTS = [
   "Huile d'olive",'Beurre de cacahuète','Graines de chia','Chocolat noir 70%','Miel',
 ];
 
+// ── IA — Helpers de validation JSON ─────────────────
+const AI_DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+
+function validateAINutritionDays(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!parsed.days || typeof parsed.days !== 'object') throw new Error('Réponse IA invalide : champ "days" manquant');
+  for (const day of AI_DAYS) {
+    if (!parsed.days[day] || typeof parsed.days[day] !== 'object') {
+      parsed.days[day] = { meals: [] };
+    }
+    if (!Array.isArray(parsed.days[day].meals)) parsed.days[day].meals = [];
+  }
+  return parsed;
+}
+
+function validateAIMealItems(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!Array.isArray(parsed.items)) throw new Error('Réponse IA invalide : champ "items" manquant ou non-tableau');
+  return parsed;
+}
+
+function validateAIProgram(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('Réponse IA invalide : structure manquante');
+  if (!parsed.name || typeof parsed.name !== 'string') throw new Error('Réponse IA invalide : champ "name" manquant');
+  if (!Array.isArray(parsed.exercises)) throw new Error('Réponse IA invalide : champ "exercises" manquant ou non-tableau');
+  if (parsed.exercises.length === 0) throw new Error('Réponse IA invalide : aucun exercice généré');
+  return parsed;
+}
+
 // ── IA — Génération de plan nutrition 7 jours ───────
-app.post('/api/ai/generate-nutrition', authRequired, async (req, res) => {
+app.post('/api/ai/generate-nutrition', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { gender, age, weight, height, activity, goal, mealsPerDay=3, allergies='',
           targetCalories, targetProtein, targetCarbs, targetFat, useProductList=false } = req.body || {};
@@ -1953,19 +2118,17 @@ Format EXACT (pas de texte autour):
 Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
     let raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    // Réparer un JSON tronqué : fermer les accolades/crochets manquants
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch(parseErr) {
-      // Tentative de réparation : trouver le dernier objet complet et fermer
-      const lastCompleteDay = raw.lastIndexOf('"meals":[');
-      if (lastCompleteDay === -1) throw parseErr;
-      // Trouver la fin du dernier tableau d'items complet
-      let repaired = raw.slice(0, raw.lastIndexOf(']}'));
-      repaired += ']}]}}}';
-      try { parsed = JSON.parse(repaired); } catch(e2) { throw parseErr; }
+      // Tentative de réparation : JSON tronqué par la limite de tokens
+      const lastBracket = raw.lastIndexOf(']}');
+      if (lastBracket === -1) throw new Error('Réponse IA illisible — JSON tronqué');
+      let repaired = raw.slice(0, lastBracket + 2) + ']}}}';
+      try { parsed = JSON.parse(repaired); } catch { throw new Error('Réponse IA illisible — réparation impossible'); }
     }
+    validateAINutritionDays(parsed);
     const plan = enrichAIPlan(parsed.days, mealCount, targets);
     res.json({ targets, plan });
   } catch(e) {
@@ -1975,7 +2138,7 @@ Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par r
 });
 
 // ── IA — Régénérer un repas ──────────────────────────
-app.post('/api/ai/regenerate-meal', authRequired, async (req, res) => {
+app.post('/api/ai/regenerate-meal', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { day, mealLabel, targetKcal, targetProtein, allergies, goal } = req.body || {};
   try {
@@ -1989,8 +2152,8 @@ Budget: ~${targetKcal} kcal, ~${targetProtein}g protéines | Objectif: ${goal} |
 Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    const { items } = JSON.parse(raw);
-    res.json({ items: items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
+    const parsed = validateAIMealItems(JSON.parse(raw));
+    res.json({ items: parsed.items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
   } catch(e) {
     console.error('AI regen meal error:', e.message);
     res.status(500).json({ error: 'regeneration_failed', detail: e.message });
@@ -1998,7 +2161,7 @@ Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"u
 });
 
 // ── IA — Génération de programme ────────────────────
-app.post('/api/ai/generate-program', authRequired, async (req, res) => {
+app.post('/api/ai/generate-program', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
   const { level, goal, days, equipment, gender, age, weight, height } = req.body || {};
   if (!level || !goal || !days || !equipment) return res.status(400).json({ error: 'missing_fields' });
@@ -2026,7 +2189,7 @@ Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans
 Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. Avancé = mouvements composés lourds. Adapte les séries/reps à l'objectif (masse=6-10 reps lourds, sèche=12-15 reps légers, force=3-5 reps max).` }]
     });
     const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
-    const program = JSON.parse(raw);
+    const program = validateAIProgram(JSON.parse(raw));
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
@@ -2273,6 +2436,31 @@ process.on('uncaughtException', err => {
 process.on('unhandledRejection', (reason, p) => {
   console.error('unhandledRejection:', reason);
 });
+
+// Graceful shutdown : flush DB avant de mourir (évite la corruption de data.json)
+function gracefulShutdown(signal) {
+  console.log(`[shutdown] ${signal} reçu — arrêt propre en cours`);
+  server.close(() => {
+    console.log('[shutdown] Serveur HTTP fermé');
+    // Annuler les timers de sauvegarde différée et sauvegarder immédiatement
+    if (saveTimer) clearTimeout(saveTimer);
+    if (pgSaveTimer) clearTimeout(pgSaveTimer);
+    try {
+      const tmp = DB_PATH + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(DATA));
+      fs.renameSync(tmp, DB_PATH);
+      console.log('[shutdown] DB vidée sur disque');
+    } catch (e) { console.error('[shutdown] Erreur flush DB:', e.message); }
+    process.exit(0);
+  });
+  // Forcer la sortie après 10s si des connexions restent ouvertes
+  setTimeout(() => {
+    console.error('[shutdown] Sortie forcée après timeout');
+    process.exit(1);
+  }, 10_000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
 // Express error middleware (catches sync errors in routes)
 app.use((err, req, res, next) => {
