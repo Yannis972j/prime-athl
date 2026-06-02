@@ -168,7 +168,7 @@ async function ensureMainCoach() {
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(), status: 'active', isMainCoach: true,
-      tokenVersion: 0,
+      emailVerified: true, tokenVersion: 0,
     };
     DATA.users[id] = main;
     console.log('[bootstrap] Main coach CREATED:', MAIN_COACH_EMAIL);
@@ -177,6 +177,7 @@ async function ensureMainCoach() {
     main.role = 'coach';
     main.status = 'active';
     main.isMainCoach = true;
+    main.emailVerified = true;
     console.log('[bootstrap] Main coach password REFRESHED:', MAIN_COACH_EMAIL);
   }
   try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
