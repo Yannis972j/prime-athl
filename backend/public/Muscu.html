@@ -5972,7 +5972,7 @@ function CoachScreen({authToken,authUser}){
       ];
       if(isMain)baseReqs.push(apiCall('/api/admin/pending'));
       const results=await Promise.all(baseReqs);
-      setAthletes(results[0]);setInvites(results[1]);setAvailable(results[2]);
+      setAthletes(Array.isArray(results[0])?results[0]:(results[0].athletes||[]));setInvites(results[1]);setAvailable(Array.isArray(results[2])?results[2]:(results[2].athletes||[]));
       if(isMain)setPending(results[3]);
     }catch(e){console.error(e);}
     setLoading(false);
@@ -7816,7 +7816,7 @@ function NutritionAIWizard({authUser}){
 
   const openCoachSheet=async()=>{
     setCoachSheet(true);
-    try{const r=await apiCall('/api/coach/athletes');setAthletes(r||[]);}catch(e){}
+    try{const r=await apiCall('/api/coach/athletes');setAthletes(Array.isArray(r)?r:(r.athletes||[]));}catch(e){}
   };
 
   const assignToAthlete=async(athleteId)=>{
