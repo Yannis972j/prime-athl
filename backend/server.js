@@ -52,10 +52,10 @@ if (!process.env.ANTHROPIC_API_KEY) {
 if (!process.env.CLOUDINARY_URL) {
   console.warn('[config] CLOUDINARY_URL non défini — upload photos limité à 500KB (base64 fallback)');
 }
-if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
   console.warn('[config] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY non définis — notifications push désactivées');
 }
-if (!RESEND_API_KEY) {
+if (!process.env.RESEND_API_KEY) {
   console.warn('[config] RESEND_API_KEY non défini — envoi d\'emails désactivé (reset password, vérification)');
 }
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
