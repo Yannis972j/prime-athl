@@ -875,7 +875,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     };
   },[]);
 
-  const ex=exercises[currentEx]||exercises[0];
+  // Helper : changer d'exercice en stoppant le chrono repos en cours
+  const goToEx=React.useCallback(idx=>{setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);},[]);
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+x.weight*(x.reps||0),0),0);
@@ -1067,7 +1068,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                 FAIT
               </button>
             ):nextExHas?(
-              <button onClick={()=>setCurrentEx(c=>Math.min(exercises.length-1,c+1))} style={{width:'100%',minHeight:88,borderRadius:22,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:20,fontWeight:800,letterSpacing:0.6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,boxShadow:'0 12px 32px rgba(124,196,161,0.4)'}}>
+              <button onClick={()=>goToEx(Math.min(exercises.length-1,currentEx+1))} style={{width:'100%',minHeight:88,borderRadius:22,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:20,fontWeight:800,letterSpacing:0.6,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,boxShadow:'0 12px 32px rgba(124,196,161,0.4)'}}>
                 Exercice suivant →
               </button>
             ):(
@@ -1079,8 +1080,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
           {/* Nav exercices (petite, en bas) */}
           <div style={{display:'flex',gap:10,marginTop:18,justifyContent:'center'}}>
-            <button onClick={()=>setCurrentEx(c=>Math.max(0,c-1))} disabled={currentEx===0} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:currentEx===0?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:currentEx===0?'not-allowed':'pointer',opacity:currentEx===0?0.4:1}}>← Précédent</button>
-            <button onClick={()=>setCurrentEx(c=>Math.min(exercises.length-1,c+1))} disabled={isLastEx} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:isLastEx?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:isLastEx?'not-allowed':'pointer',opacity:isLastEx?0.4:1}}>Suivant →</button>
+            <button onClick={()=>goToEx(Math.max(0,currentEx-1))} disabled={currentEx===0} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:currentEx===0?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:currentEx===0?'not-allowed':'pointer',opacity:currentEx===0?0.4:1}}>← Précédent</button>
+            <button onClick={()=>goToEx(Math.min(exercises.length-1,currentEx+1))} disabled={isLastEx} style={{minWidth:44,minHeight:44,padding:'0 14px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:isLastEx?T.textFaint:T.textDim,fontSize:12,fontWeight:700,cursor:isLastEx?'not-allowed':'pointer',opacity:isLastEx?0.4:1}}>Suivant →</button>
           </div>
 
         </div>
@@ -1231,10 +1232,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   }
 
                   if(isNext){
+                    const targetLabel=s.targetStr||(s.target?String(s.target):null);
                     return(
                       <div key={i} style={{borderRadius:16,background:'rgba(217,119,87,0.07)',border:'1px solid rgba(217,119,87,0.28)',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
-                        {/* Numéro */}
-                        <div style={{width:26,height:26,borderRadius:8,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff',flexShrink:0}}>{i+1}</div>
+                        {/* Numéro + objectif */}
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                          <div style={{width:26,height:26,borderRadius:8,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff'}}>{i+1}</div>
+                          {targetLabel&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600,marginTop:2,whiteSpace:'nowrap'}}>{targetLabel} r.</span>}
+                        </div>
                         {/* Poids */}
                         <div style={{display:'flex',alignItems:'center',gap:3,background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'4px 6px',flex:1,minWidth:96}}>
                           <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
@@ -1307,7 +1312,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   const sDone=s.sets.every(x=>x.done);
                   const chargeStr=s.weightStr&&s.weightStr!=='0'?s.weightStr+'kg':'';
                   return(
-                    <button key={s.id||si} onClick={()=>setCurrentEx(si)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:sDone?'transparent':`${sc}08`,border:'none',cursor:'pointer',borderTop:bi>0?`1px solid ${sc}18`:'none'}}>
+                    <button key={s.id||si} onClick={()=>goToEx(si)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:sDone?'transparent':`${sc}08`,border:'none',cursor:'pointer',borderTop:bi>0?`1px solid ${sc}18`:'none'}}>
                       <div style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:0}}>
                         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
                           <div style={{width:1,height:10,background:`${sc}55`}}/>
@@ -1333,10 +1338,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
         {/* nav buttons */}
         <div style={{display:'flex',gap:10,marginBottom:18}}>
-          <button disabled={currentEx===0} onClick={()=>setCurrentEx(i=>Math.max(0,i-1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:currentEx===0?T.textFaint:T.text,fontSize:13,fontWeight:600,cursor:currentEx===0?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===0?0.4:1}}>
+          <button disabled={currentEx===0} onClick={()=>goToEx(Math.max(0,currentEx-1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:currentEx===0?T.textFaint:T.text,fontSize:13,fontWeight:600,cursor:currentEx===0?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===0?0.4:1}}>
             <Icon name="chevronLeft" size={15}/>Précédent
           </button>
-          <button disabled={currentEx===exercises.length-1} onClick={()=>setCurrentEx(i=>Math.min(exercises.length-1,i+1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(217,119,87,0.4)',background:T.accentSoft,color:T.accent,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===exercises.length-1?0.4:1}}>
+          <button disabled={currentEx===exercises.length-1} onClick={()=>goToEx(Math.min(exercises.length-1,currentEx+1))} style={{flex:1,height:44,borderRadius:14,border:'1px solid rgba(217,119,87,0.4)',background:T.accentSoft,color:T.accent,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:currentEx===exercises.length-1?0.4:1}}>
             Suivant<Icon name="chevronRight" size={15} stroke={T.accent}/>
           </button>
         </div>
@@ -1374,7 +1379,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   if(group.style==='CARDIO'){
                     const c=e.cardio||{};
                     return(
-                      <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',padding:'8px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
+                      <button key={e.id||i} onClick={()=>goToEx(i)} style={{width:'100%',textAlign:'left',padding:'8px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
                         <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,marginBottom:4}}>{e.name}</div>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                           {c.distance&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {c.distance} km</span>}
@@ -1388,7 +1393,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   }
 
                   return(
-                    <button key={e.id||i} onClick={()=>setCurrentEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
+                    <button key={e.id||i} onClick={()=>goToEx(i)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
                       <div style={{width:26,height:26,borderRadius:8,background:isDone?color:isActive?`${color}33`:'rgba(255,255,255,0.06)',color:isDone?'#000':'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>
                         {isDone?<Icon name="check" size={12} stroke="#000" strokeWidth={2.8}/>:i+1}
                       </div>
