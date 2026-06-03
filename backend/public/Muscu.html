@@ -1206,35 +1206,76 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                 );
               })()}
 
-              {/* set rows — compact horizontal avec steppers tactiles */}
-              {ex.style!=='CARDIO'&&(<div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {/* set rows — design premium */}
+              {ex.style!=='CARDIO'&&(<div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {ex.sets.map((s,i)=>{
                   const isNext=!s.done&&ex.sets.findIndex(x=>!x.done)===i;
-                  const repsDisplay=s.done?s.reps:(isNext?'':(s.target||''));
-                  return(
-                    <div key={i}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 5px 4px 8px',borderRadius:12,background:s.done?'rgba(217,119,87,0.07)':isNext?'rgba(217,119,87,0.04)':'rgba(255,255,255,0.025)',border:`1px solid ${s.done?'rgba(217,119,87,0.18)':isNext?'rgba(217,119,87,0.32)':'rgba(255,255,255,0.06)'}`,transition:'all 0.25s ease'}}>
-                        {/* Numéro de set */}
-                        <div style={{width:24,height:24,borderRadius:7,background:s.done?T.accent:isNext?'rgba(217,119,87,0.18)':'rgba(255,255,255,0.05)',color:s.done?'#fff':isNext?T.accent:T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
-                          {s.done?<Icon name="check" size={12} stroke="#fff" strokeWidth={2.8}/>:i+1}
+
+                  if(s.done){
+                    return(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(217,119,87,0.05)',border:'1px solid rgba(217,119,87,0.13)',transition:'all 0.25s'}}>
+                        <div style={{width:22,height:22,borderRadius:11,background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                          <Icon name="check" size={12} stroke="#fff" strokeWidth={3}/>
                         </div>
-                        {/* Poids */}
-                        <Stepper value={s.weight} onChange={v=>updSet(currentEx,i,{weight:v})} step={2.5} suffix="kg" disabled={s.done}/>
-                        <span style={{color:T.textFaint,fontWeight:600,fontSize:11}}>×</span>
-                        {/* Reps */}
-                        <Stepper value={repsDisplay} onChange={v=>updSet(currentEx,i,{reps:v})} step={1} target={s.targetStr||s.target} disabled={s.done}/>
-                        <div style={{flex:1}}/>
-                        {/* Action droite : check / volume */}
-                        {!s.done?(
-                          <button onClick={()=>validateSet(i)} style={{minWidth:44,minHeight:44,borderRadius:10,border:'none',cursor:'pointer',background:isNext?'linear-gradient(135deg,#d97757,#c97586)':'rgba(255,255,255,0.06)',color:isNext?'#fff':T.textFaint,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:isNext?'0 4px 14px rgba(217,119,87,0.4)':'none',transition:'transform 0.15s ease'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
-                            <Icon name="check" size={18} stroke={isNext?'#fff':T.textFaint} strokeWidth={isNext?2.8:2}/>
-                          </button>
-                        ):(
-                          <button onClick={()=>updSet(currentEx,i,{done:false})} title="Annuler" style={{minWidth:48,minHeight:44,padding:'0 8px',textAlign:'center',background:'transparent',border:'1px solid rgba(217,119,87,0.18)',borderRadius:9,color:T.accent,fontWeight:700,fontSize:10,cursor:'pointer',flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1}}>
-                            <span style={{fontSize:11,fontVariantNumeric:'tabular-nums'}}>{Math.round(s.weight*(s.reps||0))}</span>
-                            <span style={{fontSize:7,opacity:0.65,fontWeight:600,marginTop:1}}>kg</span>
-                          </button>
-                        )}
+                        <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.3,flexShrink:0}}>S{i+1}</span>
+                        <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
+                          <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{s.weight||0}</span>
+                          <span style={{fontSize:10,color:T.textFaint}}>kg</span>
+                          <span style={{fontSize:12,color:'rgba(255,255,255,0.18)',margin:'0 6px'}}>×</span>
+                          <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{s.reps||0}</span>
+                          <span style={{fontSize:10,color:T.textFaint}}>reps</span>
+                        </div>
+                        <button onClick={()=>updSet(currentEx,i,{done:false})} style={{padding:'4px 10px',borderRadius:8,border:'1px solid rgba(255,255,255,0.07)',background:'transparent',color:T.textFaint,fontSize:10,fontWeight:600,cursor:'pointer',flexShrink:0}}>modifier</button>
+                      </div>
+                    );
+                  }
+
+                  if(isNext){
+                    return(
+                      <div key={i} style={{borderRadius:18,background:'rgba(217,119,87,0.07)',border:'1px solid rgba(217,119,87,0.3)',boxShadow:'0 4px 24px rgba(217,119,87,0.1)',padding:'16px'}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{width:28,height:28,borderRadius:9,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff',boxShadow:'0 3px 10px rgba(217,119,87,0.4)'}}>{i+1}</div>
+                            <span style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Série active</span>
+                          </div>
+                          {(s.targetStr||s.target)&&<span style={{fontSize:10,color:T.textFaint,fontWeight:600}}>objectif {s.targetStr||s.target} reps</span>}
+                        </div>
+                        <div style={{display:'flex',gap:10,marginBottom:14}}>
+                          <div style={{flex:1,background:'rgba(255,255,255,0.035)',borderRadius:14,padding:'10px 8px 8px',border:'1px solid rgba(255,255,255,0.07)',textAlign:'center'}}>
+                            <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.7,textTransform:'uppercase',marginBottom:6}}>Poids</div>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                              <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:34,height:34,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,fontWeight:400,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,flexShrink:0}}>−</button>
+                              <input type="number" value={s.weight||0} onChange={e=>updSet(currentEx,i,{weight:parseFloat(e.target.value)||0})} style={{width:56,background:'transparent',border:'none',color:'#fff',fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                              <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:34,height:34,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,fontWeight:400,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,flexShrink:0}}>+</button>
+                            </div>
+                            <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>kg</div>
+                          </div>
+                          <div style={{flex:1,background:'rgba(255,255,255,0.035)',borderRadius:14,padding:'10px 8px 8px',border:'1px solid rgba(255,255,255,0.07)',textAlign:'center'}}>
+                            <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.7,textTransform:'uppercase',marginBottom:6}}>Reps</div>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                              <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:34,height:34,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,fontWeight:400,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,flexShrink:0}}>−</button>
+                              <input type="number" value={s.reps||''} placeholder={String(s.target||'0')} onChange={e=>updSet(currentEx,i,{reps:parseFloat(e.target.value)||0})} style={{width:56,background:'transparent',border:'none',color:'#fff',fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                              <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:34,height:34,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,fontWeight:400,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,flexShrink:0}}>+</button>
+                            </div>
+                            <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>répétitions</div>
+                          </div>
+                        </div>
+                        <button onClick={()=>validateSet(i)} style={{width:'100%',height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 6px 22px rgba(217,119,87,0.45)',letterSpacing:0.6,textTransform:'uppercase'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.97)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                          <Icon name="check" size={18} stroke="#fff" strokeWidth={3}/> Série faite
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(255,255,255,0.018)',border:'1px solid rgba(255,255,255,0.04)',opacity:0.6}}>
+                      <div style={{width:22,height:22,borderRadius:8,background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.textFaint,flexShrink:0}}>{i+1}</div>
+                      <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
+                        <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.weight||'—'}</span>
+                        <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span>
+                        <span style={{fontSize:11,color:'rgba(255,255,255,0.15)',margin:'0 6px'}}>×</span>
+                        <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.target||'—'}</span>
+                        <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>reps</span>
                       </div>
                     </div>
                   );
