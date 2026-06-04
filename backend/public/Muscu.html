@@ -877,6 +877,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   // Helper : changer d'exercice en stoppant le chrono repos en cours
   const goToEx=React.useCallback(idx=>{setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);},[]);
+  const ex=exercises[currentEx]||exercises[0];
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+x.weight*(x.reps||0),0),0);
