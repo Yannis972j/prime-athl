@@ -2607,7 +2607,7 @@ function MotivationMarquee(){
   );
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
@@ -3076,16 +3076,23 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                         return els;
                       })()}
                     </div>
-                    <div style={{display:'flex',gap:8}}>
-                      {isDone&&histSession&&(
-                        <button onClick={()=>setViewHistSession(histSession)} style={{height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(124,196,161,0.4)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                          <Icon name="eye" size={15} stroke={T.good}/> Poids
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <div style={{display:'flex',gap:8}}>
+                        {isDone&&histSession&&(
+                          <button onClick={()=>setViewHistSession(histSession)} style={{height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(124,196,161,0.4)',background:'rgba(124,196,161,0.08)',color:T.good,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                            <Icon name="eye" size={15} stroke={T.good}/> Poids
+                          </button>
+                        )}
+                        <button onClick={()=>d?startDay(selectedDay.dayName):refaire()} style={{flex:1,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                          <Icon name="play" size={16} stroke="#fff"/>
+                          {isDone?'Refaire la séance':'Démarrer la séance'}
+                        </button>
+                      </div>
+                      {isDone&&histSession&&onDeleteSession&&(
+                        <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(histSession.id,selectedDay.dateStr);}} style={{width:'100%',height:34,borderRadius:10,border:'1px solid rgba(201,117,134,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2}}>
+                          <Icon name="trash" size={12} stroke={T.danger}/> Supprimer la séance
                         </button>
                       )}
-                      <button onClick={()=>d?startDay(selectedDay.dayName):refaire()} style={{flex:1,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(217,119,87,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-                        <Icon name="play" size={16} stroke="#fff"/>
-                        {isDone?'Refaire la séance':'Démarrer la séance'}
-                      </button>
                     </div>
                   </>
                 )}
@@ -8375,7 +8382,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     if(!snapshot||!snapshot.totalVolume)return;
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
-    try{await apiCall('/api/sessions',{method:'POST',body:snapshot});}catch(e){console.error('session sync',e);}
+    try{
+      const res=await apiCall('/api/sessions',{method:'POST',body:snapshot});
+      if(res?.id){setHistory(h=>h.map(s=>s.date===snapshot.date&&!s.id?{...s,id:res.id}:s));}
+    }catch(e){console.error('session sync',e);}
+  };
+  const deleteSession=async(sessionId,sessionDate)=>{
+    setHistory(h=>h.filter(s=>s.id!==sessionId&&!(s.date?.slice(0,10)===sessionDate&&!s.id)));
+    if(sessionId){try{await apiCall(`/api/sessions/${sessionId}`,{method:'DELETE'});}catch(e){console.error('delete session',e);}}
   };
 
   const editDay=(sheet,day)=>{setEditingDayKey({sheet,day});setScreen('programDay');};
@@ -8443,6 +8457,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
                   authToken={authToken} nutriRefreshKey={nutriRefreshKey}
+                  onDeleteSession={deleteSession}
                 />
               </UniverseShell>
             )}
@@ -8502,7 +8517,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 }
 
 // ── Programme Tab (Séances + Nutrition réunis) ───────────────────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey}){
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession}){
   const[sub,setSub]=React.useState('seances');
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
@@ -8526,6 +8541,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
           onStartWorkout={onStartWorkout} onEdit={onEdit} onResume={onResume}
           onEditDay={onEditDay} profile={profile} programMeta={programMeta}
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
+          onDeleteSession={onDeleteSession}
         />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>

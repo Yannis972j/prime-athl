@@ -1222,7 +1222,15 @@ app.post('/api/sessions', authRequired, (req, res) => {
   res.json({ id });
 });
 
-// ── Coach : supprimer / déplacer une séance athlète ──
+// Athlète : supprimer une de ses propres séances
+app.delete('/api/sessions/:id', authRequired, (req, res) => {
+  const s = DATA.sessions[req.params.id];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  if (s.userId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  delete DATA.sessions[req.params.id];
+  persist();
+  res.json({ ok: true });
+});
 app.delete('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {
   const s = DATA.sessions[req.params.sessionId];
   if (!s) return res.status(404).json({ error: 'not_found' });
