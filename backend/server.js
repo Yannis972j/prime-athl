@@ -150,8 +150,7 @@ if (USE_PG) {
 }
 
 // ── Main-coach bootstrap ───────────────────────────
-// Garantit que le compte coach principal existe TOUJOURS et avec le mot de passe défini en env.
-// Plus jamais besoin de recréer le compte après un déploiement.
+// Garantit que le compte coach principal existe TOUJOURS avec un accès total.
 // Mot de passe par défaut si aucune variable d'env n'est définie.
 // Garantit que le compte coach principal a TOUJOURS un accès total, même après
 // un redéploiement sur disque éphémère (Render free tier).
