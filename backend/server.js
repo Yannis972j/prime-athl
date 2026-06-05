@@ -1308,6 +1308,34 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   res.json({ ok: true, date: s.date });
 });
 
+// Coach crée une séance pour un athlète (import à l'unité)
+app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res) => {
+  const athlete = DATA.users[req.params.id];
+  if (!athlete) return res.status(404).json({ error: 'not_found' });
+  if (athlete.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  const { name, date, exercises, totalVolume, duration, notes } = req.body || {};
+  if (!name || !Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
+  const id = 'cs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const session = {
+    id, userId: athlete.id,
+    name: name.slice(0, 120),
+    date: date || new Date().toISOString(),
+    exercises: exercises.map(e => ({
+      name: e.name || '', muscle: e.muscle || '',
+      sets: (e.sets || []).map(s => ({ weight: +s.weight || 0, reps: +s.reps || 0 })),
+    })),
+    totalVolume: +totalVolume || 0,
+    duration: +duration || 0,
+    notes: notes ? String(notes).slice(0, 500) : '',
+    createdByCoach: true,
+    createdAt: Date.now(),
+  };
+  DATA.sessions[id] = session;
+  persist();
+  io.to('user:' + athlete.id).emit('session-added', { session });
+  res.json({ ok: true, id });
+});
+
 // ── Test email (main coach only) ────────────────────
 app.post('/api/admin/test-email', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
   const u = DATA.users[req.user.id];
