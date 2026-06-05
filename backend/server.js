@@ -1184,7 +1184,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
 
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
-  const { date, name, totalVolume, exercises } = req.body || {};
+  const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
   if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name_required' });
   const safeVolume = Math.max(0, Math.min(1e7, parseFloat(totalVolume) || 0));
   const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => ({
@@ -1194,15 +1194,19 @@ app.post('/api/sessions', authRequired, (req, res) => {
       weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
       reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
       done: !!s.done,
+      note: s.note ? String(s.note).slice(0, 200) : undefined,
     })),
   }));
   const session = {
     id, userId: req.user.id,
-    date: date || Date.now(),
+    date: date || new Date().toISOString(),
     name: String(name).slice(0, 100),
     totalVolume: safeVolume,
     exercises: safeExercises,
   };
+  if (rpe != null) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
+  if (notes) session.notes = String(notes).slice(0, 500);
+  if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
   DATA.sessions[id] = session;
   // Garder max 500 sessions au total (FIFO sur les plus vieilles)
   const allSids = Object.keys(DATA.sessions);
@@ -1240,6 +1244,42 @@ app.delete('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res)
   persist();
   io.to('user:' + s.userId).emit('session-deleted', { sessionId: req.params.sessionId });
   res.json({ ok: true });
+});
+
+// Coach feedback on athlete session
+app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (req, res) => {
+  const s = DATA.sessions[req.params.sessionId];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  const a = DATA.users[s.userId];
+  if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  s.coachFeedback = typeof req.body.feedback === 'string' ? req.body.feedback.slice(0, 500) : '';
+  s.coachFeedbackAt = Date.now();
+  persist();
+  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback });
+  res.json({ ok: true });
+});
+
+// Suivi poids corporel — log quotidien
+app.post('/api/me/bodyweight', authRequired, (req, res) => {
+  const w = parseFloat(req.body?.weight);
+  if (!w || w < 20 || w > 500) return res.status(400).json({ error: 'invalid_weight' });
+  const date = (req.body?.date || new Date().toISOString()).slice(0, 10);
+  if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = {};
+  DATA.weightLogs[req.user.id][date] = w;
+  // Conserver les 365 derniers jours
+  const entries = Object.entries(DATA.weightLogs[req.user.id]).sort(([a],[b]) => a < b ? -1 : 1);
+  if (entries.length > 365) DATA.weightLogs[req.user.id] = Object.fromEntries(entries.slice(-365));
+  // Mettre à jour le profil user.weight avec la dernière valeur
+  const u = DATA.users[req.user.id];
+  if (u) u.weight = String(w);
+  persist();
+  res.json({ ok: true, date, weight: w });
+});
+
+app.get('/api/me/bodyweight', authRequired, (req, res) => {
+  const logs = DATA.weightLogs[req.user.id] || {};
+  const entries = Object.entries(logs).sort(([a],[b]) => a < b ? -1 : 1).map(([date,weight]) => ({ date, weight }));
+  res.json(entries);
 });
 
 app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {

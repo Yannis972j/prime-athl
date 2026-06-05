@@ -799,19 +799,24 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
 // ── Session Screen ────────────────────────────────────────
 
 function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName}){
-  const finishAndClose=()=>{
+  const[showRpe,setShowRpe]=React.useState(false);
+
+  const finishAndClose=(rpe=null)=>{
     if(onSaveSession){
       const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       if(totalVolume>0){
-        onSaveSession({
+        const snap={
           date:new Date().toISOString(),
           name:workout.name,
           totalVolume,
+          duration:Math.round(sessionTime/60),
           exercises:exercises.map(e=>({
             name:e.name,muscle:e.muscle,
             sets:e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps})),
           })).filter(e=>e.sets.length>0),
-        });
+        };
+        if(rpe!=null)snap.rpe=rpe;
+        onSaveSession(snap);
       }
     }
     onFinish();
@@ -827,6 +832,21 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // Persisté localStorage pour respecter le choix utilisateur entre séances
   const[focusMode,setFocusMode]=React.useState(()=>{try{return localStorage.getItem('pa_focus_mode')==='1';}catch{return false;}});
   React.useEffect(()=>{try{localStorage.setItem('pa_focus_mode',focusMode?'1':'0');}catch{}},[focusMode]);
+
+  // Per-exercise last-session data for progressive overload hints
+  const lastExData=React.useMemo(()=>{
+    const map={};
+    const sorted=[...(history||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    for(const h of sorted){
+      for(const he of (h.exercises||[])){
+        if(he.name&&!map[he.name]){
+          const best=(he.sets||[]).reduce((b,s)=>!b||(s.weight||0)>(b.weight||0)?s:b,null);
+          if(best)map[he.name]={weight:best.weight,reps:best.reps,allSets:he.sets};
+        }
+      }
+    }
+    return map;
+  },[history]);
 
   React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
@@ -1234,8 +1254,27 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
                   if(isNext){
                     const targetLabel=s.targetStr||(s.target?String(s.target):null);
+                    const prev=lastExData[ex.name];
+                    // Progressive overload: compare current set weight against last session
+                    const prevSetData=prev?.allSets?.[i]||prev?.allSets?.[0]||null;
+                    const suggestWeight=prev&&(s.weight||0)===0?prev.weight:null;
                     return(
-                      <div key={i} style={{borderRadius:16,background:'rgba(217,119,87,0.07)',border:'1px solid rgba(217,119,87,0.28)',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
+                      <div key={i} style={{borderRadius:16,border:'1px solid rgba(217,119,87,0.28)',overflow:'hidden'}}>
+                        {/* Surcharge progressive hint */}
+                        {prev&&(
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',background:'rgba(124,196,161,0.06)',borderBottom:'1px solid rgba(217,119,87,0.12)'}}>
+                            <span style={{fontSize:9,color:T.good,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',flexShrink:0}}>Dernière fois</span>
+                            <span style={{fontSize:11,color:T.textDim,fontWeight:600,flex:1}}>
+                              {prevSetData?`${prevSetData.weight||0} kg × ${prevSetData.reps||0} reps`:`${prev.weight||0} kg × ${prev.reps||0} reps`}
+                            </span>
+                            {suggestWeight&&(
+                              <button onClick={()=>updSet(currentEx,i,{weight:suggestWeight})} style={{fontSize:9,color:T.good,fontWeight:700,background:'rgba(124,196,161,0.12)',border:'1px solid rgba(124,196,161,0.3)',borderRadius:6,padding:'2px 7px',cursor:'pointer',letterSpacing:0.3,flexShrink:0}}>
+                                Copier
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div style={{background:'rgba(217,119,87,0.07)',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
                         {/* Numéro + objectif */}
                         <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
                           <div style={{width:26,height:26,borderRadius:8,background:'linear-gradient(135deg,#d97757,#c97586)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff'}}>{i+1}</div>
@@ -1264,6 +1303,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <button onClick={()=>validateSet(i)} style={{width:44,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#d97757,#c97586)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 14px rgba(217,119,87,0.4)'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.93)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
                           <Icon name="check" size={18} stroke="#fff" strokeWidth={3}/>
                         </button>
+                        </div>
                       </div>
                     );
                   }
@@ -1419,7 +1459,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       {/* Valider la séance — apparaît quand tous les exercices sont terminés */}
       {exercises.length>0&&exercises.every(e=>e.sets.every(s=>s.done))&&(
         <div style={{position:'sticky',bottom:0,padding:'10px 14px 14px',background:`linear-gradient(0deg,${T.bg} 65%,transparent)`,zIndex:20}}>
-          <button onClick={finishAndClose} style={{width:'100%',height:52,borderRadius:16,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(124,196,161,0.4)',display:'flex',alignItems:'center',justifyContent:'center',gap:8,animation:'celebrationPop 0.5s ease'}}>
+          <button onClick={()=>setShowRpe(true)} style={{width:'100%',height:52,borderRadius:16,border:'none',background:'linear-gradient(135deg,#7cc4a1,#7ca8c4)',color:'#000',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(124,196,161,0.4)',display:'flex',alignItems:'center',justifyContent:'center',gap:8,animation:'celebrationPop 0.5s ease'}}>
             <Icon name="check" size={18} stroke="#000" strokeWidth={3}/> Valider la séance
           </button>
         </div>
@@ -1427,6 +1467,38 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       {/* Rest +30s discret (le chrono principal est inline près de la série active) */}
       {restSeconds>0&&(
         <button onClick={()=>{setRestSeconds(s=>{const ns=s+30;if(!restTotal)setRestTotal(ns);return ns;})}} style={{position:'absolute',right:14,bottom:14,minHeight:44,padding:'0 16px',borderRadius:22,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(20,20,28,0.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',zIndex:30,letterSpacing:0.3,boxShadow:'0 6px 18px rgba(0,0,0,0.45)'}}>+30s repos</button>
+      )}
+
+      {/* ── RPE Modal ── */}
+      {showRpe&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:9000,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:'0 0 0 0',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)'}} onClick={e=>{if(e.target===e.currentTarget){setShowRpe(false);finishAndClose(null);}}}>
+          <div style={{width:'100%',maxWidth:480,background:'linear-gradient(180deg,#13131e,#0d0d14)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'24px 24px 0 0',padding:'28px 24px 48px',animation:'celebrationPop 0.3s ease'}}>
+            <div style={{textAlign:'center',marginBottom:24}}>
+              <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)',margin:'0 auto 18px'}}/>
+              <div style={{fontSize:20,fontWeight:700,marginBottom:4}}>Comment tu te sens ?</div>
+              <div style={{fontSize:13,color:T.textDim}}>RPE — Effort perçu de 1 à 10</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:16}}>
+              {[1,2,3,4,5,6,7,8,9,10].map(v=>{
+                const colors=['','#7ca8c4','#7ca8c4','#7cc4a1','#7cc4a1','#7cc4a1','#c2a042','#c2a042','#d97757','#c97586','#c97586'];
+                const labels=['','😴','😊','💪','💪','🔥','🔥','😤','😤','💀','💀'];
+                return(
+                  <button key={v} onClick={()=>{setShowRpe(false);finishAndClose(v);}}
+                    style={{height:56,borderRadius:14,border:`1px solid ${colors[v]}44`,background:`${colors[v]}18`,color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,transition:'transform 0.1s'}}
+                    onMouseDown={e=>e.currentTarget.style.transform='scale(0.92)'}
+                    onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}
+                    onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                    <span style={{fontSize:14,fontWeight:800,color:colors[v]}}>{v}</span>
+                    <span style={{fontSize:14}}>{labels[v]}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={()=>{setShowRpe(false);finishAndClose(null);}} style={{width:'100%',height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.08)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              Passer
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1986,6 +2058,119 @@ function MessagesScreen({authUser}){
   );
 }
 
+// ── Exercise Progression Chart ────────────────────────────
+function ExerciseProgressChart({history}){
+  const[query,setQuery]=React.useState('');
+  const[selected,setSelected]=React.useState(null);
+  const[open,setOpen]=React.useState(false);
+
+  // Build exercise list from history
+  const exerciseNames=React.useMemo(()=>{
+    const s=new Set();
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(e.name);}));
+    return [...s].sort();
+  },[history]);
+
+  const filtered=query.trim()?exerciseNames.filter(n=>n.toLowerCase().includes(query.toLowerCase())):exerciseNames;
+
+  // Build data points: one per session containing selected exercise (max weight)
+  const dataPoints=React.useMemo(()=>{
+    if(!selected)return[];
+    const pts=[];
+    const sorted=[...(history||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    for(const h of sorted){
+      const ex=(h.exercises||[]).find(e=>e.name===selected);
+      if(!ex)continue;
+      const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
+      if(maxW>0)pts.push({date:new Date(h.date),weight:maxW,reps:(ex.sets||[]).find(s=>(s.weight||0)===maxW)?.reps||0});
+    }
+    return pts;
+  },[history,selected]);
+
+  const W=300,H=90,pad=10;
+  let chart=null;
+  if(dataPoints.length>1){
+    const weights=dataPoints.map(p=>p.weight);
+    const minW=Math.min(...weights),maxW=Math.max(...weights);
+    const range=maxW-minW||1;
+    const pts=dataPoints.map((p,i)=>{
+      const x=pad+(i/(dataPoints.length-1))*(W-2*pad);
+      const y=H-pad-(p.weight-minW)/range*(H-2*pad-4);
+      return{x,y,p};
+    });
+    const dPath='M '+pts.map(p=>`${p.x} ${p.y}`).join(' L ');
+    chart=(
+      <div style={{marginTop:14,position:'relative'}}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block'}} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="epgFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#7cc4a1" stopOpacity="0.4"/>
+              <stop offset="100%" stopColor="#7cc4a1" stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d={`${dPath} L ${W-pad} ${H} L ${pad} ${H} Z`} fill="url(#epgFill)"/>
+          <path d={dPath} fill="none" stroke="#7cc4a1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{filter:'drop-shadow(0 0 4px rgba(124,196,161,0.5))'}}/>
+          {pts.map((p,i)=>(
+            <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#7cc4a1" stroke={T.bg} strokeWidth="1.5"/>
+          ))}
+        </svg>
+        <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
+          <span>{dataPoints[0].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+          <span style={{color:T.good,fontWeight:700}}>{dataPoints[dataPoints.length-1].weight} kg</span>
+          <span>{dataPoints[dataPoints.length-1].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+        </div>
+        {dataPoints.length>=2&&(()=>{
+          const delta=+(dataPoints[dataPoints.length-1].weight-dataPoints[0].weight).toFixed(1);
+          return delta!==0?(
+            <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:11,fontWeight:700,color:delta>0?T.good:T.danger}}>{delta>0?'↑':'↓'} {Math.abs(delta)} kg</span>
+              <span style={{fontSize:10,color:T.textFaint}}>depuis le début</span>
+            </div>
+          ):null;
+        })()}
+      </div>
+    );
+  }else if(dataPoints.length===1){
+    chart=<div style={{marginTop:10,padding:'10px 0',fontSize:12,color:T.textDim,textAlign:'center'}}>Une seule séance — {dataPoints[0].weight} kg · reviens pour voir la progression !</div>;
+  }
+
+  return(
+    <HoloCard padding={0} style={{marginBottom:16}}>
+      <div style={{padding:18}}>
+        <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Progression par exercice</div>
+
+        {/* Search / select */}
+        <div style={{position:'relative'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.05)',border:`1px solid ${selected?'rgba(124,196,161,0.4)':'rgba(255,255,255,0.1)'}`}} onClick={()=>setOpen(o=>!o)}>
+            <Icon name="chart" size={14} stroke={T.textDim}/>
+            <span style={{flex:1,fontSize:13,color:selected?T.text:T.textFaint,fontWeight:selected?600:400}}>{selected||'Choisir un exercice...'}</span>
+            <Icon name="chevronRight" size={12} stroke={T.textFaint} style={{transform:open?'rotate(90deg)':'none',transition:'transform 0.2s'}}/>
+          </div>
+          {open&&(
+            <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,background:'#13131e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:12,zIndex:50,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',maxHeight:220,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+              <div style={{padding:'8px 12px',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher..." style={{width:'100%',background:'transparent',border:'none',color:T.text,fontSize:13,outline:'none'}}/>
+              </div>
+              <div style={{overflowY:'auto',flex:1}}>
+                {filtered.slice(0,30).map(n=>(
+                  <button key={n} onClick={()=>{setSelected(n);setOpen(false);setQuery('');}} style={{width:'100%',padding:'10px 14px',background:n===selected?'rgba(124,196,161,0.1)':'transparent',border:'none',borderBottom:'1px solid rgba(255,255,255,0.04)',color:n===selected?T.good:T.text,fontSize:13,fontWeight:n===selected?600:400,cursor:'pointer',textAlign:'left'}}>
+                    {n}
+                  </button>
+                ))}
+                {filtered.length===0&&<div style={{padding:'12px 14px',fontSize:12,color:T.textFaint,textAlign:'center'}}>Aucun résultat</div>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {selected&&chart}
+        {selected&&dataPoints.length===0&&<div style={{marginTop:12,fontSize:12,color:T.textFaint,textAlign:'center'}}>Pas encore de données pour cet exercice</div>}
+        {!selected&&<div style={{marginTop:12,fontSize:12,color:T.textFaint,textAlign:'center'}}>Sélectionne un exercice pour voir sa courbe de progression</div>}
+      </div>
+    </HoloCard>
+  );
+}
+
 // ── Stats ─────────────────────────────────────────────────
 function StatsScreen({history,profile}){
   const now=Date.now();
@@ -2095,6 +2280,7 @@ function StatsScreen({history,profile}){
         </>
       )}
 
+      <ExerciseProgressChart history={history}/>
       <WeightChartSection/>
       <CalendarView history={history}/>
     </div>
@@ -5957,6 +6143,109 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   );
 }
 
+function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved}){
+  const[expanded,setExpanded]=React.useState(false);
+  const[feedbackText,setFeedbackText]=React.useState(s.coachFeedback||'');
+  const[saving,setSaving]=React.useState(false);
+  const[saved,setSaved]=React.useState(false);
+
+  const submitFeedback=async()=>{
+    if(!feedbackText.trim())return;
+    setSaving(true);
+    try{
+      await apiCall(`/api/coach/sessions/${s.id}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
+      setSaved(true);
+      setTimeout(()=>setSaved(false),2000);
+      if(onFeedbackSaved)onFeedbackSaved();
+    }catch{}
+    setSaving(false);
+  };
+
+  return(
+    <div
+      onTouchStart={onStartDelete}
+      onTouchEnd={onCancelTouchDelete}
+      onTouchMove={onCancelTouchDelete}
+      style={{borderRadius:14,border:isDeleting?'1px solid rgba(201,117,134,0.5)':'1px solid rgba(255,255,255,0.07)',background:isDeleting?'rgba(201,117,134,0.08)':'rgba(255,255,255,0.03)',transition:'all 0.2s',overflow:'hidden'}}>
+      {/* Header row */}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:12,cursor:'pointer'}} onClick={()=>setExpanded(e=>!e)}>
+        <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
+          <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
+          <div style={{display:'flex',gap:6,alignItems:'center',marginTop:1,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:T.textFaint}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</span>
+            {s.rpe&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(194,160,66,0.12)',color:'#c2a042',border:'1px solid rgba(194,160,66,0.3)'}}>RPE {s.rpe}</span>}
+            {s.coachFeedback&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(124,168,196,0.12)',color:'#7ca8c4',border:'1px solid rgba(124,168,196,0.3)'}}>💬 Feedb.</span>}
+          </div>
+        </div>
+        <div style={{textAlign:'right',flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
+          {s.duration&&<div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{s.duration} min</div>}
+        </div>
+        <Icon name="chevronRight" size={12} stroke={T.textFaint} style={{transform:expanded?'rotate(90deg)':'none',transition:'transform 0.2s',flexShrink:0}}/>
+      </div>
+
+      {/* Expanded: exercises + feedback */}
+      {expanded&&(
+        <div style={{padding:'0 12px 12px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+          {/* Exercises list */}
+          {(s.exercises||[]).length>0&&(
+            <div style={{marginTop:10,marginBottom:12}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Exercices</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {(s.exercises||[]).map((e,ei)=>(
+                  <div key={ei} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)'}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600}}>{e.name}</div>
+                      <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      {(e.sets||[]).map((st,si)=>(
+                        <div key={si} style={{fontSize:10,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{st.weight}kg×{st.reps}</div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Coach notes shown if present */}
+          {s.notes&&(
+            <div style={{marginBottom:10,padding:'8px 10px',borderRadius:10,background:'rgba(194,160,66,0.06)',border:'1px solid rgba(194,160,66,0.2)',fontSize:11,color:T.warn,lineHeight:1.4}}>
+              💬 Ressenti athlète : {s.notes}
+            </div>
+          )}
+
+          {/* Coach feedback */}
+          <div style={{marginTop:4}}>
+            <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Feedback coach</div>
+            {s.coachFeedback&&!feedbackText&&(
+              <div style={{padding:'8px 10px',borderRadius:10,background:'rgba(124,168,196,0.06)',border:'1px solid rgba(124,168,196,0.2)',fontSize:12,color:'#7ca8c4',lineHeight:1.4,marginBottom:8}}>
+                {s.coachFeedback}
+              </div>
+            )}
+            <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Beau travail sur les squats ! Essaie +2.5kg la prochaine fois..." maxLength={500}
+              style={{width:'100%',minHeight:72,padding:'8px 10px',borderRadius:10,border:'1px solid rgba(124,168,196,0.25)',background:'rgba(124,168,196,0.04)',color:T.text,fontSize:12,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.4}}/>
+            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(124,196,161,0.2)':feedbackText.trim()?'linear-gradient(135deg,#7ca8c4,#7cc4a1)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'all 0.2s'}}>
+              {saved?'✓ Envoyé':saving?'Envoi...':'Envoyer le feedback'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isDeleting&&(
+        <div style={{display:'flex',gap:8,padding:'0 12px 10px'}}>
+          <button onClick={onDelete} style={{flex:1,height:34,borderRadius:9,border:'none',background:'linear-gradient(135deg,#c97586,#a05060)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>🗑️ Supprimer</button>
+          <button onClick={onCancelDelete} style={{height:34,padding:'0 14px',borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,cursor:'pointer'}}>Annuler</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -6444,34 +6733,16 @@ function CoachScreen({authToken,authUser}){
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {sessions.slice(0,50).map(s=>{
-                  const isDeleting=deletingSessionId===s.id;
-                  return(
-                  <div key={s.id}
-                    onTouchStart={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
-                    onTouchEnd={()=>clearTimeout(sessionPressTimer.current)}
-                    onTouchMove={()=>clearTimeout(sessionPressTimer.current)}
-                    style={{borderRadius:14,border:isDeleting?'1px solid rgba(201,117,134,0.5)':'1px solid rgba(255,255,255,0.07)',background:isDeleting?'rgba(201,117,134,0.08)':'rgba(255,255,255,0.03)',transition:'all 0.2s',overflow:'hidden'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,padding:12}}>
-                      <div style={{width:32,height:32,borderRadius:9,background:'rgba(217,119,87,0.12)',border:'1px solid rgba(217,119,87,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
-                        <Icon name="check" size={14} stroke={T.accent} strokeWidth={2.4}/>
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
-                        <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</div>
-                      </div>
-                      <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
-                      </div>
-                    </div>
-                    {isDeleting&&(
-                      <div style={{display:'flex',gap:8,padding:'0 12px 10px'}}>
-                        <button onClick={()=>deleteSession(s.id,a.id)} style={{flex:1,height:34,borderRadius:9,border:'none',background:'linear-gradient(135deg,#c97586,#a05060)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>🗑️ Supprimer</button>
-                        <button onClick={()=>setDeletingSessionId(null)} style={{height:34,padding:'0 14px',borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:12,cursor:'pointer'}}>Annuler</button>
-                      </div>
-                    )}
-                  </div>
-                );})}
+                {sessions.slice(0,50).map(s=>(
+                  <CoachSessionCard key={s.id} s={s} athleteId={a.id}
+                    isDeleting={deletingSessionId===s.id}
+                    onStartDelete={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
+                    onCancelTouchDelete={()=>clearTimeout(sessionPressTimer.current)}
+                    onDelete={()=>deleteSession(s.id,a.id)}
+                    onCancelDelete={()=>setDeletingSessionId(null)}
+                    onFeedbackSaved={()=>reloadDetail(a.id)}
+                  />
+                ))}
               </div>
             )}
           </div>
