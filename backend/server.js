@@ -897,12 +897,12 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   const p = DATA.programs[u.id];
   const sessions = Object.values(DATA.sessions)
     .filter(s => s.userId === u.id)
-    .sort((a, b) => b.date - a.date)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500);
   res.json({
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [] })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt })),
   });
 });
 
@@ -1187,7 +1187,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     .filter(s => s.userId === target)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500)
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [] }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt }));
   res.json(list);
 });
 
@@ -1266,29 +1266,6 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   persist();
   io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback });
   res.json({ ok: true });
-});
-
-// Suivi poids corporel — log quotidien
-app.post('/api/me/bodyweight', authRequired, (req, res) => {
-  const w = parseFloat(req.body?.weight);
-  if (!w || w < 20 || w > 500) return res.status(400).json({ error: 'invalid_weight' });
-  const date = (req.body?.date || new Date().toISOString()).slice(0, 10);
-  if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = {};
-  DATA.weightLogs[req.user.id][date] = w;
-  // Conserver les 365 derniers jours
-  const entries = Object.entries(DATA.weightLogs[req.user.id]).sort(([a],[b]) => a < b ? -1 : 1);
-  if (entries.length > 365) DATA.weightLogs[req.user.id] = Object.fromEntries(entries.slice(-365));
-  // Mettre à jour le profil user.weight avec la dernière valeur
-  const u = DATA.users[req.user.id];
-  if (u) u.weight = String(w);
-  persist();
-  res.json({ ok: true, date, weight: w });
-});
-
-app.get('/api/me/bodyweight', authRequired, (req, res) => {
-  const logs = DATA.weightLogs[req.user.id] || {};
-  const entries = Object.entries(logs).sort(([a],[b]) => a < b ? -1 : 1).map(([date,weight]) => ({ date, weight }));
-  res.json(entries);
 });
 
 app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {
