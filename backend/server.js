@@ -419,6 +419,8 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // ne pénalise pas les login réussis
+  // Le coach principal n'est jamais rate-limité au login
+  skip: (req) => ((req.body?.email || '').toLowerCase() === MAIN_COACH_EMAIL),
   message: { error: 'too_many_auth_attempts', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
 });
 // Rate-limit strict pour signup/forgot-password (toutes requêtes comptent, succès inclus)
@@ -488,6 +490,8 @@ const LOCK_THRESHOLD = 5;
 const LOCK_WINDOW_MS = 15 * 60 * 1000;
 function recordLoginFailure(user) {
   if (!user) return;
+  // Le coach principal n'est jamais verrouillé
+  if ((user.email || '').toLowerCase() === MAIN_COACH_EMAIL) return;
   const now = Date.now();
   user.loginFails = (user.loginFails || []).filter(t => now - t < LOCK_WINDOW_MS);
   user.loginFails.push(now);
@@ -496,6 +500,8 @@ function recordLoginFailure(user) {
   }
 }
 function isLocked(user) {
+  // Le coach principal n'est jamais considéré comme verrouillé
+  if (user && (user.email || '').toLowerCase() === MAIN_COACH_EMAIL) return false;
   return user && user.lockedUntil && user.lockedUntil > Date.now();
 }
 function clearLoginFailures(user) {
