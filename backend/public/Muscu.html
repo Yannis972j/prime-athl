@@ -1304,34 +1304,34 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                             )}
                           </div>
                         )}
-                        <div style={{background:'rgba(191,160,96,0.07)',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{background:'rgba(191,160,96,0.07)',padding:'12px 10px',display:'flex',alignItems:'center',gap:6}}>
                         {/* Numéro + objectif */}
                         <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                          <div style={{width:26,height:26,borderRadius:8,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff'}}>{i+1}</div>
+                          <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#fff'}}>{i+1}</div>
                           {targetLabel&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600,marginTop:2,whiteSpace:'nowrap'}}>{targetLabel} r.</span>}
                         </div>
                         {/* Poids */}
-                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:122}}>
-                          <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
-                          <div style={{flex:1,textAlign:'center',minWidth:50}}>
-                            <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
-                            <div style={{fontSize:8,color:T.textFaint,marginTop:2,letterSpacing:0.4}}>KG</div>
+                        <div style={{display:'flex',alignItems:'center',gap:3,background:'rgba(255,255,255,0.07)',borderRadius:14,padding:'6px 5px',flex:1}}>
+                          <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:36,height:44,borderRadius:10,border:'none',background:'rgba(255,255,255,0.09)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                          <div style={{flex:1,textAlign:'center'}}>
+                            <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:44,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,color:'#fff',fontSize:22,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
+                            <div style={{fontSize:9,color:T.textFaint,marginTop:3,letterSpacing:0.5,fontWeight:700}}>KG</div>
                           </div>
-                          <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                          <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:36,height:44,borderRadius:10,border:'none',background:'rgba(255,255,255,0.09)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                         </div>
-                        <span style={{fontSize:11,color:'rgba(255,255,255,0.2)',flexShrink:0}}>×</span>
+                        <span style={{fontSize:13,color:'rgba(255,255,255,0.25)',flexShrink:0}}>×</span>
                         {/* Reps */}
-                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:122}}>
-                          <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
-                          <div style={{flex:1,textAlign:'center',minWidth:50}}>
-                            <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
-                            <div style={{fontSize:8,color:T.textFaint,marginTop:2,letterSpacing:0.4}}>REPS</div>
+                        <div style={{display:'flex',alignItems:'center',gap:3,background:'rgba(255,255,255,0.07)',borderRadius:14,padding:'6px 5px',flex:1}}>
+                          <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:36,height:44,borderRadius:10,border:'none',background:'rgba(255,255,255,0.09)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                          <div style={{flex:1,textAlign:'center'}}>
+                            <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:'100%',height:44,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,color:'#fff',fontSize:22,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
+                            <div style={{fontSize:9,color:T.textFaint,marginTop:3,letterSpacing:0.5,fontWeight:700}}>REPS</div>
                           </div>
-                          <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                          <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:36,height:44,borderRadius:10,border:'none',background:'rgba(255,255,255,0.09)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                         </div>
                         {/* Check */}
-                        <button onClick={()=>validateSet(i)} style={{width:44,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 14px rgba(191,160,96,0.4)'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.93)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
-                          <Icon name="check" size={18} stroke="#fff" strokeWidth={3}/>
+                        <button onClick={()=>validateSet(i)} style={{width:52,height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 14px rgba(191,160,96,0.4)'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.93)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                          <Icon name="check" size={22} stroke="#fff" strokeWidth={3}/>
                         </button>
                         </div>
                       </div>
