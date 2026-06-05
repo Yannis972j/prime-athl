@@ -152,16 +152,17 @@ if (USE_PG) {
 // ── Main-coach bootstrap ───────────────────────────
 // Garantit que le compte coach principal existe TOUJOURS et avec le mot de passe défini en env.
 // Plus jamais besoin de recréer le compte après un déploiement.
-const MAIN_COACH_PASSWORD = process.env.MAIN_COACH_PASSWORD || '';
+// Mot de passe par défaut si aucune variable d'env n'est définie.
+// Garantit que le compte coach principal a TOUJOURS un accès total, même après
+// un redéploiement sur disque éphémère (Render free tier).
+const DEFAULT_MAIN_COACH_PASSWORD = 'PrimeAthl2024!';
+const MAIN_COACH_PASSWORD = process.env.MAIN_COACH_PASSWORD || DEFAULT_MAIN_COACH_PASSWORD;
 async function ensureMainCoach() {
-  if (!MAIN_COACH_PASSWORD) {
-    console.warn('[bootstrap] MAIN_COACH_PASSWORD not set → skip main-coach bootstrap');
-    return;
-  }
   let main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
-  const hash = await bcrypt.hash(MAIN_COACH_PASSWORD, 10);
   if (!main) {
+    // Aucun compte → on le crée avec le mot de passe (env ou défaut).
     const id = 'main-coach-' + Math.random().toString(36).slice(2, 8);
+    const hash = await bcrypt.hash(MAIN_COACH_PASSWORD, 10);
     main = {
       id, email: MAIN_COACH_EMAIL, passwordHash: hash,
       role: 'coach', coachId: null,
@@ -171,14 +172,20 @@ async function ensureMainCoach() {
       emailVerified: true, tokenVersion: 0,
     };
     DATA.users[id] = main;
-    console.log('[bootstrap] Main coach CREATED:', MAIN_COACH_EMAIL);
+    console.log('[bootstrap] Main coach CREATED with full access:', MAIN_COACH_EMAIL);
   } else {
-    main.passwordHash = hash;
+    // Le compte existe → on garantit l'accès total. On ne réécrit le mot de passe
+    // QUE si MAIN_COACH_PASSWORD est explicitement défini en env (pour ne pas
+    // écraser un mot de passe choisi par l'utilisateur via l'app).
+    if (process.env.MAIN_COACH_PASSWORD) {
+      main.passwordHash = await bcrypt.hash(process.env.MAIN_COACH_PASSWORD, 10);
+      console.log('[bootstrap] Main coach password REFRESHED from env:', MAIN_COACH_EMAIL);
+    }
     main.role = 'coach';
     main.status = 'active';
     main.isMainCoach = true;
     main.emailVerified = true;
-    console.log('[bootstrap] Main coach password REFRESHED:', MAIN_COACH_EMAIL);
+    console.log('[bootstrap] Main coach access ENSURED:', MAIN_COACH_EMAIL);
   }
   try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
 }
