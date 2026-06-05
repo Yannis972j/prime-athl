@@ -1092,7 +1092,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
                   <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:Math.max(0,(parseFloat(set.weight)||0)-2.5)})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>−</button>
                   <NumField value={set.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,nextSetIdx,{weight:v})}
-                    style={{width:80,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:13,color:'#fff',fontSize:30,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                    style={{width:96,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:13,color:'#fff',fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                   <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:(parseFloat(set.weight)||0)+2.5})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>+</button>
                 </div>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:6}}>kg</div>
@@ -1103,7 +1103,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
                   <button onClick={()=>updSet(currentEx,nextSetIdx,{reps:Math.max(0,(parseFloat(set.reps)||0)-1)})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>−</button>
                   <NumField value={set.reps||0} placeholder="0" onCommit={v=>updSet(currentEx,nextSetIdx,{reps:v})}
-                    style={{width:80,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:13,color:'#fff',fontSize:30,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                    style={{width:96,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:13,color:'#fff',fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                   <button onClick={()=>updSet(currentEx,nextSetIdx,{reps:(parseFloat(set.reps)||0)+1})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>+</button>
                 </div>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:6}}>répétitions</div>
@@ -1311,20 +1311,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           {targetLabel&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600,marginTop:2,whiteSpace:'nowrap'}}>{targetLabel} r.</span>}
                         </div>
                         {/* Poids */}
-                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:110}}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:122}}>
                           <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
-                          <div style={{flex:1,textAlign:'center',minWidth:44}}>
-                            <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                          <div style={{flex:1,textAlign:'center',minWidth:50}}>
+                            <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                             <div style={{fontSize:8,color:T.textFaint,marginTop:2,letterSpacing:0.4}}>KG</div>
                           </div>
                           <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                         </div>
                         <span style={{fontSize:11,color:'rgba(255,255,255,0.2)',flexShrink:0}}>×</span>
                         {/* Reps */}
-                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:100}}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.06)',borderRadius:12,padding:'6px 6px',flex:1,minWidth:122}}>
                           <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
-                          <div style={{flex:1,textAlign:'center',minWidth:36}}>
-                            <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'}}/>
+                          <div style={{flex:1,textAlign:'center',minWidth:50}}>
+                            <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:'100%',height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:18,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                             <div style={{fontSize:8,color:T.textFaint,marginTop:2,letterSpacing:0.4}}>REPS</div>
                           </div>
                           <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:32,height:36,borderRadius:8,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
