@@ -1326,7 +1326,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               {ex.style!=='CARDIO'&&<>
               <button onClick={()=>{
                 const last=ex.sets[ex.sets.length-1];
-                updSet(currentEx,ex.sets.length,undefined);
                 setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,{weight:last?.weight||20,reps:0,done:false,target:last?.target||10}]}));
               }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'all 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(191,160,96,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
                 <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
@@ -5868,7 +5867,8 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
     setMoveDate(dateStr);
     setConfirmDelete(false);
     try{
-      const sessions=await apiCall('/api/sessions?userId='+ath.id);
+      const d=await apiCall('/api/coach/athletes/'+ath.id);
+      const sessions=d.sessions||[];
       const s=sessions.find(x=>x.date&&x.date.slice(0,10)===dateStr);
       setSessionModal(m=>({...m,session:s||null}));
     }catch(e){console.error(e);}
@@ -6082,7 +6082,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
       {/* ── Modal séance complète ── */}
       {sessionModal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:1000,display:'flex',alignItems:'flex-end'}} onClick={e=>{if(e.target===e.currentTarget){setSessionModal(null);setConfirmDelete(false);}}}>
-          <div style={{width:'100%',maxHeight:'85vh',overflow:'auto',background:T.card,borderRadius:'20px 20px 0 0',padding:20,boxSizing:'border-box'}}>
+          <div style={{width:'100%',maxHeight:'85vh',overflow:'auto',background:T.bgRaise,borderRadius:'20px 20px 0 0',padding:20,boxSizing:'border-box'}}>
             {/* Header */}
             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
               <div style={{width:10,height:10,borderRadius:5,background:sessionModal.color,flexShrink:0}}/>
