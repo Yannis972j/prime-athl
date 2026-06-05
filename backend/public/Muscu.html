@@ -81,6 +81,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"></script>
 <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script type="text/babel">
 
 // ── shared ──────────────────────────────────────────────
@@ -932,7 +933,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
 
   const validateSet=si=>{
-    updSet(currentEx,si,{done:true});
+    // Marquer la série comme faite et copier poids+reps vers la suivante
+    setExercises(prev=>prev.map((e,ei)=>{
+      if(ei!==currentEx)return e;
+      const sets=e.sets.map((s,j)=>{
+        if(j===si)return{...s,done:true};
+        if(j===si+1&&!s.done){
+          // Pré-remplir la série suivante avec les valeurs validées
+          const done=e.sets[si];
+          return{...s,weight:done.weight,reps:done.reps};
+        }
+        return s;
+      });
+      return{...e,sets};
+    }));
 
     // SUPERSET / TRISET : enchaîner sans repos jusqu'au dernier exo du bloc
     if(ex.style==='SUPERSET'||ex.style==='TRISET'){
@@ -2818,6 +2832,77 @@ function MotivationMarquee(){
   );
 }
 
+function exportSessionPDF(session){
+  const {jsPDF}=window.jspdf||{};
+  if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const W=210,margin=16,col=W-margin*2;
+  let y=20;
+  const line=(txt,size=11,bold=false,color=[255,255,255])=>{
+    doc.setFontSize(size);doc.setFont('helvetica',bold?'bold':'normal');
+    doc.setTextColor(...color);doc.text(txt,margin,y);y+=size*0.45+2;
+  };
+  const rule=(alpha=30)=>{doc.setDrawColor(alpha,alpha,alpha);doc.line(margin,y,W-margin,y);y+=4;};
+
+  // Fond noir
+  doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');
+
+  // Titre
+  doc.setFontSize(20);doc.setFont('helvetica','bold');
+  doc.setTextColor(191,160,96);doc.text(session.name||'Séance',margin,y);y+=10;
+
+  // Date
+  const d=new Date(session.date);
+  const dateStr=d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  line(dateStr,10,false,[140,140,160]);y+=2;rule();
+
+  // Stats
+  const stats=[];
+  if(session.totalVolume)stats.push(`Volume : ${Math.round(session.totalVolume).toLocaleString('fr-FR')} kg`);
+  if(session.duration)stats.push(`Durée : ${session.duration} min`);
+  if(session.rpe)stats.push(`RPE : ${session.rpe}/10`);
+  if(stats.length){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(180,180,200);doc.text(stats.join('   ·   '),margin,y);y+=8;}
+
+  rule();
+
+  // Exercices
+  (session.exercises||[]).forEach((ex,ei)=>{
+    if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+    // Nom exo
+    doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
+    doc.text(`${ei+1}. ${ex.name}`,margin,y);
+    if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
+    y+=7;
+    // En-tête tableau
+    const cols=[margin,margin+12,margin+38,margin+64,margin+95];
+    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
+    ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
+    doc.setDrawColor(40,40,55);doc.line(margin,y-1,W-margin,y-1);
+    // Séries
+    (ex.sets||[]).forEach((s,si)=>{
+      if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+      const vol=(s.weight||0)*(s.reps||0);
+      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+      doc.text(String(si+1),cols[0],y);
+      doc.text(`${s.weight||0} kg`,cols[1],y);
+      doc.text(`${s.reps||0} reps`,cols[2],y);
+      doc.text(`${vol} kg`,cols[3],y);
+      y+=5.5;
+    });
+    y+=4;
+  });
+
+  // Notes / feedback
+  if(session.notes){y+=2;line('Mon ressenti',9,true,[160,130,80]);line(session.notes,9,false,[200,200,220]);y+=2;}
+  if(session.coachFeedback){y+=2;line('Feedback coach',9,true,[90,138,224]);line(session.coachFeedback,9,false,[200,200,220]);}
+
+  // Footer
+  doc.setFontSize(8);doc.setTextColor(60,60,80);doc.text('Prime Athl',W/2,290,{align:'center'});
+
+  const fname=`seance-${(session.name||'session').replace(/\s+/g,'-').toLowerCase()}-${d.toISOString().slice(0,10)}.pdf`;
+  doc.save(fname);
+}
+
 function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
@@ -3055,7 +3140,13 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                   </div>
                   <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.3,lineHeight:1.1}}>{viewHistSession.name||'Séance'}</div>
                 </div>
-                <button onClick={()=>setViewHistSession(null)} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2}}>×</button>
+                <div style={{display:'flex',gap:8,flexShrink:0,marginTop:2}}>
+                  <button onClick={()=>exportSessionPDF(viewHistSession)} style={{height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.1)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    PDF
+                  </button>
+                  <button onClick={()=>setViewHistSession(null)} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+                </div>
               </div>
               {/* Stats row */}
               <div style={{display:'flex',gap:16,marginTop:12}}>
