@@ -1304,30 +1304,30 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                             )}
                           </div>
                         )}
-                        <div style={{background:'rgba(255,255,255,0.05)',padding:'10px 10px',display:'flex',alignItems:'center',gap:6,borderRadius:18}}>
+                        <div style={{background:'rgba(255,255,255,0.05)',padding:'7px 8px',display:'flex',alignItems:'center',gap:4,borderRadius:16}}>
                         {/* Badge */}
                         <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                          <div style={{width:30,height:30,borderRadius:10,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,color:'#fff'}}>{i+1}</div>
-                          {targetLabel&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600,marginTop:2,whiteSpace:'nowrap'}}>{targetLabel} r.</span>}
+                          <div style={{width:24,height:24,borderRadius:8,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff'}}>{i+1}</div>
+                          {targetLabel&&<span style={{fontSize:7,color:T.textFaint,fontWeight:600,marginTop:1,whiteSpace:'nowrap'}}>{targetLabel} r.</span>}
                         </div>
                         {/* − KG + */}
-                        <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:36,height:36,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                        <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                         <div style={{textAlign:'center',flexShrink:0}}>
-                          <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:72,height:36,background:'transparent',border:'none',color:'#fff',fontSize:22,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
-                          <div style={{fontSize:9,color:T.textFaint,letterSpacing:0.5,fontWeight:700,marginTop:-2}}>KG</div>
+                          <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:62,height:30,background:'transparent',border:'none',color:'#fff',fontSize:19,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
+                          <div style={{fontSize:8,color:T.textFaint,letterSpacing:0.5,fontWeight:700,marginTop:-2}}>KG</div>
                         </div>
-                        <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:36,height:36,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
-                        <span style={{fontSize:13,color:'rgba(255,255,255,0.2)',flexShrink:0}}>×</span>
+                        <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                        <span style={{fontSize:11,color:'rgba(255,255,255,0.2)',flexShrink:0}}>×</span>
                         {/* − REPS + */}
-                        <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:36,height:36,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                        <button onClick={()=>updSet(currentEx,i,{reps:Math.max(0,(parseFloat(s.reps)||0)-1)})} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                         <div style={{textAlign:'center',flexShrink:0}}>
-                          <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:72,height:36,background:'transparent',border:'none',color:'#fff',fontSize:22,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
-                          <div style={{fontSize:9,color:T.textFaint,letterSpacing:0.5,fontWeight:700,marginTop:-2}}>REPS</div>
+                          <NumField value={s.reps||0} placeholder={String(s.target||'0')} onCommit={v=>updSet(currentEx,i,{reps:v})} style={{width:62,height:30,background:'transparent',border:'none',color:'#fff',fontSize:19,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
+                          <div style={{fontSize:8,color:T.textFaint,letterSpacing:0.5,fontWeight:700,marginTop:-2}}>REPS</div>
                         </div>
-                        <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:36,height:36,borderRadius:10,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                        <button onClick={()=>updSet(currentEx,i,{reps:(parseFloat(s.reps)||0)+1})} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                         {/* ✓ */}
-                        <button onClick={()=>validateSet(i)} style={{flex:1,height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 14px rgba(191,160,96,0.4)'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.93)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
-                          <Icon name="check" size={22} stroke="#fff" strokeWidth={3}/>
+                        <button onClick={()=>validateSet(i)} style={{flex:1,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 12px rgba(191,160,96,0.35)'}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.93)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
+                          <Icon name="check" size={18} stroke="#fff" strokeWidth={3}/>
                         </button>
                         </div>
                       </div>
