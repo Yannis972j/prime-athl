@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v7';
+const CACHE = 'prime-athl-v8';
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -50,8 +50,9 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(data.title || 'Prime Athl', {
       body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: data.icon || '/push-icon.webp',
+      badge: data.badge || '/icon-192.png',
+      image: data.image || undefined,
       tag: data.tag || 'prime-athl',
       renotify: true,
       data: { url: data.url || '/Muscu.html' },

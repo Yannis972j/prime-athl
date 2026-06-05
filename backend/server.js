@@ -2068,6 +2068,8 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
       title: `💬 ${name}`,
       body: text.trim().slice(0, 100),
       tag: `msg-${me}`,
+      icon: PUSH_ICON,
+      badge: PUSH_BADGE,
       url: '/Muscu.html'
     })).then(() => console.log('[push-msg] sent OK'))
       .catch(e => {
@@ -2082,11 +2084,14 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
 });
 
 // ── Push helper ──────────────────────────────────────
+const PUSH_ICON = '/push-icon.webp';
+const PUSH_BADGE = '/icon-192.png';
 function pushToUser(userId, payload) {
   if (!VAPID_PUBLIC_KEY) return;
   const sub = DATA.pushSubscriptions[userId];
   if (!sub || sub.invalidatedAt) return;
-  webpush.sendNotification(sub, JSON.stringify(payload))
+  const enriched = { icon: PUSH_ICON, badge: PUSH_BADGE, ...payload };
+  webpush.sendNotification(sub, JSON.stringify(enriched))
     .catch(e => {
       if (e.statusCode === 410 || e.statusCode === 404) {
         // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
