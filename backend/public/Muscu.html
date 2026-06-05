@@ -3008,40 +3008,100 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
         </div>
       </BottomSheet>
 
-      {/* Panneau détail séance historique — lecture seule pour vérifier les poids */}
+      {/* Panneau détail séance historique — lecture seule */}
       {viewHistSession&&(
-        <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(8px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={()=>setViewHistSession(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{background:T.bg,borderRadius:'20px 20px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'82vh',overflow:'hidden',display:'flex',flexDirection:'column'}}>
-            <div style={{padding:'14px 16px 10px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-              <div>
-                <div style={{fontSize:11,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Séance réalisée · {new Date(viewHistSession.date).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>
-                <div style={{fontSize:16,fontWeight:700,marginTop:2}}>{viewHistSession.name||'Séance'}</div>
-              </div>
-              <button onClick={()=>setViewHistSession(null)} style={{minWidth:36,minHeight:36,borderRadius:18,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={()=>setViewHistSession(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.bgRaise,borderRadius:'24px 24px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'92vh',display:'flex',flexDirection:'column'}}>
+
+            {/* Drag handle */}
+            <div style={{display:'flex',justifyContent:'center',padding:'10px 0 4px'}}>
+              <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/>
             </div>
-            <div style={{overflow:'auto',padding:'12px 14px 24px',display:'flex',flexDirection:'column',gap:10}}>
-              {(viewHistSession.exercises||[]).map((ex,ei)=>(
-                <div key={ei} style={{borderRadius:12,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
-                  <div style={{padding:'8px 12px 6px',borderBottom:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <div style={{fontSize:13,fontWeight:700}}>{ex.name}</div>
-                    {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600}}>{ex.muscle}</div>}
+
+            {/* Header */}
+            <div style={{padding:'6px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5,marginBottom:3}}>
+                    {new Date(viewHistSession.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
                   </div>
-                  <div style={{padding:'6px 12px 8px',display:'flex',flexWrap:'wrap',gap:6}}>
-                    {(ex.sets||[]).map((s,si)=>(
-                      <div key={si} style={{padding:'4px 10px',borderRadius:8,background:'rgba(191,160,96,0.1)',border:'1px solid rgba(191,160,96,0.2)',fontSize:12,fontWeight:700,color:T.accent,display:'flex',alignItems:'center',gap:4}}>
-                        <span style={{fontSize:9,color:T.textFaint,fontWeight:600}}>S{si+1}</span>
-                        {s.weight>0?<>{s.weight}<span style={{fontSize:9,color:T.textFaint}}>kg</span> × </>:''}
-                        {s.reps||'—'}<span style={{fontSize:9,color:T.textFaint}}>reps</span>
-                      </div>
-                    ))}
-                    {!(ex.sets&&ex.sets.length)&&<span style={{fontSize:11,color:T.textFaint}}>Aucune série enregistrée</span>}
-                  </div>
+                  <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.3,lineHeight:1.1}}>{viewHistSession.name||'Séance'}</div>
                 </div>
-              ))}
-              {!(viewHistSession.exercises&&viewHistSession.exercises.length)&&<div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:24}}>Détails non disponibles</div>}
-              <div style={{display:'flex',gap:6,marginTop:4,alignItems:'center',justifyContent:'center'}}>
-                <span style={{fontSize:10,color:T.textFaint}}>Volume total :</span>
-                <span style={{fontSize:12,fontWeight:700,color:T.good}}>{Math.round(viewHistSession.totalVolume||0).toLocaleString('fr-FR')} kg</span>
+                <button onClick={()=>setViewHistSession(null)} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2}}>×</button>
+              </div>
+              {/* Stats row */}
+              <div style={{display:'flex',gap:16,marginTop:12}}>
+                <div>
+                  <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Volume</div>
+                  <div style={{fontSize:16,fontWeight:700,color:T.good,marginTop:1}}>{Math.round(viewHistSession.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textFaint,marginLeft:3}}>kg</span></div>
+                </div>
+                {viewHistSession.duration>0&&(
+                  <div>
+                    <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Durée</div>
+                    <div style={{fontSize:16,fontWeight:700,marginTop:1}}>{viewHistSession.duration}<span style={{fontSize:10,color:T.textFaint,marginLeft:3}}>min</span></div>
+                  </div>
+                )}
+                {viewHistSession.rpe&&(
+                  <div>
+                    <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>RPE</div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.accent,marginTop:1}}>{viewHistSession.rpe}<span style={{fontSize:10,color:T.textFaint,marginLeft:3}}>/10</span></div>
+                  </div>
+                )}
+                <div>
+                  <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Exercices</div>
+                  <div style={{fontSize:16,fontWeight:700,marginTop:1}}>{(viewHistSession.exercises||[]).length}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable content */}
+            <div style={{overflowY:'auto',flex:1,padding:'14px 16px 36px'}}>
+              {(viewHistSession.exercises||[]).length===0&&(
+                <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
+              )}
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {(viewHistSession.exercises||[]).map((ex,ei)=>{
+                  const exVol=(ex.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0);
+                  return(
+                    <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
+                      {/* Exercise header */}
+                      <div style={{padding:'10px 14px 8px',borderBottom:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                          {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                        </div>
+                        {exVol>0&&<div style={{fontSize:11,fontWeight:700,color:T.textDim,flexShrink:0}}>{Math.round(exVol).toLocaleString('fr-FR')} kg</div>}
+                      </div>
+                      {/* Sets table */}
+                      <div style={{padding:'8px 14px 10px'}}>
+                        {/* Header row */}
+                        <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,marginBottom:6}}>
+                          {['','Poids','Reps','Volume'].map((h,i)=>(
+                            <div key={i} style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',textAlign:i>0?'center':'left'}}>{h}</div>
+                          ))}
+                        </div>
+                        {(ex.sets||[]).map((s,si)=>{
+                          const vol=(s.weight||0)*(s.reps||0);
+                          return(
+                            <div key={si} style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.04)',alignItems:'center'}}>
+                              <div style={{width:22,height:22,borderRadius:7,background:'rgba(191,160,96,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent}}>{si+1}</div>
+                              <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
+                                {s.weight>0?<>{s.weight}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>—</span>}
+                              </div>
+                              <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
+                                {s.reps||'—'}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
+                              </div>
+                              <div style={{textAlign:'center',fontSize:11,fontWeight:600,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>
+                                {vol>0?<>{Math.round(vol)}<span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span></>:'—'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
