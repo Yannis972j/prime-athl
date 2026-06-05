@@ -184,6 +184,9 @@ async function ensureMainCoach() {
     main.status = 'active';
     main.isMainCoach = true;
     main.emailVerified = true;
+    // Débloquer le verrou de tentatives à chaque boot
+    main.loginFails = [];
+    main.lockedUntil = null;
     console.log('[bootstrap] Main coach access ENSURED:', MAIN_COACH_EMAIL);
   }
   try { fs.writeFileSync(DB_PATH, JSON.stringify(DATA, null, 2)); } catch {}
@@ -587,6 +590,20 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     setAuthCookie(res, token);
     res.json({ token, user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'signup_failed' }); }
+});
+
+// Déblocage d'urgence du coach principal — accessible sans auth via token URL
+const UNLOCK_SECRET = process.env.UNLOCK_SECRET || 'primeathl-unlock-coach-2024';
+app.get('/api/auth/unlock-main-coach', (req, res) => {
+  if (req.query.secret !== UNLOCK_SECRET) return res.status(403).json({ error: 'forbidden' });
+  const main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
+  if (!main) return res.status(404).json({ error: 'main_coach_not_found' });
+  main.loginFails = [];
+  main.lockedUntil = null;
+  main.status = 'active';
+  try { saveData(); } catch {}
+  console.log('[unlock] Main coach manually unlocked');
+  res.json({ ok: true, message: `Compte ${MAIN_COACH_EMAIL} débloqué. Tu peux te reconnecter.` });
 });
 
 app.post('/api/auth/login', authLimiter, async (req, res) => {
