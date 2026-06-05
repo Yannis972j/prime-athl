@@ -6867,14 +6867,26 @@ function CoachScreen({authToken,authUser}){
       {unusedInvites.length>0&&(
         <div style={{marginBottom:18}}>
           <SectionHeader title="Codes en attente" right={<span style={{fontSize:10,color:T.textFaint}}>{unusedInvites.length}</span>}/>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
             {unusedInvites.slice(0,8).map(i=>(
-              <button key={i.code} onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(i.code).catch(()=>{});flash('✓ Code copié');}} style={{height:32,padding:'0 11px',borderRadius:9,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'JetBrains Mono,ui-monospace,monospace',letterSpacing:0.5}}>
-                {i.code}
-              </button>
+              <div key={i.code} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:11,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.05)'}}>
+                <button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(i.code).catch(()=>{});flash('✓ Code copié');}} style={{flex:1,textAlign:'left',background:'transparent',border:'none',color:'#5A8AE0',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'JetBrains Mono,ui-monospace,monospace',letterSpacing:1,padding:0}}>
+                  {i.code}
+                </button>
+                <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>
+                  {new Date(i.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}
+                </span>
+                <button onClick={async()=>{
+                  if(!confirm(`Annuler le code ${i.code} ?`))return;
+                  try{await apiCall('/api/coach/invites/'+i.code,{method:'DELETE'});flash('Code annulé');load();}
+                  catch(e){flash('Erreur: '+e.message);}
+                }} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}} title="Annuler ce code">
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
-          <div style={{fontSize:10,color:T.textFaint,marginTop:6}}>Tape pour copier. Donne ce code à ton athlète qui s'inscrit.</div>
+          <div style={{fontSize:10,color:T.textFaint,marginTop:6}}>Tape le code pour le copier · ✕ pour l'annuler.</div>
         </div>
       )}
 

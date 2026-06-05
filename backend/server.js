@@ -1166,6 +1166,15 @@ app.get('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   res.json(list);
 });
 
+app.delete('/api/coach/invites/:code', authRequired, coachOnly, (req, res) => {
+  const inv = DATA.invites[req.params.code];
+  if (!inv || inv.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  if (inv.used) return res.status(400).json({ error: 'already_used' });
+  delete DATA.invites[req.params.code];
+  persist();
+  res.json({ ok: true });
+});
+
 // ── Sessions ────────────────────────────────────────
 app.get('/api/sessions', authRequired, (req, res) => {
   const target = req.query.userId || req.user.id;
