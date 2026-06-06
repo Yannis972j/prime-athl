@@ -6713,6 +6713,7 @@ function CoachScreen({authToken,authUser}){
   const prevCountsRef=React.useRef({});
   const highlightTimerRef=React.useRef(null);
   const fileRef=React.useRef(null);
+  const libFileRef=React.useRef(null);
 
   // Detect session count increases → highlight + pulse
   React.useEffect(()=>{
@@ -6804,11 +6805,12 @@ function CoachScreen({authToken,authUser}){
   };
   const reloadDetail=async id=>{
     try{
-      const[d,n]=await Promise.all([
+      const[d,n,lib]=await Promise.all([
         apiCall('/api/coach/athletes/'+id),
         apiCall('/api/coach/athletes/'+id+'/nutrition').catch(()=>({plan:null})),
+        apiCall('/api/coach/session-library-for/'+id).catch(()=>({sessions:[],assignedAt:null})),
       ]);
-      setDetail(d);
+      setDetail({...d,sessionLibrary:lib});
       setNutriDetail(n);
     }catch(e){}
   };
@@ -6907,6 +6909,28 @@ function CoachScreen({authToken,authUser}){
     },err=>flash('✗ '+err));
   };
 
+  const handleLibExcel=e=>{
+    const file=e.target.files[0];
+    if(!file||!selected)return;
+    e.target.value='';
+    flash('⏳ Import bibliothèque...');
+    parseYannisExcel(file,async data=>{
+      try{
+        const uid=()=>Math.random().toString(36).slice(2);
+        const sessions=[];
+        Object.entries(data).forEach(([sheetName,days])=>{
+          Object.entries(days).forEach(([dayName,dayData])=>{
+            sessions.push({id:uid(),name:dayName,sheetName,category:dayData.category||'',exercises:dayData.exercises||[]});
+          });
+        });
+        if(sessions.length===0){flash('✗ Aucune séance détectée');return;}
+        await apiCall('/api/coach/session-library/'+selected.id,{method:'PUT',body:{sessions}});
+        flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
+        reloadDetail(selected.id);
+      }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
+    },err=>flash('✗ '+err));
+  };
+
   // Optimistic patch of athlete profile
   const patchTimerRef=React.useRef({});
   const patchAthlete=React.useCallback(patch=>{
@@ -6958,6 +6982,7 @@ function CoachScreen({authToken,authUser}){
     return(
       <div style={{padding:'18px 0 100px',color:T.text}}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
+        <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
@@ -7103,6 +7128,34 @@ function CoachScreen({authToken,authUser}){
                 </button>
               )}
             </div>
+
+            {/* Import bibliothèque de séances */}
+            {(()=>{
+              const lib=detail?.sessionLibrary;
+              const libCount=lib?.sessions?.length||0;
+              return(
+                <div style={{display:'flex',gap:6,marginBottom:12}}>
+                  <button onClick={()=>libFileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+                    <div style={{width:36,height:36,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
+                      {libCount>0?'📚':'📂'}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{libCount>0?`${libCount} séance${libCount>1?'s':''} en bibliothèque`:'Importer bibliothèque'}</div>
+                      <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{libCount>0?lib?.assignedAt?`maj ${new Date(lib.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active':'Séances à la carte (sans calendrier)'}</div>
+                    </div>
+                  </button>
+                  {libCount>0&&(
+                    <button onClick={async()=>{
+                      if(!confirm(`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`))return;
+                      try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}
+                      catch(e){flash('✗ '+(e.message||e));}
+                    }} title="Vider la bibliothèque" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Icon name="trash" size={16} stroke="#5A8AE0"/>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Calendrier sport */}
             <SectionHeader title="Calendrier"/>
@@ -9131,6 +9184,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});
   const[programMeta,setProgramMeta]=React.useState({assignedAt:null,assignedBy:null});
+  const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
   const setProfileCloud=React.useCallback(async patch=>{
     const updated={...profile,...patch};
@@ -9147,15 +9201,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const refreshAll=React.useCallback(async()=>{
     setRefreshing(true);
     try{
-      const[me,prog,sess]=await Promise.all([
+      const[me,prog,sess,lib]=await Promise.all([
         apiCall('/api/me'),
         apiCall('/api/program'),
         apiCall('/api/sessions'),
+        apiCall('/api/session-library').catch(()=>({sessions:[],assignedAt:null})),
       ]);
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
       setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy});
       setHistory(sess);
+      setSessionLibrary(lib||{sessions:[],assignedAt:null});
       setNutriRefreshKey(k=>k+1); // force NutritionScreen reload
       triggerSave();
     }catch(e){console.error('refresh',e);}
@@ -9169,6 +9225,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy});
     }).catch(()=>{});
     apiCall('/api/sessions').then(setHistory).catch(()=>{});
+    apiCall('/api/session-library').then(lib=>setSessionLibrary(lib||{sessions:[],assignedAt:null})).catch(()=>{});
   },[]);
 
   React.useEffect(()=>{
@@ -9185,6 +9242,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     'program-updated':({data,assignedAt})=>{
       setImportedPrograms(data||{});
       setProgramMeta(m=>({...m,assignedAt}));
+      triggerSave();
+    },
+    'session-library-updated':({sessions,assignedAt})=>{
+      setSessionLibrary({sessions:sessions||[],assignedAt});
       triggerSave();
     },
     'my-profile-updated':({profile:p})=>{
@@ -9338,7 +9399,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
                   authToken={authToken} nutriRefreshKey={nutriRefreshKey}
-                  onDeleteSession={deleteSession}
+                  onDeleteSession={deleteSession} sessionLibrary={sessionLibrary}
                 />
               </UniverseShell>
             )}
@@ -9397,15 +9458,116 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   );
 }
 
-// ── Programme Tab (Séances + Nutrition réunis) ───────────────────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession}){
+// ── Bibliothèque de séances (partagée par le coach, sans calendrier) ──────────
+function BibliothequeScreen({sessionLibrary,onStartWorkout}){
+  const sessions=sessionLibrary?.sessions||[];
+  const[preview,setPreview]=React.useState(null);
+
+  const launchSession=s=>{
+    if(!s||!s.exercises||s.exercises.length===0)return;
+    // Les exercices viennent directement du parseur Excel, même format que workout
+    onStartWorkout({name:s.name,muscles:s.category||'',exercises:s.exercises});
+    setPreview(null);
+  };
+
+  // Grouper par sheetName (phase/mois)
+  const sheets=[...new Set(sessions.map(s=>s.sheetName))];
+
+  if(preview){
+    const sc='#5A8AE0';
+    return(
+      <div style={{padding:'18px 18px 90px',color:T.text}}>
+        <button onClick={()=>setPreview(null)} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+          <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+        </button>
+        <div style={{padding:'18px',borderRadius:18,background:'rgba(90,138,224,0.08)',border:'1px solid rgba(90,138,224,0.25)',marginBottom:16}}>
+          <div style={{fontSize:28,marginBottom:6}}>💪</div>
+          <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:2}}>{preview.name}</div>
+          {preview.sheetName&&<div style={{fontSize:11,color:T.textFaint,marginBottom:8}}>{preview.sheetName}</div>}
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {preview.category&&<Pill color={sc}>{preview.category}</Pill>}
+            <Pill color={T.accent}>{preview.exercises.length} exercices</Pill>
+          </div>
+        </div>
+        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Exercices</div>
+        <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:20}}>
+          {preview.exercises.map((ex,i)=>{
+            const sc2=STYLE_COLORS[ex.style||'CLASSIQUE']||T.textFaint;
+            return(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+                <div style={{width:24,height:24,borderRadius:7,background:`${sc2}18`,border:`1px solid ${sc2}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:sc2,flexShrink:0}}>{i+1}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                  <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{ex.sets?.length||'?'}×{ex.repsStr||'?'}</div>
+                  <div style={{fontSize:10,color:T.textFaint}}>{ex.rest}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={()=>launchSession(preview)} style={{width:'100%',height:54,borderRadius:16,border:'none',background:'linear-gradient(135deg,#5A8AE0,#9090c4)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 10px 28px rgba(90,138,224,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
+          <Icon name="play" size={18} stroke="#fff"/>Commencer la séance
+        </button>
+      </div>
+    );
+  }
+
+  if(sessions.length===0){
+    return(
+      <div style={{padding:'40px 24px',display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',color:T.textFaint}}>
+        <div style={{fontSize:44,marginBottom:14}}>📂</div>
+        <div style={{fontSize:16,fontWeight:700,color:T.textDim,marginBottom:8}}>Bibliothèque vide</div>
+        <div style={{fontSize:13,lineHeight:1.6,maxWidth:280}}>Ton coach n'a pas encore partagé de séances. Contacte-le pour qu'il importe ta bibliothèque.</div>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{padding:'18px 18px 90px',color:T.text}}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Coaching</div>
+        <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}>Ma bibliothèque</div>
+        <div style={{fontSize:12,color:T.textDim,marginTop:4}}>{sessions.length} séance{sessions.length>1?'s':''} disponible{sessions.length>1?'s':''}</div>
+      </div>
+      {sheets.map(sheet=>(
+        <div key={sheet} style={{marginBottom:20}}>
+          {sheets.length>1&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>{sheet}</div>}
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {sessions.filter(s=>s.sheetName===sheet).map(s=>(
+              <button key={s.id} onClick={()=>setPreview(s)} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
+                </div>
+                <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
+  const libCount=(sessionLibrary?.sessions||[]).length;
+  const tabs=[
+    {id:'seances',label:'🏋️ Séances'},
+    ...(libCount>0?[{id:'biblio',label:'📚 Biblio'}]:[]),
+    {id:'nutrition',label:'🍎 Nutrition'},
+  ];
   const[sub,setSub]=React.useState('seances');
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
       {/* Sous-navigation */}
       <div style={{padding:'10px 16px 0',flexShrink:0}}>
         <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`}}>
-          {[{id:'seances',label:'🏋️ Séances'},{id:'nutrition',label:'🍎 Nutrition'}].map(s=>(
+          {tabs.map(s=>(
             <button key={s.id} onClick={()=>setSub(s.id)} style={{
               flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
               background:sub===s.id?T.accentSoft:'transparent',
@@ -9424,6 +9586,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
           onDeleteSession={onDeleteSession}
         />}
+        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>
     </div>
