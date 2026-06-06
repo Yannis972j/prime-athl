@@ -6731,6 +6731,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
   const[saving,setSaving]=React.useState(false);
+  const[confirmingClose,setConfirmingClose]=React.useState(false);
   const queryInputRef=React.useRef(null);
 
   React.useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
@@ -6782,8 +6783,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
   const handleSave=async()=>{
     const valid=exercises.filter(e=>e.sets.length>0);
-    if(!valid.length){alert('Ajoute au moins une série pour enregistrer.');return;}
-    if(!confirm(`Enregistrer cette séance pour ${athleteName} ?`))return;
+    if(!valid.length)return;
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -6792,11 +6792,11 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
       });
       onSaved();
-    }catch(e){alert('Erreur: '+e.message);setSaving(false);}
+    }catch(e){setSaving(false);}
   };
 
   const confirmClose=()=>{
-    if(exercises.length>0&&!confirm('Annuler la séance ? Tout sera perdu.'))return;
+    if(exercises.length>0){setConfirmingClose(true);return;}
     onClose();
   };
 
@@ -6881,6 +6881,23 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
 
+  // Confirmation inline (remplace confirm() non fiable sur mobile PWA)
+  if(confirmingClose){
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
+        <div style={{fontSize:40,marginBottom:16}}>⚠️</div>
+        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Abandonner la séance ?</div>
+        <div style={{fontSize:13,color:T.textFaint,marginBottom:28,textAlign:'center',lineHeight:1.6}}>
+          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrés
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
+          <button onClick={onClose} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+          <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Header */}
@@ -6890,7 +6907,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         </button>
         <div style={{flex:1,textAlign:'center',minWidth:0}}>
           <div style={{fontSize:10,color:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
-            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'pulse 1.4s ease infinite'}}/>
+            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>
             Live · {athleteName}
           </div>
           <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
@@ -7150,7 +7167,7 @@ function CoachScreen({authToken,authUser}){
   };
 
   const openDetail=a=>{setSelected(a);reloadDetail(a.id);};
-  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);};
+  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);};
 
   const handleExcel=e=>{
     const file=e.target.files[0];
@@ -7241,6 +7258,8 @@ function CoachScreen({authToken,authUser}){
     const totalVol=sessions.reduce((s,x)=>s+(x.totalVolume||0),0);
     const programDays=Object.values(a.program?.data||{}).reduce((s,d)=>s+Object.keys(d).length,0);
     const programMonths=Object.keys(a.program?.data||{}).length;
+    const libData=detail?.sessionLibrary;
+    const libCount=libData?.sessions?.length||0;
 
     const TABS=[
       {id:'profil',label:'Profil',icon:'user'},
@@ -7382,7 +7401,7 @@ function CoachScreen({authToken,authUser}){
             <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',padding:'13px 16px',borderRadius:16,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.08),rgba(184,80,112,0.04))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',marginBottom:10}}>
               <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(232,64,64,0.3),rgba(184,80,112,0.2))',border:'1px solid rgba(232,64,64,0.25)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
                 <span style={{fontSize:20}}>🔴</span>
-                <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:4,background:'#e84040',animation:'pulse 1.4s ease infinite',boxShadow:'0 0 6px #e84040'}}/>
+                <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:4,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:700,letterSpacing:0.1}}>Séance Live</div>
@@ -7413,32 +7432,26 @@ function CoachScreen({authToken,authUser}){
             </div>
 
             {/* Import bibliothèque de séances */}
-            {(()=>{
-              const lib=detail?.sessionLibrary;
-              const libCount=lib?.sessions?.length||0;
-              return(
-                <div style={{display:'flex',gap:6,marginBottom:12}}>
-                  <button onClick={()=>libFileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
-                    <div style={{width:36,height:36,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
-                      {libCount>0?'📚':'📂'}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{libCount>0?`${libCount} séance${libCount>1?'s':''} en bibliothèque`:'Importer bibliothèque'}</div>
-                      <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{libCount>0?lib?.assignedAt?`maj ${new Date(lib.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active':'Séances à la carte (sans calendrier)'}</div>
-                    </div>
-                  </button>
-                  {libCount>0&&(
-                    <button onClick={async()=>{
-                      if(!confirm(`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`))return;
-                      try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}
-                      catch(e){flash('✗ '+(e.message||e));}
-                    }} title="Vider la bibliothèque" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <Icon name="trash" size={16} stroke="#5A8AE0"/>
-                    </button>
-                  )}
+            <div style={{display:'flex',gap:6,marginBottom:12}}>
+              <button onClick={()=>libFileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
+                  {libCount>0?'📚':'📂'}
                 </div>
-              );
-            })()}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{libCount>0?`${libCount} séance${libCount>1?'s':''} en bibliothèque`:'Importer bibliothèque'}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{libCount>0?libData?.assignedAt?`maj ${new Date(libData.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active':'Séances à la carte (sans calendrier)'}</div>
+                </div>
+              </button>
+              {libCount>0&&(
+                <button onClick={async()=>{
+                  if(!confirm(`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`))return;
+                  try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}
+                  catch(e){flash('✗ '+(e.message||e));}
+                }} title="Vider la bibliothèque" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <Icon name="trash" size={16} stroke="#5A8AE0"/>
+                </button>
+              )}
+            </div>
 
             {/* Calendrier sport */}
             <SectionHeader title="Calendrier"/>
