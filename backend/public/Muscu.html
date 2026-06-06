@@ -6703,33 +6703,140 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
 }
 
 // ── Coach Live Session ────────────────────────────────────────────────────────
+// ── Equipment catalogue (Technogym · Gym 80 · Hammer Strength + free weights) ──
+const EQUIP=[
+  {b:'Technogym',n:'Leg Press',m:'Quadriceps / Fessiers'},
+  {b:'Technogym',n:'Leg Extension',m:'Quadriceps'},
+  {b:'Technogym',n:'Leg Curl couché',m:'Ischio-jambiers'},
+  {b:'Technogym',n:'Leg Curl assis',m:'Ischio-jambiers'},
+  {b:'Technogym',n:'Hip Abductor',m:'Abducteurs'},
+  {b:'Technogym',n:'Hip Adductor',m:'Adducteurs'},
+  {b:'Technogym',n:'Glute Press',m:'Fessiers'},
+  {b:'Technogym',n:'Standing Calf Raise',m:'Mollets'},
+  {b:'Technogym',n:'Seated Calf Raise',m:'Mollets'},
+  {b:'Technogym',n:'Hack Squat',m:'Quadriceps / Fessiers'},
+  {b:'Technogym',n:'Chest Press',m:'Pectoraux'},
+  {b:'Technogym',n:'Incline Chest Press',m:'Pectoraux supérieur'},
+  {b:'Technogym',n:'Pec Deck Butterfly',m:'Pectoraux'},
+  {b:'Technogym',n:'Shoulder Press',m:'Épaules'},
+  {b:'Technogym',n:'Lateral Raise Machine',m:'Deltoïdes latéraux'},
+  {b:'Technogym',n:'Triceps Extension Machine',m:'Triceps'},
+  {b:'Technogym',n:'Dips Assist Machine',m:'Pectoraux / Triceps'},
+  {b:'Technogym',n:'Lat Pulldown',m:'Grand dorsal'},
+  {b:'Technogym',n:'Seated Row Low',m:'Dos'},
+  {b:'Technogym',n:'Seated Row Mid',m:'Dos'},
+  {b:'Technogym',n:'Face Pull Machine',m:'Dos / Épaules'},
+  {b:'Technogym',n:'Biceps Curl Machine',m:'Biceps'},
+  {b:'Technogym',n:'Assisted Pull-up',m:'Grand dorsal / Biceps'},
+  {b:'Technogym',n:'Abdominal Crunch',m:'Abdominaux'},
+  {b:'Technogym',n:'Back Extension',m:'Lombaires'},
+  {b:'Technogym',n:'Rotary Torso',m:'Obliques'},
+  {b:'Technogym',n:'Cable Column',m:'Polyvalent'},
+  {b:'Gym 80',n:'Leg Press 45°',m:'Quadriceps / Fessiers'},
+  {b:'Gym 80',n:'Leg Extension',m:'Quadriceps'},
+  {b:'Gym 80',n:'Leg Curl couché',m:'Ischio-jambiers'},
+  {b:'Gym 80',n:'Multi Hip',m:'Hanches / Fessiers'},
+  {b:'Gym 80',n:'Abducteur / Adducteur',m:'Abducteurs / Adducteurs'},
+  {b:'Gym 80',n:'Chest Press',m:'Pectoraux'},
+  {b:'Gym 80',n:'Shoulder Press',m:'Épaules'},
+  {b:'Gym 80',n:'Butterfly',m:'Pectoraux'},
+  {b:'Gym 80',n:'Dip Machine',m:'Pectoraux / Triceps'},
+  {b:'Gym 80',n:'Lat Pull',m:'Grand dorsal'},
+  {b:'Gym 80',n:'Seated Row',m:'Dos'},
+  {b:'Gym 80',n:'Preacher Curl',m:'Biceps'},
+  {b:'Gym 80',n:'Triceps Machine',m:'Triceps'},
+  {b:'Gym 80',n:'Roman Chair',m:'Abdominaux / Lombaires'},
+  {b:'Gym 80',n:'Hyperextension',m:'Lombaires / Fessiers'},
+  {b:'Gym 80',n:'Calf Raise Machine',m:'Mollets'},
+  {b:'Hammer Strength',n:'Iso-Lat Leg Press',m:'Quadriceps / Fessiers'},
+  {b:'Hammer Strength',n:'Iso-Lat Leg Extension',m:'Quadriceps'},
+  {b:'Hammer Strength',n:'Iso-Lat Leg Curl',m:'Ischio-jambiers'},
+  {b:'Hammer Strength',n:'Iso-Lat Incline Press',m:'Pectoraux supérieur'},
+  {b:'Hammer Strength',n:'Iso-Lat Decline Press',m:'Pectoraux inférieur'},
+  {b:'Hammer Strength',n:'Iso-Lat Chest Press',m:'Pectoraux'},
+  {b:'Hammer Strength',n:'Iso-Lat Shoulder Press',m:'Épaules'},
+  {b:'Hammer Strength',n:'Iso-Lat Front Lat Pulldown',m:'Grand dorsal'},
+  {b:'Hammer Strength',n:'Iso-Lat High Row',m:'Dos'},
+  {b:'Hammer Strength',n:'Iso-Lat Low Row',m:'Dos'},
+  {b:'Hammer Strength',n:'Iso-Lat Biceps Curl',m:'Biceps'},
+  {b:'Hammer Strength',n:'Iso-Lat Triceps Extension',m:'Triceps'},
+  {b:'Hammer Strength',n:'Iso-Lat Hip Thrust',m:'Fessiers'},
+  {b:'Hammer Strength',n:'MTS Incline Press',m:'Pectoraux supérieur'},
+  {b:'Hammer Strength',n:'MTS Row',m:'Dos'},
+  {b:'Hammer Strength',n:'MTS Shoulder Press',m:'Épaules'},
+  {b:'Hammer Strength',n:'Ground Base Squat',m:'Quadriceps / Fessiers'},
+  {b:'Hammer Strength',n:'Ground Base Lunge',m:'Quadriceps / Fessiers'},
+  {b:'Barres & Haltères',n:'Squat barre',m:'Quadriceps / Fessiers'},
+  {b:'Barres & Haltères',n:'Front Squat',m:'Quadriceps'},
+  {b:'Barres & Haltères',n:'Deadlift',m:'Dos / Fessiers / Ischio-jambiers'},
+  {b:'Barres & Haltères',n:'Romanian Deadlift',m:'Ischio-jambiers / Fessiers'},
+  {b:'Barres & Haltères',n:'Hip Thrust barre',m:'Fessiers'},
+  {b:'Barres & Haltères',n:'Bulgarian Split Squat',m:'Quadriceps / Fessiers'},
+  {b:'Barres & Haltères',n:'Fentes',m:'Quadriceps / Fessiers'},
+  {b:'Barres & Haltères',n:'Bench Press plat',m:'Pectoraux'},
+  {b:'Barres & Haltères',n:'Bench Press incliné',m:'Pectoraux supérieur'},
+  {b:'Barres & Haltères',n:'Bench Press décliné',m:'Pectoraux inférieur'},
+  {b:'Barres & Haltères',n:'Développé militaire',m:'Épaules'},
+  {b:'Barres & Haltères',n:'Arnold Press haltères',m:'Épaules'},
+  {b:'Barres & Haltères',n:'Élévations latérales',m:'Deltoïdes latéraux'},
+  {b:'Barres & Haltères',n:'Bent Over Row',m:'Dos'},
+  {b:'Barres & Haltères',n:'T-Bar Row',m:'Dos'},
+  {b:'Barres & Haltères',n:'Curl barre',m:'Biceps'},
+  {b:'Barres & Haltères',n:'Curl haltères',m:'Biceps'},
+  {b:'Barres & Haltères',n:'Hammer Curl',m:'Biceps'},
+  {b:'Barres & Haltères',n:'Skull Crusher',m:'Triceps'},
+  {b:'Barres & Haltères',n:'Close Grip Bench Press',m:'Triceps / Pectoraux'},
+  {b:'Barres & Haltères',n:'Good Morning',m:'Lombaires / Ischio-jambiers'},
+  {b:'Barres & Haltères',n:'Shrugs',m:'Trapèzes'},
+  {b:'Barres & Haltères',n:'Calf Raise debout',m:'Mollets'},
+  {b:'Poids du corps',n:'Tractions',m:'Grand dorsal / Biceps'},
+  {b:'Poids du corps',n:'Dips parallèles',m:'Pectoraux / Triceps'},
+  {b:'Poids du corps',n:'Pompes',m:'Pectoraux / Triceps'},
+  {b:'Poids du corps',n:'Planche',m:'Abdominaux / Gainage'},
+  {b:'Poids du corps',n:'Crunch',m:'Abdominaux'},
+  {b:'Poids du corps',n:'Relevé de jambes suspendu',m:'Abdominaux'},
+  {b:'Poids du corps',n:'Nordic Hamstring',m:'Ischio-jambiers'},
+  {b:'Câbles',n:'Poulie haute triceps',m:'Triceps'},
+  {b:'Câbles',n:'Poulie basse biceps',m:'Biceps'},
+  {b:'Câbles',n:'Cable Fly',m:'Pectoraux'},
+  {b:'Câbles',n:'Cable Lateral Raise',m:'Deltoïdes latéraux'},
+  {b:'Câbles',n:'Cable Crunch',m:'Abdominaux'},
+  {b:'Câbles',n:'Cable Kickback',m:'Triceps'},
+  {b:'Câbles',n:'Face Pull câble',m:'Dos / Épaules'},
+  {b:'Câbles',n:'Cable Pull Through',m:'Fessiers / Ischio-jambiers'},
+];
+const EQUIP_BRANDS=['Tous','Technogym','Gym 80','Hammer Strength','Barres & Haltères','Poids du corps','Câbles','Personnel'];
+
 function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const uid=()=>Math.random().toString(36).slice(2);
 
-  // Build exercise catalog from all known athlete data
   const catalog=React.useMemo(()=>{
     const map=new Map();
-    const add=(name,muscle)=>{
-      const key=(name||'').trim().toLowerCase();
-      if(key&&!map.has(key))map.set(key,{name:name.trim(),muscle:muscle||''});
+    EQUIP.forEach(e=>map.set(e.n.toLowerCase(),{name:e.n,muscle:e.m,brand:e.b}));
+    const addPersonal=(name,muscle)=>{
+      const k=(name||'').trim().toLowerCase();
+      if(k&&!map.has(k))map.set(k,{name:name.trim(),muscle:muscle||'',brand:'Personnel'});
     };
     Object.values(detail?.program?.data||{}).forEach(sheet=>
-      Object.values(sheet).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle)))
+      Object.values(sheet).forEach(day=>(day.exercises||[]).forEach(e=>addPersonal(e.name,e.muscle)))
     );
-    (detail?.sessionLibrary?.sessions||[]).forEach(s=>(s.exercises||[]).forEach(e=>add(e.name,e.muscle)));
-    [...(detail?.sessions||[])].sort((a,b)=>new Date(b.date)-new Date(a.date))
-      .forEach(s=>(s.exercises||[]).forEach(e=>add(e.name,e.muscle)));
+    (detail?.sessionLibrary?.sessions||[]).forEach(s=>(s.exercises||[]).forEach(e=>addPersonal(e.name,e.muscle)));
+    [...(detail?.sessions||[])].forEach(s=>(s.exercises||[]).forEach(e=>addPersonal(e.name,e.muscle)));
     return[...map.values()];
   },[detail]);
 
-  const[exercises,setExercises]=React.useState([]);
+  const[exercises,setExercises]=React.useState([]); // [{id,name,muscle,brand,sets:[{weight,reps,rest,done}],groupId,groupType}]
   const[elapsed,setElapsed]=React.useState(0);
-  const[mode,setMode]=React.useState('session'); // 'session'|'pick-exercise'|'add-set'
+  const[mode,setMode]=React.useState('session');
+  const[brandFilter,setBrandFilter]=React.useState('Tous');
   const[query,setQuery]=React.useState('');
-  const[pendingEx,setPendingEx]=React.useState({name:'',muscle:''});
-  const[addingSetForIdx,setAddingSetForIdx]=React.useState(null); // null=new exercise
+  const[pendingEx,setPendingEx]=React.useState({name:'',muscle:'',brand:''});
+  const[addingTo,setAddingTo]=React.useState(null); // null=new exercise, {exIdx} for adding set
+  const[pendingGroupType,setPendingGroupType]=React.useState('classic');
+  const[pendingGroupId,setPendingGroupId]=React.useState(null);
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
+  const[setRest,setSetRest]=React.useState(90);
   const[saving,setSaving]=React.useState(false);
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
@@ -6740,47 +6847,50 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const fmtRest=s=>s>=60?`${Math.floor(s/60)}min${s%60?` ${s%60}s`:''}`:`${s}s`;
 
-  const filteredCatalog=query.trim()
-    ?catalog.filter(e=>norm(e.name).includes(norm(query)))
-    :catalog;
+  const filteredCatalog=React.useMemo(()=>{
+    let list=brandFilter==='Tous'?catalog:catalog.filter(e=>e.brand===brandFilter);
+    if(query.trim())list=list.filter(e=>norm(e.name).includes(norm(query))||norm(e.muscle||'').includes(norm(query)));
+    return list;
+  },[catalog,brandFilter,query]);
 
-  const openPickExercise=()=>{setQuery('');setMode('pick-exercise');};
+  const openPickExercise=(groupId=null,groupType=null)=>{
+    setQuery('');setBrandFilter('Tous');setPendingGroupId(groupId);
+    if(groupType)setPendingGroupType(groupType);
+    setMode('pick-exercise');
+  };
 
-  const selectExercise=(name,muscle)=>{
-    // Pre-fill weight from last session
-    let lastW=0;
+  const selectExercise=(name,muscle,brand)=>{
+    let lastW=0,lastRest=90;
     for(const s of(detail?.sessions||[])){
-      const ex=(s.exercises||[]).find(e=>e.name.toLowerCase()===name.toLowerCase());
-      if(ex?.sets?.length){lastW=ex.sets[ex.sets.length-1]?.weight||0;break;}
+      const ex=(s.exercises||[]).find(e=>norm(e.name)===norm(name));
+      if(ex?.sets?.length){lastW=ex.sets[ex.sets.length-1]?.weight||0;lastRest=ex.sets[ex.sets.length-1]?.rest||90;break;}
     }
-    setPendingEx({name,muscle:muscle||''});
-    setAddingSetForIdx(null);
-    setSetW(lastW);
-    setSetR(10);
-    setMode('add-set');
+    setPendingEx({name,muscle:muscle||'',brand:brand||''});
+    setAddingTo(null);setSetW(lastW);setSetR(10);setSetRest(lastRest);setMode('add-set');
   };
 
   const openAddSet=exIdx=>{
     const ex=exercises[exIdx];
-    const last=ex.sets[ex.sets.length-1];
-    setSetW(last?.weight??0);
-    setSetR(last?.reps??10);
-    setAddingSetForIdx(exIdx);
-    setMode('add-set');
+    const last=ex?.sets[ex.sets.length-1];
+    setSetW(last?.weight??0);setSetR(last?.reps??10);setSetRest(last?.rest??90);
+    setAddingTo({exIdx});setMode('add-set');
   };
 
   const confirmSet=()=>{
     if(setR<=0)return;
-    if(addingSetForIdx===null){
-      setExercises(ex=>[...ex,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,sets:[{weight:setW,reps:setR,done:true}]}]);
+    if(addingTo===null){
+      const gid=pendingGroupId||uid();
+      setExercises(prev=>[...prev,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,brand:pendingEx.brand,sets:[{weight:setW,reps:setR,rest:setRest,done:true}],groupId:gid,groupType:pendingGroupType}]);
+      setPendingGroupId(null);
     }else{
-      setExercises(ex=>ex.map((e,i)=>i!==addingSetForIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,done:true}]}));
+      setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,rest:setRest,done:true}]}));
     }
     setMode('session');
   };
 
-  const removeExercise=idx=>setExercises(ex=>ex.filter((_,i)=>i!==idx));
+  const removeExercise=idx=>setExercises(prev=>prev.filter((_,i)=>i!==idx));
 
   const handleSave=async()=>{
     const valid=exercises.filter(e=>e.sets.length>0);
@@ -6790,51 +6900,56 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{
         method:'POST',
-        body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
+        body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
       });
       onSaved();
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
-  const confirmClose=()=>{
-    if(exercises.length>0){setConfirmingClose(true);return;}
-    onClose();
-  };
-
+  const confirmClose=()=>{if(exercises.length>0){setConfirmingClose(true);return;}onClose();};
   const adj=(setter,delta,min=0)=>setter(v=>Math.max(min,+(v+delta).toFixed(1)));
+
+  const groups=React.useMemo(()=>{
+    const map=new Map();
+    exercises.forEach((ex,idx)=>{
+      if(!map.has(ex.groupId))map.set(ex.groupId,{type:ex.groupType,items:[]});
+      map.get(ex.groupId).items.push({...ex,idx});
+    });
+    return[...map.values()];
+  },[exercises]);
+
+  const TYPE_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'}};
+  const REST_PRESETS=[30,45,60,90,120,180];
 
   // ── Mode : choisir exercice ──────────────────────────────────────────────────
   if(mode==='pick-exercise'){
-    const exactMatch=filteredCatalog.some(e=>e.name.toLowerCase()===query.trim().toLowerCase());
+    const exactMatch=filteredCatalog.some(e=>norm(e.name)===norm(query.trim()));
     return(
       <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column'}}>
-        <div style={{padding:`calc(16px + env(safe-area-inset-top)) 16px 12px`,display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+        <div style={{padding:`calc(16px + env(safe-area-inset-top)) 16px 12px`,flexShrink:0,borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10}}>
           <button onClick={()=>setMode('session')} style={{width:36,height:36,borderRadius:18,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             <Icon name="chevronLeft" size={18}/>
           </button>
-          <input
-            ref={queryInputRef} value={query} onChange={e=>setQuery(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter'&&query.trim()&&!exactMatch)selectExercise(query.trim(),'');}}
-            placeholder="Rechercher ou nommer un exercice..."
-            style={{flex:1,height:42,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.06)',color:T.text,fontSize:14,fontWeight:500,padding:'0 12px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
+          <input ref={queryInputRef} value={query} onChange={e=>setQuery(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter'&&query.trim()&&!exactMatch)selectExercise(query.trim(),'','Personnel');}}
+            placeholder="Rechercher un exercice..."
+            style={{flex:1,height:44,borderRadius:13,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.06)',color:T.text,fontSize:15,fontWeight:500,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
           />
         </div>
-        <div style={{flex:1,overflow:'auto',padding:'12px 16px 40px'}}>
+        <div style={{flex:1,overflow:'auto',padding:'10px 16px 40px'}}>
           {query.trim()&&!exactMatch&&(
-            <button onClick={()=>selectExercise(query.trim(),'')} style={{width:'100%',padding:'12px 16px',borderRadius:14,border:'1px dashed rgba(191,160,96,0.45)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',textAlign:'left',marginBottom:10,display:'flex',alignItems:'center',gap:10}}>
-              <Icon name="plus" size={18} stroke={T.accent}/>
-              <span>Créer <strong>"{query.trim()}"</strong></span>
+            <button onClick={()=>selectExercise(query.trim(),'','Personnel')} style={{width:'100%',padding:'11px 14px',borderRadius:14,border:'1px dashed rgba(191,160,96,0.45)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',textAlign:'left',marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
+              <Icon name="plus" size={18} stroke={T.accent}/><span>Créer <strong>"{query.trim()}"</strong></span>
             </button>
           )}
-          {filteredCatalog.length===0&&!query.trim()&&(
-            <div style={{padding:'32px 0',textAlign:'center',color:T.textFaint,fontSize:13}}>Tape un nom pour créer un exercice personnalisé.</div>
-          )}
           {filteredCatalog.map((ex,i)=>(
-            <button key={i} onClick={()=>selectExercise(ex.name,ex.muscle)} style={{width:'100%',padding:'12px 16px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-              <div style={{width:36,height:36,borderRadius:10,background:'rgba(191,160,96,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>🏋️</div>
+            <button key={i} onClick={()=>selectExercise(ex.name,ex.muscle,ex.brand)} style={{width:'100%',padding:'11px 14px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:T.text,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10,marginBottom:5}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                {ex.muscle&&<div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{ex.muscle}</div>}
+                <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:2,display:'flex',gap:8}}>
+                  {ex.brand&&ex.brand!=='Personnel'&&<span style={{color:'rgba(191,160,96,0.65)',fontWeight:600}}>{ex.brand}</span>}
+                  {ex.muscle&&<span>{ex.muscle}</span>}
+                </div>
               </div>
             </button>
           ))}
@@ -6845,44 +6960,70 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
   // ── Mode : ajouter une série ─────────────────────────────────────────────────
   if(mode==='add-set'){
-    const isNew=addingSetForIdx===null;
-    const exName=isNew?pendingEx.name:exercises[addingSetForIdx]?.name;
-    const setNum=isNew?1:(exercises[addingSetForIdx]?.sets?.length||0)+1;
+    const isNew=addingTo===null;
+    const exName=isNew?pendingEx.name:exercises[addingTo.exIdx]?.name;
+    const setNum=isNew?1:(exercises[addingTo.exIdx]?.sets?.length||0)+1;
     return(
       <div style={{position:'fixed',inset:0,zIndex:310,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'flex-end'}} onClick={()=>setMode(isNew?'pick-exercise':'session')}>
-        <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)'}}>
+        <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)',maxHeight:'92vh',overflowY:'auto'}}>
           <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
           <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Série {setNum}</div>
-          <div style={{fontSize:19,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:22}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
             {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Répétitions',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min})=>(
               <div key={label}>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{label}</div>
-                <div style={{display:'flex',alignItems:'center',height:54,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
-                  <button onClick={()=>adj(set,-step,min)} style={{width:46,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                  <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)}
-                    style={{flex:1,height:'100%',border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit',minWidth:0,padding:0}}/>
-                  <button onClick={()=>adj(set,step,min)} style={{width:46,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                <div style={{display:'flex',alignItems:'center',height:52,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+                  <button onClick={()=>adj(set,-step,min)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                  <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{flex:1,height:'100%',border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit',minWidth:0,padding:0}}/>
+                  <button onClick={()=>adj(set,step,min)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                 </div>
                 <div style={{fontSize:10,color:T.textFaint,textAlign:'center',marginTop:4}}>{unit}</div>
               </div>
             ))}
           </div>
 
-          <button onClick={confirmSet} disabled={setR<=0} style={{width:'100%',height:54,borderRadius:16,border:'none',background:setR>0?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:setR>0?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:setR>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
-            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?"Créer l'exercice":"Valider la série"}
+          <div style={{marginBottom:isNew&&!pendingGroupId?16:20}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Repos</div>
+            <div style={{display:'flex',gap:5,marginBottom:8}}>
+              {REST_PRESETS.map(v=>(
+                <button key={v} onClick={()=>setSetRest(v)} style={{flex:1,height:30,borderRadius:9,border:`1px solid ${setRest===v?'rgba(90,138,224,0.5)':T.border}`,background:setRest===v?'rgba(90,138,224,0.15)':'rgba(255,255,255,0.04)',color:setRest===v?'#5A8AE0':T.textDim,fontSize:10,fontWeight:setRest===v?700:500,cursor:'pointer'}}>
+                  {fmtRest(v)}
+                </button>
+              ))}
+            </div>
+            <div style={{display:'flex',alignItems:'center',height:44,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+              <button onClick={()=>adj(setSetRest,-15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+              <div style={{flex:1,textAlign:'center',fontSize:16,fontWeight:700,color:T.text}}>{fmtRest(setRest)}</div>
+              <button onClick={()=>adj(setSetRest,15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+            </div>
+          </div>
+
+          {isNew&&!pendingGroupId&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Type de série</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                {Object.entries(TYPE_STYLE).map(([v,{label,color}])=>(
+                  <button key={v} onClick={()=>setPendingGroupType(v)} style={{height:40,borderRadius:12,border:`1px solid ${pendingGroupType===v?color+'80':'rgba(255,255,255,0.08)'}`,background:pendingGroupType===v?color+'18':'rgba(255,255,255,0.03)',color:pendingGroupType===v?color:T.textDim,fontSize:12,fontWeight:pendingGroupType===v?700:500,cursor:'pointer'}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={confirmSet} disabled={setR<=0} style={{width:'100%',height:52,borderRadius:16,border:'none',background:setR>0?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:setR>0?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:setR>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
+            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?'Créer l\'exercice':'Valider la série'}
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Mode : vue séance ────────────────────────────────────────────────────────
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
 
-  // Confirmation inline (remplace confirm() non fiable sur mobile PWA)
   if(confirmingClose){
     return(
       <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
@@ -6899,9 +7040,9 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
     );
   }
 
+  // ── Mode : vue séance ────────────────────────────────────────────────────────
   return(
     <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      {/* Header */}
       <div style={{padding:`calc(16px + env(safe-area-inset-top)) 16px 12px`,display:'flex',alignItems:'center',gap:10,flexShrink:0,borderBottom:`1px solid ${T.border}`,background:'rgba(12,12,20,0.98)'}}>
         <button onClick={confirmClose} style={{width:36,height:36,borderRadius:18,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
           <Icon name="x" size={16} stroke="#B85070"/>
@@ -6918,18 +7059,16 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         </button>
       </div>
 
-      {/* Save error */}
       {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
-      {/* Stats strip */}
+
       {exercises.length>0&&(
         <div style={{padding:'7px 16px',display:'flex',gap:18,flexShrink:0,background:'rgba(255,255,255,0.02)',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.text}}>{exercises.length}</span> exercice{exercises.length>1?'s':''}</div>
+          <div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.text}}>{exercises.length}</span> ex.</div>
           <div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.text}}>{totalSets}</span> série{totalSets>1?'s':''}</div>
           {totalVol>0&&<div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.accent}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg</span></div>}
         </div>
       )}
 
-      {/* List */}
       <div style={{flex:1,overflow:'auto',padding:'12px 16px 100px'}}>
         {exercises.length===0&&(
           <div style={{padding:'50px 0',textAlign:'center',color:T.textFaint}}>
@@ -6939,41 +7078,69 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
           </div>
         )}
 
-        {exercises.map((ex,exIdx)=>(
-          <div key={ex.id} style={{marginBottom:10,borderRadius:16,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
-            <div style={{padding:'12px 14px 8px',display:'flex',alignItems:'center',gap:10}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.muscle}</div>}
-              </div>
-              <button onClick={()=>removeExercise(exIdx)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(184,80,112,0.08)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <Icon name="trash" size={13} stroke="#B85070"/>
-              </button>
-            </div>
-            {ex.sets.length>0&&(
-              <div style={{padding:'0 14px 8px',display:'flex',flexDirection:'column',gap:4}}>
-                {ex.sets.map((s,si)=>(
-                  <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)'}}>
-                    <div style={{width:22,height:22,borderRadius:6,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
-                    <div style={{flex:1,fontSize:13,fontWeight:600}}>
-                      {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:10,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>PDC</span>}
-                      <span style={{color:T.textFaint,margin:'0 6px'}}>×</span>
-                      <span>{s.reps}</span><span style={{fontSize:10,color:T.textFaint,marginLeft:2}}>reps</span>
+        {groups.map((g,gi)=>{
+          const ts=TYPE_STYLE[g.type]||TYPE_STYLE.classic;
+          const isComplex=g.type!=='classic';
+          const maxInGroup=g.type==='triset'?3:2;
+          const canAddToGroup=isComplex&&g.items.length<maxInGroup;
+          return(
+            <div key={gi} style={{marginBottom:10,borderRadius:16,border:`1px solid ${isComplex?ts.color+'45':T.border}`,background:isComplex?ts.color+'07':'rgba(255,255,255,0.025)',overflow:'hidden'}}>
+              {isComplex&&(
+                <div style={{padding:'6px 14px',background:ts.color+'12',borderBottom:`1px solid ${ts.color+'30'}`,display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:0.8,color:ts.color}}>{ts.label}</span>
+                  <span style={{fontSize:10,color:T.textFaint}}>{g.items.length} exercice{g.items.length>1?'s':''}</span>
+                </div>
+              )}
+              {g.items.map((ex,itemIdx)=>(
+                <div key={ex.id} style={{borderTop:itemIdx>0?`1px solid ${T.border}`:'none'}}>
+                  <div style={{padding:'10px 14px 6px',display:'flex',alignItems:'center',gap:8}}>
+                    {isComplex&&<span style={{width:18,height:18,borderRadius:5,background:ts.color+'20',color:ts.color,fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+itemIdx)}</span>}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                      <div style={{fontSize:10,color:T.textFaint,marginTop:1,display:'flex',gap:6}}>
+                        {ex.brand&&ex.brand!=='Personnel'&&<span style={{color:'rgba(191,160,96,0.6)',fontWeight:600}}>{ex.brand}</span>}
+                        {ex.muscle&&<span>{ex.muscle}</span>}
+                      </div>
                     </div>
-                    <span style={{fontSize:12,color:T.good}}>✓</span>
+                    <button onClick={()=>removeExercise(ex.idx)} style={{width:26,height:26,borderRadius:8,border:'none',background:'rgba(184,80,112,0.08)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Icon name="trash" size={12} stroke="#B85070"/>
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-            <div style={{padding:'0 14px 12px'}}>
-              <button onClick={()=>openAddSet(exIdx)} style={{width:'100%',height:36,borderRadius:10,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.04)',color:'#5A8AE0',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                <Icon name="plus" size={14} stroke="#5A8AE0"/>+ Série
-              </button>
+                  {ex.sets.length>0&&(
+                    <div style={{padding:'0 14px 4px',display:'flex',flexDirection:'column',gap:3}}>
+                      {ex.sets.map((s,si)=>(
+                        <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)'}}>
+                          <div style={{width:20,height:20,borderRadius:5,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
+                          <div style={{flex:1,fontSize:12,fontWeight:600}}>
+                            {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint,fontSize:10}}>PDC</span>}
+                            <span style={{color:T.textFaint,margin:'0 5px'}}>×</span>
+                            <span>{s.reps}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
+                            {s.rest>0&&<span style={{fontSize:9,color:T.textFaint,marginLeft:8}}>⏱ {fmtRest(s.rest)}</span>}
+                          </div>
+                          <span style={{fontSize:11,color:T.good}}>✓</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{padding:'4px 14px 10px'}}>
+                    <button onClick={()=>openAddSet(ex.idx)} style={{width:'100%',height:32,borderRadius:10,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.04)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+                      <Icon name="plus" size={13} stroke="#5A8AE0"/>+ Série
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {canAddToGroup&&(
+                <div style={{padding:'0 14px 12px',borderTop:`1px solid ${ts.color+'25'}`}}>
+                  <button onClick={()=>openPickExercise(g.items[0].groupId,g.type)} style={{width:'100%',height:32,borderRadius:10,border:`1px dashed ${ts.color}60`,background:ts.color+'06',color:ts.color,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+                    <Icon name="plus" size={13} stroke={ts.color}/>Ex. {String.fromCharCode(65+g.items.length)} — {ts.label}
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
-        <button onClick={openPickExercise} style={{width:'100%',height:54,borderRadius:16,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,marginTop:exercises.length>0?6:0}}>
+        <button onClick={()=>openPickExercise()} style={{width:'100%',height:52,borderRadius:16,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,marginTop:exercises.length>0?6:0}}>
           <Icon name="plus" size={18} stroke={T.accent}/>Ajouter un exercice
         </button>
       </div>
