@@ -5682,7 +5682,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':T.textFaint):(sessDone?'#2CC4A0':hasProg?'#BFA060':T.textFaint);
           return(
             <div key={i} onClick={()=>canClick&&setSel(isSel?null:dateStr)}
-              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,transition:'all 0.15s'}}>
+              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,transition:'background 0.15s,border-color 0.15s',willChange:'auto'}}>
               <span style={{fontSize:11,fontWeight:600,color:numColor,lineHeight:1}}>{d}</span>
               <div style={{display:'flex',gap:2,marginTop:2}}>
                 {sessDone&&<div style={{width:3,height:3,borderRadius:2,background:'#2CC4A0'}}/>}
@@ -7312,7 +7312,7 @@ function CoachScreen({authToken,authUser}){
         {/* Tab bar */}
         <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none'}}>
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setDetailTab(t.id)} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'all 0.15s'}}>
+            <button key={t.id} onClick={()=>setDetailTab(t.id)} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
               {t.label}
             </button>
           ))}
