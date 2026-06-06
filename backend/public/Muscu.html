@@ -6731,6 +6731,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
   const[saving,setSaving]=React.useState(false);
+  const[confirmingClose,setConfirmingClose]=React.useState(false);
   const queryInputRef=React.useRef(null);
 
   React.useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
@@ -6782,8 +6783,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
   const handleSave=async()=>{
     const valid=exercises.filter(e=>e.sets.length>0);
-    if(!valid.length){alert('Ajoute au moins une série pour enregistrer.');return;}
-    if(!confirm(`Enregistrer cette séance pour ${athleteName} ?`))return;
+    if(!valid.length)return;
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -6792,11 +6792,11 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
       });
       onSaved();
-    }catch(e){alert('Erreur: '+e.message);setSaving(false);}
+    }catch(e){setSaving(false);}
   };
 
   const confirmClose=()=>{
-    if(exercises.length>0&&!confirm('Annuler la séance ? Tout sera perdu.'))return;
+    if(exercises.length>0){setConfirmingClose(true);return;}
     onClose();
   };
 
@@ -6881,6 +6881,23 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
 
+  // Confirmation inline (remplace confirm() non fiable sur mobile PWA)
+  if(confirmingClose){
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
+        <div style={{fontSize:40,marginBottom:16}}>⚠️</div>
+        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Abandonner la séance ?</div>
+        <div style={{fontSize:13,color:T.textFaint,marginBottom:28,textAlign:'center',lineHeight:1.6}}>
+          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrés
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
+          <button onClick={onClose} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+          <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Header */}
@@ -6890,7 +6907,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         </button>
         <div style={{flex:1,textAlign:'center',minWidth:0}}>
           <div style={{fontSize:10,color:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
-            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'pulse 1.4s ease infinite'}}/>
+            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>
             Live · {athleteName}
           </div>
           <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
@@ -7150,7 +7167,7 @@ function CoachScreen({authToken,authUser}){
   };
 
   const openDetail=a=>{setSelected(a);reloadDetail(a.id);};
-  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);};
+  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);};
 
   const handleExcel=e=>{
     const file=e.target.files[0];
