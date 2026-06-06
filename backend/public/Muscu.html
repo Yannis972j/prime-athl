@@ -6970,17 +6970,23 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
           <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Série {setNum}</div>
           <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-            {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Répétitions',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min})=>(
-              <div key={label}>
-                <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{label}</div>
-                <div style={{display:'flex',alignItems:'center',height:52,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
-                  <button onClick={()=>adj(set,-step,min)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                  <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{flex:1,height:'100%',border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit',minWidth:0,padding:0}}/>
-                  <button onClick={()=>adj(set,step,min)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+          {/* Charge × Reps */}
+          <div style={{display:'flex',alignItems:'stretch',gap:0,marginBottom:16,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+            {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Reps',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min},idx)=>(
+              <React.Fragment key={label}>
+                {idx===1&&<div style={{width:1,background:T.border,flexShrink:0}}/>}
+                <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                  <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',paddingTop:10,marginBottom:4}}>{label}</div>
+                  <div style={{display:'flex',alignItems:'center',width:'100%',flex:1}}>
+                    <button onClick={()=>adj(set,-step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',border:'none',background:'transparent',color:T.text,fontSize:24,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
+                    </div>
+                    <button onClick={()=>adj(set,step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                  </div>
+                  <div style={{fontSize:10,color:T.textFaint,fontWeight:600,paddingBottom:10}}>{unit}</div>
                 </div>
-                <div style={{fontSize:10,color:T.textFaint,textAlign:'center',marginTop:4}}>{unit}</div>
-              </div>
+              </React.Fragment>
             ))}
           </div>
 
