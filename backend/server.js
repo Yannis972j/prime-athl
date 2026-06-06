@@ -607,7 +607,7 @@ app.get('/api/auth/unlock-main-coach', (req, res) => {
   main.loginFails = [];
   main.lockedUntil = null;
   main.status = 'active';
-  try { saveData(); } catch {}
+  try { persist(); } catch {}
   console.log('[unlock] Main coach manually unlocked');
   res.json({ ok: true, message: `Compte ${MAIN_COACH_EMAIL} débloqué. Tu peux te reconnecter.` });
 });
