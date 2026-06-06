@@ -7243,20 +7243,21 @@ function CoachScreen({authToken,authUser}){
     }});
   };
 
-  // ── Live session overlay ────────────────────────────────────────────────────
-  if(showLiveSession&&selected){
-    return <CoachLiveSessionScreen
+  // ── Live session overlay — rendu via portal pour échapper au willChange:transform du gestureRef
+  const liveSessionEl=showLiveSession&&selected?ReactDOM.createPortal(
+    <CoachLiveSessionScreen
       athleteId={selected.id}
       athleteName={(detail||selected).firstName||selected.email.split('@')[0]}
       detail={detail||{}}
       onSaved={()=>{setShowLiveSession(false);reloadDetail(selected.id);flash('✓ Séance enregistrée');}}
       onClose={()=>setShowLiveSession(false)}
-    />;
-  }
+    />,
+    document.body
+  ):null;
 
   // ── Calendar view (must come before detail check) ───────────────────────────
   if(coachView==='calendar'){
-    return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
+    return <>{liveSessionEl}<CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/></>;
   }
 
   // ── Detail view ─────────────────────────────────
@@ -7279,6 +7280,7 @@ function CoachScreen({authToken,authUser}){
 
     return(
       <div style={{padding:'18px 0 100px',color:T.text}}>
+        {liveSessionEl}
         {confirmAction&&(
           <div style={{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setConfirmAction(null)}>
             <div onClick={e=>e.stopPropagation()} style={{background:'#13131a',borderRadius:18,padding:'24px 22px',width:'100%',maxWidth:320,boxShadow:'0 20px 60px rgba(0,0,0,0.6)'}}>
@@ -7580,6 +7582,7 @@ function CoachScreen({authToken,authUser}){
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
+      {liveSessionEl}
       {confirmAction&&(
         <div style={{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setConfirmAction(null)}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#13131a',borderRadius:18,padding:'24px 22px',width:'100%',maxWidth:320,boxShadow:'0 20px 60px rgba(0,0,0,0.6)'}}>
