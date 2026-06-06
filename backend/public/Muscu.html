@@ -6731,6 +6731,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
   const[saving,setSaving]=React.useState(false);
+  const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const queryInputRef=React.useRef(null);
 
@@ -6792,7 +6793,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
       });
       onSaved();
-    }catch(e){setSaving(false);}
+    }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
   const confirmClose=()=>{
@@ -6917,6 +6918,8 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         </button>
       </div>
 
+      {/* Save error */}
+      {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
       {/* Stats strip */}
       {exercises.length>0&&(
         <div style={{padding:'7px 16px',display:'flex',gap:18,flexShrink:0,background:'rgba(255,255,255,0.02)',borderBottom:`1px solid ${T.border}`}}>
@@ -7241,11 +7244,11 @@ function CoachScreen({authToken,authUser}){
   };
 
   // ── Live session overlay ────────────────────────────────────────────────────
-  if(showLiveSession&&selected&&detail){
+  if(showLiveSession&&selected){
     return <CoachLiveSessionScreen
       athleteId={selected.id}
-      athleteName={detail?.firstName||selected.email.split('@')[0]}
-      detail={detail}
+      athleteName={(detail||selected).firstName||selected.email.split('@')[0]}
+      detail={detail||{}}
       onSaved={()=>{setShowLiveSession(false);reloadDetail(selected.id);flash('✓ Séance enregistrée');}}
       onClose={()=>setShowLiveSession(false)}
     />;
