@@ -6702,6 +6702,265 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
   );
 }
 
+// ── Coach Live Session ────────────────────────────────────────────────────────
+function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
+  const uid=()=>Math.random().toString(36).slice(2);
+
+  // Build exercise catalog from all known athlete data
+  const catalog=React.useMemo(()=>{
+    const map=new Map();
+    const add=(name,muscle)=>{
+      const key=(name||'').trim().toLowerCase();
+      if(key&&!map.has(key))map.set(key,{name:name.trim(),muscle:muscle||''});
+    };
+    Object.values(detail?.program?.data||{}).forEach(sheet=>
+      Object.values(sheet).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle)))
+    );
+    (detail?.sessionLibrary?.sessions||[]).forEach(s=>(s.exercises||[]).forEach(e=>add(e.name,e.muscle)));
+    [...(detail?.sessions||[])].sort((a,b)=>new Date(b.date)-new Date(a.date))
+      .forEach(s=>(s.exercises||[]).forEach(e=>add(e.name,e.muscle)));
+    return[...map.values()];
+  },[detail]);
+
+  const[exercises,setExercises]=React.useState([]);
+  const[elapsed,setElapsed]=React.useState(0);
+  const[mode,setMode]=React.useState('session'); // 'session'|'pick-exercise'|'add-set'
+  const[query,setQuery]=React.useState('');
+  const[pendingEx,setPendingEx]=React.useState({name:'',muscle:''});
+  const[addingSetForIdx,setAddingSetForIdx]=React.useState(null); // null=new exercise
+  const[setW,setSetW]=React.useState(0);
+  const[setR,setSetR]=React.useState(10);
+  const[saving,setSaving]=React.useState(false);
+  const queryInputRef=React.useRef(null);
+
+  React.useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
+  React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
+
+  const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+  const filteredCatalog=query.trim()
+    ?catalog.filter(e=>norm(e.name).includes(norm(query)))
+    :catalog;
+
+  const openPickExercise=()=>{setQuery('');setMode('pick-exercise');};
+
+  const selectExercise=(name,muscle)=>{
+    // Pre-fill weight from last session
+    let lastW=0;
+    for(const s of(detail?.sessions||[])){
+      const ex=(s.exercises||[]).find(e=>e.name.toLowerCase()===name.toLowerCase());
+      if(ex?.sets?.length){lastW=ex.sets[ex.sets.length-1]?.weight||0;break;}
+    }
+    setPendingEx({name,muscle:muscle||''});
+    setAddingSetForIdx(null);
+    setSetW(lastW);
+    setSetR(10);
+    setMode('add-set');
+  };
+
+  const openAddSet=exIdx=>{
+    const ex=exercises[exIdx];
+    const last=ex.sets[ex.sets.length-1];
+    setSetW(last?.weight??0);
+    setSetR(last?.reps??10);
+    setAddingSetForIdx(exIdx);
+    setMode('add-set');
+  };
+
+  const confirmSet=()=>{
+    if(setR<=0)return;
+    if(addingSetForIdx===null){
+      setExercises(ex=>[...ex,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,sets:[{weight:setW,reps:setR,done:true}]}]);
+    }else{
+      setExercises(ex=>ex.map((e,i)=>i!==addingSetForIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,done:true}]}));
+    }
+    setMode('session');
+  };
+
+  const removeExercise=idx=>setExercises(ex=>ex.filter((_,i)=>i!==idx));
+
+  const handleSave=async()=>{
+    const valid=exercises.filter(e=>e.sets.length>0);
+    if(!valid.length){alert('Ajoute au moins une série pour enregistrer.');return;}
+    if(!confirm(`Enregistrer cette séance pour ${athleteName} ?`))return;
+    setSaving(true);
+    try{
+      const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+      await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{
+        method:'POST',
+        body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
+      });
+      onSaved();
+    }catch(e){alert('Erreur: '+e.message);setSaving(false);}
+  };
+
+  const confirmClose=()=>{
+    if(exercises.length>0&&!confirm('Annuler la séance ? Tout sera perdu.'))return;
+    onClose();
+  };
+
+  const adj=(setter,delta,min=0)=>setter(v=>Math.max(min,+(v+delta).toFixed(1)));
+
+  // ── Mode : choisir exercice ──────────────────────────────────────────────────
+  if(mode==='pick-exercise'){
+    const exactMatch=filteredCatalog.some(e=>e.name.toLowerCase()===query.trim().toLowerCase());
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column'}}>
+        <div style={{padding:`calc(16px + env(safe-area-inset-top)) 16px 12px`,display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          <button onClick={()=>setMode('session')} style={{width:36,height:36,borderRadius:18,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Icon name="chevronLeft" size={18}/>
+          </button>
+          <input
+            ref={queryInputRef} value={query} onChange={e=>setQuery(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter'&&query.trim()&&!exactMatch)selectExercise(query.trim(),'');}}
+            placeholder="Rechercher ou nommer un exercice..."
+            style={{flex:1,height:42,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.06)',color:T.text,fontSize:14,fontWeight:500,padding:'0 12px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
+          />
+        </div>
+        <div style={{flex:1,overflow:'auto',padding:'12px 16px 40px'}}>
+          {query.trim()&&!exactMatch&&(
+            <button onClick={()=>selectExercise(query.trim(),'')} style={{width:'100%',padding:'12px 16px',borderRadius:14,border:'1px dashed rgba(191,160,96,0.45)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',textAlign:'left',marginBottom:10,display:'flex',alignItems:'center',gap:10}}>
+              <Icon name="plus" size={18} stroke={T.accent}/>
+              <span>Créer <strong>"{query.trim()}"</strong></span>
+            </button>
+          )}
+          {filteredCatalog.length===0&&!query.trim()&&(
+            <div style={{padding:'32px 0',textAlign:'center',color:T.textFaint,fontSize:13}}>Tape un nom pour créer un exercice personnalisé.</div>
+          )}
+          {filteredCatalog.map((ex,i)=>(
+            <button key={i} onClick={()=>selectExercise(ex.name,ex.muscle)} style={{width:'100%',padding:'12px 16px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+              <div style={{width:36,height:36,borderRadius:10,background:'rgba(191,160,96,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>🏋️</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                {ex.muscle&&<div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{ex.muscle}</div>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Mode : ajouter une série ─────────────────────────────────────────────────
+  if(mode==='add-set'){
+    const isNew=addingSetForIdx===null;
+    const exName=isNew?pendingEx.name:exercises[addingSetForIdx]?.name;
+    const setNum=isNew?1:(exercises[addingSetForIdx]?.sets?.length||0)+1;
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:310,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'flex-end'}} onClick={()=>setMode(isNew?'pick-exercise':'session')}>
+        <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)'}}>
+          <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Série {setNum}</div>
+          <div style={{fontSize:19,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:22}}>
+            {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Répétitions',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min})=>(
+              <div key={label}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{label}</div>
+                <div style={{display:'flex',alignItems:'center',height:54,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+                  <button onClick={()=>adj(set,-step,min)} style={{width:46,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                  <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)}
+                    style={{flex:1,height:'100%',border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',fontFamily:'inherit',minWidth:0,padding:0}}/>
+                  <button onClick={()=>adj(set,step,min)} style={{width:46,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                </div>
+                <div style={{fontSize:10,color:T.textFaint,textAlign:'center',marginTop:4}}>{unit}</div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={confirmSet} disabled={setR<=0} style={{width:'100%',height:54,borderRadius:16,border:'none',background:setR>0?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:setR>0?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:setR>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
+            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?"Créer l'exercice":"Valider la série"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Mode : vue séance ────────────────────────────────────────────────────────
+  const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
+  const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* Header */}
+      <div style={{padding:`calc(16px + env(safe-area-inset-top)) 16px 12px`,display:'flex',alignItems:'center',gap:10,flexShrink:0,borderBottom:`1px solid ${T.border}`,background:'rgba(12,12,20,0.98)'}}>
+        <button onClick={confirmClose} style={{width:36,height:36,borderRadius:18,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <Icon name="x" size={16} stroke="#B85070"/>
+        </button>
+        <div style={{flex:1,textAlign:'center',minWidth:0}}>
+          <div style={{fontSize:10,color:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
+            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'pulse 1.4s ease infinite'}}/>
+            Live · {athleteName}
+          </div>
+          <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
+        </div>
+        <button onClick={handleSave} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+          {saving?'…':<><Icon name="check" size={14} stroke={totalSets>0?'#fff':T.textFaint}/>Fin</>}
+        </button>
+      </div>
+
+      {/* Stats strip */}
+      {exercises.length>0&&(
+        <div style={{padding:'7px 16px',display:'flex',gap:18,flexShrink:0,background:'rgba(255,255,255,0.02)',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.text}}>{exercises.length}</span> exercice{exercises.length>1?'s':''}</div>
+          <div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.text}}>{totalSets}</span> série{totalSets>1?'s':''}</div>
+          {totalVol>0&&<div style={{fontSize:11,color:T.textDim}}><span style={{fontWeight:700,color:T.accent}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg</span></div>}
+        </div>
+      )}
+
+      {/* List */}
+      <div style={{flex:1,overflow:'auto',padding:'12px 16px 100px'}}>
+        {exercises.length===0&&(
+          <div style={{padding:'50px 0',textAlign:'center',color:T.textFaint}}>
+            <div style={{fontSize:46,marginBottom:14}}>🏋️</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.textDim,marginBottom:6}}>Prêt à démarrer</div>
+            <div style={{fontSize:12,lineHeight:1.7}}>Ajoute le premier exercice pour commencer</div>
+          </div>
+        )}
+
+        {exercises.map((ex,exIdx)=>(
+          <div key={ex.id} style={{marginBottom:10,borderRadius:16,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
+            <div style={{padding:'12px 14px 8px',display:'flex',alignItems:'center',gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.muscle}</div>}
+              </div>
+              <button onClick={()=>removeExercise(exIdx)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(184,80,112,0.08)',color:'#B85070',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <Icon name="trash" size={13} stroke="#B85070"/>
+              </button>
+            </div>
+            {ex.sets.length>0&&(
+              <div style={{padding:'0 14px 8px',display:'flex',flexDirection:'column',gap:4}}>
+                {ex.sets.map((s,si)=>(
+                  <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)'}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
+                    <div style={{flex:1,fontSize:13,fontWeight:600}}>
+                      {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:10,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>PDC</span>}
+                      <span style={{color:T.textFaint,margin:'0 6px'}}>×</span>
+                      <span>{s.reps}</span><span style={{fontSize:10,color:T.textFaint,marginLeft:2}}>reps</span>
+                    </div>
+                    <span style={{fontSize:12,color:T.good}}>✓</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{padding:'0 14px 12px'}}>
+              <button onClick={()=>openAddSet(exIdx)} style={{width:'100%',height:36,borderRadius:10,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.04)',color:'#5A8AE0',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <Icon name="plus" size={14} stroke="#5A8AE0"/>+ Série
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button onClick={openPickExercise} style={{width:'100%',height:54,borderRadius:16,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,marginTop:exercises.length>0?6:0}}>
+          <Icon name="plus" size={18} stroke={T.accent}/>Ajouter un exercice
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -6714,6 +6973,7 @@ function CoachScreen({authToken,authUser}){
   const highlightTimerRef=React.useRef(null);
   const fileRef=React.useRef(null);
   const libFileRef=React.useRef(null);
+  const[showLiveSession,setShowLiveSession]=React.useState(false);
 
   // Detect session count increases → highlight + pulse
   React.useEffect(()=>{
@@ -6958,6 +7218,17 @@ function CoachScreen({authToken,authUser}){
     }catch(e){alert('Erreur: '+e.message);}
   };
 
+  // ── Live session overlay ────────────────────────────────────────────────────
+  if(showLiveSession&&selected&&detail){
+    return <CoachLiveSessionScreen
+      athleteId={selected.id}
+      athleteName={detail?.firstName||selected.email.split('@')[0]}
+      detail={detail}
+      onSaved={()=>{setShowLiveSession(false);reloadDetail(selected.id);flash('✓ Séance enregistrée');}}
+      onClose={()=>setShowLiveSession(false)}
+    />;
+  }
+
   // ── Calendar view (must come before detail check) ───────────────────────────
   if(coachView==='calendar'){
     return <CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/>;
@@ -7107,6 +7378,18 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 2 : Séances / Programme ── */}
         {detailTab==='sport'&&(
           <div style={{padding:'0 18px'}}>
+            {/* Séance Live */}
+            <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',padding:'13px 16px',borderRadius:16,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.08),rgba(184,80,112,0.04))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',marginBottom:10}}>
+              <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(232,64,64,0.3),rgba(184,80,112,0.2))',border:'1px solid rgba(232,64,64,0.25)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
+                <span style={{fontSize:20}}>🔴</span>
+                <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:4,background:'#e84040',animation:'pulse 1.4s ease infinite',boxShadow:'0 0 6px #e84040'}}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,letterSpacing:0.1}}>Séance Live</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Construire en temps réel à la salle</div>
+              </div>
+              <Icon name="chevronRight" size={16} stroke="rgba(232,64,64,0.6)"/>
+            </button>
             {/* Import programme */}
             <div style={{display:'flex',gap:6,marginBottom:12}}>
               <button onClick={()=>fileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(191,160,96,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
