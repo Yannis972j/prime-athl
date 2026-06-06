@@ -1279,7 +1279,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
                   if(s.done){
                     return(
-                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(191,160,96,0.05)',border:'1px solid rgba(191,160,96,0.13)',transition:'all 0.25s'}}>
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(191,160,96,0.05)',border:'1px solid rgba(191,160,96,0.13)',transition:'background 0.25s,border-color 0.25s'}}>
                         <div style={{width:22,height:22,borderRadius:11,background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                           <Icon name="check" size={12} stroke="#fff" strokeWidth={3}/>
                         </div>
@@ -1369,7 +1369,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               <button onClick={()=>{
                 const last=ex.sets[ex.sets.length-1];
                 setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,{weight:last?.weight||20,reps:0,done:false,target:last?.target||10}]}));
-              }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'all 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(191,160,96,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
+              }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'border-color 0.2s ease,color 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(191,160,96,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
                 <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
               </button>
               {ex.sets.length>1&&(
@@ -4033,7 +4033,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
                   const dayMeals=getDayMeals(data,d,activeWeek);
                   const hasMeals=dayMeals.some(m=>(m.items||[]).length>0);
                   return(
-                    <button key={d} onClick={()=>{setViewDay(d);setExpandedMeal(null);}} style={{flex:1,minWidth:0,padding:'6px 0',borderRadius:10,border:isActive?'2px solid #BFA060':'1px solid rgba(255,255,255,0.08)',background:isActive?'rgba(191,160,96,0.18)':'rgba(255,255,255,0.03)',color:isActive?'#BFA060':isTodayDay?T.text:T.textFaint,fontSize:11,fontWeight:isActive||isTodayDay?700:500,cursor:'pointer',position:'relative',transition:'all 0.15s'}}>
+                    <button key={d} onClick={()=>{setViewDay(d);setExpandedMeal(null);}} style={{flex:1,minWidth:0,padding:'6px 0',borderRadius:10,border:isActive?'2px solid #BFA060':'1px solid rgba(255,255,255,0.08)',background:isActive?'rgba(191,160,96,0.18)':'rgba(255,255,255,0.03)',color:isActive?'#BFA060':isTodayDay?T.text:T.textFaint,fontSize:11,fontWeight:isActive||isTodayDay?700:500,cursor:'pointer',position:'relative',transition:'background 0.15s,color 0.15s,border-color 0.15s'}}>
                       {DAY_LABELS[i]}
                       {isTodayDay&&!isActive&&<div style={{position:'absolute',bottom:3,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:2,background:'#BFA060'}}/>}
                       {hasMeals&&isActive&&<div style={{position:'absolute',bottom:3,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:2,background:'#BFA060'}}/>}
@@ -4134,7 +4134,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           const statusColors={now:T.accent,later:T.textFaint,past:T.danger};
           const statusLabels={now:'⏰ MAINTENANT',later:'à venir',past:'passé'};
           return(
-            <div key={m.id} style={{position:'relative',borderRadius:14,overflow:'hidden',border:`1px solid ${validated?'rgba(44,196,160,0.4)':status==='now'?'rgba(191,160,96,0.4)':T.border}`,background:validated?'rgba(44,196,160,0.06)':status==='now'?'rgba(191,160,96,0.04)':'rgba(255,255,255,0.025)',transition:'all 0.3s'}}>
+            <div key={m.id} style={{position:'relative',borderRadius:14,overflow:'hidden',border:`1px solid ${validated?'rgba(44,196,160,0.4)':status==='now'?'rgba(191,160,96,0.4)':T.border}`,background:validated?'rgba(44,196,160,0.06)':status==='now'?'rgba(191,160,96,0.04)':'rgba(255,255,255,0.025)',transition:'background 0.3s,border-color 0.3s'}}>
               <div onClick={()=>setExpandedMeal(isExpanded?null:m.id)} style={{padding:14,cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
                 <div style={{fontSize:28,opacity:validated?0.5:1,transition:'opacity 0.3s'}}>{m.emoji}</div>
                 <div style={{flex:1,minWidth:0}}>
@@ -5350,7 +5350,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
       )}
 
       {/* Bouton validation → push notification athlète */}
-      <button onClick={notifyAthlete} disabled={notifyStatus==='sending'} style={{width:'100%',height:46,borderRadius:13,border:'none',background:notifyStatus==='done'?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:700,cursor:notifyStatus==='sending'?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:12,boxShadow:notifyStatus==='done'?'0 6px 18px rgba(44,196,160,0.4)':'0 6px 18px rgba(191,160,96,0.4)',opacity:notifyStatus==='sending'?0.7:1,transition:'all 0.3s ease'}}>
+      <button onClick={notifyAthlete} disabled={notifyStatus==='sending'} style={{width:'100%',height:46,borderRadius:13,border:'none',background:notifyStatus==='done'?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:700,cursor:notifyStatus==='sending'?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:12,boxShadow:notifyStatus==='done'?'0 6px 18px rgba(44,196,160,0.4)':'0 6px 18px rgba(191,160,96,0.4)',opacity:notifyStatus==='sending'?0.7:1,transition:'background 0.3s ease,box-shadow 0.3s ease,opacity 0.3s ease'}}>
         {notifyStatus==='sending'?<span style={{fontSize:15}}>⏳</span>:notifyStatus==='done'?<span style={{fontSize:15}}>✅</span>:notifyStatus==='error'?<span style={{fontSize:15}}>✗</span>:<Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/>}
         {notifyStatus==='sending'?'Envoi en cours…':notifyStatus==='done'?'Notification envoyée !':notifyStatus==='error'?'Erreur — réessaie':"Valider & notifier l'athlète"}
       </button>
@@ -6355,7 +6355,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
 
           {/* Day detail panel */}
           {selectedDay&&(
-            <div style={{marginTop:16,padding:14,borderRadius:16,background:deleteMode?'rgba(184,80,112,0.06)':'rgba(255,255,255,0.04)',border:`1px solid ${deleteMode?'rgba(184,80,112,0.3)':T.border}`,transition:'all 0.2s'}}>
+            <div style={{marginTop:16,padding:14,borderRadius:16,background:deleteMode?'rgba(184,80,112,0.06)':'rgba(255,255,255,0.04)',border:`1px solid ${deleteMode?'rgba(184,80,112,0.3)':T.border}`,transition:'background 0.2s,border-color 0.2s'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
                 <div style={{fontSize:13,fontWeight:700,color:deleteMode?'#B85070':T.textDim}}>
                   {deleteMode?'🗑️ Mode suppression — ':''}{new Date(year,month-1,selectedDay).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
@@ -6581,7 +6581,7 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
             )}
             <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Excellent travail ! Essaie +2.5 kg la prochaine fois sur le développé couché..." maxLength={500}
               style={{width:'100%',minHeight:80,padding:'10px 14px',borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.05)',color:T.text,fontSize:13,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.5}}/>
-            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:8,width:'100%',height:44,borderRadius:12,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'all 0.2s'}}>
+            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:8,width:'100%',height:44,borderRadius:12,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Feedback envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
           </div>
@@ -6615,7 +6615,7 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
       onTouchStart={onStartDelete}
       onTouchEnd={onCancelTouchDelete}
       onTouchMove={onCancelTouchDelete}
-      style={{borderRadius:14,border:isDeleting?'1px solid rgba(184,80,112,0.5)':'1px solid rgba(255,255,255,0.07)',background:isDeleting?'rgba(184,80,112,0.08)':'rgba(255,255,255,0.03)',transition:'all 0.2s',overflow:'hidden'}}>
+      style={{borderRadius:14,border:isDeleting?'1px solid rgba(184,80,112,0.5)':'1px solid rgba(255,255,255,0.07)',background:isDeleting?'rgba(184,80,112,0.08)':'rgba(255,255,255,0.03)',transition:'background 0.2s,border-color 0.2s',overflow:'hidden'}}>
       {/* Header row */}
       <div style={{display:'flex',alignItems:'center',gap:10,padding:12,cursor:'pointer'}} onClick={()=>setExpanded(e=>!e)}>
         <div style={{width:32,height:32,borderRadius:9,background:'rgba(191,160,96,0.12)',border:'1px solid rgba(191,160,96,0.25)',display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>
@@ -6681,7 +6681,7 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
             )}
             <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Beau travail sur les squats ! Essaie +2.5kg la prochaine fois..." maxLength={500}
               style={{width:'100%',minHeight:72,padding:'8px 10px',borderRadius:10,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.04)',color:T.text,fontSize:12,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.4}}/>
-            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'all 0.2s'}}>
+            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
           </div>
@@ -7944,7 +7944,7 @@ function CoachScreen({authToken,authUser}){
                       fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',
                       display:'flex',alignItems:'center',justifyContent:'center',
                       animation:isNew?'countPop 0.6s ease, pulse 1.4s ease infinite':'none',
-                      transition:'all 0.3s'
+                      transition:'background 0.3s,color 0.3s'
                     }}>{a.sessionCount}</div>
                     <div style={{fontSize:8,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>séances</div>
                   </div>
@@ -8480,7 +8480,7 @@ function OnboardingModal({user,onClose}){
           {/* Dots */}
           <div style={{display:'flex',justifyContent:'center',gap:6,marginBottom:18}}>
             {steps.map((_,i)=>(
-              <div key={i} style={{width:i===step?22:6,height:6,borderRadius:3,background:i===step?T.accent:'rgba(255,255,255,0.15)',transition:'all 0.3s ease'}}/>
+              <div key={i} style={{width:i===step?22:6,height:6,borderRadius:3,background:i===step?T.accent:'rgba(255,255,255,0.15)',transition:'background 0.3s ease,width 0.3s ease'}}/>
             ))}
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -9496,7 +9496,7 @@ function AIUniverseScreen({onStartWorkout,authUser}){
               flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
               background:sub===s.id?`rgba(99,102,241,0.22)`:'transparent',
               color:sub===s.id?'#a5b4fc':T.textFaint,
-              transition:'all 0.2s',letterSpacing:0.2,
+              transition:'background 0.2s,color 0.2s',letterSpacing:0.2,
             }}>{s.label}</button>
           ))}
         </div>
@@ -10062,7 +10062,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
               flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
               background:sub===s.id?T.accentSoft:'transparent',
               color:sub===s.id?T.accent:T.textFaint,
-              transition:'all 0.2s',letterSpacing:0.2,
+              transition:'background 0.2s,color 0.2s',letterSpacing:0.2,
             }}>{s.label}</button>
           ))}
         </div>
