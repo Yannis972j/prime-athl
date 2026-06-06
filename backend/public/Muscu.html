@@ -4131,7 +4131,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           const status=isToday?mealStatus(m,nowHM):'later';
           const validated=isToday&&!!todayLog.validated[m.id];
           const isExpanded=expandedMeal===m.id;
-          const statusColors={now:T.accent,later:T.textFaint,past:T.danger};
+          const statusColors={now:T.accent,later:T.textFaint,past:T.textFaint};
           const statusLabels={now:'⏰ MAINTENANT',later:'à venir',past:'passé'};
           return(
             <div key={m.id} style={{position:'relative',borderRadius:14,overflow:'hidden',border:`1px solid ${validated?'rgba(44,196,160,0.4)':status==='now'?'rgba(191,160,96,0.4)':T.border}`,background:validated?'rgba(44,196,160,0.06)':status==='now'?'rgba(191,160,96,0.04)':'rgba(255,255,255,0.025)',transition:'background 0.3s,border-color 0.3s'}}>
@@ -4423,7 +4423,7 @@ function exportNutritionExcel(plan,athleteName){
       aoa.push(HEADER);
       let firstMealOfDay=true;
       for(const m of meals){
-        const horaire=`${m.timeStart.replace(':','H').replace(/H00$/,'H')} - ${m.timeEnd.replace(':','H').replace(/H00$/,'H')}`;
+        const horaire=`${(m.timeStart||'').replace(':','H').replace(/H00$/,'H')} - ${(m.timeEnd||'').replace(':','H').replace(/H00$/,'H')}`;
         if(!m.items||m.items.length===0){
           aoa.push([firstMealOfDay?dayName:'',m.label,horaire,'','','','','','','','']);
           firstMealOfDay=false;
@@ -5746,7 +5746,7 @@ function CoachImportSessionModal({athleteId,athleteName,dayName,dayData,onClose,
   const[date,setDate]=React.useState(()=>new Date().toISOString().slice(0,10));
   const[exos,setExos]=React.useState(()=>(dayData.exercises||[]).map(ex=>({
     name:ex.name,muscle:ex.muscle||'',
-    sets:(ex.sets||[{weight:0,reps:0,target:10}]).map(s=>({weight:s.weight||0,reps:s.reps||s.target||0})),
+    sets:(ex.sets||[{weight:0,reps:0}]).map(s=>({weight:s.weight||0,reps:s.reps||0})),
   })));
   const[notes,setNotes]=React.useState('');
   const[sending,setSending]=React.useState(false);
@@ -5902,7 +5902,7 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,onSessionSent}){
                   <div key={i} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:T.textDim}}>
                     <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,background:`${(STYLE_COLORS[ex.style]||T.accent)}18`,color:STYLE_COLORS[ex.style]||T.accent}}>{i+1}</div>
                     <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
-                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.repsStr||ex.sets[0]&&ex.sets[0].target||'?'}</span>
+                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{(ex.sets||[]).length}×{ex.repsStr||(ex.sets&&ex.sets[0]&&ex.sets[0].target)||'?'}</span>
                   </div>
                 ))}
                 {exCount>4&&<div style={{fontSize:10,color:T.textFaint,paddingLeft:23}}>+{exCount-4} exo</div>}
@@ -6857,7 +6857,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
   const openPickExercise=(groupId=null,groupType=null)=>{
     setQuery('');setBrandFilter('Tous');setPendingGroupId(groupId);
-    if(groupType)setPendingGroupType(groupType);
+    setPendingGroupType(groupType||'classic');
     setMode('pick-exercise');
   };
 
@@ -7302,8 +7302,8 @@ function CoachScreen({authToken,authUser}){
       setCreateForm({email:'',password:'',firstName:'',lastName:''});
       load();
     }catch(err){
-      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (6 car. min)',email_and_password_required:'Email et mot de passe requis'};
-      alert(msgs[err.message]||'Erreur: '+err.message);
+      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (8 car. min)',email_and_password_required:'Email et mot de passe requis'};
+      flash('✗ '+(msgs[err.message]||err.message||'Erreur'));
     }
     setCreating(false);
   };
@@ -7553,7 +7553,7 @@ function CoachScreen({authToken,authUser}){
               </div>
 
               {/* Accès Premium */}
-              <div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(144,144,196,0.06)',border:'1px solid rgba(144,144,196,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+              {isMain&&<div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(144,144,196,0.06)',border:'1px solid rgba(144,144,196,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:700,color:'#9090c4'}}>🔑 Accès Explorer Premium</div>
                   <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.premium?'Actif — accès aux séances prêtes':'Inactif — accès verrouillé'}</div>
@@ -7567,7 +7567,7 @@ function CoachScreen({authToken,authUser}){
                 }} style={{height:30,padding:'0 14px',borderRadius:9,border:'none',background:a.premium?'rgba(184,80,112,0.15)':'linear-gradient(135deg,#9090c4,#5A8AE0)',color:a.premium?'#B85070':'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
                   {a.premium?'Révoquer':'Activer'}
                 </button>
-              </div>
+              </div>}
 
               {/* Danger zone */}
               <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:8,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
@@ -8046,7 +8046,7 @@ function CoachScreen({authToken,authUser}){
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4}}>Mot de passe *</div>
-              <input required type="password" value={createForm.password} onChange={e=>setCreateForm(f=>({...f,password:e.target.value}))} placeholder="6 caractères minimum" style={{height:40,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
+              <input required type="password" value={createForm.password} onChange={e=>setCreateForm(f=>({...f,password:e.target.value}))} placeholder="8 caractères minimum" style={{height:40,padding:'0 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,outline:'none'}}/>
             </div>
             <div style={{fontSize:11,color:T.textFaint,lineHeight:1.5,marginTop:2}}>Le compte est créé actif et immédiatement rattaché à toi. L'athlète peut se connecter avec ces identifiants.</div>
             <button type="submit" disabled={creating} style={{height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',fontSize:14,fontWeight:700,cursor:creating?'not-allowed':'pointer',opacity:creating?0.6:1,marginTop:4}}>
@@ -9135,7 +9135,7 @@ function NutritionAIWizard({authUser}){
           return np;
         });
       }
-    }catch(e){console.error(e);}
+    }catch(e){console.error(e);setError('Erreur régénération du repas');}
     setRegenLoading(null);
   };
 

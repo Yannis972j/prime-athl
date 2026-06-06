@@ -941,11 +941,14 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   // Suppression complète du compte et toutes ses données
   delete DATA.users[u.id];
   delete DATA.programs[u.id];
-  delete DATA.sessions[u.id];
   delete DATA.nutritionLogs[u.id];
   delete DATA.nutritionPrograms[u.id];
   delete DATA.weightLogs[u.id];
   delete DATA.progressPhotos[u.id];
+  // Supprimer les séances (keyées par sessionId, pas userId)
+  for (const sid of Object.keys(DATA.sessions || {})) {
+    if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
+  }
   // Retirer des invites (DATA.invites est un objet keyé par code)
   for (const code of Object.keys(DATA.invites || {})) {
     if (DATA.invites[code].usedBy === u.id) delete DATA.invites[code];
@@ -1361,7 +1364,10 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     date: date || new Date().toISOString(),
     exercises: exercises.map(e => ({
       name: e.name || '', muscle: e.muscle || '',
-      sets: (e.sets || []).map(s => ({ weight: +s.weight || 0, reps: +s.reps || 0 })),
+      brand: e.brand ? String(e.brand).slice(0, 60) : '',
+      groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
+      groupType: ['classic','superset','triset'].includes(e.groupType) ? e.groupType : 'classic',
+      sets: (e.sets || []).map(s => ({ weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0 })),
     })),
     totalVolume: +totalVolume || 0,
     duration: +duration || 0,
@@ -2253,7 +2259,9 @@ Format EXACT (pas de texte autour):
 {"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
 Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
-    let raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const block0 = msg.content?.find(b => b.type === 'text');
+    if (!block0) throw new Error('Réponse IA vide');
+    let raw = block0.text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -2276,18 +2284,21 @@ Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par r
 // ── IA — Régénérer un repas ──────────────────────────
 app.post('/api/ai/regenerate-meal', authRequired, aiLimiter, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_not_configured' });
-  const { day, mealLabel, targetKcal, targetProtein, allergies, goal } = req.body || {};
+  const { day, dayLabel, mealLabel, targetKcal, targetProtein, allergies, goal } = req.body || {};
+  const dayName = day || dayLabel || '';
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 600,
-      messages: [{ role: 'user', content: `Régénère le repas "${mealLabel}" du ${day}.
+      messages: [{ role: 'user', content: `Régénère le repas "${mealLabel}" du ${dayName}.
 Budget: ~${targetKcal} kcal, ~${targetProtein}g protéines | Objectif: ${goal} | Allergies: ${allergies||'aucune'}
 Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
     });
-    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const block = msg.content?.find(b => b.type === 'text');
+    if (!block) throw new Error('Réponse IA vide');
+    const raw = block.text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
     const parsed = validateAIMealItems(JSON.parse(raw));
     res.json({ items: parsed.items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
   } catch(e) {
@@ -2324,7 +2335,9 @@ Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de backticks) dans
 
 Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. Avancé = mouvements composés lourds. Adapte les séries/reps à l'objectif (masse=6-10 reps lourds, sèche=12-15 reps légers, force=3-5 reps max).` }]
     });
-    const raw = msg.content[0].text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
+    const block1 = msg.content?.find(b => b.type === 'text');
+    if (!block1) throw new Error('Réponse IA vide');
+    const raw = block1.text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'');
     const program = validateAIProgram(JSON.parse(raw));
     res.json({ program });
   } catch(e) {
