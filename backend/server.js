@@ -118,7 +118,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -1176,6 +1176,45 @@ app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => 
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   pushToUser(req.params.athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts });
+});
+
+// ── Bibliothèque de séances (coach → athlète) ────────────────────────────────
+// Le coach importe le même Excel mais les jours deviennent des séances
+// indépendantes dans une bibliothèque — sans calendrier.
+
+app.put('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const sessions = req.body?.sessions;
+  if (!Array.isArray(sessions)) return res.status(400).json({ error: 'sessions_required' });
+  const ts = Date.now();
+  DATA.sessionLibrary[req.params.athleteId] = { sessions, assignedBy: req.user.id, assignedAt: ts };
+  persist();
+  io.to('user:' + req.params.athleteId).emit('session-library-updated', { sessions, assignedAt: ts });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  pushToUser(req.params.athleteId, { title: '📚 Bibliothèque mise à jour', body: `${coachName} t'a partagé ${sessions.length} séance${sessions.length > 1 ? 's' : ''} dans ta bibliothèque`, url: '/Muscu.html' });
+  res.json({ ok: true, assignedAt: ts });
+});
+
+app.get('/api/session-library', authRequired, (req, res) => {
+  const lib = DATA.sessionLibrary[req.user.id];
+  res.json(lib || { sessions: [], assignedAt: null, assignedBy: null });
+});
+
+app.get('/api/coach/session-library-for/:athleteId', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const lib = DATA.sessionLibrary[req.params.athleteId];
+  res.json(lib || { sessions: [], assignedAt: null, assignedBy: null });
+});
+
+app.delete('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  delete DATA.sessionLibrary[req.params.athleteId];
+  persist();
+  io.to('user:' + req.params.athleteId).emit('session-library-updated', { sessions: [], assignedAt: null });
+  res.json({ ok: true });
 });
 
 // ── Coach: invites ──────────────────────────────────
