@@ -7154,6 +7154,8 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   );
 }
 
+const ATHLETE_DETAIL_TAB_IDS=['profil','sport','nutrition','historique','album'];
+
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -7349,6 +7351,14 @@ function CoachScreen({authToken,authUser}){
   const openDetail=a=>{setSelected(a);reloadDetail(a.id);};
   const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);};
 
+  // Swipe pour naviguer entre les onglets de la fiche athlète (profil ↔ séances ↔ nutrition ↔ historique ↔ album)
+  // + swipe depuis le bord gauche pour revenir à la liste des athlètes
+  const{ref:detailGestureRef,dragX:detailDragX,transitioning:detailTransitioning}=useGestureNav({
+    tabIds:ATHLETE_DETAIL_TAB_IDS,tab:detailTab,setTab:setDetailTab,
+    onBack:closeDetail,canBack:!!selected,
+    claimGesture:true,
+  });
+
   const handleExcel=e=>{
     const file=e.target.files[0];
     if(!file||!selected)return;
@@ -7495,6 +7505,12 @@ function CoachScreen({authToken,authUser}){
             </button>
           ))}
         </div>
+
+        <div ref={detailGestureRef} style={{position:'relative',overflow:'hidden',
+          transform:detailDragX?`translateX(${detailDragX}px)`:'none',
+          transition:detailDragX?'none':(detailTransitioning?'transform 0.3s cubic-bezier(.25,1,.5,1)':'none'),
+          willChange:'transform'}}>
+        {detailDragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,detailDragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
 
         {/* ── Tab 1 : Profil ── */}
         {detailTab==='profil'&&(()=>{
@@ -7746,6 +7762,7 @@ function CoachScreen({authToken,authUser}){
             <PhotoGallery readOnly userId={a.id}/>
           </div>
         )}
+        </div>
       </div>
     );
   }
@@ -9556,7 +9573,7 @@ function scrollTopAt(node){
   }
   return 0;
 }
-function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefresh}){
+function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefresh, claimGesture}){
   const ref=React.useRef(null);
   const drag=React.useRef(0);
   const [dragX,setDragX]=React.useState(0);
@@ -9595,6 +9612,8 @@ function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefr
         }
       }
       if(!s.tracking) return;
+      // Empêche le useGestureNav englobant (ex: MainApp) de traiter le même geste
+      if(claimGesture)e.stopPropagation();
       if(s.axis==='x'){
         const v=s.isBack?Math.max(0,dx):dx;
         drag.current=v;
@@ -9637,7 +9656,7 @@ function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefr
       el.removeEventListener('touchend',onEnd);
       el.removeEventListener('touchcancel',onEnd);
     };
-  },[tab,tabIds,canBack,canRefresh,onBack,onRefresh,setTab]);
+  },[tab,tabIds,canBack,canRefresh,onBack,onRefresh,setTab,claimGesture]);
 
   return{ref,dragX,dragY,transitioning};
 }
