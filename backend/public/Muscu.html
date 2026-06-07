@@ -7619,40 +7619,40 @@ function CoachScreen({authToken,authUser}){
               </div>
               <Icon name="chevronRight" size={16} stroke="rgba(232,64,64,0.6)"/>
             </button>
-            {/* Import programme */}
-            <div style={{display:'flex',gap:6,marginBottom:12}}>
-              <button onClick={()=>fileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(191,160,96,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
-                <div style={{width:36,height:36,borderRadius:10,background:programDays>0?'rgba(191,160,96,0.12)':'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
-                  {programDays>0?'📋':'📥'}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{programDays>0?`${programMonths} mois · ${programDays} jours`:'Importer programme'}</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{programDays>0?a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif':'Excel du programme musculation'}</div>
-                </div>
-              </button>
-              {programDays>0&&(
-                <button onClick={()=>setConfirmAction({msg:`Supprimer le programme de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}catch(e){flash('✗ '+(e.message||e));}}})} title="Supprimer le programme" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(191,160,96,0.25)',background:'rgba(191,160,96,0.06)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <Icon name="trash" size={16} stroke={T.accent}/>
+            {/* Import programme & bibliothèque — regroupés côte à côte pour limiter l'empilement */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+              <div style={{position:'relative'}}>
+                <button onClick={()=>fileRef.current.click()} style={{width:'100%',padding:'12px 10px',borderRadius:14,border:`1px solid ${programDays>0?T.border:'rgba(191,160,96,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,textAlign:'left'}}>
+                  <div style={{width:34,height:34,borderRadius:10,background:programDays>0?'rgba(191,160,96,0.12)':'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>
+                    {programDays>0?'📋':'📥'}
+                  </div>
+                  <div style={{minWidth:0,maxWidth:'100%'}}>
+                    <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?`${programMonths} mois · ${programDays}j`:'Programme'}</div>
+                    <div style={{fontSize:9,color:T.textFaint,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?(a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif'):'Importer un Excel'}</div>
+                  </div>
                 </button>
-              )}
-            </div>
-
-            {/* Import bibliothèque de séances */}
-            <div style={{display:'flex',gap:6,marginBottom:12}}>
-              <button onClick={()=>libFileRef.current.click()} style={{flex:1,padding:12,borderRadius:12,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
-                <div style={{width:36,height:36,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>
-                  {libCount>0?'📚':'📂'}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,letterSpacing:0.1}}>{libCount>0?`${libCount} séance${libCount>1?'s':''} en bibliothèque`:'Importer bibliothèque'}</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{libCount>0?libData?.assignedAt?`maj ${new Date(libData.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active':'Séances à la carte (sans calendrier)'}</div>
-                </div>
-              </button>
-              {libCount>0&&(
-                <button onClick={()=>setConfirmAction({msg:`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} title="Vider la bibliothèque" style={{width:48,padding:0,borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <Icon name="trash" size={16} stroke="#5A8AE0"/>
+                {programDays>0&&(
+                  <button onClick={()=>setConfirmAction({msg:`Supprimer le programme de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}catch(e){flash('✗ '+(e.message||e));}}})} title="Supprimer le programme" style={{position:'absolute',top:8,right:8,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="trash" size={13} stroke={T.accent}/>
+                  </button>
+                )}
+              </div>
+              <div style={{position:'relative'}}>
+                <button onClick={()=>libFileRef.current.click()} style={{width:'100%',padding:'12px 10px',borderRadius:14,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,textAlign:'left'}}>
+                  <div style={{width:34,height:34,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>
+                    {libCount>0?'📚':'📂'}
+                  </div>
+                  <div style={{minWidth:0,maxWidth:'100%'}}>
+                    <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{libCount>0?`${libCount} séance${libCount>1?'s':''}`:'Bibliothèque'}</div>
+                    <div style={{fontSize:9,color:T.textFaint,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{libCount>0?(libData?.assignedAt?`maj ${new Date(libData.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active'):'Séances à la carte'}</div>
+                  </div>
                 </button>
-              )}
+                {libCount>0&&(
+                  <button onClick={()=>setConfirmAction({msg:`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} title="Vider la bibliothèque" style={{position:'absolute',top:8,right:8,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="trash" size={13} stroke="#5A8AE0"/>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Calendrier sport */}
