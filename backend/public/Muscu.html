@@ -9544,6 +9544,18 @@ function ThemePicker(){
 }
 
 // ── Gesture Navigation ──────────────────────────────────────
+function scrollTopAt(node){
+  let n=node;
+  while(n&&n.nodeType===1){
+    if(n.scrollHeight>n.clientHeight+1){
+      if(n===document.body||n===document.documentElement)return document.scrollingElement?document.scrollingElement.scrollTop:n.scrollTop;
+      const ov=getComputedStyle(n).overflowY;
+      if(ov==='auto'||ov==='scroll')return n.scrollTop;
+    }
+    n=n.parentElement;
+  }
+  return 0;
+}
 function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefresh}){
   const ref=React.useRef(null);
   const drag=React.useRef(0);
@@ -9557,7 +9569,7 @@ function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefr
     const onStart=e=>{
       if(e.touches.length!==1) return;
       const t=e.touches[0];
-      state.current={sx:t.clientX,sy:t.clientY,decided:false,tracking:false,axis:null,isBack:false,isPull:false};
+      state.current={sx:t.clientX,sy:t.clientY,decided:false,tracking:false,axis:null,isBack:false,isPull:false,atTop:scrollTopAt(e.target)<=0};
       drag.current=0;
     };
     const onMove=e=>{
@@ -9570,7 +9582,7 @@ function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefr
         s.decided=true;
         if(Math.abs(dy)>Math.abs(dx)){
           // Vertical — pull to refresh uniquement
-          if(dy>0&&canRefresh){s.tracking=true;s.axis='y';s.isPull=true;}
+          if(dy>0&&canRefresh&&s.atTop){s.tracking=true;s.axis='y';s.isPull=true;}
           else return;
         } else {
           // Horizontal
