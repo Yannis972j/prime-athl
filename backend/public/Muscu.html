@@ -10183,13 +10183,17 @@ if(window.__splashDone) window.__splashDone();
 
 // Register Service Worker for push notifications + auto-update
 if('serviceWorker' in navigator){
+  // Était-on déjà contrôlé par un SW avant cet enregistrement ? Si non, c'est la toute
+  // première activation (page déjà fraîche depuis le réseau) : pas besoin de recharger.
+  // Si oui, un futur "controllerchange" signale une vraie mise à jour → on recharge.
+  const hadController=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('/sw.js').then(reg=>{
     // Vérifie une mise à jour à chaque chargement (sinon il faut attendre 24h)
     reg.update().catch(()=>{});
     // Quand un nouveau SW prend la main → recharge la page pour avoir la dernière version
     let reloading=false;
     navigator.serviceWorker.addEventListener('controllerchange',()=>{
-      if(reloading)return;reloading=true;window.location.reload();
+      if(!hadController||reloading)return;reloading=true;window.location.reload();
     });
   }).catch(e=>console.warn('[SW] registration failed:',e));
 }
