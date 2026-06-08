@@ -9891,6 +9891,45 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     },
   });
 
+  // Filet de secours pour le badge "messages non lus" si Socket.IO est indisponible
+  // (CDN bloqué par un pare-feu, bloqueur de scripts tiers...) — sondage léger des
+  // conversations en complément de l'event temps réel 'new-message' ci-dessus, qui
+  // reste la voie principale (quasi instantanée). Même logique de comptage que lui :
+  // on incrémente seulement si on n'est pas déjà sur l'onglet Chat.
+  const lastSeenMsgId=React.useRef({});
+  React.useEffect(()=>{
+    let stopped=false;
+    const poll=async()=>{
+      try{
+        let partners=[];
+        if(authUser.role==='athlete'){
+          const coach=await apiCall('/api/my-coach').catch(()=>null);
+          if(coach)partners=[coach];
+        }else if(authUser.role==='coach'){
+          const r=await apiCall('/api/coach/athletes').catch(()=>null);
+          partners=(Array.isArray(r)?r:(r?.athletes||[])).filter(a=>a.status==='active');
+        }
+        for(const p of partners){
+          if(stopped)return;
+          const r=await apiCall('/api/messages/'+p.id).catch(()=>null);
+          const msgs=r?.messages;
+          if(!msgs||!msgs.length)continue;
+          const last=msgs[msgs.length-1];
+          const seen=lastSeenMsgId.current[p.id];
+          lastSeenMsgId.current[p.id]=last.id;
+          // "seen===undefined" = première mesure depuis l'ouverture de l'app : on
+          // mémorise juste la référence, sans signaler (sinon tout l'historique
+          // déjà lu apparaîtrait comme "non lu" au démarrage)
+          if(seen!==undefined&&last.id!==seen&&last.senderId!==authUser.id){
+            setTab(t=>{ if(t!=='messages')setUnreadMessages(u=>u+1); return t; });
+          }
+        }
+      }catch{}
+    };
+    const iv=setInterval(poll,20000);
+    return()=>{stopped=true;clearInterval(iv);};
+  },[authUser.id,authUser.role]);
+
   // Handle ?stripe=success or ?stripe=cancel from Stripe redirect
   React.useEffect(()=>{
     const p=new URLSearchParams(window.location.search);
