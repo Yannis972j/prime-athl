@@ -333,6 +333,7 @@ const profileOf = u => u && {
   firstName: u.firstName || '', lastName: u.lastName || '',
   height: u.height || '', weight: u.weight || '', objective: u.objective || '',
   prSquat: u.prSquat || '', prBench: u.prBench || '', prDeadlift: u.prDeadlift || '',
+  avatarUrl: u.avatarUrl || '',
   createdAt: u.createdAt,
   status: u.status || 'active',
   isMainCoach: !!u.isMainCoach,
@@ -876,6 +877,12 @@ app.patch('/api/me', authRequired, (req, res) => {
       const v = parseFloat(req.body[k]);
       if (!isNaN(v)) u[k] = Math.max(min, Math.min(max, v));
     }
+  }
+  if (req.body.avatarUrl !== undefined) {
+    const v = String(req.body.avatarUrl || '').trim();
+    if (!v) u.avatarUrl = '';
+    else if (v.length <= 3 * 1024 * 1024 && /^(https?:\/\/|data:image\/)/.test(v)) u.avatarUrl = v;
+    else return res.status(400).json({ error: 'invalid_avatar' });
   }
   persist();
   const p = profileOf(u);
@@ -1962,7 +1969,7 @@ app.get('/api/my-coach', authRequired, (req, res) => {
   if (!me || !me.coachId) return res.status(404).json({ error: 'no_coach' });
   const coach = DATA.users[me.coachId];
   if (!coach) return res.status(404).json({ error: 'coach_not_found' });
-  res.json({ id: coach.id, email: coach.email, firstName: coach.firstName, lastName: coach.lastName, role: coach.role });
+  res.json({ id: coach.id, email: coach.email, firstName: coach.firstName, lastName: coach.lastName, role: coach.role, avatarUrl: coach.avatarUrl || '' });
 });
 
 // ── Weight logs ─────────────────────────────────────
