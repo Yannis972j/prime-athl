@@ -7380,6 +7380,15 @@ function CoachScreen({authToken,authUser}){
     }
   };
 
+  const resendVerifyEmail=async a=>{
+    try{
+      const r=await apiCall('/api/coach/athletes/'+a.id+'/resend-verify',{method:'POST'});
+      if(r.alreadyVerified)flash(`${a.email} a déjà confirmé son email`);
+      else if(r.sent)flash(`✓ Email de confirmation renvoyé à ${a.email}`);
+      else flash(`✗ Échec de l'envoi à ${a.email}`);
+    }catch(e){flash('✗ '+(e.message||e));}
+  };
+
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
     'session-added':()=>{load();if(selected)reloadDetail(selected.id);},
@@ -7694,6 +7703,19 @@ function CoachScreen({authToken,authUser}){
                   })}
                 </div>
               </GlassCard>
+
+              {/* Email non confirmé : permet au coach de renvoyer le lien */}
+              {a.emailVerified===false&&(
+                <div style={{marginBottom:12,padding:'11px 14px',borderRadius:12,background:'rgba(200,144,64,0.06)',border:'1px solid rgba(200,144,64,0.25)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.warn}}>📧 Email non confirmé</div>
+                    <div style={{fontSize:10,color:T.textFaint,marginTop:2,lineHeight:1.4}}>L'athlète n'a pas encore cliqué sur le lien reçu par email (et ne peut pas se connecter)</div>
+                  </div>
+                  <button onClick={()=>resendVerifyEmail(a)} style={{height:32,padding:'0 13px',borderRadius:9,border:'1px solid rgba(200,144,64,0.4)',background:'rgba(200,144,64,0.1)',color:T.warn,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                    Renvoyer
+                  </button>
+                </div>
+              )}
 
               {/* Stats rapides */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>

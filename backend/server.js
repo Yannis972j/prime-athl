@@ -339,6 +339,7 @@ const profileOf = u => u && {
   avatarUrl: u.avatarUrl || '',
   createdAt: u.createdAt,
   status: u.status || 'active',
+  emailVerified: !!u.emailVerified,
   isMainCoach: !!u.isMainCoach,
   onboardedAt: u.onboardedAt || null,
   requestedRole: u.requestedRole || u.role || 'athlete',
@@ -1088,6 +1089,19 @@ app.post('/api/coach/athletes/:id/reset', authRequired, coachOnly, (req, res) =>
   const p = profileOf(u);
   io.to('user:' + u.id).emit('my-profile-updated', { profile: p });
   res.json({ ok: true, profile: p });
+});
+
+// Coach renvoie l'email de confirmation à un athlète qui ne l'a pas reçu / pas encore cliqué dessus
+app.post('/api/coach/athletes/:id/resend-verify', authRequired, coachOnly, async (req, res) => {
+  const u = DATA.users[req.params.id];
+  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  if (u.emailVerified) return res.json({ ok: true, alreadyVerified: true });
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  u.emailVerifyToken = hashToken(rawToken);
+  persist();
+  const link = `${PUBLIC_URL}/Muscu.html?verify=${rawToken}`;
+  const result = await sendVerifyEmail(u.email, link);
+  res.json({ ok: true, ...result });
 });
 
 // Coach deletes athlete's program (Excel import wipe)
