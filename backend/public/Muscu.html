@@ -7385,7 +7385,8 @@ function CoachScreen({authToken,authUser}){
       const r=await apiCall('/api/coach/athletes/'+a.id+'/resend-verify',{method:'POST'});
       if(r.alreadyVerified)flash(`${a.email} a déjà confirmé son email`);
       else if(r.sent)flash(`✓ Email de confirmation renvoyé à ${a.email}`);
-      else flash(`✗ Échec de l'envoi à ${a.email}`);
+      else if(r.reason==='no_provider')flash('✗ Service email non configuré (RESEND_API_KEY manquant)');
+      else flash(`✗ Échec de l'envoi${r.detail?` : ${r.detail}`:''}`);
     }catch(e){flash('✗ '+(e.message||e));}
   };
 
