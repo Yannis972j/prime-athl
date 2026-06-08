@@ -3182,7 +3182,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
   const doneDates=React.useMemo(()=>{
     const s=new Set();
     (history||[]).forEach(h=>{
-      if(h.date)s.add(h.date.slice(0,10));
+      if(h.date)s.add(ymdKey(new Date(h.date)));
     });
     return s;
   },[history]);
@@ -3527,7 +3527,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               if(isDragOver){bg='rgba(44,196,160,0.25)';border='2px solid #2CC4A0';}
               if(isDragSrc){bg='rgba(191,160,96,0.35)';border='2px dashed #BFA060';}
               const progExercises=days[dayName]?days[dayName].exercises:[];
-              const histExercises=(history||[]).find(h=>h.date&&h.date.slice(0,10)===dateStr)?.exercises||[];
+              const histExercises=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===dateStr)?.exercises||[];
               const exercises=progExercises.length>0?progExercises:histExercises;
               return(
                 <div key={i} data-cal-date={dateStr}
@@ -3555,7 +3555,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             const d=days[selectedDay.dayName];
             const isDone=doneDates.has(selectedDay.dateStr);
             // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
-            const histSession=(history||[]).find(h=>h.date&&h.date.slice(0,10)===selectedDay.dateStr);
+            const histSession=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===selectedDay.dateStr);
             const displayExercises=d?d.exercises:(histSession?.exercises||null);
             const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
@@ -5760,7 +5760,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   // sessions done: map dateStr → session
   const sessionsByDate=React.useMemo(()=>{
     const m={};
-    (sessions||[]).forEach(s=>{const d=s.date?.slice(0,10);if(d)m[d]=s;});
+    (sessions||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d)m[d]=s;});
     return m;
   },[sessions]);
 
@@ -5898,7 +5898,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
 // Coach reads athlete's program (read-only mirror)
 // Modal import séance à l'unité — coach envoie une séance d'un jour à l'athlète
 function CoachImportSessionModal({athleteId,athleteName,dayName,dayData,onClose,onDone}){
-  const[date,setDate]=React.useState(()=>new Date().toISOString().slice(0,10));
+  const[date,setDate]=React.useState(()=>ymdKey());
   const[exos,setExos]=React.useState(()=>(dayData.exercises||[]).map(ex=>({
     name:ex.name,muscle:ex.muscle||'',
     sets:(ex.sets||[{weight:0,reps:0}]).map(s=>({weight:s.weight||0,reps:s.reps||0})),
@@ -5917,7 +5917,7 @@ function CoachImportSessionModal({athleteId,athleteName,dayName,dayData,onClose,
     try{
       await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{
         name:dayData.category||dayName,
-        date:new Date(date).toISOString(),
+        date:date+'T12:00:00.000Z',
         exercises:exos,
         totalVolume:totalVol,
         notes,
@@ -6347,7 +6347,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
     try{
       const d=await apiCall('/api/coach/athletes/'+ath.id);
       const sessions=d.sessions||[];
-      const s=sessions.find(x=>x.date&&x.date.slice(0,10)===dateStr);
+      const s=sessions.find(x=>x.date&&ymdKey(new Date(x.date))===dateStr);
       setSessionModal(m=>({...m,session:s||null}));
     }catch(e){console.error(e);}
     setModalLoading(false);
@@ -6395,7 +6395,8 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
     const dots=[];
     for(const ath of calData){
       const dayStr=String(d).padStart(2,'0');
-      const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+      const dateStr=`${year}-${String(month).padStart(2,'0')}-${dayStr}`;
+      const hasSession=ath.sessionDates.some(s=>ymdKey(new Date(s))===dateStr);
       const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
       const hasProg=ath.programDays.some(pd=>{
         // programDays are day-of-week labels; we check if this calendar day matches
@@ -6411,7 +6412,8 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   const selectedDots=selectedDay?dotsForDay(selectedDay):[];
   const selectedAths=selectedDay&&calData?calData.filter(ath=>{
     const dayStr=String(selectedDay).padStart(2,'0');
-    const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+    const dateStr=`${year}-${String(month).padStart(2,'0')}-${dayStr}`;
+    const hasSession=ath.sessionDates.some(s=>ymdKey(new Date(s))===dateStr);
     const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
     const jsDay=new Date(year,month-1,selectedDay).getDay();
     const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
@@ -6524,7 +6526,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
                   {selectedAths.map(ath=>{
                     const dayStr=String(selectedDay).padStart(2,'0');
                     const dateStr=`${year}-${String(month).padStart(2,'0')}-${dayStr}`;
-                    const hasSession=ath.sessionDates.some(s=>s.endsWith(`-${dayStr}`));
+                    const hasSession=ath.sessionDates.some(s=>ymdKey(new Date(s))===dateStr);
                     const hasNutri=ath.nutriDates.some(s=>s.endsWith(`-${dayStr}`));
                     const jsDay=new Date(year,month-1,selectedDay).getDay();
                     const DAYS=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
@@ -10059,7 +10061,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     }catch(e){console.error('session sync',e);}
   };
   const deleteSession=async(sessionId,sessionDate)=>{
-    setHistory(h=>h.filter(s=>s.id!==sessionId&&!(s.date?.slice(0,10)===sessionDate&&!s.id)));
+    setHistory(h=>h.filter(s=>s.id!==sessionId&&!((s.date?ymdKey(new Date(s.date)):null)===sessionDate&&!s.id)));
     if(sessionId){try{await apiCall(`/api/sessions/${sessionId}`,{method:'DELETE'});}catch(e){console.error('delete session',e);}}
   };
 

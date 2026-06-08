@@ -1796,8 +1796,10 @@ app.post('/api/coach/nutrition/:athleteId/notify', authRequired, coachOnly, (req
 app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
   const year  = parseInt(req.query.year)  || new Date().getFullYear();
   const month = parseInt(req.query.month) || new Date().getMonth() + 1; // 1-12
-  const start = new Date(year, month - 1, 1).getTime();
-  const end   = new Date(year, month, 1).getTime();
+  // Marge de ±24h pour ne pas exclure les séances proches des limites du mois
+  // selon le fuseau horaire local du coach (le serveur tourne en UTC).
+  const start = new Date(year, month - 1, 1).getTime() - 24*3600*1000;
+  const end   = new Date(year, month, 1).getTime() + 24*3600*1000;
   const JS_TO_DAY = ['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
   const PALETTE = ['#d97757','#7cc4a1','#7ca8c4','#c97586','#c2a042','#a08fd4','#78b4b4'];
 
@@ -1806,9 +1808,12 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
 
   const result = athletes.map((u, idx) => {
     // Sessions du mois
+    // On renvoie les timestamps ISO bruts (et non une date UTC pré-découpée) :
+    // seul le frontend connaît le fuseau horaire local du coach et peut donc
+    // regrouper correctement les séances par "jour local" via ymdKey().
     const sessionDates = Object.values(DATA.sessions)
       .filter(s => s.userId === u.id && new Date(s.date).getTime() >= start && new Date(s.date).getTime() < end)
-      .map(s => new Date(s.date).toISOString().slice(0,10));
+      .map(s => s.date);
 
     // Nutrition validée du mois (nutritionLogs)
     const logs = DATA.nutritionLogs[u.id] || {};
