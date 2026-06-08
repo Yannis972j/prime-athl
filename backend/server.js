@@ -61,7 +61,7 @@ if (!process.env.RESEND_API_KEY) {
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
 if (RESEND_API_KEY && /onboarding@resend\.dev/i.test(RESEND_FROM)) {
-  console.warn('[config] RESEND_FROM utilise le domaine sandbox "onboarding@resend.dev" : Resend refuse alors l\'envoi vers toute adresse autre que celle du compte Resend (les athlètes ne recevront ni email de confirmation, ni reset de mot de passe). Vérifie un domaine sur resend.com/domains puis configure RESEND_FROM avec une adresse de ce domaine.');
+  console.warn('[config] RESEND_FROM utilise le domaine sandbox "onboarding@resend.dev" : Resend refuse alors l\'envoi vers toute adresse autre que celle du compte Resend (les athlètes ne recevront ni email de réinitialisation de mot de passe, ni notification). Vérifie un domaine sur resend.com/domains puis configure RESEND_FROM avec une adresse de ce domaine.');
 }
 // Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
 if (process.env.CLOUDINARY_URL) {
@@ -171,7 +171,7 @@ async function ensureMainCoach() {
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(), status: 'active', isMainCoach: true,
-      emailVerified: true, tokenVersion: 0,
+      tokenVersion: 0,
     };
     DATA.users[id] = main;
     console.log('[bootstrap] Main coach CREATED with full access:', MAIN_COACH_EMAIL);
@@ -186,7 +186,6 @@ async function ensureMainCoach() {
     main.role = 'coach';
     main.status = 'active';
     main.isMainCoach = true;
-    main.emailVerified = true;
     // Débloquer le verrou de tentatives à chaque boot
     main.loginFails = [];
     main.lockedUntil = null;
@@ -339,7 +338,6 @@ const profileOf = u => u && {
   avatarUrl: u.avatarUrl || '',
   createdAt: u.createdAt,
   status: u.status || 'active',
-  emailVerified: !!u.emailVerified,
   isMainCoach: !!u.isMainCoach,
   onboardedAt: u.onboardedAt || null,
   requestedRole: u.requestedRole || u.role || 'athlete',
@@ -547,8 +545,6 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
 
     const id = uid();
     const passwordHash = await bcrypt.hash(password, 12);
-    // Vérification email : générer token sauf pour le coach principal
-    const verifyToken = isMain ? null : crypto.randomBytes(32).toString('hex');
     const u = {
       id, email: lowEmail, passwordHash, role: userRole, coachId,
       firstName: '', lastName: '', height: '', weight: '', objective: '',
@@ -557,18 +553,10 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       status, isMainCoach: isMain,
       loginFails: [], lockedUntil: null,
       requestedRole,
-      emailVerified: isMain,
-      emailVerifyToken: verifyToken ? hashToken(verifyToken) : null,
       tokenVersion: 0,
     };
     DATA.users[id] = u;
     persist();
-
-    // Envoyer email de vérification
-    if (verifyToken) {
-      const link = `${PUBLIC_URL}/Muscu.html?verify=${verifyToken}`;
-      await sendVerifyEmail(lowEmail, link).catch(e => console.error('[verify] email error:', e.message));
-    }
 
     // Notify main coach of new pending request
     let coachDisplayName = null;
@@ -592,7 +580,6 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     if (status === 'pending') {
       return res.json({
         pending: true,
-        emailVerification: !!RESEND_API_KEY,
         coachName: coachDisplayName,
         message: "Demande envoyée. En attente d'approbation du coach principal.",
       });
@@ -712,19 +699,6 @@ async function sendResetEmail(toEmail, link) {
   });
 }
 
-async function sendVerifyEmail(toEmail, link) {
-  return sendEmail({
-    to: toEmail,
-    subject: 'Prime Athl — Confirme ton adresse email ✅',
-    html: emailBase(`
-      <h2 style="font-size:20px;margin:0 0 10px;">Bienvenue sur Prime Athl 👋</h2>
-      <p>Clique sur le bouton ci-dessous pour confirmer ton adresse email et activer ton compte.</p>
-      ${btn(link, 'Confirmer mon email')}
-      <p style="font-size:12px;color:#666;">Ce lien est valable <strong>24 heures</strong>. Si tu n'es pas à l'origine de cette inscription, ignore ce message.</p>
-    `),
-  });
-}
-
 async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
   return sendEmail({
     to: coachEmail,
@@ -737,32 +711,6 @@ async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
     `),
   });
 }
-
-app.get('/api/auth/verify-email', async (req, res) => {
-  const { token } = req.query;
-  if (!token) return res.status(400).json({ error: 'token_required' });
-  const tokenHash = hashToken(token);
-  const u = Object.values(DATA.users).find(x => x.emailVerifyToken === tokenHash);
-  if (!u) return res.status(400).json({ error: 'invalid_token' });
-  u.emailVerified = true;
-  u.emailVerifyToken = null;
-  persist();
-  res.json({ ok: true, email: u.email });
-});
-
-// Renvoyer l'email de vérification
-app.post('/api/auth/resend-verify', signupLimiter, async (req, res) => {
-  const email = (req.body?.email || '').toLowerCase().trim();
-  const u = findUserByEmail(email);
-  if (u && !u.emailVerified) {
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    u.emailVerifyToken = hashToken(rawToken);
-    persist();
-    const link = `${PUBLIC_URL}/Muscu.html?verify=${rawToken}`;
-    await sendVerifyEmail(u.email, link).catch(() => {});
-  }
-  res.json({ ok: true });
-});
 
 // Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
 app.post('/api/auth/forgot-password', forgotLimiter, async (req, res) => {
@@ -845,7 +793,7 @@ app.get('/api/me/export', authRequired, (req, res) => {
   if (!u) return res.status(404).json({ error: 'not_found' });
 
   // On exclut les champs internes de sécurité (hash, tokens) jamais envoyés au client
-  const { passwordHash, resetTokenHash, resetTokenExpiry, emailVerifyToken, loginFails, lockedUntil, tokenVersion, ...publicUser } = u;
+  const { passwordHash, resetTokenHash, resetTokenExpiry, loginFails, lockedUntil, tokenVersion, ...publicUser } = u;
 
   const exportData = {
     exportedAt: new Date().toISOString(),
@@ -994,8 +942,6 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
       isMainCoach: false,
       loginFails: [], lockedUntil: null,
       requestedRole: 'athlete',
-      emailVerified: true,
-      emailVerifyToken: null,
       tokenVersion: 0,
     };
     DATA.users[id] = u;
@@ -1085,19 +1031,6 @@ app.post('/api/coach/athletes/:id/reset', authRequired, coachOnly, (req, res) =>
   const p = profileOf(u);
   io.to('user:' + u.id).emit('my-profile-updated', { profile: p });
   res.json({ ok: true, profile: p });
-});
-
-// Coach renvoie l'email de confirmation à un athlète qui ne l'a pas reçu / pas encore cliqué dessus
-app.post('/api/coach/athletes/:id/resend-verify', authRequired, coachOnly, async (req, res) => {
-  const u = DATA.users[req.params.id];
-  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
-  if (u.emailVerified) return res.json({ ok: true, alreadyVerified: true });
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  u.emailVerifyToken = hashToken(rawToken);
-  persist();
-  const link = `${PUBLIC_URL}/Muscu.html?verify=${rawToken}`;
-  const result = await sendVerifyEmail(u.email, link);
-  res.json({ ok: true, ...result });
 });
 
 // Coach deletes athlete's program (Excel import wipe)
