@@ -2057,7 +2057,7 @@ function MessagesScreen({authUser}){
           {/* Header */}
           <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
             <button onClick={()=>setSelected(null)} style={{width:32,height:32,borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
-            <div style={{width:32,height:32,borderRadius:16,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>{(selected.firstName?.[0]||selected.email?.[0]||'?').toUpperCase()}</div>
+            <div style={{width:32,height:32,borderRadius:16,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>{selected.avatarUrl?<img src={selected.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:(selected.firstName?.[0]||selected.email?.[0]||'?').toUpperCase()}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:600}}>{selected.firstName||selected.email.split('@')[0]}</div>
               <div style={{fontSize:10,color:T.textFaint}}>{selected.role==='coach'?'Coach':'Athlète'}</div>
@@ -2095,7 +2095,7 @@ function MessagesScreen({authUser}){
           {partners.length===0&&<div style={{textAlign:'center',fontSize:13,color:T.textFaint,marginTop:60,fontStyle:'italic'}}>{authUser.role==='coach'?'Aucun athlète actif pour l\'instant':'Aucun coach assigné'}</div>}
           {partners.map(p=>(
             <button key={p.id} onClick={()=>setSelected(p)} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px',borderRadius:14,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',cursor:'pointer',marginBottom:8,textAlign:'left',position:'relative'}}>
-              <div style={{width:40,height:40,borderRadius:20,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{(p.firstName?.[0]||p.email?.[0]||'?').toUpperCase()}</div>
+              <div style={{width:40,height:40,borderRadius:20,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{p.avatarUrl?<img src={p.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:(p.firstName?.[0]||p.email?.[0]||'?').toUpperCase()}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.firstName||p.email.split('@')[0]}</div>
                 <div style={{fontSize:11,color:T.textFaint}}>{p.role==='coach'?'Coach':'Athlète'}</div>
@@ -2743,22 +2743,86 @@ function ProfileScreen({profile,onChange,onLogout}){
   const objectives=['Hypertrophie','Force','Perte de poids','Endurance'];
   const inp={width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid '+T.border,borderRadius:9,color:T.text,fontSize:13,fontWeight:500,padding:'7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box',minWidth:0};
 
+  // ── Photo de profil : sélection → recadrage carré côté client → upload Cloudinary ──
+  const[avatarSheet,setAvatarSheet]=React.useState(false);
+  const[avatarBusy,setAvatarBusy]=React.useState(false);
+  const avatarFileRef=React.useRef(null);
+
+  const handleAvatarFile=e=>{
+    const file=e.target.files[0];
+    e.target.value='';
+    if(!file||avatarBusy)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        // Recadrage centré en carré + redimensionnement (même pipeline que l'album photo)
+        const side=Math.min(img.width,img.height);
+        const dim=440;
+        const canvas=document.createElement('canvas');
+        canvas.width=dim;canvas.height=dim;
+        canvas.getContext('2d').drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,dim,dim);
+        canvas.toBlob(async blob=>{
+          setAvatarBusy(true);
+          try{
+            const fd=new FormData();
+            fd.append('file',blob,'avatar.jpg');
+            const token=localStorage.getItem('pa_token');
+            const upRes=await fetch((typeof API_BASE!=='undefined'&&API_BASE?API_BASE:'')+'/api/upload',{method:'POST',headers:token?{Authorization:'Bearer '+token}:{},credentials:'include',body:fd});
+            const upJson=await upRes.json();
+            if(!upRes.ok)throw new Error(upJson.error||'upload_failed');
+            await onChange({avatarUrl:upJson.url});
+          }catch(err){alert('Erreur upload : '+(err.message||err));}
+          finally{setAvatarBusy(false);}
+        },'image/jpeg',0.85);
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAvatar=()=>{
+    setAvatarSheet(false);
+    if(profile.avatarUrl&&confirm('Supprimer ta photo de profil ?'))onChange({avatarUrl:''});
+  };
+
   return(
     <div style={{padding:'14px 16px 90px',color:T.text}}>
-      {/* Header compact : avatar + identité + role inline */}
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-        <div style={{width:52,height:52,borderRadius:26,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 16s linear infinite',flexShrink:0}}>
-          <div style={{width:'100%',height:'100%',borderRadius:24.5,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:600,color:'#fff'}}>{initials.toUpperCase()}</div>
-        </div>
+      {/* Header compact : avatar modifiable + identité + role inline */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:18}}>
+        <button onClick={()=>setAvatarSheet(true)} aria-label="Modifier la photo de profil" style={{position:'relative',width:52,height:52,padding:0,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,borderRadius:26}}>
+          <div style={{width:52,height:52,borderRadius:26,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 16s linear infinite'}}>
+            <div style={{width:'100%',height:'100%',borderRadius:24.5,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:600,color:'#fff'}}>
+              {profile.avatarUrl?<img src={profile.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:initials.toUpperCase()}
+            </div>
+          </div>
+          <div style={{position:'absolute',right:-2,bottom:-2,width:20,height:20,borderRadius:10,background:T.bgRaise,border:`2px solid ${T.bg}`,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 6px rgba(0,0,0,0.4)'}}>
+            <Icon name="edit" size={9} stroke={T.accent}/>
+          </div>
+          {avatarBusy&&<div style={{position:'absolute',inset:0,borderRadius:26,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',fontWeight:700}}>…</div>}
+        </button>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase'}}>{profile.role==='coach'?(profile.isMainCoach?'Coach principal':'Coach'):'Athlète'}</div>
           <div style={{fontSize:16,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:-0.2}}>{fullName||'Sans nom'}</div>
           <div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{profile.email}</div>
         </div>
       </div>
+      <input ref={avatarFileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleAvatarFile}/>
+      <BottomSheet open={avatarSheet} onClose={()=>setAvatarSheet(false)} center>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:14,textAlign:'center'}}>Photo de profil</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <button onClick={()=>{setAvatarSheet(false);avatarFileRef.current?.click();}} style={{height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+            <Icon name="upload" size={14} stroke="#fff"/> {profile.avatarUrl?'Changer la photo':'Choisir une photo'}
+          </button>
+          {profile.avatarUrl&&(
+            <button onClick={removeAvatar} style={{height:44,borderRadius:12,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:13,fontWeight:600,cursor:'pointer'}}>Supprimer la photo</button>
+          )}
+          <button onClick={()=>setAvatarSheet(false)} style={{height:44,borderRadius:12,border:`1px solid ${T.border}`,background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
+        </div>
+      </BottomSheet>
 
       {/* Identité (4 champs en grid 2x2) */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
         <input style={inp} value={profile.firstName||''} onChange={e=>upd('firstName',e.target.value)} placeholder="Prénom"/>
         <input style={inp} value={profile.lastName||''} onChange={e=>upd('lastName',e.target.value)} placeholder="Nom"/>
         <div style={{position:'relative'}}>
@@ -2772,32 +2836,33 @@ function ProfileScreen({profile,onChange,onLogout}){
       </div>
 
       {/* Objectif — chips compactes */}
-      <div style={{display:'flex',gap:4,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif</div>
+      <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
         {objectives.map(o=>(
           <button key={o} onClick={()=>upd('objective',o)} style={{flex:'1 1 auto',height:28,padding:'0 9px',borderRadius:7,border:profile.objective===o?'1px solid transparent':'1px solid '+T.border,background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.025)',color:profile.objective===o?T.accent:T.textDim,fontSize:10.5,fontWeight:profile.objective===o?700:500,cursor:'pointer',letterSpacing:0.2,whiteSpace:'nowrap'}}>{o}</button>
         ))}
       </div>
 
-
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
+
+      <SubscriptionCard profile={profile}/>
 
       {profile.isMainCoach&&<BackupRestoreCard/>}
       {profile.isMainCoach&&<TestEmailCard/>}
 
-      <SectionHeader title="Apparence"/>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,marginBottom:8}}>
-        <span style={{fontSize:13,color:T.textDim,fontWeight:500}}>Thème</span>
+      {/* Préférences regroupées : thème, notifications, installation — un seul bloc cohérent */}
+      <SectionHeader title="Préférences"/>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:20,flexShrink:0}}>🎨</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.text}}>Thème</span>
+        </div>
         <ThemePicker/>
       </div>
-
-      <SubscriptionCard profile={profile}/>
-
+      <PushNotifToggle/>
       <InstallPrompt/>
 
-      <SectionHeader title="Notifications"/>
-      <PushNotifToggle/>
-
-      <button onClick={onLogout} style={{width:'100%',height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3}}>
+      <button onClick={onLogout} style={{width:'100%',height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3,marginTop:6}}>
         <Icon name="x" size={13} stroke={T.danger}/> Se déconnecter
       </button>
     </div>
@@ -7930,8 +7995,8 @@ function CoachScreen({authToken,authUser}){
                 return(
                   <GlassCard key={a.id} padding={12}>
                     <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:36,height:36,borderRadius:18,background:'linear-gradient(135deg,#5A8AE0,#8e6cb6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>
-                        {((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
+                      <div style={{width:36,height:36,borderRadius:18,overflow:'hidden',background:'linear-gradient(135deg,#5A8AE0,#8e6cb6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>
+                        {a.avatarUrl?<img src={a.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.firstName||a.email.split('@')[0]} {a.lastName}</div>
@@ -8009,8 +8074,8 @@ function CoachScreen({authToken,authUser}){
                 style={{cursor:'pointer',transition:'transform 0.2s',transform:isNew?'scale(1.01)':'scale(1)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
                   <div style={{width:42,height:42,borderRadius:21,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite',flexShrink:0,position:'relative'}}>
-                    <div style={{width:'100%',height:'100%',borderRadius:19.5,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff'}}>
-                      {((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
+                    <div style={{width:'100%',height:'100%',borderRadius:19.5,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff'}}>
+                      {a.avatarUrl?<img src={a.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:((a.firstName?.[0]||a.email[0])+(a.lastName?.[0]||'')).toUpperCase()}
                     </div>
                     {isNew&&<div style={{position:'absolute',top:-2,right:-2,width:12,height:12,borderRadius:6,background:T.good,boxShadow:'0 0 8px '+T.good,border:'2px solid #06060a',animation:'pulse 1.4s ease infinite'}}/>}
                   </div>
