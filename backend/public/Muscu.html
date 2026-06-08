@@ -230,8 +230,23 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
     lock:<><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></>,
     clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></>,
     creditCard:<><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></>,
+    eye:<><path d="M1 12S4 4 12 4s11 8 11 8-3 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
+    eyeOff:<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></>,
   };
   return <svg {...p}>{paths[name]||null}</svg>;
+}
+
+// Champ mot de passe avec bouton afficher/masquer (œil) — facilite la saisie et la vérification
+function PasswordField({value,onChange,placeholder,autoComplete,name,required,minLength,inputStyle}){
+  const[show,setShow]=React.useState(false);
+  return(
+    <div style={{position:'relative'}}>
+      <input style={{...inputStyle,paddingRight:46}} type={show?'text':'password'} name={name} autoComplete={autoComplete} placeholder={placeholder} value={value} onChange={onChange} required={required} minLength={minLength}/>
+      <button type="button" tabIndex={-1} onClick={()=>setShow(s=>!s)} aria-label={show?'Masquer le mot de passe':'Afficher le mot de passe'} style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',width:38,height:38,border:'none',borderRadius:10,background:'transparent',color:T.textFaint,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <Icon name={show?'eyeOff':'eye'} size={19}/>
+      </button>
+    </div>
+  );
 }
 
 function HoloCard({children,intense=false,style={},onClick,padding=18}){
@@ -8441,7 +8456,7 @@ function AuthScreen({onLogin,onSignup}){
         {mode==='forgot'&&(
           <form onSubmit={submitForgot} style={{display:'flex',flexDirection:'column',gap:11}}>
             <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:2,textAlign:'center'}}>Entre ton email, on t'envoie un lien pour choisir un nouveau mot de passe.</div>
-            <input style={inputStyle} type="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+            <input style={inputStyle} type="email" name="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
             {err&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>}
             {infoMsg&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(44,196,160,0.10)',border:'1px solid rgba(44,196,160,0.30)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{infoMsg}</div>}
             <button type="submit" disabled={loading} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(191,160,96,0.4)',opacity:loading?0.7:1}}>{loading?'…':'Envoyer le lien'}</button>
@@ -8453,7 +8468,7 @@ function AuthScreen({onLogin,onSignup}){
         {mode==='reset'&&(
           <form onSubmit={submitReset} style={{display:'flex',flexDirection:'column',gap:11}}>
             <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,marginBottom:2,textAlign:'center'}}>Choisis ton nouveau mot de passe (8 caractères minimum).</div>
-            <input style={inputStyle} type="password" autoComplete="new-password" placeholder="Nouveau mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required minLength={8}/>
+            <PasswordField inputStyle={inputStyle} name="new-password" autoComplete="new-password" placeholder="Nouveau mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required minLength={8}/>
             {err&&<div style={{padding:'11px 14px',borderRadius:11,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>{err}</div>}
             <button type="submit" disabled={loading||!resetTokenFromUrl} style={{height:50,marginTop:6,border:'none',borderRadius:14,cursor:loading?'wait':'pointer',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:15,fontWeight:700,boxShadow:'0 8px 24px rgba(191,160,96,0.4)',opacity:loading?0.7:1}}>{loading?'…':'Valider'}</button>
             {!resetTokenFromUrl&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',marginTop:4}}>Aucun token. Ouvre le lien reçu par email.</div>}
@@ -8469,8 +8484,8 @@ function AuthScreen({onLogin,onSignup}){
         </div>
 
         <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:11}}>
-          <input style={inputStyle} type="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
-          <input style={inputStyle} type="password" autoComplete={mode==='login'?'current-password':'new-password'} placeholder={mode==='login'?'Mot de passe':'Mot de passe (8 min)'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='signup'?8:undefined}/>
+          <input style={inputStyle} type="email" name="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+          <PasswordField inputStyle={inputStyle} name={mode==='login'?'current-password':'new-password'} autoComplete={mode==='login'?'current-password':'new-password'} placeholder={mode==='login'?'Mot de passe':'Mot de passe (8 min)'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='signup'?8:undefined}/>
 
           {mode==='signup'&&(
             <>
