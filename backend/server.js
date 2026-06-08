@@ -101,6 +101,7 @@ function userHasAccess(u, universe) {
   if (!u) return false;
   if (u.email === MAIN_COACH_EMAIL) return true;
   if (u.role === 'coach') return true;
+  if (u.fullAccess) return true;
   if (Date.now() < (u.createdAt || 0) + TRIAL_MS) return true;
   if (u.stripeStatus === 'active' && u.stripePlan) {
     return (PLAN_UNIVERSES[u.stripePlan] || []).includes(universe);
@@ -342,6 +343,7 @@ const profileOf = u => u && {
   onboardedAt: u.onboardedAt || null,
   requestedRole: u.requestedRole || u.role || 'athlete',
   premium: !!u.premium,
+  fullAccess: !!u.fullAccess,
   stripeStatus: u.stripeStatus || null,
   stripePlan: u.stripePlan || null,
   stripeCustomerId: u.stripeCustomerId || null,
@@ -2433,6 +2435,17 @@ app.post('/api/premium/grant/:userId', authRequired, coachOnly, mainCoachOnly, (
   persist();
   io.to('user:' + u.id).emit('premium-updated', { premium: u.premium });
   res.json({ ok: true, premium: u.premium });
+});
+
+// Coach principal : débloquer/révoquer l'accès complet à l'application (les 3 univers :
+// Coaching, IA Programme, Explorer) pour un athlète, indépendamment de Stripe/de l'essai.
+app.post('/api/access/grant/:userId', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  const u = DATA.users[req.params.userId];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  u.fullAccess = !!req.body.enabled;
+  persist();
+  io.to('user:' + u.id).emit('full-access-updated', { fullAccess: u.fullAccess });
+  res.json({ ok: true, fullAccess: u.fullAccess });
 });
 
 // ── Stripe routes ────────────────────────────────────

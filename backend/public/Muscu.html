@@ -7775,6 +7775,23 @@ function CoachScreen({authToken,authUser}){
                 </button>
               </div>}
 
+              {/* Accès complet à l'application (les 3 univers, hors Stripe) */}
+              {isMain&&<div style={{marginTop:8,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>🔓 Accès complet à l'application</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement ou essai gratuit'}</div>
+                </div>
+                <button onClick={async()=>{
+                  try{
+                    await apiCall('/api/access/grant/'+a.id,{method:'POST',body:{enabled:!a.fullAccess}});
+                    load();reloadDetail(a.id);
+                    flash(a.fullAccess?'✓ Accès complet désactivé':'✓ Accès complet activé');
+                  }catch(e){flash('✗ '+(e.message||e));}
+                }} style={{height:30,padding:'0 14px',borderRadius:9,border:'none',background:a.fullAccess?'rgba(184,80,112,0.15)':'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:a.fullAccess?'#B85070':'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                  {a.fullAccess?'Révoquer':'Activer'}
+                </button>
+              </div>}
+
               {/* Danger zone */}
               <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:8,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
                 {showDangerZone?'▴ Masquer':'⋯ Plus d\'options'}
@@ -9056,6 +9073,7 @@ function userHasAccessFE(u,universe){
   const CREATOR='yannisgym972@gmail.com';
   if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
+  if(u.fullAccess)return true;
   if(u.createdAt&&Date.now()<(u.createdAt+7*24*3600*1000))return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
@@ -9978,6 +9996,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     },
     'subscription-updated':({plan,status})=>{
       setUser(prev=>({...prev,stripePlan:plan,stripeStatus:status}));
+    },
+    'full-access-updated':({fullAccess})=>{
+      setUser(prev=>({...prev,fullAccess}));
     },
   });
 
