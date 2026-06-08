@@ -6995,9 +6995,11 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const[saving,setSaving]=React.useState(false);
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
+  const[reviewing,setReviewing]=React.useState(false);
+  const[editingSet,setEditingSet]=React.useState(null); // {exIdx,setIdx}
   const queryInputRef=React.useRef(null);
 
-  React.useEffect(()=>{const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[]);
+  React.useEffect(()=>{if(reviewing)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -7033,9 +7035,19 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
     setAddingTo({exIdx});setMode('add-set');
   };
 
+  const openEditSet=(exIdx,setIdx)=>{
+    const s=exercises[exIdx]?.sets?.[setIdx];
+    if(!s)return;
+    setSetW(s.weight||0);setSetR(s.reps||0);setSetRest(s.rest||90);
+    setAddingTo({exIdx});setEditingSet({exIdx,setIdx});setMode('add-set');
+  };
+
   const confirmSet=()=>{
     if(setR<=0)return;
-    if(addingTo===null){
+    if(editingSet){
+      setExercises(prev=>prev.map((e,i)=>i!==editingSet.exIdx?e:{...e,sets:e.sets.map((st,j)=>j!==editingSet.setIdx?st:{...st,weight:setW,reps:setR,rest:setRest})}));
+      setEditingSet(null);
+    }else if(addingTo===null){
       const gid=pendingGroupId||uid();
       setExercises(prev=>[...prev,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,brand:pendingEx.brand,sets:[{weight:setW,reps:setR,rest:setRest,done:true}],groupId:gid,groupType:pendingGroupType}]);
       setPendingGroupId(null);
@@ -7043,6 +7055,12 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
       setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,rest:setRest,done:true}]}));
     }
     setMode('session');
+  };
+
+  const deleteSet=()=>{
+    if(!editingSet)return;
+    setExercises(prev=>prev.map((e,i)=>i!==editingSet.exIdx?e:{...e,sets:e.sets.filter((_,j)=>j!==editingSet.setIdx)}));
+    setEditingSet(null);setMode('session');
   };
 
   const removeExercise=idx=>setExercises(prev=>prev.filter((_,i)=>i!==idx));
@@ -7117,12 +7135,13 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   if(mode==='add-set'){
     const isNew=addingTo===null;
     const exName=isNew?pendingEx.name:exercises[addingTo.exIdx]?.name;
-    const setNum=isNew?1:(exercises[addingTo.exIdx]?.sets?.length||0)+1;
+    const setNum=isNew?1:editingSet?editingSet.setIdx+1:(exercises[addingTo.exIdx]?.sets?.length||0)+1;
+    const closeSheet=()=>{setEditingSet(null);setMode(isNew?'pick-exercise':'session');};
     return(
-      <div style={{position:'fixed',inset:0,zIndex:310,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'flex-end'}} onClick={()=>setMode(isNew?'pick-exercise':'session')}>
+      <div style={{position:'fixed',inset:0,zIndex:310,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'flex-end'}} onClick={closeSheet}>
         <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)',maxHeight:'92vh',overflowY:'auto'}}>
           <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Série {setNum}</div>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{editingSet?`Modifier · Série ${setNum}`:`Série ${setNum}`}</div>
           <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
 
           {/* Charge × Reps */}
@@ -7175,8 +7194,13 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
           )}
 
           <button onClick={confirmSet} disabled={setR<=0} style={{width:'100%',height:52,borderRadius:16,border:'none',background:setR>0?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:setR>0?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:setR>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
-            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?'Créer l\'exercice':'Valider la série'}
+            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?'Créer l\'exercice':editingSet?'Enregistrer les modifications':'Valider la série'}
           </button>
+          {editingSet&&(
+            <button onClick={deleteSet} style={{width:'100%',height:46,marginTop:10,borderRadius:14,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              <Icon name="trash" size={14} stroke={T.danger}/>Supprimer cette série
+            </button>
+          )}
         </div>
       </div>
     );
@@ -7209,18 +7233,27 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
           <Icon name="x" size={16} stroke="#B85070"/>
         </button>
         <div style={{flex:1,textAlign:'center',minWidth:0}}>
-          <div style={{fontSize:10,color:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
-            <span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>
-            Live · {athleteName}
+          <div style={{fontSize:10,color:reviewing?T.good:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
+            {reviewing?<Icon name="check" size={10} stroke={T.good}/>:<span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>}
+            {reviewing?'Récap · ':'Live · '}{athleteName}
           </div>
           <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
         </div>
-        <button onClick={handleSave} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-          {saving?'…':<><Icon name="check" size={14} stroke={totalSets>0?'#fff':T.textFaint}/>Fin</>}
+        <button onClick={()=>reviewing?handleSave():setReviewing(true)} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+          {saving?'…':<><Icon name="check" size={14} stroke={totalSets>0?'#fff':T.textFaint}/>{reviewing?'Valider':'Fin'}</>}
         </button>
       </div>
 
       {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
+
+      {reviewing&&(
+        <div style={{padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(44,196,160,0.07)',borderBottom:'1px solid rgba(44,196,160,0.18)'}}>
+          <div style={{flex:1,fontSize:11,color:T.textDim,lineHeight:1.5}}>
+            <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — vérifie la séance, touche une série pour la modifier ou la supprimer, puis valide pour l'enregistrer.
+          </div>
+          <button onClick={()=>setReviewing(false)} style={{height:30,padding:'0 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Reprendre</button>
+        </div>
+      )}
 
       {exercises.length>0&&(
         <div style={{padding:'7px 16px',display:'flex',gap:18,flexShrink:0,background:'rgba(255,255,255,0.02)',borderBottom:`1px solid ${T.border}`}}>
@@ -7270,7 +7303,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
                   {ex.sets.length>0&&(
                     <div style={{padding:'0 14px 4px',display:'flex',flexDirection:'column',gap:3}}>
                       {ex.sets.map((s,si)=>(
-                        <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)'}}>
+                        <div key={si} onClick={()=>openEditSet(ex.idx,si)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)',cursor:'pointer'}}>
                           <div style={{width:20,height:20,borderRadius:5,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
                           <div style={{flex:1,fontSize:12,fontWeight:600}}>
                             {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint,fontSize:10}}>PDC</span>}
@@ -7278,7 +7311,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
                             <span>{s.reps}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
                             {s.rest>0&&<span style={{fontSize:9,color:T.textFaint,marginLeft:8}}>⏱ {fmtRest(s.rest)}</span>}
                           </div>
-                          <span style={{fontSize:11,color:T.good}}>✓</span>
+                          <Icon name="edit" size={12} stroke={T.textFaint}/>
                         </div>
                       ))}
                     </div>
@@ -9920,6 +9953,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     },
     'session-library-updated':({sessions,assignedAt})=>{
       setSessionLibrary({sessions:sessions||[],assignedAt});
+      triggerSave();
+    },
+    'session-added':()=>{
+      apiCall('/api/sessions').then(setHistory).catch(()=>{});
+      triggerSave();
+    },
+    'session-deleted':({sessionId})=>{
+      setHistory(h=>h.filter(s=>s.id!==sessionId));
       triggerSave();
     },
     'my-profile-updated':({profile:p})=>{
