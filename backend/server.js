@@ -2253,10 +2253,12 @@ app.post('/api/ai/generate-nutrition', authRequired, aiLimiter, async (req, res)
 
 Cibles/jour: ${targets.calories}kcal | P:${targets.protein}g G:${targets.carbs}g L:${targets.fat}g
 Repas (${mealCount}/j): ${mealNames}
-Contraintes: allergies=${allergies||'aucune'} | objectif=${goal}${productConstraint} | varie les protéines
+Contraintes: allergies=${allergies||'aucune'} | objectif=${goal}${productConstraint}
+Variété: varie les protéines ET les associations d'aliments d'un repas/jour à l'autre — n'accouple pas systématiquement les deux mêmes aliments (ex: éviter "flocons d'avoine + fromage blanc" à chaque fois qu'il y a des flocons d'avoine).
+Unités réalistes selon l'aliment : "unité"/"pièce" pour un fruit entier (pomme, banane, kiwi…) ou un œuf, "boîte" pour une conserve (sardines, thon…), "tranche" si pertinent, "g"/"ml" sinon. N'utilise pas "g" pour tout par défaut.
 
-Format EXACT (pas de texte autour):
-{"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
+Format EXACT (pas de texte autour), exemple d'unités variées :
+{"days":{"LUNDI":{"meals":[{"items":[{"name":"Flocons d'avoine","qty":80,"unit":"g","kcal":296,"p":10,"c":54,"f":6},{"name":"Banane","qty":1,"unit":"unité","kcal":90,"p":1,"c":23,"f":0}]},{"items":[{"name":"Sardines en boîte","qty":1,"unit":"boîte","kcal":180,"p":20,"c":0,"f":11},{"name":"Riz blanc","qty":150,"unit":"g","kcal":195,"p":4,"c":42,"f":0}]}]},"MARDI":{...},"MERCREDI":{...},"JEUDI":{...},"VENDREDI":{...},"SAMEDI":{...},"DIMANCHE":{...}}}
 Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par repas (pas plus). Macros cohérentes. IMPORTANT: termine le JSON complètement, tous les 7 jours.` }]
     });
     const block0 = msg.content?.find(b => b.type === 'text');
@@ -2292,9 +2294,10 @@ app.post('/api/ai/regenerate-meal', authRequired, aiLimiter, async (req, res) =>
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 600,
-      messages: [{ role: 'user', content: `Régénère le repas "${mealLabel}" du ${dayName}.
+      messages: [{ role: 'user', content: `Régénère le repas "${mealLabel}" du ${dayName}, avec une association d'aliments différente de l'habituelle (varie les duos, ex: évite systématiquement "flocons d'avoine + fromage blanc").
 Budget: ~${targetKcal} kcal, ~${targetProtein}g protéines | Objectif: ${goal} | Allergies: ${allergies||'aucune'}
-Réponds UNIQUEMENT en JSON sans markdown : {"items":[{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
+Unités réalistes selon l'aliment : "unité"/"pièce" pour un fruit entier ou un œuf, "boîte" pour une conserve, "tranche" si pertinent, "g"/"ml" sinon (pas "g" pour tout par défaut).
+Réponds UNIQUEMENT en JSON sans markdown, EXACTEMENT 2-3 aliments : {"items":[{"name":"Banane","qty":1,"unit":"unité","kcal":90,"p":1,"c":23,"f":0},{"name":"...","qty":100,"unit":"g","kcal":120,"p":10,"c":15,"f":3}]}` }]
     });
     const block = msg.content?.find(b => b.type === 'text');
     if (!block) throw new Error('Réponse IA vide');
