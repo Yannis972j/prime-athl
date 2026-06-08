@@ -2629,34 +2629,41 @@ function PushNotifToggle(){
 
 function TestEmailCard(){
   const[status,setStatus]=React.useState(null); // null | 'loading' | 'ok' | 'error' | 'no_key'
+  const[detail,setDetail]=React.useState('');
+  const[to,setTo]=React.useState('');
   const test=async()=>{
-    setStatus('loading');
+    setStatus('loading');setDetail('');
     try{
-      const r=await apiCall('/api/admin/test-email',{method:'POST'});
+      const r=await apiCall('/api/admin/test-email',{method:'POST',body:to.trim()?{to:to.trim()}:{}});
       setStatus(r.sent?'ok':r.reason==='no_provider'?'no_key':'error');
-    }catch(e){setStatus('error');}
+      setDetail(r.sent?(r.to||''):(r.detail||''));
+    }catch(e){setStatus('error');setDetail(e.message==='invalid_email'?'Adresse email invalide':'');}
   };
   return(
     <div style={{marginBottom:12}}>
       <SectionHeader title="Emails"/>
-      <div style={{padding:'13px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-        <div>
-          <div style={{fontSize:13,fontWeight:600,color:T.text}}>Test Resend</div>
-          <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>
-            {status==='ok'&&<span style={{color:T.good}}>✓ Email envoyé avec succès</span>}
-            {status==='no_key'&&<span style={{color:T.warn}}>⚠ RESEND_API_KEY non configuré</span>}
-            {status==='error'&&<span style={{color:T.danger}}>✗ Erreur d'envoi</span>}
-            {!status&&'Envoie un email de test sur ton adresse'}
+      <div style={{padding:'13px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:T.text}}>Test Resend</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2,overflow:'hidden',textOverflow:'ellipsis'}}>
+              {status==='ok'&&<span style={{color:T.good}}>✓ Envoyé à {detail}</span>}
+              {status==='no_key'&&<span style={{color:T.warn}}>⚠ RESEND_API_KEY non configuré</span>}
+              {status==='error'&&<span style={{color:T.danger}}>✗ {detail||'Erreur d\'envoi'}</span>}
+              {!status&&'Envoie un email de test à l\'adresse de ton choix'}
+            </div>
           </div>
+          <button onClick={test} disabled={status==='loading'} style={{
+            padding:'8px 14px',borderRadius:9,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0,
+            background:status==='ok'?'rgba(44,196,160,0.15)':status==='error'?'rgba(184,80,112,0.15)':'rgba(255,255,255,0.07)',
+            color:status==='ok'?T.good:status==='error'?T.danger:T.text,
+            opacity:status==='loading'?0.6:1,
+          }}>
+            {status==='loading'?'Envoi…':'📧 Tester'}
+          </button>
         </div>
-        <button onClick={test} disabled={status==='loading'} style={{
-          padding:'8px 14px',borderRadius:9,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0,
-          background:status==='ok'?'rgba(44,196,160,0.15)':status==='error'?'rgba(184,80,112,0.15)':'rgba(255,255,255,0.07)',
-          color:status==='ok'?T.good:status==='error'?T.danger:T.text,
-          opacity:status==='loading'?0.6:1,
-        }}>
-          {status==='loading'?'Envoi…':'📧 Tester'}
-        </button>
+        <input type="email" value={to} onChange={e=>{setTo(e.target.value);setStatus(null);setDetail('');}} placeholder="Adresse à tester (vide = la tienne)" style={{width:'100%',background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,padding:'9px 11px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+        <div style={{fontSize:10,color:T.textFaint,marginTop:7,lineHeight:1.4}}>💡 Teste avec l'adresse d'un·e athlète pour vérifier que les emails (confirmation, mot de passe…) lui parviennent bien — Resend bloque les envois vers d'autres adresses que la tienne tant qu'aucun domaine n'est vérifié sur resend.com/domains.</div>
       </div>
     </div>
   );
@@ -8333,6 +8340,15 @@ function AuthScreen({onLogin,onSignup}){
                 <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{pendingMsg.email}</div>
               </div>
             </div>
+            {pendingMsg.emailVerification&&(
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+                <div style={{width:26,height:26,borderRadius:13,background:'rgba(200,144,64,0.18)',border:'1px solid rgba(200,144,64,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.warn}}>📧</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text}}>Confirme ton adresse email</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Un email vient de t'être envoyé à {pendingMsg.email} — clique sur le lien (pense à vérifier tes spams)</div>
+                </div>
+              </div>
+            )}
             <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
               <div style={{width:26,height:26,borderRadius:13,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.accent}}>📬</div>
               <div style={{flex:1}}>

@@ -60,6 +60,9 @@ if (!process.env.RESEND_API_KEY) {
 }
 const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
 const RESEND_FROM      = process.env.RESEND_FROM || 'Prime Athl <onboarding@resend.dev>';
+if (RESEND_API_KEY && /onboarding@resend\.dev/i.test(RESEND_FROM)) {
+  console.warn('[config] RESEND_FROM utilise le domaine sandbox "onboarding@resend.dev" : Resend refuse alors l\'envoi vers toute adresse autre que celle du compte Resend (les athlètes ne recevront ni email de confirmation, ni reset de mot de passe). Vérifie un domaine sur resend.com/domains puis configure RESEND_FROM avec une adresse de ce domaine.');
+}
 // Cloudinary — stockage photos. Env var: CLOUDINARY_URL (copie depuis dashboard Cloudinary)
 if (process.env.CLOUDINARY_URL) {
   cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL });
@@ -679,7 +682,13 @@ async function sendEmail({ to, subject, html }) {
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html }),
     });
-    if (!r.ok) { const txt = await r.text(); console.error('[resend] HTTP', r.status, txt); return { sent: false, reason: 'provider_error', status: r.status }; }
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error('[resend] HTTP', r.status, txt);
+      let detail = '';
+      try { detail = JSON.parse(txt).message || ''; } catch {}
+      return { sent: false, reason: 'provider_error', status: r.status, detail };
+    }
     console.log(`[email] ✓ sent to ${to} | ${subject}`);
     return { sent: true };
   } catch(e) { console.error('[resend] error:', e.message); return { sent: false, reason: 'network' }; }
@@ -1391,16 +1400,18 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
 // ── Test email (main coach only) ────────────────────
 app.post('/api/admin/test-email', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
   const u = DATA.users[req.user.id];
+  const to = String(req.body?.to || '').trim().toLowerCase() || u.email;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'invalid_email' });
   const result = await sendEmail({
-    to: u.email,
+    to,
     subject: 'Prime Athl — Test email ✅',
     html: emailBase(`
       <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
       <p>Ton serveur d'emails Resend est correctement configuré.</p>
-      <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
+      <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Destinataire : <strong>${to}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
     `),
   });
-  res.json(result);
+  res.json({ ...result, to });
 });
 
 // ── Backup / Restore (main coach only) ──────────────
