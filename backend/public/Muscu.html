@@ -393,7 +393,6 @@ function useAuth(){
       const err=new Error('pending_approval');
       err.pending=true;
       err.detail=res.message;
-      err.emailVerification=res.emailVerification;
       err.coachName=res.coachName;
       throw err;
     }
@@ -2678,7 +2677,7 @@ function TestEmailCard(){
           </button>
         </div>
         <input type="email" value={to} onChange={e=>{setTo(e.target.value);setStatus(null);setDetail('');}} placeholder="Adresse à tester (vide = la tienne)" style={{width:'100%',background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,padding:'9px 11px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
-        <div style={{fontSize:10,color:T.textFaint,marginTop:7,lineHeight:1.4}}>💡 Teste avec l'adresse d'un·e athlète pour vérifier que les emails (confirmation, mot de passe…) lui parviennent bien — Resend bloque les envois vers d'autres adresses que la tienne tant qu'aucun domaine n'est vérifié sur resend.com/domains.</div>
+        <div style={{fontSize:10,color:T.textFaint,marginTop:7,lineHeight:1.4}}>💡 Teste avec l'adresse d'un·e athlète pour vérifier que les emails (réinitialisation de mot de passe, notifications…) lui parviennent bien — Resend bloque les envois vers d'autres adresses que la tienne tant qu'aucun domaine n'est vérifié sur resend.com/domains.</div>
       </div>
     </div>
   );
@@ -7395,16 +7394,6 @@ function CoachScreen({authToken,authUser}){
     }
   };
 
-  const resendVerifyEmail=async a=>{
-    try{
-      const r=await apiCall('/api/coach/athletes/'+a.id+'/resend-verify',{method:'POST'});
-      if(r.alreadyVerified)flash(`${a.email} a déjà confirmé son email`);
-      else if(r.sent)flash(`✓ Email de confirmation renvoyé à ${a.email}`);
-      else if(r.reason==='no_provider')flash('✗ Service email non configuré (RESEND_API_KEY manquant)');
-      else flash(`✗ Échec de l'envoi${r.detail?` : ${r.detail}`:''}`);
-    }catch(e){flash('✗ '+(e.message||e));}
-  };
-
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
     'session-added':()=>{load();if(selected)reloadDetail(selected.id);},
@@ -7719,19 +7708,6 @@ function CoachScreen({authToken,authUser}){
                   })}
                 </div>
               </GlassCard>
-
-              {/* Email non confirmé : permet au coach de renvoyer le lien */}
-              {a.emailVerified===false&&(
-                <div style={{marginBottom:12,padding:'11px 14px',borderRadius:12,background:'rgba(200,144,64,0.06)',border:'1px solid rgba(200,144,64,0.25)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.warn}}>📧 Email non confirmé</div>
-                    <div style={{fontSize:10,color:T.textFaint,marginTop:2,lineHeight:1.4}}>L'athlète n'a pas encore cliqué sur le lien reçu par email (et ne peut pas se connecter)</div>
-                  </div>
-                  <button onClick={()=>resendVerifyEmail(a)} style={{height:32,padding:'0 13px',borderRadius:9,border:'1px solid rgba(200,144,64,0.4)',background:'rgba(200,144,64,0.1)',color:T.warn,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
-                    Renvoyer
-                  </button>
-                </div>
-              )}
 
               {/* Stats rapides */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
@@ -8273,13 +8249,11 @@ const AUTH_ERR_FR={
   account_locked:'Trop de tentatives. Compte verrouillé temporairement.',
   too_many_auth_attempts:'Trop de tentatives. Réessaie dans 15 minutes.',
   too_many_requests:'Trop de requêtes. Patiente un peu.',
-  email_not_verified:'📧 Vérifie ta boîte mail et clique sur le lien de confirmation.',
 };
 
 function AuthScreen({onLogin,onSignup}){
   const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
   const resetTokenFromUrl=params.get('reset');
-  const verifyTokenFromUrl=params.get('verify');
   const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
   const[email,setEmail]=React.useState('');
   const[password,setPassword]=React.useState('');
@@ -8287,20 +8261,8 @@ function AuthScreen({onLogin,onSignup}){
   const[code,setCode]=React.useState('');
   const[err,setErr]=React.useState(null);
   const[loading,setLoading]=React.useState(false);
-  const[pendingMsg,setPendingMsg]=React.useState(null); // {email, emailVerification}
+  const[pendingMsg,setPendingMsg]=React.useState(null); // {email, detail, coachName}
   const[infoMsg,setInfoMsg]=React.useState(null);
-  const[verifyDone,setVerifyDone]=React.useState(false);
-  const[resendLoading,setResendLoading]=React.useState(false);
-  const[resendDone,setResendDone]=React.useState(false);
-
-  // Traitement du lien de vérification email (?verify=TOKEN)
-  React.useEffect(()=>{
-    if(!verifyTokenFromUrl)return;
-    window.history.replaceState({},'',window.location.pathname);
-    apiCall(`/api/auth/verify-email?token=${encodeURIComponent(verifyTokenFromUrl)}`,{noAuth:true})
-      .then(r=>{if(r?.ok)setVerifyDone(true);else setErr('Lien de vérification invalide ou expiré.');})
-      .catch(()=>setErr('Lien de vérification invalide ou expiré.'));
-  },[]);
 
   // Demande de réinitialisation : envoie un email avec le lien (ou log côté serveur)
   const submitForgot=async e=>{
@@ -8335,18 +8297,11 @@ function AuthScreen({onLogin,onSignup}){
       if(mode==='login')await onLogin(email.trim(),password);
       else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
     }catch(ex){
-      if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', emailVerification:ex.emailVerification, email:email.trim(), coachName:ex.coachName});}
+      if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', email:email.trim(), coachName:ex.coachName});}
       else setErr(AUTH_ERR_FR[ex.message]||ex.message||'Erreur');
     }
     setLoading(false);
   };
-
-  const resendVerify=async()=>{
-    setResendLoading(true);
-    try{await apiCall('/api/auth/resend-verify',{method:'POST',body:{email:email||pendingMsg?.email},noAuth:true});}catch(e){}
-    setResendDone(true);setResendLoading(false);
-  };
-
 
   // ── Écran en attente d'approbation ────────────────
   if(pendingMsg){
@@ -8378,15 +8333,6 @@ function AuthScreen({onLogin,onSignup}){
                 <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{pendingMsg.email}</div>
               </div>
             </div>
-            {pendingMsg.emailVerification&&(
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
-                <div style={{width:26,height:26,borderRadius:13,background:'rgba(200,144,64,0.18)',border:'1px solid rgba(200,144,64,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.warn}}>📧</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:T.text}}>Confirme ton adresse email</div>
-                  <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Un email vient de t'être envoyé à {pendingMsg.email} — clique sur le lien (pense à vérifier tes spams)</div>
-                </div>
-              </div>
-            )}
             <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
               <div style={{width:26,height:26,borderRadius:13,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.5)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,color:T.accent}}>📬</div>
               <div style={{flex:1}}>
@@ -8444,13 +8390,6 @@ function AuthScreen({onLogin,onSignup}){
           <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Prime Athl</div>
           <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.6,marginTop:4}}><HoloText>{titleByMode[mode]}</HoloText></div>
         </div>
-
-        {/* ── Email vérifié avec succès ── */}
-        {verifyDone&&(
-          <div style={{marginBottom:16,padding:'12px 16px',borderRadius:13,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.35)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>
-            ✅ Email confirmé ! Tu peux maintenant te connecter.
-          </div>
-        )}
 
         {/* ── Forgot password ── */}
         {mode==='forgot'&&(
@@ -8510,17 +8449,6 @@ function AuthScreen({onLogin,onSignup}){
           {err&&(
             <div style={{padding:'11px 14px',borderRadius:11,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.35)',color:'#ff7eb6',fontSize:13,fontWeight:600,textAlign:'center'}}>
               {err}
-              {err===AUTH_ERR_FR['email_not_verified']&&(
-                <div style={{marginTop:8}}>
-                  {resendDone?(
-                    <span style={{fontSize:12,color:T.good,fontWeight:600}}>✓ Email renvoyé ! Vérifie ta boîte.</span>
-                  ):(
-                    <button onClick={resendVerify} disabled={resendLoading} style={{height:30,padding:'0 14px',borderRadius:8,border:'1px solid rgba(255,255,255,0.2)',background:'rgba(255,255,255,0.08)',color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                      {resendLoading?'Envoi…':'📧 Renvoyer l\'email de confirmation'}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
