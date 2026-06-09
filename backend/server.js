@@ -1339,6 +1339,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   DATA.sessions[id] = session;
   persist();
   io.to('user:' + athlete.id).emit('session-added', { session });
+  io.to('user:' + req.user.id).emit('session-added', { session });
   res.json({ ok: true, id });
 });
 

@@ -6314,7 +6314,7 @@ function timeAgo(ts){
 }
 
 // ── Coach Global Calendar ────────────────────────────────────────────────────
-function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
+function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey}){
   const now=new Date();
   const[year,setYear]=React.useState(now.getFullYear());
   const[month,setMonth]=React.useState(now.getMonth()+1);
@@ -6372,6 +6372,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete}){
   };
 
   React.useEffect(()=>{reload();},[year,month]);
+  React.useEffect(()=>{if(refreshKey)reload();},[refreshKey]);
 
   const prevMonth=()=>{if(month===1){setYear(y=>y-1);setMonth(12);}else setMonth(m=>m-1);setSelectedDay(null);};
   const nextMonth=()=>{if(month===12){setYear(y=>y+1);setMonth(1);}else setMonth(m=>m+1);setSelectedDay(null);};
@@ -7360,6 +7361,7 @@ function CoachScreen({authToken,authUser}){
   const libFileRef=React.useRef(null);
   const[showLiveSession,setShowLiveSession]=React.useState(false);
   const[confirmAction,setConfirmAction]=React.useState(null); // {msg,onConfirm}
+  const[calRefreshKey,setCalRefreshKey]=React.useState(0);
 
   // Detect session count increases → highlight + pulse
   React.useEffect(()=>{
@@ -7431,7 +7433,7 @@ function CoachScreen({authToken,authUser}){
 
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
-    'session-added':()=>{load();if(selected)reloadDetail(selected.id);},
+    'session-added':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
     'athlete-profile-updated':()=>{load();},
     'pending-request':()=>{load();},
     'nutrition-meal-validated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
@@ -7630,7 +7632,7 @@ function CoachScreen({authToken,authUser}){
 
   // ── Calendar view (must come before detail check) ───────────────────────────
   if(coachView==='calendar'){
-    return <>{liveSessionEl}<CoachCalendarView authToken={authToken} athletes={athletes} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/></>;
+    return <>{liveSessionEl}<CoachCalendarView authToken={authToken} athletes={athletes} refreshKey={calRefreshKey} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/></>;
   }
 
   // ── Detail view ─────────────────────────────────
