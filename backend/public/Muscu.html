@@ -7944,6 +7944,14 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 4 : Historique ── */}
         {detailTab==='historique'&&(
           <div style={{padding:'0 18px'}}>
+            {(()=>{const ls=sessions.filter(s=>s.createdByCoach);return ls.length>0&&(
+              <>
+                <SectionHeader title="⚡ Séances Live" right={<span style={{fontSize:10,color:'#BFA060'}}>{ls.length} séance{ls.length>1?'s':''}</span>}/>
+                <GlassCard padding={14} style={{marginBottom:16}}>
+                  <LiveSessionCalendar sessions={ls}/>
+                </GlassCard>
+              </>
+            );})()}
             <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
             {sessions.length===0?(
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
@@ -10332,11 +10340,120 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout}){
   );
 }
 
+// ── Live Sessions Calendar (shared: athlete tab + coach historique) ──────────
+function LiveSessionCalendar({sessions}){
+  const now=new Date();
+  const[calYear,setCalYear]=React.useState(now.getFullYear());
+  const[calMonth,setCalMonth]=React.useState(now.getMonth());
+  const[sel,setSel]=React.useState(null);
+  const todayStr=ymdKey(now);
+  const byDate=React.useMemo(()=>{
+    const m={};
+    (sessions||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d){if(!m[d])m[d]=[];m[d].push(s);}});
+    return m;
+  },[sessions]);
+  const calDays=React.useMemo(()=>{
+    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
+    const dim=new Date(calYear,calMonth+1,0).getDate();
+    const c=[];for(let i=0;i<firstDow;i++)c.push(null);for(let d=1;d<=dim;d++)c.push(d);return c;
+  },[calYear,calMonth]);
+  const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
+  const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <button onClick={prevM} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+        <span style={{fontSize:13,fontWeight:700,textTransform:'capitalize'}}>{new Date(calYear,calMonth).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</span>
+        <button onClick={nextM} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:3}}>
+        {['L','M','M','J','V','S','D'].map((d,i)=><div key={i} style={{textAlign:'center',fontSize:9,fontWeight:700,color:T.textFaint}}>{d}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+        {calDays.map((d,i)=>{
+          if(!d)return<div key={i}/>;
+          const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const hasLive=!!byDate[dateStr];
+          const isToday=dateStr===todayStr;
+          const isSel=sel===dateStr;
+          let bg=hasLive?'rgba(191,160,96,0.12)':'rgba(255,255,255,0.03)';
+          let border=hasLive?'1px solid rgba(191,160,96,0.4)':'1px solid rgba(255,255,255,0.05)';
+          if(isToday)border='2px solid rgba(191,160,96,0.6)';
+          if(isSel){bg='rgba(191,160,96,0.22)';border='2px solid #BFA060';}
+          return(
+            <div key={i} onClick={()=>hasLive&&setSel(isSel?null:dateStr)}
+              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:hasLive?'pointer':'default',background:bg,border,transition:'background 0.15s,border-color 0.15s'}}>
+              <span style={{fontSize:11,fontWeight:600,color:hasLive?'#BFA060':T.textFaint,lineHeight:1}}>{d}</span>
+              {hasLive&&<div style={{width:3,height:3,borderRadius:2,background:'#BFA060',marginTop:2}}/>}
+            </div>
+          );
+        })}
+      </div>
+      {sel&&byDate[sel]&&(
+        <div style={{marginTop:10,padding:'12px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:8}}>
+            {new Date(sel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+          </div>
+          {byDate[sel].map(s=>(
+            <div key={s.id} style={{padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:'#BFA060'}}>⚡</span><span style={{fontSize:13,fontWeight:700}}>{s.name||'Séance Live'}</span></div>
+              <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{(s.exercises||[]).length} exercice{(s.exercises||[]).length>1?'s':''} · {Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Live Sessions full view (athlete ⚡ Live tab) ────────────────────────────
+function LiveSessionsView({sessions}){
+  const sorted=React.useMemo(()=>[...(sessions||[])].sort((a,b)=>new Date(b.date)-new Date(a.date)),[sessions]);
+  if(!sessions?.length){
+    return(
+      <div style={{padding:'40px 16px',textAlign:'center'}}>
+        <div style={{fontSize:32,marginBottom:12}}>⚡</div>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>Aucune séance live</div>
+        <div style={{fontSize:13,color:T.textDim}}>Les séances créées par ton coach apparaîtront ici.</div>
+      </div>
+    );
+  }
+  return(
+    <div style={{padding:'16px 16px 40px'}}>
+      <GlassCard padding={14} style={{marginBottom:16}}>
+        <LiveSessionCalendar sessions={sessions}/>
+      </GlassCard>
+      <div style={{fontSize:10,fontWeight:700,color:T.textFaint,letterSpacing:1,textTransform:'uppercase',marginBottom:8,paddingLeft:2}}>Toutes les séances live · {sessions.length}</div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {sorted.map(s=>{
+          const dateLabel=s.date?new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}):'-';
+          return(
+            <GlassCard key={s.id} padding={14}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                    <span style={{fontSize:12,color:'#BFA060'}}>⚡</span>
+                    <span style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance Live'}</span>
+                  </div>
+                  <div style={{fontSize:11,color:T.textDim}}>{(s.exercises||[]).length} ex · {Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+                </div>
+                <div style={{fontSize:11,color:T.textFaint,flexShrink:0,textTransform:'capitalize',textAlign:'right'}}>{dateLabel}</div>
+              </div>
+            </GlassCard>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
 function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
   const libCount=(sessionLibrary?.sessions||[]).length;
+  const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
+    ...(profile?.coachId?[{id:'live',label:'⚡ Live'}]:[]),
     ...(libCount>0?[{id:'biblio',label:'📚 Biblio'}]:[]),
     {id:'nutrition',label:'🍎 Nutrition'},
   ];
@@ -10365,6 +10482,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
           onDeleteSession={onDeleteSession}
         />}
+        {sub==='live'&&<LiveSessionsView sessions={liveSessions}/>}
         {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>
