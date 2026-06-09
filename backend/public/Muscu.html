@@ -3598,10 +3598,10 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
                                   {bi>0&&<span style={{fontSize:9,color:group.color,fontWeight:700}}>↓</span>}
                                   <div style={{flex:1,minWidth:0}}>
                                     <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                    {group.style==='CLASSIQUE'&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'} reps</div>}
+                                    {group.style==='CLASSIQUE'&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'} reps</div>}
                                   </div>
-                                  {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>}
-                                  {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||'?'}</span>}
+                                  {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'}</span>}
+                                  {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'}</span>}
                                 </div>
                               ))}
                             </div>
