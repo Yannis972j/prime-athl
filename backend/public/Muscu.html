@@ -7624,7 +7624,7 @@ function CoachScreen({authToken,authUser}){
       athleteId={selected.id}
       athleteName={(detail||selected).firstName||selected.email.split('@')[0]}
       detail={detail||{}}
-      onSaved={()=>{setShowLiveSession(false);reloadDetail(selected.id);flash('✓ Séance enregistrée');}}
+      onSaved={()=>{setShowLiveSession(false);setDetailTab('historique');reloadDetail(selected.id);flash('✓ Séance enregistrée');}}
       onClose={()=>setShowLiveSession(false)}
     />,
     document.body
