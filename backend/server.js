@@ -289,9 +289,10 @@ setInterval(() => {
   // Purge nutritionLogs > 90 jours
   const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const cutoffStr = new Date(cutoff).toISOString().slice(0, 10);
+  let removedNutrition = 0;
   for (const uid of Object.keys(DATA.nutritionLogs || {})) {
     for (const dateKey of Object.keys(DATA.nutritionLogs[uid] || {})) {
-      if (dateKey < cutoffStr) delete DATA.nutritionLogs[uid][dateKey];
+      if (dateKey < cutoffStr) { delete DATA.nutritionLogs[uid][dateKey]; removedNutrition++; }
     }
   }
 
@@ -320,7 +321,7 @@ setInterval(() => {
   }
   if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
 
-  if (removedPending > 0 || removedPush > 0) persist();
+  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 
 // ── Helpers ─────────────────────────────────────────
@@ -1245,7 +1246,7 @@ app.post('/api/sessions', authRequired, (req, res) => {
     totalVolume: safeVolume,
     exercises: safeExercises,
   };
-  if (rpe != null) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
+  if (rpe != null && !isNaN(parseFloat(rpe))) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
   if (notes) session.notes = String(notes).slice(0, 500);
   if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
   DATA.sessions[id] = session;
@@ -1397,6 +1398,7 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       premiumCodes: body.premiumCodes || {},
       freeFoodLogs: body.freeFoodLogs || {},
       customFoods: body.customFoods || {},
+      sessionLibrary: body.sessionLibrary || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -1467,6 +1469,7 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       premiumCodes: body.premiumCodes || {},
       freeFoodLogs: body.freeFoodLogs || {},
       customFoods: body.customFoods || {},
+      sessionLibrary: body.sessionLibrary || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
@@ -2385,7 +2388,7 @@ let SEANCES_CACHE = loadSeances();
 app.get('/api/seances', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
-  if (!u.premium) return res.status(403).json({ error: 'premium_required' });
+  if (!u.premium && !u.fullAccess && !userHasAccess(u, 'coach')) return res.status(403).json({ error: 'premium_required' });
   const category = req.query.category;
   const list = category ? SEANCES_CACHE.filter(s => s.category === category) : SEANCES_CACHE;
   res.json(list);
@@ -2395,7 +2398,7 @@ app.get('/api/seances', authRequired, (req, res) => {
 app.get('/api/seances/random', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
-  if (!u.premium) return res.status(403).json({ error: 'premium_required' });
+  if (!u.premium && !u.fullAccess && !userHasAccess(u, 'coach')) return res.status(403).json({ error: 'premium_required' });
   const category = req.query.category;
   const pool = SEANCES_CACHE.filter(s => s.random !== false && (!category || s.category === category));
   if (!pool.length) return res.status(404).json({ error: 'no_seance' });
