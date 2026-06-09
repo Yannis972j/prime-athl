@@ -1714,14 +1714,11 @@ function WeightChartSection({userId}){
   const add=async()=>{
     const w=parseFloat(newW);
     if(!w||w<20||w>300)return;
-    await apiCall('/api/weight',{method:'POST',body:{weight:w,date:Date.now()}});
-    setNewW('');
-    load();
+    try{await apiCall('/api/weight',{method:'POST',body:{weight:w,date:Date.now()}});setNewW('');load();}catch{}
   };
 
   const del=async(id)=>{
-    await apiCall('/api/weight/'+id,{method:'DELETE'});
-    load();
+    try{await apiCall('/api/weight/'+id,{method:'DELETE'});load();}catch{}
   };
 
   if(loading)return null;
@@ -1925,10 +1922,7 @@ function PhotoGallery({readOnly,userId}){
       // 1. Upload fichier → Cloudinary (ou base64 fallback)
       const fd=new FormData();
       fd.append('file',pending.file,'photo.jpg');
-      const token=localStorage.getItem('pa_token');
-      const upRes=await fetch((typeof API_BASE!=='undefined'&&API_BASE?API_BASE:'')+'/api/upload',{method:'POST',headers:token?{Authorization:'Bearer '+token}:{},credentials:'include',body:fd});
-      const upJson=await upRes.json();
-      if(!upRes.ok)throw new Error(upJson.error||'upload_failed');
+      const upJson=await uploadFile(fd);
       // 2. Enregistre la photo (URL Cloudinary ou base64)
       await apiCall('/api/photos',{method:'POST',body:{url:upJson.url,note:pending.note,date:Date.now()}});
       load();setPending(null);
@@ -1940,9 +1934,7 @@ function PhotoGallery({readOnly,userId}){
 
   const del=async(id)=>{
     if(!confirm('Supprimer cette photo ?'))return;
-    await apiCall('/api/photos/'+id,{method:'DELETE'});
-    setSelected(null);
-    load();
+    try{await apiCall('/api/photos/'+id,{method:'DELETE'});setSelected(null);load();}catch{}
   };
 
   if(loading)return null;
@@ -2788,10 +2780,7 @@ function ProfileScreen({profile,onChange,onLogout}){
           try{
             const fd=new FormData();
             fd.append('file',blob,'avatar.jpg');
-            const token=localStorage.getItem('pa_token');
-            const upRes=await fetch((typeof API_BASE!=='undefined'&&API_BASE?API_BASE:'')+'/api/upload',{method:'POST',headers:token?{Authorization:'Bearer '+token}:{},credentials:'include',body:fd});
-            const upJson=await upRes.json();
-            if(!upRes.ok)throw new Error(upJson.error||'upload_failed');
+            const upJson=await uploadFile(fd);
             await onChange({avatarUrl:upJson.url});
           }catch(err){alert('Erreur upload : '+(err.message||err));}
           finally{setAvatarBusy(false);}
@@ -3102,8 +3091,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
     }catch(e){setSaveMsg('✗ '+(e.message||e));setTimeout(()=>setSaveMsg(null),3000);}
   };
   const deleteArchive=async(id)=>{
-    await apiCall('/api/my-program/saved/'+id,{method:'DELETE'});
-    setConfirmDel(null);setViewArchive(null);await loadArchives();
+    try{await apiCall('/api/my-program/saved/'+id,{method:'DELETE'});setConfirmDel(null);setViewArchive(null);await loadArchives();}catch{}
   };
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
@@ -3188,14 +3176,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
   },[history]);
 
   // Build calendar days for current month
-  const calDays=React.useMemo(()=>{
-    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7; // Mon=0
-    const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-    const cells=[];
-    for(let i=0;i<firstDow;i++)cells.push(null);
-    for(let d=1;d<=daysInMonth;d++)cells.push(d);
-    return cells;
-  },[calYear,calMonth]);
+  const calDays=React.useMemo(()=>buildCalDays(calYear,calMonth),[calYear,calMonth]);
 
   const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
@@ -3891,14 +3872,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[selectedDate,setSelectedDate]=React.useState(null);
   const JS_TO_DAY_N=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
   const todayStrN=`${nowN.getFullYear()}-${String(nowN.getMonth()+1).padStart(2,'0')}-${String(nowN.getDate()).padStart(2,'0')}`;
-  const calDaysN=React.useMemo(()=>{
-    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
-    const dim=new Date(calYear,calMonth+1,0).getDate();
-    const cells=[];
-    for(let i=0;i<firstDow;i++)cells.push(null);
-    for(let d=1;d<=dim;d++)cells.push(d);
-    return cells;
-  },[calYear,calMonth]);
+  const calDaysN=React.useMemo(()=>buildCalDays(calYear,calMonth),[calYear,calMonth]);
   const prevMonthN=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
   const nextMonthN=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
 
@@ -4522,6 +4496,24 @@ const NUTRI_MEAL_TEMPLATES=[
 const DAYS_OF_WEEK=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
 const todayDayName=()=>DAYS_OF_WEEK[(new Date().getDay()+6)%7];
 const ymdKey=(d=new Date())=>{const x=new Date(d);return`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
+const buildCalDays=(year,month)=>{const firstDow=(new Date(year,month,1).getDay()+6)%7;const dim=new Date(year,month+1,0).getDate();const c=[];for(let i=0;i<firstDow;i++)c.push(null);for(let d=1;d<=dim;d++)c.push(d);return c;};
+const uploadFile=fd=>apiCall('/api/upload',{method:'POST',body:fd});
+function useSessionFeedback(sessionId,initial,onSaved){
+  const[feedbackText,setFeedbackText]=React.useState(initial||'');
+  const[saving,setSaving]=React.useState(false);
+  const[saved,setSaved]=React.useState(false);
+  const submitFeedback=async()=>{
+    if(!feedbackText.trim())return;
+    setSaving(true);
+    try{
+      await apiCall(`/api/coach/sessions/${sessionId}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
+      setSaved(true);setTimeout(()=>setSaved(false),2000);
+      if(onSaved)onSaved();
+    }catch{}
+    setSaving(false);
+  };
+  return{feedbackText,setFeedbackText,saving,saved,submitFeedback};
+}
 
 const emptyDay=()=>({meals:NUTRI_MEAL_TEMPLATES.map(t=>({...t,items:[],note:''}))});
 const emptyWeek=()=>{const d={};for(const day of DAYS_OF_WEEK)d[day]=emptyDay();return d;};
@@ -5776,14 +5768,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   // has nutrition plan
   const hasNutriPlan=!!(nutriPlan?.data);
 
-  const calDays=React.useMemo(()=>{
-    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
-    const dim=new Date(calYear,calMonth+1,0).getDate();
-    const c=[];
-    for(let i=0;i<firstDow;i++)c.push(null);
-    for(let d=1;d<=dim;d++)c.push(d);
-    return c;
-  },[calYear,calMonth]);
+  const calDays=React.useMemo(()=>buildCalDays(calYear,calMonth),[calYear,calMonth]);
 
   const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
   const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
@@ -6623,21 +6608,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
 }
 
 function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
-  const[feedbackText,setFeedbackText]=React.useState(s.coachFeedback||'');
-  const[saving,setSaving]=React.useState(false);
-  const[saved,setSaved]=React.useState(false);
-
-  const submitFeedback=async()=>{
-    if(!feedbackText.trim())return;
-    setSaving(true);
-    try{
-      await apiCall(`/api/coach/sessions/${s.id}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
-      setSaved(true);
-      setTimeout(()=>setSaved(false),2000);
-      if(onFeedbackSaved)onFeedbackSaved();
-    }catch{}
-    setSaving(false);
-  };
+  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
 
@@ -6654,7 +6625,7 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:17,fontWeight:700,marginBottom:4}}>{s.name||'Séance'}</div>
-              <div style={{fontSize:12,color:T.textDim}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+              <div style={{fontSize:12,color:T.textDim}}>{s.date?new Date(s.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):''}</div>
             </div>
             <button onClick={onClose} style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:T.textFaint,fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>×</button>
           </div>
@@ -6752,21 +6723,7 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
 function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved}){
   const[expanded,setExpanded]=React.useState(false);
   const[showModal,setShowModal]=React.useState(false);
-  const[feedbackText,setFeedbackText]=React.useState(s.coachFeedback||'');
-  const[saving,setSaving]=React.useState(false);
-  const[saved,setSaved]=React.useState(false);
-
-  const submitFeedback=async()=>{
-    if(!feedbackText.trim())return;
-    setSaving(true);
-    try{
-      await apiCall(`/api/coach/sessions/${s.id}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
-      setSaved(true);
-      setTimeout(()=>setSaved(false),2000);
-      if(onFeedbackSaved)onFeedbackSaved();
-    }catch{}
-    setSaving(false);
-  };
+  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   return(
     <div
@@ -10361,11 +10318,7 @@ function LiveSessionCalendar({sessions}){
     (sessions||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d){if(!m[d])m[d]=[];m[d].push(s);}});
     return m;
   },[sessions]);
-  const calDays=React.useMemo(()=>{
-    const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7;
-    const dim=new Date(calYear,calMonth+1,0).getDate();
-    const c=[];for(let i=0;i<firstDow;i++)c.push(null);for(let d=1;d<=dim;d++)c.push(d);return c;
-  },[calYear,calMonth]);
+  const calDays=React.useMemo(()=>buildCalDays(calYear,calMonth),[calYear,calMonth]);
   const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
   const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
   return(
