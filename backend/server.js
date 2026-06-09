@@ -894,7 +894,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   res.json({
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
   });
 });
 
@@ -1219,7 +1219,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     .filter(s => s.userId === target)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500)
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach }));
   res.json(list);
 });
 
