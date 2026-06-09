@@ -6999,6 +6999,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const[reviewing,setReviewing]=React.useState(false);
+  const[sessionName,setSessionName]=React.useState('');
   const[editingSet,setEditingSet]=React.useState(null); // {exIdx,setIdx}
   const queryInputRef=React.useRef(null);
 
@@ -7076,7 +7077,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{
         method:'POST',
-        body:{name:'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
+        body:{name:sessionName.trim()||'Séance Live',date:new Date().toISOString(),exercises:valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,sets:e.sets})),totalVolume,duration:Math.round(elapsed/60)},
       });
       onSaved();
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
@@ -7250,11 +7251,19 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
       {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
 
       {reviewing&&(
-        <div style={{padding:'10px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(44,196,160,0.07)',borderBottom:'1px solid rgba(44,196,160,0.18)'}}>
-          <div style={{flex:1,fontSize:11,color:T.textDim,lineHeight:1.5}}>
-            <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — vérifie la séance, touche une série pour la modifier ou la supprimer, puis valide pour l'enregistrer.
+        <div style={{padding:'10px 16px',flexShrink:0,background:'rgba(44,196,160,0.07)',borderBottom:'1px solid rgba(44,196,160,0.18)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+            <div style={{flex:1,fontSize:11,color:T.textDim,lineHeight:1.5}}>
+              <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — vérifie la séance puis nomme-la avant de valider.
+            </div>
+            <button onClick={()=>setReviewing(false)} style={{height:30,padding:'0 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Reprendre</button>
           </div>
-          <button onClick={()=>setReviewing(false)} style={{height:30,padding:'0 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Reprendre</button>
+          <input
+            value={sessionName}
+            onChange={e=>setSessionName(e.target.value)}
+            placeholder="Nom de la séance (ex: Push Day A, Jambes…)"
+            style={{width:'100%',height:40,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:13,fontWeight:600,padding:'0 12px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
+          />
         </div>
       )}
 
