@@ -467,7 +467,8 @@ const DEFAULT_WORKOUT={
 };
 
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
-function parseYannisExcel(file, onSuccess, onError) {
+function parseYannisExcel(file, onSuccess, onError, opts) {
+  const categoryFallback = !!(opts && opts.categoryFallback);
   const reader = new FileReader();
   reader.onerror = () => onError('Lecture du fichier impossible');
   reader.onload = ev => {
@@ -554,6 +555,7 @@ function parseYannisExcel(file, onSuccess, onError) {
         const normalizeStyle = s => s === 'TRI-SET' ? 'TRISET' : s;
 
         const sheetData = {};
+        const categoryData = {};
         let currentDay = null;
         let currentCategory = '';
         let lastSeriesCount = 3;
@@ -569,9 +571,6 @@ function parseYannisExcel(file, onSuccess, onError) {
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
           if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; }
-          if (!currentDay) return;
-
-          if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
 
           const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
           const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
@@ -603,14 +602,25 @@ function parseYannisExcel(file, onSuccess, onError) {
             duree:    String(row[colDuree]||'').trim(),
           } : null;
 
-          sheetData[currentDay].exercises.push({
+          const exercise = {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
             sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
-          });
+          };
+
+          if (currentDay) {
+            if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
+            sheetData[currentDay].exercises.push(exercise);
+          }
+
+          // Bibliothèque sans colonne JOUR : un bloc de catégorie = une séance
+          const catKey = currentCategory || sheetName;
+          if (!categoryData[catKey]) categoryData[catKey] = {category:currentCategory, exercises:[]};
+          categoryData[catKey].exercises.push({...exercise, id:uid(), sets:exercise.sets.map(s=>({...s}))});
         });
 
         if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
+        else if (categoryFallback && Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
       });
 
       if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
@@ -628,7 +638,7 @@ function excelExport(workout) {
       'Muscle'         : ex.muscle,
       'Série'          : i + 1,
       'Poids (kg)'     : s.weight,
-      'Répétitions'    : s.target || s.reps,
+      'Répétitions'    : s.targetStr || s.target || s.reps,
       'Reps réalisées' : s.reps,
       'Validé'         : s.done ? 'Oui' : 'Non',
     }));
@@ -702,6 +712,26 @@ function NumField({value,onCommit,decimal=false,placeholder,style}){
         setBuf(raw);
         const n=decimal?parseFloat(raw):parseInt(raw,10);
         onCommit(isFinite(n)&&n>=0?n:0);
+      }}
+      onBlur={()=>setBuf(null)}
+      onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
+      style={style}/>
+  );
+}
+
+// Champ "reps cible" : accepte un nombre simple (10) ou une fourchette (8-10)
+function RangeField({value,onCommit,placeholder,style}){
+  const[buf,setBuf]=React.useState(null);
+  const display=buf!==null?buf:(value||'');
+  return(
+    <input
+      type="text" enterKeyHint="done"
+      value={display} placeholder={placeholder}
+      onFocus={e=>{const el=e.currentTarget;setBuf(value||'');requestAnimationFrame(()=>{try{el.select();}catch(_){}});}}
+      onChange={e=>{
+        const raw=e.target.value.replace(/[^0-9-]/g,'');
+        setBuf(raw);
+        onCommit(raw);
       }}
       onBlur={()=>setBuf(null)}
       onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
@@ -808,8 +838,12 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
                   </div>
                   <NumField style={numStyle} value={s.weight||0} decimal placeholder="0"
                     onCommit={v=>updSet(ei,si,{weight:v})}/>
-                  <NumField style={numStyle} value={s.target||s.reps||0} placeholder="0"
-                    onCommit={v=>updSet(ei,si,{target:v})}/>
+                  <RangeField style={numStyle} value={s.targetStr??(s.target?String(s.target):'')} placeholder="0"
+                    onCommit={raw=>{
+                      const m=raw.match(/^(\d+)-(\d+)$/);
+                      const target=m?parseInt(m[1],10):(parseInt(raw,10)||0);
+                      updSet(ei,si,{targetStr:raw,target});
+                    }}/>
                   <NumField style={{...numStyle,color:s.done?T.accent:T.textDim}} value={s.reps||0} placeholder="0"
                     onCommit={v=>updSet(ei,si,{reps:v})}/>
                   <button onClick={()=>delSet(ei,si)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(255,255,255,0.04)',color:T.textFaint,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -840,9 +874,11 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
 // ── Session Screen ────────────────────────────────────────
 
 function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName}){
+  const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
 
   const finishAndClose=(rpe=null)=>{
+    try{localStorage.removeItem(SNAP_KEY);}catch{}
     if(onSaveSession){
       const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       if(totalVolume>0){
@@ -895,16 +931,24 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       </div>
     </div>
   );
-  const[exercises,setExercises]=React.useState(()=>workout.exercises.map(e=>({...e,sets:e.sets.map(s=>({...s}))})));
+  const[exercises,setExercises]=React.useState(()=>{
+    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises))return s.exercises;}catch{}
+    return workout.exercises.map(e=>({...e,sets:e.sets.map(s=>({...s}))}));
+  });
   const[currentEx,setCurrentEx]=React.useState(0);
   const[restSeconds,setRestSeconds]=React.useState(0);
   const[restTotal,setRestTotal]=React.useState(0);
-  const[sessionTime,setSessionTime]=React.useState(0);
+  const[sessionTime,setSessionTime]=React.useState(()=>{
+    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&s.sessionTime)return s.sessionTime;}catch{}
+    return 0;
+  });
   const[editMode,setEditMode]=React.useState(false);
   // Focus mode : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono repos plein écran
   // Persisté localStorage pour respecter le choix utilisateur entre séances
   const[focusMode,setFocusMode]=React.useState(()=>{try{return localStorage.getItem('pa_focus_mode')==='1';}catch{return false;}});
   React.useEffect(()=>{try{localStorage.setItem('pa_focus_mode',focusMode?'1':'0');}catch{}},[focusMode]);
+  React.useEffect(()=>{try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,exercises}));}catch{}},[exercises]);
+  React.useEffect(()=>{if(!sessionTime||sessionTime%30!==0)return;try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,sessionTime}));}catch{}},[sessionTime]);
 
   // Per-exercise last-session data for progressive overload hints
   const lastExData=React.useMemo(()=>{
@@ -1139,7 +1183,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               <div style={{fontSize:18,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>
                 {set.targetWeight?<><span>{set.targetWeight}</span><span style={{fontSize:12,color:T.textFaint,marginLeft:3}}>kg</span></>:''}
                 {(set.targetWeight&&(set.targetReps||set.target||set.targetStr))?<span style={{color:T.textFaint,margin:'0 8px'}}>×</span>:''}
-                {set.targetReps||set.target||set.targetStr||''}
+                {set.targetReps||set.targetStr||set.target||''}
                 {(!set.targetWeight&&(set.targetReps||set.target))?<span style={{fontSize:12,color:T.textFaint,marginLeft:3}}>reps</span>:''}
               </div>
             </div>
@@ -1411,7 +1455,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.weight||'—'}</span>
                         <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span>
                         <span style={{fontSize:11,color:'rgba(255,255,255,0.15)',margin:'0 6px'}}>×</span>
-                        <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.target||'—'}</span>
+                        <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.targetStr||s.target||'—'}</span>
                         <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>reps</span>
                       </div>
                     </div>
@@ -7553,7 +7597,7 @@ function CoachScreen({authToken,authUser}){
         flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
         reloadDetail(selected.id);
       }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
-    },err=>flash('✗ '+err));
+    },err=>flash('✗ '+err),{categoryFallback:true});
   };
 
   // Optimistic patch of athlete profile
@@ -8283,8 +8327,10 @@ function AuthScreen({onLogin,onSignup}){
   const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
   const resetTokenFromUrl=params.get('reset');
   const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
-  const[email,setEmail]=React.useState('');
-  const[password,setPassword]=React.useState('');
+  const savedCreds=(()=>{try{return JSON.parse(localStorage.getItem('pa_remember')||'null');}catch{return null;}})();
+  const[email,setEmail]=React.useState(savedCreds?.email||'');
+  const[password,setPassword]=React.useState(savedCreds?.password||'');
+  const[rememberMe,setRememberMe]=React.useState(!!savedCreds);
   const[role,setRole]=React.useState('athlete');
   const[code,setCode]=React.useState('');
   const[err,setErr]=React.useState(null);
@@ -8322,8 +8368,11 @@ function AuthScreen({onLogin,onSignup}){
     if(e&&e.preventDefault)e.preventDefault();
     setErr(null);setPendingMsg(null);setLoading(true);
     try{
-      if(mode==='login')await onLogin(email.trim(),password);
-      else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
+      if(mode==='login'){
+        if(rememberMe){try{localStorage.setItem('pa_remember',JSON.stringify({email:email.trim(),password}));}catch{}}
+        else{try{localStorage.removeItem('pa_remember');}catch{}}
+        await onLogin(email.trim(),password);
+      }else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
     }catch(ex){
       if(ex.pending){setPendingMsg({detail:ex.detail||'Demande envoyée.', email:email.trim(), coachName:ex.coachName});}
       else setErr(AUTH_ERR_FR[ex.message]||ex.message||'Erreur');
@@ -8453,6 +8502,13 @@ function AuthScreen({onLogin,onSignup}){
         <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:11}}>
           <input style={inputStyle} type="email" name="email" autoComplete="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
           <PasswordField inputStyle={inputStyle} name={mode==='login'?'current-password':'new-password'} autoComplete={mode==='login'?'current-password':'new-password'} placeholder={mode==='login'?'Mot de passe':'Mot de passe (8 min)'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='signup'?8:undefined}/>
+
+          {mode==='login'&&(
+            <label style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',userSelect:'none',paddingLeft:2,marginTop:-2}}>
+              <input type="checkbox" checked={rememberMe} onChange={e=>{setRememberMe(e.target.checked);if(!e.target.checked){try{localStorage.removeItem('pa_remember');}catch{}}}} style={{width:17,height:17,accentColor:'#BFA060',cursor:'pointer',flexShrink:0}}/>
+              <span style={{fontSize:13,color:T.textDim,fontWeight:500}}>Se souvenir de moi</span>
+            </label>
+          )}
 
           {mode==='signup'&&(
             <>
@@ -10044,9 +10100,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     try{await apiCall('/api/my-program',{method:'PUT',body:{data}});}catch(e){console.error('program sync',e);}
   },[triggerSave]);
 
-  const[sessionActive,setSessionActive]=React.useState(false);
+  const SESS_ACTIVE_KEY='pa_sess_active_'+authUser.id;
+  const[sessionActive,setSessionActive]=React.useState(()=>{try{return!!localStorage.getItem('pa_sess_active_'+authUser.id);}catch{return false;}});
   const[showCongrats,setShowCongrats]=React.useState(false);
-  const startWorkout=w=>{setWorkout(w);setSessionActive(true);setScreen('session');};
+  const startWorkout=w=>{setWorkout(w);setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');};
 
   const saveSession=async snapshot=>{
     if(!snapshot||!snapshot.totalVolume)return;
@@ -10121,7 +10178,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setScreen(null);setShowCongrats(true);}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
