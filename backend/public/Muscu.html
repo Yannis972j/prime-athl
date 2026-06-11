@@ -619,8 +619,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           categoryData[catKey].exercises.push({...exercise, id:uid(), sets:exercise.sets.map(s=>({...s}))});
         });
 
-        if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
-        else if (categoryFallback && Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
+        // Bibliothèque : toujours grouper par catégorie, jamais par jour de la semaine
+        if (categoryFallback) {
+          if (Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
+        } else if (Object.keys(sheetData).length > 0) {
+          programs[sheetName] = sheetData;
+        }
       });
 
       if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
