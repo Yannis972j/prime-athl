@@ -467,7 +467,8 @@ const DEFAULT_WORKOUT={
 };
 
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
-function parseYannisExcel(file, onSuccess, onError) {
+function parseYannisExcel(file, onSuccess, onError, opts) {
+  const categoryFallback = !!(opts && opts.categoryFallback);
   const reader = new FileReader();
   reader.onerror = () => onError('Lecture du fichier impossible');
   reader.onload = ev => {
@@ -554,6 +555,7 @@ function parseYannisExcel(file, onSuccess, onError) {
         const normalizeStyle = s => s === 'TRI-SET' ? 'TRISET' : s;
 
         const sheetData = {};
+        const categoryData = {};
         let currentDay = null;
         let currentCategory = '';
         let lastSeriesCount = 3;
@@ -569,9 +571,6 @@ function parseYannisExcel(file, onSuccess, onError) {
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
           if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; }
-          if (!currentDay) return;
-
-          if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
 
           const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
           const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
@@ -603,14 +602,25 @@ function parseYannisExcel(file, onSuccess, onError) {
             duree:    String(row[colDuree]||'').trim(),
           } : null;
 
-          sheetData[currentDay].exercises.push({
+          const exercise = {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
             sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
-          });
+          };
+
+          if (currentDay) {
+            if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
+            sheetData[currentDay].exercises.push(exercise);
+          }
+
+          // Bibliothèque sans colonne JOUR : un bloc de catégorie = une séance
+          const catKey = currentCategory || sheetName;
+          if (!categoryData[catKey]) categoryData[catKey] = {category:currentCategory, exercises:[]};
+          categoryData[catKey].exercises.push({...exercise, id:uid(), sets:exercise.sets.map(s=>({...s}))});
         });
 
         if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
+        else if (categoryFallback && Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
       });
 
       if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
@@ -7587,7 +7597,7 @@ function CoachScreen({authToken,authUser}){
         flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
         reloadDetail(selected.id);
       }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
-    },err=>flash('✗ '+err));
+    },err=>flash('✗ '+err),{categoryFallback:true});
   };
 
   // Optimistic patch of athlete profile
