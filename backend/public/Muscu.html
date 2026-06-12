@@ -8712,6 +8712,21 @@ function OnboardingModal({user,onClose}){
   );
 }
 
+// Convertit les exercices renvoyés par l'IA au format attendu par une séance (sets, etc.)
+function aiExercisesToWorkout(exercises){
+  return (exercises||[]).map(ex=>({
+    id:Math.random().toString(36).slice(2),
+    name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
+    rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
+    weightStr:'',repsStr:String(ex.reps||''),cardio:null,
+    sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
+      weight:0,reps:0,done:false,
+      target:parseInt(String(ex.reps))||10,
+      targetStr:String(ex.reps||''),
+    })),
+  }));
+}
+
 // ── AI Program Generator ─────────────────────────────────────────────────────
 function AIGeneratorCard({onStartWorkout,standalone=false}){
   const[level,setLevel]=React.useState('');
@@ -8742,22 +8757,23 @@ function AIGeneratorCard({onStartWorkout,standalone=false}){
 
   const launch=()=>{
     if(!result||!Array.isArray(result.exercises)||result.exercises.length===0)return;
-    const exercises=result.exercises.map(ex=>({
-      id:Math.random().toString(36).slice(2),
-      name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
-      rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
-      weightStr:'',repsStr:String(ex.reps||''),cardio:null,
-      sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
-        weight:0,reps:0,done:false,
-        target:parseInt(String(ex.reps))||10,
-        targetStr:String(ex.reps||''),
-      })),
-    }));
+    const exercises=aiExercisesToWorkout(result.exercises);
     onStartWorkout({name:result.name,muscles:result.muscles||'',exercises});
     setResult(null);setOpen(false);
   };
 
-  const reset=()=>{setResult(null);setErr(null);};
+  const[importState,setImportState]=React.useState('idle'); // idle|loading|done
+  const importToLibrary=async()=>{
+    if(!result||!Array.isArray(result.exercises)||result.exercises.length===0)return;
+    setImportState('loading');
+    try{
+      const exercises=aiExercisesToWorkout(result.exercises);
+      await apiCall('/api/my-library/sessions',{method:'POST',body:{name:result.name,muscles:result.muscles||'',tip:result.tip||'',exercises}});
+      setImportState('done');
+    }catch(e){setImportState('idle');}
+  };
+
+  const reset=()=>{setResult(null);setErr(null);setImportState('idle');};
 
   const SEL_STYLE=(active,color='#6366f1')=>({
     flex:1,height:36,borderRadius:10,border:active?`1px solid ${color}60`:'1px solid rgba(255,255,255,0.08)',
@@ -8888,8 +8904,11 @@ function AIGeneratorCard({onStartWorkout,standalone=false}){
           <button onClick={launch} style={{width:'100%',height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.45)',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:8}}>
             <Icon name="play" size={18} stroke="#fff"/>Démarrer cette séance
           </button>
-          <button onClick={()=>exportAIProgramPDF(result)} style={{width:'100%',height:42,borderRadius:13,border:'1px solid rgba(99,102,241,0.35)',background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          <button onClick={()=>exportAIProgramPDF(result)} style={{width:'100%',height:42,borderRadius:13,border:'1px solid rgba(99,102,241,0.35)',background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:8}}>
             <span style={{fontSize:14}}>📄</span> Exporter en PDF
+          </button>
+          <button onClick={importToLibrary} disabled={importState==='loading'||importState==='done'} style={{width:'100%',height:42,borderRadius:13,border:importState==='done'?'1px solid rgba(44,196,160,0.35)':'1px solid rgba(99,102,241,0.35)',background:importState==='done'?'rgba(44,196,160,0.12)':'rgba(99,102,241,0.08)',color:importState==='done'?T.good:'#a5b4fc',fontWeight:700,fontSize:13,cursor:importState==='done'?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            {importState==='done'?'✓ Importé dans ta bibliothèque':importState==='loading'?'Importation…':(<><span style={{fontSize:14}}>📚</span> Importer dans ma bibliothèque</>)}
           </button>
         </div>
       )}
@@ -9331,7 +9350,7 @@ function NutritionAIWizard({authUser}){
       clearInterval(iv);
       if(genCancelled.current)return; // l'utilisateur a annulé entre-temps : on ignore la réponse tardive
       if(r.error)throw new Error(r.error);
-      setPlan(r.plan);setSelDay('LUNDI');setExpandMeal(null);setApplyDone(false);setView('result');
+      setPlan(r.plan);setSelDay('LUNDI');setExpandMeal(null);setApplyDone(false);setLibState('idle');setView('result');
     }catch(e){
       clearInterval(iv);
       if(genCancelled.current)return;
@@ -9380,6 +9399,17 @@ function NutritionAIWizard({authUser}){
       setApplyDone(true);
     }catch(e){console.error(e);}
     setApplyLoading(false);
+  };
+
+  const[libState,setLibState]=React.useState('idle'); // idle|loading|done
+  const importToLibrary=async()=>{
+    if(!plan)return;
+    setLibState('loading');
+    try{
+      const name=`Plan ${form.goal} · ${new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}`;
+      await apiCall('/api/my-library/nutrition',{method:'POST',body:{name,plan}});
+      setLibState('done');
+    }catch(e){setLibState('idle');}
   };
 
   const openCoachSheet=async()=>{
@@ -9698,6 +9728,14 @@ function NutritionAIWizard({authUser}){
             </button>
           )}
         </div>
+        <button onClick={importToLibrary} disabled={libState==='loading'||libState==='done'} style={{
+          width:'100%',padding:'12px 8px',borderRadius:13,cursor:libState==='done'?'default':'pointer',
+          border:libState==='done'?'1px solid rgba(44,196,160,0.35)':`1px solid rgba(99,102,241,0.35)`,
+          background:libState==='done'?'rgba(44,196,160,0.12)':'rgba(99,102,241,0.08)',
+          color:libState==='done'?T.good:'#a5b4fc',fontWeight:700,fontSize:13,
+        }}>
+          {libState==='done'?'✓ Importé dans ta bibliothèque':libState==='loading'?'Importation…':'📚 Importer dans ma bibliothèque'}
+        </button>
         <button onClick={()=>{setPlan(null);setView('form');setStep(1);}} style={{
           width:'100%',padding:'11px',borderRadius:13,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',
           background:'transparent',color:T.textDim,fontWeight:600,fontSize:13,
@@ -10269,32 +10307,69 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
 // ── Bibliothèque de séances (partagée par le coach, sans calendrier) ──────────
 function BibliothequeScreen({sessionLibrary,onStartWorkout}){
-  const sessions=sessionLibrary?.sessions||[];
+  const IA='#6366f1',IA2='#8b5cf6';
+  const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const coachSessions=sessionLibrary?.sessions||[];
+  const[sub,setSub]=React.useState('seances');
+  const[myLibrary,setMyLibrary]=React.useState({sessions:[],nutrition:[]});
   const[preview,setPreview]=React.useState(null);
+  const[nutriPreview,setNutriPreview]=React.useState(null);
+  const[selDay,setSelDay]=React.useState('LUNDI');
+  const[expandMeal,setExpandMeal]=React.useState(null);
+  const[applyState,setApplyState]=React.useState({});
+
+  React.useEffect(()=>{
+    apiCall('/api/my-library').then(r=>setMyLibrary(r||{sessions:[],nutrition:[]})).catch(()=>{});
+  },[]);
+
+  const mySessions=myLibrary.sessions||[];
+  const myNutrition=myLibrary.nutrition||[];
 
   const launchSession=s=>{
     if(!s||!s.exercises||s.exercises.length===0)return;
-    // Les exercices viennent directement du parseur Excel, même format que workout
-    onStartWorkout({name:s.name,muscles:s.category||'',exercises:s.exercises});
+    // Les exercices viennent directement du parseur Excel ou de l'IA, même format que workout
+    onStartWorkout({name:s.name,muscles:s.category||s.muscles||'',exercises:s.exercises});
     setPreview(null);
   };
 
-  // Grouper par sheetName (phase/mois)
-  const sheets=[...new Set(sessions.map(s=>s.sheetName))];
+  const deleteMySession=async(id)=>{
+    setMyLibrary(l=>({...l,sessions:(l.sessions||[]).filter(s=>s.id!==id)}));
+    setPreview(null);
+    try{await apiCall(`/api/my-library/sessions/${id}`,{method:'DELETE'});}catch(e){}
+  };
 
+  const deleteMyNutrition=async(id)=>{
+    setMyLibrary(l=>({...l,nutrition:(l.nutrition||[]).filter(n=>n.id!==id)}));
+    setNutriPreview(null);
+    try{await apiCall(`/api/my-library/nutrition/${id}`,{method:'DELETE'});}catch(e){}
+  };
+
+  const applyNutrition=async(item)=>{
+    setApplyState(s=>({...s,[item.id]:'loading'}));
+    try{
+      await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:item.plan}});
+      setApplyState(s=>({...s,[item.id]:'done'}));
+    }catch(e){setApplyState(s=>({...s,[item.id]:null}));}
+  };
+
+  // Grouper les séances du coach par sheetName (phase/mois)
+  const sheets=[...new Set(coachSessions.map(s=>s.sheetName))];
+
+  // ── Aperçu d'une séance ────────────────────────────────────────────────
   if(preview){
-    const sc='#5A8AE0';
+    const sc=preview.source==='mine'?IA:'#5A8AE0';
     return(
       <div style={{padding:'18px 18px 90px',color:T.text}}>
         <button onClick={()=>setPreview(null)} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
           <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
         </button>
-        <div style={{padding:'18px',borderRadius:18,background:'rgba(90,138,224,0.08)',border:'1px solid rgba(90,138,224,0.25)',marginBottom:16}}>
-          <div style={{fontSize:28,marginBottom:6}}>💪</div>
+        <div style={{padding:'18px',borderRadius:18,background:`${sc}14`,border:`1px solid ${sc}40`,marginBottom:16}}>
+          <div style={{fontSize:28,marginBottom:6}}>{preview.source==='mine'?'🤖':'💪'}</div>
           <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:2}}>{preview.name}</div>
           {preview.sheetName&&<div style={{fontSize:11,color:T.textFaint,marginBottom:8}}>{preview.sheetName}</div>}
+          {preview.tip&&<div style={{fontSize:12,color:'#c4b5fd',fontStyle:'italic',lineHeight:1.5,marginBottom:8}}>💡 {preview.tip}</div>}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {preview.category&&<Pill color={sc}>{preview.category}</Pill>}
+            {(preview.category||preview.muscles)&&<Pill color={sc}>{preview.category||preview.muscles}</Pill>}
             <Pill color={T.accent}>{preview.exercises.length} exercices</Pill>
           </div>
         </div>
@@ -10317,47 +10392,197 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout}){
             );
           })}
         </div>
-        <button onClick={()=>launchSession(preview)} style={{width:'100%',height:54,borderRadius:16,border:'none',background:'linear-gradient(135deg,#5A8AE0,#9090c4)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 10px 28px rgba(90,138,224,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
+        <button onClick={()=>launchSession(preview)} style={{width:'100%',height:54,borderRadius:16,border:'none',background:`linear-gradient(135deg,${sc},${preview.source==='mine'?IA2:'#9090c4'})`,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${sc}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,marginBottom:preview.source==='mine'?10:0}}>
           <Icon name="play" size={18} stroke="#fff"/>Commencer la séance
         </button>
+        {preview.source==='mine'&&(
+          <button onClick={()=>deleteMySession(preview.id)} style={{width:'100%',height:42,borderRadius:13,border:'1px solid rgba(184,80,112,0.35)',background:'rgba(184,80,112,0.08)',color:T.danger,fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            <Icon name="trash" size={14} stroke={T.danger}/> Retirer de ma bibliothèque
+          </button>
+        )}
       </div>
     );
   }
 
-  if(sessions.length===0){
+  // ── Aperçu d'un plan nutrition ────────────────────────────────────────────
+  if(nutriPreview){
+    const plan=nutriPreview.plan;
+    const aState=applyState[nutriPreview.id];
     return(
-      <div style={{padding:'40px 24px',display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',color:T.textFaint}}>
-        <div style={{fontSize:44,marginBottom:14}}>📂</div>
-        <div style={{fontSize:16,fontWeight:700,color:T.textDim,marginBottom:8}}>Bibliothèque vide</div>
-        <div style={{fontSize:13,lineHeight:1.6,maxWidth:280}}>Ton coach n'a pas encore partagé de séances. Contacte-le pour qu'il importe ta bibliothèque.</div>
+      <div style={{padding:'18px 18px 90px',color:T.text}}>
+        <button onClick={()=>{setNutriPreview(null);setExpandMeal(null);}} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+          <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+        </button>
+        <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:12}}>{nutriPreview.name}</div>
+        {/* Résumé macros */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:7,marginBottom:16}}>
+          {[
+            {label:'Calories',val:plan.dailyCalories,unit:'kcal',color:'#D4A840'},
+            {label:'Protéines',val:plan.dailyProtein,unit:'g',color:T.macroP},
+            {label:'Glucides',val:plan.dailyCarbs,unit:'g',color:T.macroC},
+            {label:'Lipides',val:plan.dailyFat,unit:'g',color:T.macroL},
+          ].map(m=>(
+            <div key={m.label} style={{borderRadius:12,padding:'10px 7px',background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)',textAlign:'center'}}>
+              <div style={{fontSize:15,fontWeight:800,color:m.color}}>{m.val}</div>
+              <div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{m.unit}</div>
+              <div style={{fontSize:9,color:T.textDim,fontWeight:600,letterSpacing:0.3,marginTop:2,textTransform:'uppercase'}}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+        {/* Sélecteur de jour */}
+        <div style={{display:'flex',gap:5,overflowX:'auto',paddingBottom:4,marginBottom:12}}>
+          {DAYS.map(d=>(
+            <button key={d} onClick={()=>{setSelDay(d);setExpandMeal(null);}} style={{
+              flexShrink:0,padding:'6px 10px',borderRadius:20,border:`1px solid ${selDay===d?IA:'rgba(255,255,255,0.08)'}`,
+              background:selDay===d?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.04)',
+              color:selDay===d?'#a5b4fc':T.textDim,fontWeight:700,fontSize:11,cursor:'pointer',letterSpacing:0.3,
+            }}>{d.slice(0,3)}</button>
+          ))}
+        </div>
+        {/* Repas */}
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:20}}>
+          {(plan.days?.[selDay]?.meals||[]).map((meal,idx)=>{
+            const key=`${selDay}-${idx}`;
+            const isOpen=expandMeal===key;
+            const mealKcal=(meal.items||[]).reduce((s,it)=>s+(+it.kcal||0),0);
+            const mealP=(meal.items||[]).reduce((s,it)=>s+(+it.p||0),0);
+            return(
+              <div key={key} style={{borderRadius:14,background:'rgba(99,102,241,0.07)',border:`1px solid ${isOpen?'rgba(99,102,241,0.35)':'rgba(99,102,241,0.15)'}`,overflow:'hidden'}}>
+                <div onClick={()=>setExpandMeal(isOpen?null:key)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer'}}>
+                  <div style={{fontSize:20}}>{meal.emoji}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>{meal.label}</div>
+                    <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{meal.timeStart} · {mealKcal} kcal · {Math.round(mealP)}g prot</div>
+                  </div>
+                  <Icon name={isOpen?'chevronUp':'chevronDown'} size={14} stroke={T.textFaint}/>
+                </div>
+                {isOpen&&(
+                  <div style={{padding:'0 13px 12px',borderTop:'1px solid rgba(99,102,241,0.12)'}}>
+                    {(meal.items||[]).map((it,i)=>(
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<meal.items.length-1?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{it.name}</div>
+                          <div style={{fontSize:11,color:T.textFaint}}>{it.qty}{it.unit} · P:{it.p}g G:{it.c}g L:{it.f}g</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:'#D4A840',flexShrink:0}}>{it.kcal} kcal</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {/* Actions */}
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <button onClick={()=>applyNutrition(nutriPreview)} disabled={aState==='loading'||aState==='done'} style={{
+            width:'100%',padding:'13px',borderRadius:13,border:'none',cursor:aState==='done'?'default':'pointer',
+            background:aState==='done'?'rgba(44,196,160,0.15)':`linear-gradient(135deg,${IA},${IA2})`,
+            color:aState==='done'?T.good:'#fff',fontWeight:800,fontSize:14,
+          }}>
+            {aState==='done'?'✓ Plan appliqué à ta nutrition':aState==='loading'?'Enregistrement…':'✅ Appliquer à ma nutrition'}
+          </button>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>exportAINutritionPDF(plan)} style={{
+              flex:1,padding:'12px 8px',borderRadius:13,border:'1px solid rgba(99,102,241,0.35)',cursor:'pointer',
+              background:'rgba(99,102,241,0.08)',color:'#a5b4fc',fontWeight:700,fontSize:13,
+            }}>📄 Exporter PDF</button>
+            <button onClick={()=>deleteMyNutrition(nutriPreview.id)} style={{
+              flex:1,padding:'12px 8px',borderRadius:13,border:'1px solid rgba(184,80,112,0.35)',cursor:'pointer',
+              background:'rgba(184,80,112,0.08)',color:T.danger,fontWeight:700,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+            }}><Icon name="trash" size={14} stroke={T.danger}/> Supprimer</button>
+          </div>
+        </div>
       </div>
     );
   }
+
+  // ── Liste principale ──────────────────────────────────────────────────
+  const isEmpty=sub==='seances'?(coachSessions.length===0&&mySessions.length===0):myNutrition.length===0;
 
   return(
     <div style={{padding:'18px 18px 90px',color:T.text}}>
-      <div style={{marginBottom:20}}>
+      <div style={{marginBottom:16}}>
         <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Coaching</div>
         <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}>Ma bibliothèque</div>
-        <div style={{fontSize:12,color:T.textDim,marginTop:4}}>{sessions.length} séance{sessions.length>1?'s':''} disponible{sessions.length>1?'s':''}</div>
       </div>
-      {sheets.map(sheet=>(
-        <div key={sheet} style={{marginBottom:20}}>
-          {sheets.length>1&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>{sheet}</div>}
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {sessions.filter(s=>s.sheetName===sheet).map(s=>(
-              <button key={s.id} onClick={()=>setPreview(s)} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
-                <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                  <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
-                </div>
-                <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
-              </button>
-            ))}
+      {/* Sous-onglets Séances / Nutrition */}
+      <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,marginBottom:18}}>
+        {[{id:'seances',label:'🏋️ Séances'},{id:'nutrition',label:'🍎 Nutrition'}].map(s=>(
+          <button key={s.id} onClick={()=>setSub(s.id)} style={{
+            flex:1,height:34,borderRadius:11,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+            background:sub===s.id?T.accentSoft:'transparent',
+            color:sub===s.id?T.accent:T.textFaint,
+            transition:'background 0.2s,color 0.2s',letterSpacing:0.2,
+          }}>{s.label}</button>
+        ))}
+      </div>
+
+      {isEmpty&&(
+        <div style={{padding:'40px 24px',display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',color:T.textFaint}}>
+          <div style={{fontSize:44,marginBottom:14}}>{sub==='seances'?'📂':'🥗'}</div>
+          <div style={{fontSize:16,fontWeight:700,color:T.textDim,marginBottom:8}}>Bibliothèque vide</div>
+          <div style={{fontSize:13,lineHeight:1.6,maxWidth:280}}>
+            {sub==='seances'
+              ?"Ton coach n'a pas encore partagé de séances, et tu n'as pas encore importé de programme IA. Génère un programme dans l'onglet IA puis importe-le ici."
+              :"Tu n'as pas encore importé de plan nutrition. Génère un plan dans l'onglet IA puis importe-le ici."}
           </div>
         </div>
-      ))}
+      )}
+
+      {sub==='seances'&&!isEmpty&&(
+        <React.Fragment>
+          {mySessions.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>🤖 Mes programmes IA</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {mySessions.map(s=>(
+                  <button key={s.id} onClick={()=>setPreview({...s,source:'mine'})} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.07)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.15))',border:'1px solid rgba(99,102,241,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🤖</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                      <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.muscles||'Musculation'} · {s.exercises.length} exercices</div>
+                    </div>
+                    <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {coachSessions.length>0&&sheets.map(sheet=>(
+            <div key={sheet||'_'} style={{marginBottom:20}}>
+              {(sheets.length>1||mySessions.length>0)&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>{sheet||'Bibliothèque du coach'}</div>}
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {coachSessions.filter(s=>s.sheetName===sheet).map(s=>(
+                  <button key={s.id} onClick={()=>setPreview({...s,source:'coach'})} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                      <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
+                    </div>
+                    <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </React.Fragment>
+      )}
+
+      {sub==='nutrition'&&!isEmpty&&(
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {myNutrition.map(n=>(
+            <button key={n.id} onClick={()=>{setNutriPreview(n);setSelDay('LUNDI');setExpandMeal(null);}} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.07)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+              <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.15))',border:'1px solid rgba(99,102,241,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🥗</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</div>
+                <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{n.plan?.dailyCalories||0} kcal/j · {new Date(n.savedAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div>
+              </div>
+              <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -10467,12 +10692,11 @@ function LiveSessionsView({sessions}){
 
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
 function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
-  const libCount=(sessionLibrary?.sessions||[]).length;
   const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
     ...(profile?.coachId?[{id:'live',label:'⚡ Live'}]:[]),
-    ...(libCount>0?[{id:'biblio',label:'📚 Biblio'}]:[]),
+    {id:'biblio',label:'📚 Biblio'},
     {id:'nutrition',label:'🍎 Nutrition'},
   ];
   const[sub,setSub]=React.useState('seances');

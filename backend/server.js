@@ -122,7 +122,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -304,6 +304,7 @@ setInterval(() => {
       delete DATA.users[u.id];
       delete DATA.programs[u.id];
       delete DATA.savedPrograms[u.id];
+      delete DATA.myLibrary[u.id];
       removedPending++;
     }
   }
@@ -808,6 +809,7 @@ app.get('/api/me/export', authRequired, (req, res) => {
     nutritionProgram: DATA.nutritionPrograms[uid] || null,
     program: DATA.programs[uid] || null,
     savedPrograms: DATA.savedPrograms[uid] || [],
+    myLibrary: DATA.myLibrary[uid] || { sessions: [], nutrition: [] },
     progressPhotos: (DATA.progressPhotos[uid] || []).map(p => ({ ...p, url: p.url?.startsWith('data:') ? '[base64 omis]' : p.url })),
     messages: Object.entries(DATA.messages)
       .filter(([key]) => key.includes(uid))
@@ -1182,6 +1184,50 @@ app.delete('/api/coach/session-library/:athleteId', authRequired, coachOnly, (re
   res.json({ ok: true });
 });
 
+// ── Bibliothèque personnelle (programmes/plans générés par l'IA et importés) ─
+const MY_LIBRARY_CAP = 10;
+
+app.get('/api/my-library', authRequired, (req, res) => {
+  const lib = DATA.myLibrary[req.user.id] || { sessions: [], nutrition: [] };
+  res.json({ sessions: lib.sessions || [], nutrition: lib.nutrition || [] });
+});
+
+app.post('/api/my-library/sessions', authRequired, (req, res) => {
+  const { name, muscles, tip, exercises } = req.body || {};
+  if (!Array.isArray(exercises) || exercises.length === 0) return res.status(400).json({ error: 'exercises_required' });
+  if (!DATA.myLibrary[req.user.id]) DATA.myLibrary[req.user.id] = { sessions: [], nutrition: [] };
+  const lib = DATA.myLibrary[req.user.id];
+  const id = uid();
+  lib.sessions.unshift({ id, name: name || 'Programme IA', muscles: muscles || '', tip: tip || '', exercises, savedAt: Date.now() });
+  if (lib.sessions.length > MY_LIBRARY_CAP) lib.sessions = lib.sessions.slice(0, MY_LIBRARY_CAP);
+  persist();
+  res.json({ ok: true, id });
+});
+
+app.delete('/api/my-library/sessions/:id', authRequired, (req, res) => {
+  const lib = DATA.myLibrary[req.user.id];
+  if (lib) { lib.sessions = (lib.sessions || []).filter(s => s.id !== req.params.id); persist(); }
+  res.json({ ok: true });
+});
+
+app.post('/api/my-library/nutrition', authRequired, (req, res) => {
+  const { name, plan } = req.body || {};
+  if (!plan || !plan.days) return res.status(400).json({ error: 'plan_required' });
+  if (!DATA.myLibrary[req.user.id]) DATA.myLibrary[req.user.id] = { sessions: [], nutrition: [] };
+  const lib = DATA.myLibrary[req.user.id];
+  const id = uid();
+  lib.nutrition.unshift({ id, name: name || 'Plan nutrition IA', plan, savedAt: Date.now() });
+  if (lib.nutrition.length > MY_LIBRARY_CAP) lib.nutrition = lib.nutrition.slice(0, MY_LIBRARY_CAP);
+  persist();
+  res.json({ ok: true, id });
+});
+
+app.delete('/api/my-library/nutrition/:id', authRequired, (req, res) => {
+  const lib = DATA.myLibrary[req.user.id];
+  if (lib) { lib.nutrition = (lib.nutrition || []).filter(n => n.id !== req.params.id); persist(); }
+  res.json({ ok: true });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
@@ -1399,6 +1445,7 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       freeFoodLogs: body.freeFoodLogs || {},
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
+      myLibrary: body.myLibrary || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -1470,6 +1517,7 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       freeFoodLogs: body.freeFoodLogs || {},
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
+      myLibrary: body.myLibrary || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
@@ -1527,6 +1575,7 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   }
   delete DATA.programs[u.id];
   delete DATA.savedPrograms[u.id];
+  delete DATA.myLibrary[u.id];
   delete DATA.users[u.id];
   persist();
   res.json({ ok: true, removed: true });
