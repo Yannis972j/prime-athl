@@ -1310,6 +1310,8 @@ app.post('/api/sessions', authRequired, (req, res) => {
       athleteId: req.user.id,
       session: { id, date: session.date, name, totalVolume },
     });
+    const athleteName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email.split('@')[0];
+    pushToUser(u.coachId, { title: '✅ Séance terminée', body: `${athleteName} vient de terminer "${session.name}"`, url: '/Muscu.html' });
   }
   res.json({ id });
 });
