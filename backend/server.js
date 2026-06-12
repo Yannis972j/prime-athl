@@ -9,7 +9,7 @@ import http from 'http';
 import fs from 'fs';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
 import webpush from 'web-push';
@@ -446,7 +446,7 @@ const forgotLimiter = rateLimit({
 const aiLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
-  keyGenerator: (req) => 'ai:' + (req.user?.id || req.ip),
+  keyGenerator: (req) => req.user?.id ? 'ai:' + req.user.id : 'ai:' + ipKeyGenerator(req.ip),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'ai_rate_limit', detail: 'Limite de 10 générations IA par heure atteinte. Réessaie dans 1h.' },
