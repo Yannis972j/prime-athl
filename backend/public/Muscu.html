@@ -970,23 +970,34 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
 
-  // Vibration + bip quand le chrono repos arrive à 0 (uniquement après avoir démarré un repos)
+  // Vibration + bip de décompte (10s → 0), puis sonnerie de fin de repos
   const prevRestRef=React.useRef(0);
+  const playBeep=React.useCallback((freq,gain,duration)=>{
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return;
+      const a=new AC();const o=a.createOscillator();const g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.frequency.value=freq;g.gain.setValueAtTime(0.001,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(gain,a.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+duration);
+      o.start();o.stop(a.currentTime+duration+0.05);
+    }catch{}
+  },[]);
   React.useEffect(()=>{
-    if(prevRestRef.current>0&&restSeconds===0){
-      try{if(navigator.vibrate)navigator.vibrate([200,100,200,100,400]);}catch{}
-      try{
-        const AC=window.AudioContext||window.webkitAudioContext;
-        if(AC){const a=new AC();const o=a.createOscillator();const g=a.createGain();
-          o.connect(g);g.connect(a.destination);
-          o.frequency.value=880;g.gain.setValueAtTime(0.001,a.currentTime);
-          g.gain.exponentialRampToValueAtTime(0.25,a.currentTime+0.02);
-          g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+0.6);
-          o.start();o.stop(a.currentTime+0.65);}
-      }catch{}
+    if(restSeconds>0&&restSeconds<=10){
+      // Décompte intensif : bip + vibration de plus en plus forts à l'approche de 0
+      const intensity=(11-restSeconds)/10; // 0.1 → 1
+      try{if(navigator.vibrate)navigator.vibrate(30+intensity*70);}catch{}
+      playBeep(700+intensity*400,0.25+intensity*0.35,0.12);
+    }else if(prevRestRef.current>0&&restSeconds===0){
+      // Fin de repos : sonnerie plus forte, double bip
+      try{if(navigator.vibrate)navigator.vibrate([250,100,250,100,250,100,500]);}catch{}
+      playBeep(880,0.6,0.7);
+      setTimeout(()=>playBeep(1100,0.6,0.7),180);
     }
     prevRestRef.current=restSeconds;
-  },[restSeconds]);
+  },[restSeconds,playBeep]);
 
   // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
   // Critique pour utilisation à la salle : sinon l'écran s'éteint entre les séries.
