@@ -991,10 +991,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       try{if(navigator.vibrate)navigator.vibrate(30+intensity*70);}catch{}
       playBeep(700+intensity*400,0.25+intensity*0.35,0.12);
     }else if(prevRestRef.current>0&&restSeconds===0){
-      // Fin de repos : sonnerie plus forte, double bip
-      try{if(navigator.vibrate)navigator.vibrate([250,100,250,100,250,100,500]);}catch{}
-      playBeep(880,0.6,0.7);
-      setTimeout(()=>playBeep(1100,0.6,0.7),180);
+      // Fin de repos : sonnerie forte type réveil — 3 doubles-bips répétés au volume max
+      try{if(navigator.vibrate)navigator.vibrate([300,100,300,100,300,100,300,100,300,100,600]);}catch{}
+      for(let i=0;i<3;i++){
+        setTimeout(()=>{
+          playBeep(880,1,0.35);
+          setTimeout(()=>playBeep(1175,1,0.35),200);
+        },i*600);
+      }
     }
     prevRestRef.current=restSeconds;
   },[restSeconds,playBeep]);
