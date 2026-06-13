@@ -1030,7 +1030,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const ex=exercises[currentEx]||exercises[0];
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
-  const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+x.weight*(x.reps||0),0),0);
+  const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
   const allDone=exercises.length>0&&exercises.every(e=>e.sets.every(s=>s.done));
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 

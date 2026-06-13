@@ -2024,8 +2024,12 @@ app.get('/api/coach/athletes/:id/weight', authRequired, coachOnly, (req, res) =>
 });
 
 // ── Upload fichier → Cloudinary (ou base64 fallback) ──
+const ALLOWED_UPLOAD_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 app.post('/api/upload', authRequired, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'no_file' });
+  if (!ALLOWED_UPLOAD_MIMES.includes(req.file.mimetype)) {
+    return res.status(400).json({ error: 'invalid_file_type' });
+  }
   if (process.env.CLOUDINARY_URL) {
     try {
       const result = await new Promise((resolve, reject) => {
@@ -2403,7 +2407,13 @@ const io = new SocketIOServer(server, { cors: { origin: '*' } });
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error('no_token'));
-  try { socket.user = verify(token); next(); }
+  try {
+    socket.user = verify(token);
+    const u = DATA.users[socket.user.id];
+    if (!u) return next(new Error('user_not_found'));
+    if ((socket.user.tv ?? 0) !== (u.tokenVersion || 0)) return next(new Error('token_revoked'));
+    next();
+  }
   catch { next(new Error('bad_token')); }
 });
 
