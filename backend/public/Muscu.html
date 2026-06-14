@@ -972,18 +972,30 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   // Vibration + bip de décompte (10s → 0), puis sonnerie de fin de repos
   const prevRestRef=React.useRef(0);
-  const playBeep=React.useCallback((freq,gain,duration)=>{
+  // Un seul AudioContext réutilisé (créer/résumer un nouveau contexte à chaque bip
+  // échoue silencieusement sur mobile : limite de contextes + politique d'autoplay).
+  const audioCtxRef=React.useRef(null);
+  const getAudioCtx=React.useCallback(()=>{
     try{
       const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC)return;
-      const a=new AC();const o=a.createOscillator();const g=a.createGain();
+      if(!AC)return null;
+      if(!audioCtxRef.current)audioCtxRef.current=new AC();
+      if(audioCtxRef.current.state==='suspended')audioCtxRef.current.resume();
+      return audioCtxRef.current;
+    }catch{return null;}
+  },[]);
+  const playBeep=React.useCallback((freq,gain,duration)=>{
+    try{
+      const a=getAudioCtx();
+      if(!a)return;
+      const o=a.createOscillator();const g=a.createGain();
       o.connect(g);g.connect(a.destination);
       o.frequency.value=freq;g.gain.setValueAtTime(0.001,a.currentTime);
       g.gain.exponentialRampToValueAtTime(gain,a.currentTime+0.02);
       g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+duration);
       o.start();o.stop(a.currentTime+duration+0.05);
     }catch{}
-  },[]);
+  },[getAudioCtx]);
   React.useEffect(()=>{
     if(restSeconds>0&&restSeconds<=10){
       // Décompte intensif : bip + vibration de plus en plus forts à l'approche de 0
@@ -1041,6 +1053,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
 
   const validateSet=si=>{
+    // Débloquer/créer l'AudioContext pendant ce geste utilisateur (requis sur iOS)
+    // pour que la sonnerie de fin de repos puisse jouer plus tard.
+    getAudioCtx();
     // Marquer la série comme faite et copier poids+reps vers la suivante
     setExercises(prev=>prev.map((e,ei)=>{
       if(ei!==currentEx)return e;
