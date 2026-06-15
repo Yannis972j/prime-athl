@@ -940,6 +940,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const[currentEx,setCurrentEx]=React.useState(0);
   const[restSeconds,setRestSeconds]=React.useState(0);
   const[restTotal,setRestTotal]=React.useState(0);
+  const[setTimerSecs,setSetTimerSecs]=React.useState(0);
+  const[setTimerTotal,setSetTimerTotal]=React.useState(0);
   const[sessionTime,setSessionTime]=React.useState(()=>{
     try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&s.sessionTime)return s.sessionTime;}catch{}
     return 0;
@@ -969,6 +971,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
+  React.useEffect(()=>{if(setTimerSecs<=0)return;const t=setTimeout(()=>setSetTimerSecs(s=>s-1),1000);return()=>clearTimeout(t);},[setTimerSecs]);
 
   // Vibration + bip de décompte (10s → 0), puis sonnerie de fin de repos
   const prevRestRef=React.useRef(0);
@@ -1015,6 +1018,34 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     prevRestRef.current=restSeconds;
   },[restSeconds,playBeep]);
 
+  // Timer de série — compte à rebours pendant l'exécution de la série
+  const prevSetTimerRef=React.useRef(0);
+  const setTimerActiveRef=React.useRef(false);
+  const exercisesRef=React.useRef(exercises);
+  const currentExRef=React.useRef(currentEx);
+  const validateSetRef=React.useRef(null);
+  exercisesRef.current=exercises;
+  currentExRef.current=currentEx;
+  React.useEffect(()=>{
+    if(setTimerActiveRef.current&&prevSetTimerRef.current>0&&setTimerSecs===0){
+      setTimerActiveRef.current=false;
+      try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch{}
+      playBeep(660,0.8,0.4);
+      setTimeout(()=>playBeep(880,0.8,0.35),300);
+      setTimeout(()=>{
+        const si=(exercisesRef.current[currentExRef.current]?.sets??[]).findIndex(s=>!s.done);
+        if(si>=0&&validateSetRef.current)validateSetRef.current(si);
+      },350);
+    }
+    prevSetTimerRef.current=setTimerSecs;
+  },[setTimerSecs,playBeep]);
+  const startSetTimer=React.useCallback((secs)=>{
+    getAudioCtx();
+    setTimerActiveRef.current=true;
+    setSetTimerTotal(secs);
+    setSetTimerSecs(secs);
+  },[getAudioCtx]);
+
   // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
   // Critique pour utilisation à la salle : sinon l'écran s'éteint entre les séries.
   // Fallback silencieux si l'API n'est pas supportée (iOS < 16.4, vieux Android).
@@ -1042,7 +1073,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   },[]);
 
   // Helper : changer d'exercice en stoppant le chrono repos en cours
-  const goToEx=React.useCallback(idx=>{setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);},[]);
   const ex=exercises[currentEx]||exercises[0];
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
@@ -1053,6 +1083,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
 
   const validateSet=si=>{
+    // Annuler le timer de série s'il est en cours
+    setTimerActiveRef.current=false;
+    setSetTimerSecs(0);
     // Débloquer/créer l'AudioContext pendant ce geste utilisateur (requis sur iOS)
     // pour que la sonnerie de fin de repos puisse jouer plus tard.
     getAudioCtx();
@@ -1094,7 +1127,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     const rest=ex.restSeconds||90;
     setRestSeconds(rest);setRestTotal(rest);
   };
+  validateSetRef.current=validateSet;
 
+  const goToEx=React.useCallback(idx=>{
+    setTimerActiveRef.current=false;
+    setSetTimerSecs(0);
+    setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);
+  },[]);
 
   // inline edit helpers
   const numIn=(val,onChange,w=56)=>(
@@ -1163,6 +1202,31 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
               <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>+30s</button>
               <button onClick={()=>setRestSeconds(0)} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(44,196,160,0.35)'}}>Passer le repos</button>
+            </div>
+          </div>
+        )}
+
+        {/* Overlay compte à rebours de série — plein écran */}
+        {setTimerSecs>0&&setTimerTotal>0&&(
+          <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
+            <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
+            <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
+            <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
+              <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
+                <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10"/>
+                <circle cx="120" cy="120" r="108" fill="none" stroke="#5A8AE0" strokeWidth="10" strokeLinecap="round"
+                  strokeDasharray={2*Math.PI*108}
+                  strokeDashoffset={2*Math.PI*108*(setTimerSecs/setTimerTotal)}
+                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 12px rgba(90,138,224,0.7))'}}/>
+              </svg>
+              <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{setTimerSecs}</div>
+                <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
+              <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
+              <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);validateSet(ex.sets.findIndex(s=>!s.done));}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
             </div>
           </div>
         )}
@@ -1252,6 +1316,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           {!allExDone&&(
             <div style={{marginBottom:18}}>
               <input value={set.note||''} onChange={e=>updSet(currentEx,nextSetIdx,{note:e.target.value})} placeholder="💬 Ressenti pendant la série (optionnel)" style={{width:'100%',height:38,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:13,color:T.text,fontSize:13,padding:'0 14px',outline:'none',fontFamily:'inherit',textAlign:'center'}}/>
+            </div>
+          )}
+
+          {/* Timer de série — boutons de durée prédéfinie */}
+          {!allExDone&&setTimerSecs===0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',textAlign:'center',marginBottom:8}}>⏱ Timer de série</div>
+              <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap'}}>
+                {[20,30,45,60,90,120].map(secs=>(
+                  <button key={secs} onClick={()=>startSetTimer(secs)} style={{padding:'8px 13px',borderRadius:999,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#8AADEE',fontSize:12,fontWeight:700,cursor:'pointer',letterSpacing:0.2}}>
+                    {secs<60?`${secs}s`:`${secs/60}min`}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
