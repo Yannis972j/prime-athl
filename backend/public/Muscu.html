@@ -7525,7 +7525,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
   );
 }
 
-const ATHLETE_DETAIL_TAB_IDS=['profil','sport','nutrition','historique','album'];
+const ATHLETE_DETAIL_TAB_IDS=['profil','sport','nutrition','historique','biblio','album'];
 
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
@@ -7622,8 +7622,9 @@ function CoachScreen({authToken,authUser}){
   const[nutriDetail,setNutriDetail]=React.useState(null);
   const[nutriMode,setNutriMode]=React.useState('mirror'); // 'mirror' | 'edit'
   const[showDangerZone,setShowDangerZone]=React.useState(false);
-  const[detailTab,setDetailTab]=React.useState('profil'); // 'profil'|'sport'|'nutrition'|'historique'|'album'
+  const[detailTab,setDetailTab]=React.useState('profil');
   const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
+  const[athleteLibrary,setAthleteLibrary]=React.useState({sessions:[],nutrition:[]});
   const sessionPressTimer=React.useRef(null);
 
   const deleteSession=async(sid,athleteId)=>{
@@ -7635,13 +7636,15 @@ function CoachScreen({authToken,authUser}){
   };
   const reloadDetail=async id=>{
     try{
-      const[d,n,lib]=await Promise.all([
+      const[d,n,lib,myLib]=await Promise.all([
         apiCall('/api/coach/athletes/'+id),
         apiCall('/api/coach/athletes/'+id+'/nutrition').catch(()=>({plan:null})),
         apiCall('/api/coach/session-library-for/'+id).catch(()=>({sessions:[],assignedAt:null})),
+        apiCall('/api/coach/athletes/'+id+'/my-library').catch(()=>({sessions:[],nutrition:[]})),
       ]);
       setDetail({...d,sessionLibrary:lib});
       setNutriDetail(n);
+      setAthleteLibrary(myLib||{sessions:[],nutrition:[]});
     }catch(e){}
   };
 
@@ -7830,6 +7833,7 @@ function CoachScreen({authToken,authUser}){
       {id:'sport',label:'Séances',icon:'dumbbell'},
       {id:'nutrition',label:'Nutrition',icon:'apple'},
       {id:'historique',label:'Historique',icon:'clock'},
+      {id:'biblio',label:'Biblio',icon:'book'},
       {id:'album',label:'Album',icon:'image'},
     ];
 
@@ -8152,7 +8156,70 @@ function CoachScreen({authToken,authUser}){
           </div>
         )}
 
-        {/* ── Tab 5 : Album ── */}
+        {/* ── Tab 5 : Biblio (bibliothèque perso de l'athlète) ── */}
+        {detailTab==='biblio'&&(
+          <div style={{padding:'0 18px'}}>
+            <SectionHeader title="Bibliothèque personnelle"/>
+            {(()=>{
+              const mySessions=athleteLibrary.sessions||[];
+              const myNutrition=athleteLibrary.nutrition||[];
+              if(!mySessions.length&&!myNutrition.length)return(
+                <div style={{textAlign:'center',padding:'40px 20px',color:T.textFaint}}>
+                  <div style={{fontSize:40,marginBottom:12}}>📚</div>
+                  <div style={{fontSize:14,fontWeight:600}}>Bibliothèque vide</div>
+                  <div style={{fontSize:12,marginTop:6}}>L'athlète n'a pas encore importé de séances ou plans nutrition dans sa bibliothèque.</div>
+                </div>
+              );
+              return(
+                <div style={{display:'flex',flexDirection:'column',gap:16}}>
+                  {mySessions.length>0&&(
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.textDim,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>🏋️ Séances ({mySessions.length})</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {mySessions.map(s=>(
+                          <div key={s.id} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                              <div style={{fontSize:14,fontWeight:700}}>{s.name||'Programme IA'}</div>
+                              {s.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</div>}
+                            </div>
+                            {s.muscles&&<div style={{fontSize:10,color:T.accent,fontWeight:600,marginBottom:6}}>{s.muscles}</div>}
+                            {(s.exercises||[]).map((ex,ei)=>(
+                              <div key={ei} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderTop:ei?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                                <div style={{fontSize:11,fontWeight:600,color:T.text,flex:1}}>{ex.name}</div>
+                                <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
+                                <div style={{fontSize:10,color:T.textDim,fontWeight:600}}>{(ex.sets||[]).length}×</div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {myNutrition.length>0&&(
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.textDim,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>🍎 Nutrition ({myNutrition.length})</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {myNutrition.map(n=>(
+                          <div key={n.id} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                              <div style={{fontSize:14,fontWeight:700}}>{n.name||'Plan nutrition IA'}</div>
+                              {n.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(n.savedAt).toLocaleDateString('fr-FR')}</div>}
+                            </div>
+                            {n.plan&&n.plan.days&&(
+                              <div style={{fontSize:10,color:T.textDim,marginTop:4}}>{Object.keys(n.plan.days).length} jours · {n.plan.dailyCalories||'—'} kcal/j</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ── Tab 6 : Album ── */}
         {detailTab==='album'&&(
           <div style={{padding:'0 18px'}}>
             <SectionHeader title="Album photos"/>

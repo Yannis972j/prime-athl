@@ -1228,6 +1228,14 @@ app.delete('/api/my-library/nutrition/:id', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Coach : lire la bibliothèque personnelle d'un athlète
+app.get('/api/coach/athletes/:id/my-library', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.id];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const lib = DATA.myLibrary[req.params.id];
+  res.json(lib || { sessions: [], nutrition: [] });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
