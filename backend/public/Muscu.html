@@ -466,6 +466,20 @@ const DEFAULT_WORKOUT={
   ],
 };
 
+// ── Correction des valeurs cardio stockées comme serials de date Excel ──────
+// Quand l'utilisateur tape "4-5" (plage vitesse), Excel l'auto-convertit en
+// date (serial ≈ 46146). Cette fonction reconstitue "4-5" depuis le serial.
+// S'applique aussi aux anciennes données déjà sauvegardées en base.
+function fixCardioVal(v) {
+  const n = parseFloat(v);
+  if (!isNaN(n) && Number.isInteger(n) && n > 30000 && n < 80000) {
+    const adj = n > 60 ? n - 1 : n;
+    const d = new Date(Date.UTC(1899, 11, 31) + adj * 86400000);
+    return `${d.getUTCDate()}-${d.getUTCMonth()+1}`;
+  }
+  return String(v||'');
+}
+
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
   const categoryFallback = !!(opts && opts.categoryFallback);
@@ -1483,19 +1497,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                       {c.distance&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Distance</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.distance}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.distance)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
                       </div>}
                       {c.vitesse&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.vitesse}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km/h</span></div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.vitesse)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km/h</span></div>
                       </div>}
                       {c.inclinaison&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Inclinaison</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.inclinaison}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>%</span></div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.inclinaison)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>%</span></div>
                       </div>}
                       {c.duree&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.duree}</div>
+                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.duree)}</div>
                       </div>}
                     </div>
                     <button onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }} style={{width:'100%',height:46,borderRadius:13,border:'none',background:allDone?'rgba(255,255,255,0.06)':`linear-gradient(135deg,${sc},#BFA060)`,color:allDone?T.textDim:'#fff',fontSize:14,fontWeight:700,cursor:allDone?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
@@ -1706,10 +1720,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       <button key={e.id||i} onClick={()=>goToEx(i)} style={{width:'100%',textAlign:'left',padding:'8px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
                         <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,marginBottom:4}}>{e.name}</div>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          {c.distance&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {c.distance} km</span>}
-                          {c.vitesse&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {c.vitesse} km/h</span>}
-                          {c.inclinaison&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {c.inclinaison}%</span>}
-                          {c.duree&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {c.duree}</span>}
+                          {c.distance&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {fixCardioVal(c.distance)} km</span>}
+                          {c.vitesse&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {fixCardioVal(c.vitesse)} km/h</span>}
+                          {c.inclinaison&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {fixCardioVal(c.inclinaison)}%</span>}
+                          {c.duree&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {fixCardioVal(c.duree)}</span>}
                         </div>
                         {isActive&&<Pill color={color} style={{marginTop:4}}>NOW</Pill>}
                       </button>
