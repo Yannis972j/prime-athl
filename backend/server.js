@@ -406,7 +406,10 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '5mb' }));
+app.use((req, res, next) => {
+  if (req.path === '/api/stripe/webhook') return next();
+  express.json({ limit: '5mb' })(req, res, next);
+});
 app.use(cookieParser());
 
 // Rate-limit global doux (anti-DDOS basique) — 600 req / 5 min / IP
@@ -996,7 +999,15 @@ app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) =
     const u = DATA.users[req.params.id];
     if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
     for (const k of PROFILE_FIELDS) {
-      if (req.body[k] !== undefined) u[k] = req.body[k];
+      if (req.body[k] !== undefined) {
+        const val = String(req.body[k]).slice(0, 100);
+        if (['height','weight','prSquat','prBench','prDeadlift'].includes(k)) {
+          const n = parseFloat(val);
+          u[k] = isNaN(n) ? '' : String(Math.max(0, Math.min(999, n)));
+        } else {
+          u[k] = val;
+        }
+      }
     }
     if (req.body.email) {
       const newEmail = req.body.email.toLowerCase().trim();
@@ -1304,11 +1315,11 @@ app.post('/api/sessions', authRequired, (req, res) => {
   if (notes) session.notes = String(notes).slice(0, 500);
   if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
   DATA.sessions[id] = session;
-  // Garder max 500 sessions au total (FIFO sur les plus vieilles)
-  const allSids = Object.keys(DATA.sessions);
-  if (allSids.length > 500) {
-    const sorted = allSids.sort((a, b) => new Date(DATA.sessions[a].date) - new Date(DATA.sessions[b].date));
-    sorted.slice(0, allSids.length - 500).forEach(sid => delete DATA.sessions[sid]);
+  // Garder max 200 sessions par utilisateur (FIFO sur les plus vieilles)
+  const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === userId);
+  if (userSids.length > 200) {
+    const sorted = userSids.sort((a, b) => new Date(DATA.sessions[a].date) - new Date(DATA.sessions[b].date));
+    sorted.slice(0, userSids.length - 200).forEach(sid => delete DATA.sessions[sid]);
   }
   persist();
 

@@ -208,6 +208,8 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
     check:<path d="M5 12l5 5 9-11"/>,
     chevronRight:<path d="M9 6l6 6-6 6"/>,
     chevronLeft:<path d="M15 6l-6 6 6 6"/>,
+    chevronUp:<path d="M6 15l6-6 6 6"/>,
+    chevronDown:<path d="M6 9l6 6 6-6"/>,
     x:<><path d="M6 6l12 12"/><path d="M18 6l-12 12"/></>,
     timer:<><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/><path d="M12 2v3"/></>,
     settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></>,
@@ -3937,7 +3939,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   // Debounce recherche : 300ms après dernière frappe
   React.useEffect(()=>{
     clearTimeout(searchTimer.current);
-    if(searchQuery.trim().length<2){setSearchResults([]);return;}
+    if(searchQuery.trim().length<2){setSearchResults([]);setSearching(false);return;}
     setSearching(true);
     searchTimer.current=setTimeout(async()=>{
       try{
@@ -6501,7 +6503,7 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
 // ── Coach Screen ──────────────────────────────────────────
 function timeAgo(ts){
   if(!ts)return null;
-  const d=Date.now()-ts;
+  const d=Date.now()-new Date(ts).getTime();
   if(d<60000)return"à l'instant";
   if(d<3600000)return"il y a "+Math.floor(d/60000)+"min";
   if(d<86400000)return"il y a "+Math.floor(d/3600000)+"h";
@@ -7527,6 +7529,24 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
 
 const ATHLETE_DETAIL_TAB_IDS=['profil','sport','nutrition','historique','biblio','album'];
 
+function CoachProfileField({label,value,onCommit,suffix,type='text'}){
+  const[v,setV]=React.useState(value||'');
+  React.useEffect(()=>setV(value||''),[value]);
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:2}}>
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</div>
+      <div style={{display:'flex',alignItems:'center',gap:3,height:30,padding:'0 8px',borderRadius:8,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+        <input type={type} inputMode={type==='number'?'decimal':undefined} value={v}
+          onChange={e=>setV(e.target.value)}
+          onBlur={e=>onCommit(e.target.value)}
+          style={{flex:1,minWidth:0,width:'100%',background:'transparent',border:'none',color:T.text,fontSize:12,fontWeight:600,outline:'none',fontFamily:'inherit',padding:0}}
+          placeholder="—"/>
+        {suffix&&<span style={{fontSize:10,color:T.textDim,fontWeight:600,flexShrink:0}}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
 function CoachScreen({authToken,authUser}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -7891,23 +7911,6 @@ function CoachScreen({authToken,authUser}){
 
         {/* ── Tab 1 : Profil ── */}
         {detailTab==='profil'&&(()=>{
-          const F=({label,value,onCommit,suffix,type='text'})=>{
-            const[v,setV]=React.useState(value||'');
-            React.useEffect(()=>setV(value||''),[value]);
-            return(
-              <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</div>
-                <div style={{display:'flex',alignItems:'center',gap:3,height:30,padding:'0 8px',borderRadius:8,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
-                  <input type={type} inputMode={type==='number'?'decimal':undefined} value={v}
-                    onChange={e=>setV(e.target.value)}
-                    onBlur={e=>onCommit(e.target.value)}
-                    style={{flex:1,minWidth:0,width:'100%',background:'transparent',border:'none',color:T.text,fontSize:12,fontWeight:600,outline:'none',fontFamily:'inherit',padding:0}}
-                    placeholder="—"/>
-                  {suffix&&<span style={{fontSize:10,color:T.textDim,fontWeight:600,flexShrink:0}}>{suffix}</span>}
-                </div>
-              </div>
-            );
-          };
           return(
             <div style={{padding:'0 18px'}}>
               <GlassCard padding={10} style={{marginBottom:12}}>
@@ -7916,10 +7919,10 @@ function CoachScreen({authToken,authUser}){
                   <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{a.email}</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                  <F label="Prénom" value={a.firstName} onCommit={v=>patchAthlete({firstName:v})}/>
-                  <F label="Nom" value={a.lastName} onCommit={v=>patchAthlete({lastName:v})}/>
-                  <F label="Taille" value={a.height} onCommit={v=>patchAthlete({height:v})} suffix="cm" type="number"/>
-                  <F label="Poids" value={a.weight} onCommit={v=>patchAthlete({weight:v})} suffix="kg" type="number"/>
+                  <CoachProfileField label="Prénom" value={a.firstName} onCommit={v=>patchAthlete({firstName:v})}/>
+                  <CoachProfileField label="Nom" value={a.lastName} onCommit={v=>patchAthlete({lastName:v})}/>
+                  <CoachProfileField label="Taille" value={a.height} onCommit={v=>patchAthlete({height:v})} suffix="cm" type="number"/>
+                  <CoachProfileField label="Poids" value={a.weight} onCommit={v=>patchAthlete({weight:v})} suffix="kg" type="number"/>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4}}>
                   {['Hypertrophie','Force','Perte','Endurance'].map((o,i)=>{
@@ -8524,7 +8527,7 @@ function CoachScreen({authToken,authUser}){
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(90,138,224,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={17} stroke="#5A8AE0"/></div>
               Voir la fiche
             </button>
-            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
+            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);setSelected(a);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(44,196,160,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="edit" size={17} stroke="#2CC4A0"/></div>
               Modifier
             </button>
@@ -10054,7 +10057,7 @@ function NutritionAIWizard({authUser}){
 
       {/* Coach assign bottom sheet */}
       {coachSheet&&(
-        <BottomSheet onClose={()=>setCoachSheet(false)} title="Assigner à un athlète">
+        <BottomSheet open={coachSheet} onClose={()=>setCoachSheet(false)} title="Assigner à un athlète">
           {athletes.length===0
             ?<div style={{color:T.textDim,fontSize:14,padding:'12px 0'}}>Aucun athlète trouvé.</div>
             :athletes.map(a=>(
