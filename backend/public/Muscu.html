@@ -561,10 +561,19 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
 
-        rows.forEach(row => {
+        rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
           if (isHeaderRow(row)) { detectCols(row); return; }
           if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); return; }
+
+          // Lit le texte formaté d'une cellule (propriété .w) au lieu de la valeur brute.
+          // Indispensable pour les plages cardio type "4-5" : Excel les convertit en numéros
+          // de série de date (46146…), mais .w renvoie le texte affiché ("4-5").
+          const cellText = (colIdx) => {
+            const cell = ws[XLSX.utils.encode_cell({r:rowIdx, c:colIdx})];
+            if (!cell) return '';
+            return (cell.w || String(cell.v || '')).trim();
+          };
 
           const exName = String(row[colExercice]||'').trim().replace(/^\([ABC]\)\s*/i,'');
           if (!exName || exName === '_') return;
@@ -594,12 +603,13 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           const restStr = String(row[colRest]||'').trim();
           const restSecs = parseRest(restStr);
 
-          // Cardio : champs spécifiques
+          // Cardio : champs spécifiques — on utilise .w (texte formaté) pour préserver
+          // les plages comme "4-5" qu'Excel converti sinon en numéro de série de date.
           const cardio = styleVal === 'CARDIO' ? {
-            distance: String(row[colDist]||'').trim(),
-            vitesse:  String(row[colVitesse]||'').trim(),
-            inclinaison: String(row[colIncli]||'').trim(),
-            duree:    String(row[colDuree]||'').trim(),
+            distance:    cellText(colDist),
+            vitesse:     cellText(colVitesse),
+            inclinaison: cellText(colIncli),
+            duree:       cellText(colDuree),
           } : null;
 
           const exercise = {
