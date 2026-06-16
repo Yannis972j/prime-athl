@@ -35,8 +35,8 @@ coaching/
 # Generated assets
 *.tmp
 qr-data.txt
-# Build output (regenere par build.js a chaque deploy)
-backend/public/Muscu.app.html
+# Build output — suivi dans git pour éviter de devoir relancer build.js au deploy
+# backend/public/Muscu.app.html
 
 # Personal notes
 design_content.txt
