@@ -566,12 +566,19 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (isHeaderRow(row)) { detectCols(row); return; }
           if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); return; }
 
-          // Lit le texte formaté d'une cellule (propriété .w) au lieu de la valeur brute.
-          // Indispensable pour les plages cardio type "4-5" : Excel les convertit en numéros
-          // de série de date (46146…), mais .w renvoie le texte affiché ("4-5").
+          // Lit le texte d'une cellule cardio en gérant les plages "4-5" auto-converties
+          // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
           const cellText = (colIdx) => {
             const cell = ws[XLSX.utils.encode_cell({r:rowIdx, c:colIdx})];
             if (!cell) return '';
+            // Entier dans la plage des serials de date Excel (≈ 1982–2118) :
+            // "4-5" tapé en Excel français → converti en "4 mai" → serial ~46146.
+            // On reconstitue la notation "j-m" d'origine.
+            if (cell.t === 'n' && Number.isInteger(cell.v) && cell.v > 30000 && cell.v < 80000) {
+              const adj = cell.v > 60 ? cell.v - 1 : cell.v;
+              const d = new Date(Date.UTC(1899, 11, 31) + adj * 86400000);
+              return `${d.getUTCDate()}-${d.getUTCMonth()+1}`;
+            }
             return (cell.w || String(cell.v || '')).trim();
           };
 
