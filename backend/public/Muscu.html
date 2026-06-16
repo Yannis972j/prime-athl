@@ -7625,6 +7625,7 @@ function CoachScreen({authToken,authUser}){
   const[detailTab,setDetailTab]=React.useState('profil');
   const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
   const[athleteLibrary,setAthleteLibrary]=React.useState({sessions:[],nutrition:[]});
+  const[coachBiblioPreview,setCoachBiblioPreview]=React.useState(null);
   const sessionPressTimer=React.useRef(null);
 
   const deleteSession=async(sid,athleteId)=>{
@@ -7876,7 +7877,7 @@ function CoachScreen({authToken,authUser}){
         {/* Tab bar */}
         <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none'}}>
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setDetailTab(t.id)} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
+            <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
               {t.label}
             </button>
           ))}
@@ -8159,6 +8160,70 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 5 : Biblio (bibliothèque perso de l'athlète) ── */}
         {detailTab==='biblio'&&(
           <div style={{padding:'0 18px'}}>
+            {coachBiblioPreview?(()=>{
+              const s=coachBiblioPreview;
+              const sc='#5A8AE0';
+              return(
+                <div>
+                  <button onClick={()=>setCoachBiblioPreview(null)} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+                    <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+                  </button>
+                  <div style={{padding:'18px',borderRadius:18,background:`${sc}14`,border:`1px solid ${sc}40`,marginBottom:16}}>
+                    <div style={{fontSize:28,marginBottom:6}}>📚</div>
+                    <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:2}}>{s.name}</div>
+                    {s.tip&&<div style={{fontSize:12,color:'#c4b5fd',fontStyle:'italic',lineHeight:1.5,marginBottom:8}}>💡 {s.tip}</div>}
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {s.muscles&&<Pill color={sc}>{s.muscles}</Pill>}
+                      <Pill color={T.accent}>{(s.exercises||[]).length} exercices</Pill>
+                      {s.savedAt&&<Pill color={T.textFaint}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</Pill>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Exercices</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:20}}>
+                    {(s.exercises||[]).map((ex,i)=>{
+                      const sc2=STYLE_COLORS[ex.style||'CLASSIQUE']||T.textFaint;
+                      const isCardio=ex.style==='CARDIO'&&ex.cardio;
+                      const setsArr=ex.sets||[];
+                      const repsDisplay=isCardio?(ex.cardio.duree?ex.cardio.duree+'min':'—')
+                        :setsArr.length?(setsArr[0].reps||'?'):'?';
+                      return(
+                        <div key={i} style={{padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:10}}>
+                            <div style={{width:24,height:24,borderRadius:7,background:`${sc2}18`,border:`1px solid ${sc2}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:sc2,flexShrink:0}}>{i+1}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                              <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
+                            </div>
+                            <div style={{textAlign:'right',flexShrink:0}}>
+                              <div style={{fontSize:11,fontWeight:700,color:sc2}}>{setsArr.length}×{repsDisplay}</div>
+                              {ex.restSeconds&&<div style={{fontSize:10,color:T.textFaint}}>{ex.restSeconds}s repos</div>}
+                            </div>
+                          </div>
+                          {isCardio&&(
+                            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                              {ex.cardio.vitesse&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
+                              {ex.cardio.inclinaison&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
+                              {ex.cardio.duree&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⏱ {ex.cardio.duree} min</div>}
+                              {ex.cardio.distance&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📏 {ex.cardio.distance} km</div>}
+                            </div>
+                          )}
+                          {!isCardio&&setsArr.length>1&&(
+                            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                              {setsArr.map((st,si)=>(
+                                <div key={si} style={{fontSize:9,padding:'2px 7px',borderRadius:6,background:'rgba(255,255,255,0.05)',color:T.textDim}}>
+                                  S{si+1}: {st.weight||0}kg × {st.reps||'?'}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })():(
+            <>
             <SectionHeader title="Bibliothèque personnelle"/>
             {(()=>{
               const mySessions=athleteLibrary.sessions||[];
@@ -8177,10 +8242,13 @@ function CoachScreen({authToken,authUser}){
                       <div style={{fontSize:12,fontWeight:700,color:T.textDim,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>🏋️ Séances ({mySessions.length})</div>
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {mySessions.map(s=>(
-                          <div key={s.id} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                          <div key={s.id} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',transition:'background 0.2s'}}>
                             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                              <div style={{fontSize:14,fontWeight:700}}>{s.name||'Programme IA'}</div>
-                              {s.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</div>}
+                              <div style={{fontSize:14,fontWeight:700,flex:1}}>{s.name||'Programme IA'}</div>
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                {s.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</div>}
+                                <Icon name="chevronRight" size={14} stroke={T.textFaint}/>
+                              </div>
                             </div>
                             {s.muscles&&<div style={{fontSize:10,color:T.accent,fontWeight:600,marginBottom:6}}>{s.muscles}</div>}
                             {(s.exercises||[]).map((ex,ei)=>(
@@ -8216,6 +8284,8 @@ function CoachScreen({authToken,authUser}){
                 </div>
               );
             })()}
+            </>
+            )}
           </div>
         )}
 
