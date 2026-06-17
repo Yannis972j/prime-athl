@@ -8160,19 +8160,19 @@ function CoachScreen({authToken,authUser}){
           </div>
         )}
 
-        {/* ── Tab 5 : Biblio (bibliothèque perso de l'athlète) ── */}
+        {/* ── Tab 5 : Biblio (vue consolidée de tout ce que l'athlète possède) ── */}
         {detailTab==='biblio'&&(
           <div style={{padding:'0 18px'}}>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
-              const sc='#5A8AE0';
+              const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
               return(
                 <div>
                   <button onClick={()=>setCoachBiblioPreview(null)} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
                     <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
                   </button>
                   <div style={{padding:'18px',borderRadius:18,background:`${sc}14`,border:`1px solid ${sc}40`,marginBottom:16}}>
-                    <div style={{fontSize:28,marginBottom:6}}>📚</div>
+                    <div style={{fontSize:28,marginBottom:6}}>{s._source==='program'?'📋':s._source==='coach-lib'?'📚':'🤖'}</div>
                     <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:2}}>{s.name}</div>
                     {s.tip&&<div style={{fontSize:12,color:'#c4b5fd',fontStyle:'italic',lineHeight:1.5,marginBottom:8}}>💡 {s.tip}</div>}
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -8225,55 +8225,148 @@ function CoachScreen({authToken,authUser}){
                   </div>
                 </div>
               );
-            })():(
-            <>
-            <SectionHeader title="Bibliothèque personnelle"/>
-            {(()=>{
-              const mySessions=athleteLibrary.sessions||[];
+            })():(()=>{
+              const coachLibSessions=(libData?.sessions||[]).map(s=>({...s,_source:'coach-lib'}));
+              const programSessions=(()=>{
+                if(!a.program?.data)return[];
+                const out=[];
+                Object.entries(a.program.data).forEach(([month,days])=>{
+                  Object.entries(days).forEach(([day,exs])=>{
+                    if(!Array.isArray(exs)||!exs.length)return;
+                    const muscles=[...new Set((exs||[]).map(e=>e.muscle).filter(Boolean))].join(', ');
+                    out.push({name:`${month} — ${day}`,muscles,exercises:exs,_source:'program',savedAt:a.program.assignedAt});
+                  });
+                });
+                return out;
+              })();
+              const mySessions=(athleteLibrary.sessions||[]).map(s=>({...s,_source:'athlete-import'}));
               const myNutrition=athleteLibrary.nutrition||[];
-              if(!mySessions.length&&!myNutrition.length)return(
+              const nutriPlan=nutriDetail?.plan?.data||nutriDetail?.plan;
+              const hasNutriPlan=nutriPlan&&nutriPlan.days;
+              const totalItems=coachLibSessions.length+programSessions.length+mySessions.length+myNutrition.length+(hasNutriPlan?1:0);
+
+              if(!totalItems)return(
                 <div style={{textAlign:'center',padding:'40px 20px',color:T.textFaint}}>
                   <div style={{fontSize:40,marginBottom:12}}>📚</div>
-                  <div style={{fontSize:14,fontWeight:600}}>Bibliothèque vide</div>
-                  <div style={{fontSize:12,marginTop:6}}>L'athlète n'a pas encore importé de séances ou plans nutrition dans sa bibliothèque.</div>
+                  <div style={{fontSize:14,fontWeight:600}}>Aucun contenu</div>
+                  <div style={{fontSize:12,marginTop:6}}>Cet athlète n'a pas encore de programme, de bibliothèque ni d'imports personnels.</div>
                 </div>
               );
+
               return(
-                <div style={{display:'flex',flexDirection:'column',gap:16}}>
-                  {mySessions.length>0&&(
+                <div style={{display:'flex',flexDirection:'column',gap:20}}>
+                  <SectionHeader title={`Vue complète · ${totalItems} élément${totalItems>1?'s':''}`}/>
+
+                  {/* Programme du coach */}
+                  {programSessions.length>0&&(
                     <div>
-                      <div style={{fontSize:12,fontWeight:700,color:T.textDim,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>🏋️ Séances ({mySessions.length})</div>
-                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        {mySessions.map(s=>(
-                          <div key={s.id} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',transition:'background 0.2s'}}>
-                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                              <div style={{fontSize:14,fontWeight:700,flex:1}}>{s.name||'Programme IA'}</div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <div style={{width:28,height:28,borderRadius:9,background:'linear-gradient(135deg,rgba(191,160,96,0.2),rgba(184,80,112,0.1))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>📋</div>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Programme du coach</div>
+                          <div style={{fontSize:10,color:T.textFaint}}>{programMonths} mois · {programSessions.length} séances</div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {programSessions.map((s,idx)=>(
+                          <div key={'prog-'+idx} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'10px 14px',borderRadius:12,background:'rgba(191,160,96,0.06)',border:'1px solid rgba(191,160,96,0.15)',cursor:'pointer',transition:'background 0.2s'}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                              <div style={{fontSize:13,fontWeight:600,flex:1}}>{s.name}</div>
                               <div style={{display:'flex',alignItems:'center',gap:6}}>
-                                {s.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</div>}
-                                <Icon name="chevronRight" size={14} stroke={T.textFaint}/>
+                                <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
+                                <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
                               </div>
                             </div>
-                            {s.muscles&&<div style={{fontSize:10,color:T.accent,fontWeight:600,marginBottom:6}}>{s.muscles}</div>}
-                            {(s.exercises||[]).map((ex,ei)=>(
-                              <div key={ei} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderTop:ei?'1px solid rgba(255,255,255,0.04)':'none'}}>
-                                <div style={{fontSize:11,fontWeight:600,color:T.text,flex:1}}>{ex.name}</div>
-                                <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
-                                <div style={{fontSize:10,color:T.textDim,fontWeight:600}}>{(ex.sets||[]).length}×</div>
-                              </div>
-                            ))}
+                            {s.muscles&&<div style={{fontSize:10,color:T.accent,marginTop:3}}>{s.muscles}</div>}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  {myNutrition.length>0&&(
+
+                  {/* Bibliothèque du coach (séances à la carte) */}
+                  {coachLibSessions.length>0&&(
                     <div>
-                      <div style={{fontSize:12,fontWeight:700,color:T.textDim,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>🍎 Nutrition ({myNutrition.length})</div>
-                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        {myNutrition.map(n=>(
-                          <div key={n.id} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <div style={{width:28,height:28,borderRadius:9,background:'rgba(90,138,224,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>📚</div>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Bibliothèque du coach</div>
+                          <div style={{fontSize:10,color:T.textFaint}}>{coachLibSessions.length} séance{coachLibSessions.length>1?'s':''} à la carte{libData?.assignedAt?' · maj '+new Date(libData.assignedAt).toLocaleDateString('fr-FR'):''}</div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {coachLibSessions.map((s,idx)=>(
+                          <div key={'lib-'+idx} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'10px 14px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.15)',cursor:'pointer',transition:'background 0.2s'}}>
                             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                              <div style={{fontSize:14,fontWeight:700}}>{n.name||'Plan nutrition IA'}</div>
+                              <div style={{fontSize:13,fontWeight:600,flex:1}}>{s.name||'Séance'}</div>
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
+                                <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
+                              </div>
+                            </div>
+                            {s.muscles&&<div style={{fontSize:10,color:'#5A8AE0',marginTop:3}}>{s.muscles}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Plan nutrition du coach */}
+                  {hasNutriPlan&&(
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <div style={{width:28,height:28,borderRadius:9,background:'rgba(72,187,120,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>🍎</div>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Plan nutrition</div>
+                          <div style={{fontSize:10,color:T.textFaint}}>Assigné par le coach</div>
+                        </div>
+                      </div>
+                      <div style={{padding:'12px 14px',borderRadius:12,background:'rgba(72,187,120,0.06)',border:'1px solid rgba(72,187,120,0.15)'}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{nutriPlan.name||'Plan nutrition'}</div>
+                        <div style={{fontSize:10,color:T.textDim,marginTop:4}}>
+                          {Object.keys(nutriPlan.days||{}).length} jours · {nutriPlan.dailyCalories||'—'} kcal/j
+                          {nutriPlan.weeks&&' · '+Object.keys(nutriPlan.weeks).length+' semaine'+(Object.keys(nutriPlan.weeks).length>1?'s':'')}
+                        </div>
+                        {nutriPlan.days&&(
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
+                            {Object.keys(nutriPlan.days).slice(0,7).map(d=>(
+                              <div key={d} style={{fontSize:9,padding:'3px 8px',borderRadius:7,background:'rgba(72,187,120,0.12)',color:'#48BB78',fontWeight:600}}>{d}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Imports personnels de l'athlète (programmes IA) */}
+                  {(mySessions.length>0||myNutrition.length>0)&&(
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <div style={{width:28,height:28,borderRadius:9,background:'rgba(159,122,234,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>🤖</div>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Imports personnels</div>
+                          <div style={{fontSize:10,color:T.textFaint}}>Programmes générés par l'IA et importés par l'athlète</div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {mySessions.map(s=>(
+                          <div key={s.id} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'10px 14px',borderRadius:12,background:'rgba(159,122,234,0.06)',border:'1px solid rgba(159,122,234,0.15)',cursor:'pointer',transition:'background 0.2s'}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
+                                <div style={{fontSize:13,fontWeight:600}}>{s.name||'Programme IA'}</div>
+                              </div>
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                {s.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(s.savedAt).toLocaleDateString('fr-FR')}</div>}
+                                <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
+                              </div>
+                            </div>
+                            {s.muscles&&<div style={{fontSize:10,color:'#9F7AEA',marginTop:3}}>{s.muscles}</div>}
+                          </div>
+                        ))}
+                        {myNutrition.map(n=>(
+                          <div key={n.id} style={{padding:'10px 14px',borderRadius:12,background:'rgba(159,122,234,0.06)',border:'1px solid rgba(159,122,234,0.15)'}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                              <div style={{fontSize:13,fontWeight:600}}>{n.name||'Plan nutrition IA'}</div>
                               {n.savedAt&&<div style={{fontSize:9,color:T.textFaint}}>{new Date(n.savedAt).toLocaleDateString('fr-FR')}</div>}
                             </div>
                             {n.plan&&n.plan.days&&(
@@ -8287,8 +8380,6 @@ function CoachScreen({authToken,authUser}){
                 </div>
               );
             })()}
-            </>
-            )}
           </div>
         )}
 
