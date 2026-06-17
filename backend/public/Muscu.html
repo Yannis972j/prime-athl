@@ -980,6 +980,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return 0;
   });
   const[editMode,setEditMode]=React.useState(false);
+  const scrollRef=React.useRef(null);
   // Focus mode : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono repos plein écran
   // Persisté localStorage pour respecter le choix utilisateur entre séances
   const[focusMode,setFocusMode]=React.useState(()=>{try{return localStorage.getItem('pa_focus_mode')==='1';}catch{return false;}});
@@ -1079,6 +1080,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     setSetTimerSecs(secs);
   },[getAudioCtx]);
 
+  React.useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTo({top:0,behavior:'smooth'});},[currentEx]);
   // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
   // Critique pour utilisation à la salle : sinon l'écran s'éteint entre les séries.
   // Fallback silencieux si l'API n'est pas supportée (iOS < 16.4, vieux Android).
@@ -1106,7 +1108,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   },[]);
 
   // Helper : changer d'exercice en stoppant le chrono repos en cours
-  const ex=exercises[currentEx]||exercises[0];
+  if(currentEx>=exercises.length&&exercises.length>0)setCurrentEx(exercises.length-1);
+  const safeIdx=Math.min(currentEx,exercises.length-1);
+  const ex=exercises[safeIdx]||exercises[0];
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -1446,7 +1450,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       </div>
 
       {/* content — l'image apparaît au-dessus (espace réservé), puis la carte sets glisse par-dessus avec un fond plus dense */}
-      <div style={{flex:1,overflow:'auto',padding:'0 14px 110px',position:'relative',zIndex:1}}>
+      <div ref={scrollRef} style={{flex:1,overflow:'auto',WebkitOverflowScrolling:'touch',padding:'0 14px 110px',position:'relative',zIndex:1}}>
         {/* Espace pour que l'image de l'exercice reste visible en haut */}
         {(()=>{const u=exerciseImageURL(ex.name);return u?(
           <div style={{height:'clamp(115px, 18vh, 170px)',display:'flex',alignItems:'flex-start',justifyContent:'flex-start',padding:'6px 2px'}}>
@@ -10708,7 +10712,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 }
 
 // ── Bibliothèque de séances (partagée par le coach, sans calendrier) ──────────
-function BibliothequeScreen({sessionLibrary,onStartWorkout}){
+function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
   const IA='#6366f1',IA2='#8b5cf6';
   const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const coachSessions=sessionLibrary?.sessions||[];
@@ -10920,6 +10924,14 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout}){
         ))}
       </div>
 
+      {/* Calendrier des séances réalisées */}
+      {sub==='seances'&&(history||[]).length>0&&(
+        <div style={{marginBottom:18,padding:'14px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+          <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:10}}>Historique des séances</div>
+          <LiveSessionCalendar sessions={history}/>
+        </div>
+      )}
+
       {isEmpty&&(
         <div style={{padding:'40px 24px',display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',color:T.textFaint}}>
           <div style={{fontSize:44,marginBottom:14}}>{sub==='seances'?'📂':'🥗'}</div>
@@ -11127,7 +11139,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
           onDeleteSession={onDeleteSession}
         />}
         {sub==='live'&&<LiveSessionsView sessions={liveSessions}/>}
-        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} />}
+        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>
     </div>
