@@ -122,7 +122,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -1267,6 +1267,35 @@ app.get('/api/coach/athletes/:id/my-library', authRequired, coachOnly, (req, res
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   const lib = DATA.myLibrary[req.params.id];
   res.json(lib || { sessions: [], nutrition: [] });
+});
+
+// ── Planned sessions (calendar) ─────────────────────
+app.get('/api/planned-sessions', authRequired, (req, res) => {
+  const ps = DATA.plannedSessions[req.user.id] || {};
+  res.json(ps);
+});
+
+app.post('/api/planned-sessions', authRequired, (req, res) => {
+  const { date, session } = req.body;
+  if (!date || !session) return res.status(400).json({ error: 'missing_fields' });
+  if (!DATA.plannedSessions[req.user.id]) DATA.plannedSessions[req.user.id] = {};
+  if (!DATA.plannedSessions[req.user.id][date]) DATA.plannedSessions[req.user.id][date] = [];
+  DATA.plannedSessions[req.user.id][date].push(session);
+  persist();
+  res.json(DATA.plannedSessions[req.user.id]);
+});
+
+app.delete('/api/planned-sessions/:date/:index', authRequired, (req, res) => {
+  const { date, index } = req.params;
+  const idx = parseInt(index, 10);
+  const userPlanned = DATA.plannedSessions[req.user.id];
+  if (!userPlanned || !userPlanned[date] || !userPlanned[date][idx]) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+  userPlanned[date].splice(idx, 1);
+  if (userPlanned[date].length === 0) delete userPlanned[date];
+  persist();
+  res.json(DATA.plannedSessions[req.user.id]);
 });
 
 // ── Coach: invites ──────────────────────────────────
