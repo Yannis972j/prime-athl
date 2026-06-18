@@ -10747,6 +10747,20 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
   const mySessions=myLibrary.sessions||[];
   const myNutrition=myLibrary.nutrition||[];
 
+  const now0=new Date();
+  const[calY,setCalY]=React.useState(now0.getFullYear());
+  const[calM,setCalM]=React.useState(now0.getMonth());
+  const[calSel,setCalSel]=React.useState(null);
+  const todayStr=ymdKey(now0);
+  const byDate=React.useMemo(()=>{
+    const m={};
+    (history||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d){if(!m[d])m[d]=[];m[d].push(s);}});
+    return m;
+  },[history]);
+  const calDays=React.useMemo(()=>buildCalDays(calY,calM),[calY,calM]);
+  const prevM=()=>{if(calM===0){setCalY(y=>y-1);setCalM(11);}else setCalM(m=>m-1);setCalSel(null);};
+  const nextM=()=>{if(calM===11){setCalY(y=>y+1);setCalM(0);}else setCalM(m=>m+1);setCalSel(null);};
+
   const launchSession=s=>{
     if(!s||!s.exercises||s.exercises.length===0)return;
     // Les exercices viennent directement du parseur Excel ou de l'IA, même format que workout
@@ -10942,19 +10956,6 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
       {/* Calendrier planification + historique */}
       {sub==='seances'&&(()=>{
         const allSessions=[...coachSessions.map(s=>({...s,source:'coach'})),...mySessions.map(s=>({...s,source:'mine'}))];
-        const now=new Date();
-        const[calY,setCalY]=React.useState(now.getFullYear());
-        const[calM,setCalM]=React.useState(now.getMonth());
-        const[calSel,setCalSel]=React.useState(null);
-        const todayStr=ymdKey(now);
-        const byDate=React.useMemo(()=>{
-          const m={};
-          (history||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d){if(!m[d])m[d]=[];m[d].push(s);}});
-          return m;
-        },[history]);
-        const calDays=React.useMemo(()=>buildCalDays(calY,calM),[calY,calM]);
-        const prevM=()=>{if(calM===0){setCalY(y=>y-1);setCalM(11);}else setCalM(m=>m-1);setCalSel(null);};
-        const nextM=()=>{if(calM===11){setCalY(y=>y+1);setCalM(0);}else setCalM(m=>m+1);setCalSel(null);};
 
         return(
         <div style={{marginBottom:18,padding:'14px',borderRadius:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
