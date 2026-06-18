@@ -1179,6 +1179,17 @@ app.get('/api/session-library', authRequired, (req, res) => {
   res.json(lib || { sessions: [], assignedAt: null, assignedBy: null });
 });
 
+app.patch('/api/session-library/swap', authRequired, (req, res) => {
+  const { from, to } = req.body || {};
+  const lib = DATA.sessionLibrary[req.user.id];
+  if (!lib || !lib.sessions) return res.json({ ok: false });
+  const arr = lib.sessions;
+  if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
+  [arr[from], arr[to]] = [arr[to], arr[from]];
+  persist();
+  res.json({ ok: true });
+});
+
 app.get('/api/coach/session-library-for/:athleteId', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
@@ -1218,6 +1229,17 @@ app.post('/api/my-library/sessions', authRequired, (req, res) => {
 app.delete('/api/my-library/sessions/:id', authRequired, (req, res) => {
   const lib = DATA.myLibrary[req.user.id];
   if (lib) { lib.sessions = (lib.sessions || []).filter(s => s.id !== req.params.id); persist(); }
+  res.json({ ok: true });
+});
+
+app.patch('/api/my-library/sessions/swap', authRequired, (req, res) => {
+  const { from, to } = req.body || {};
+  const lib = DATA.myLibrary[req.user.id];
+  if (!lib || !lib.sessions) return res.json({ ok: false });
+  const arr = lib.sessions;
+  if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
+  [arr[from], arr[to]] = [arr[to], arr[from]];
+  persist();
   res.json({ ok: true });
 });
 

@@ -10715,7 +10715,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
   const IA='#6366f1',IA2='#8b5cf6';
   const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
-  const coachSessions=sessionLibrary?.sessions||[];
+  const[coachSessions,setCoachSessions]=React.useState(sessionLibrary?.sessions||[]);
+  React.useEffect(()=>{setCoachSessions(sessionLibrary?.sessions||[]);},[sessionLibrary]);
   const[sub,setSub]=React.useState('seances');
   const[myLibrary,setMyLibrary]=React.useState({sessions:[],nutrition:[]});
   const[preview,setPreview]=React.useState(null);
@@ -10727,6 +10728,15 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
   React.useEffect(()=>{
     apiCall('/api/my-library').then(r=>setMyLibrary(r||{sessions:[],nutrition:[]})).catch(()=>{});
   },[]);
+
+  const swapCoach=(from,to)=>{
+    setCoachSessions(prev=>{const a=[...prev];[a[from],a[to]]=[a[to],a[from]];return a;});
+    apiCall('/api/session-library/swap',{method:'PATCH',body:{from,to}}).catch(()=>{});
+  };
+  const swapMine=(from,to)=>{
+    setMyLibrary(prev=>{const s=[...(prev.sessions||[])];[s[from],s[to]]=[s[to],s[from]];return{...prev,sessions:s};});
+    apiCall('/api/my-library/sessions/swap',{method:'PATCH',body:{from,to}}).catch(()=>{});
+  };
 
   const mySessions=myLibrary.sessions||[];
   const myNutrition=myLibrary.nutrition||[];
@@ -10759,7 +10769,6 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
   };
 
   // Grouper les séances du coach par sheetName (phase/mois)
-  const sheets=[...new Set(coachSessions.map(s=>s.sheetName))];
 
   // ── Aperçu d'une séance ────────────────────────────────────────────────
   if(preview){
@@ -10950,36 +10959,48 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
             <div style={{marginBottom:20}}>
               <div style={{fontSize:11,color:'#a5b4fc',fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>🤖 Mes programmes IA</div>
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {mySessions.map(s=>(
-                  <button key={s.id} onClick={()=>setPreview({...s,source:'mine'})} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.07)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.15))',border:'1px solid rgba(99,102,241,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🤖</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                      <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.muscles||'Musculation'} · {s.exercises.length} exercices</div>
+                {mySessions.map((s,si)=>(
+                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+                      <button onClick={()=>{if(si>0)swapMine(si,si-1);}} disabled={si===0} style={{width:28,height:24,borderRadius:7,border:'1px solid rgba(99,102,241,0.2)',background:si===0?'transparent':'rgba(99,102,241,0.08)',color:si===0?'rgba(255,255,255,0.15)':'#a5b4fc',cursor:si===0?'default':'pointer',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>▲</button>
+                      <button onClick={()=>{if(si<mySessions.length-1)swapMine(si,si+1);}} disabled={si===mySessions.length-1} style={{width:28,height:24,borderRadius:7,border:'1px solid rgba(99,102,241,0.2)',background:si===mySessions.length-1?'transparent':'rgba(99,102,241,0.08)',color:si===mySessions.length-1?'rgba(255,255,255,0.15)':'#a5b4fc',cursor:si===mySessions.length-1?'default':'pointer',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>▼</button>
                     </div>
-                    <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
-                  </button>
+                    <button onClick={()=>setPreview({...s,source:'mine'})} style={{flex:1,textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(99,102,241,0.25)',background:'rgba(99,102,241,0.07)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                      <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.15))',border:'1px solid rgba(99,102,241,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🤖</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                        <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.muscles||'Musculation'} · {s.exercises.length} exercices</div>
+                      </div>
+                      <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
           )}
-          {coachSessions.length>0&&sheets.map(sheet=>(
-            <div key={sheet||'_'} style={{marginBottom:20}}>
-              {(sheets.length>1||mySessions.length>0)&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>{sheet||'Bibliothèque du coach'}</div>}
+          {coachSessions.length>0&&(
+            <div style={{marginBottom:20}}>
+              {mySessions.length>0&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Bibliothèque du coach</div>}
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {coachSessions.filter(s=>s.sheetName===sheet).map(s=>(
-                  <button key={s.id} onClick={()=>setPreview({...s,source:'coach'})} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                      <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
+                {coachSessions.map((s,ci)=>(
+                  <div key={s.id||ci} style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+                      <button onClick={()=>{if(ci>0)swapCoach(ci,ci-1);}} disabled={ci===0} style={{width:28,height:24,borderRadius:7,border:'1px solid rgba(90,138,224,0.2)',background:ci===0?'transparent':'rgba(90,138,224,0.08)',color:ci===0?'rgba(255,255,255,0.15)':'#5A8AE0',cursor:ci===0?'default':'pointer',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>▲</button>
+                      <button onClick={()=>{if(ci<coachSessions.length-1)swapCoach(ci,ci+1);}} disabled={ci===coachSessions.length-1} style={{width:28,height:24,borderRadius:7,border:'1px solid rgba(90,138,224,0.2)',background:ci===coachSessions.length-1?'transparent':'rgba(90,138,224,0.08)',color:ci===coachSessions.length-1?'rgba(255,255,255,0.15)':'#5A8AE0',cursor:ci===coachSessions.length-1?'default':'pointer',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>▼</button>
                     </div>
-                    <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
-                  </button>
+                    <button onClick={()=>setPreview({...s,source:'coach'})} style={{flex:1,textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                      <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                        <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
+                      </div>
+                      <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
+          )}
         </React.Fragment>
       )}
 
