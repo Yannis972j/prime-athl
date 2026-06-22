@@ -1367,7 +1367,7 @@ app.post('/api/sessions', authRequired, (req, res) => {
   if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
   DATA.sessions[id] = session;
   // Garder max 200 sessions par utilisateur (FIFO sur les plus vieilles)
-  const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === userId);
+  const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === req.user.id);
   if (userSids.length > 200) {
     const sorted = userSids.sort((a, b) => new Date(DATA.sessions[a].date) - new Date(DATA.sessions[b].date));
     sorted.slice(0, userSids.length - 200).forEach(sid => delete DATA.sessions[sid]);
