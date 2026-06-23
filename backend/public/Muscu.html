@@ -685,7 +685,7 @@ function excelExport(workout) {
   ws['!cols'] = [22,18,8,12,14,15,8].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, workout.name.slice(0,31) || 'Séance');
-  XLSX.writeFile(wb, `${workout.name || 'Seance'}.xlsx`);
+  XLSX.writeFile(wb, `${workout.name || 'Séance'}.xlsx`);
 }
 
 // ── Shared Excel import handler (programme) ───────────────
@@ -3096,7 +3096,7 @@ const MOTIVATION_QUOTES=[
   "La douleur est temporaire, la fierté est éternelle",
   "Force et honneur",
   "Une rep de plus que la dernière fois",
-  "Les résultats appartiennent aux constants",
+  "Les résultats appartiennent aux persévérants",
 ];
 
 const CONGRATS_MESSAGES=[
@@ -3602,7 +3602,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
       {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{(()=>{const h=new Date().getHours();return h<12?'Bon matin':h<18?'Bon après-midi':'Bonsoir';})()}</div>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{(()=>{const h=new Date().getHours();return h<18?'Bonjour':'Bonsoir';})()}</div>
           <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,marginTop:2,lineHeight:1.1}}>
             <HoloText>{profile&&profile.firstName?profile.firstName:'Athlète'}</HoloText> 👋
           </div>
@@ -4702,11 +4702,11 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
 
 // ── Nutrition: model + Excel I/O ──────────────────────────
 const NUTRI_MEAL_TEMPLATES=[
-  {label:'PETIT DEJ',  id:'breakfast',    emoji:'🍳',timeStart:'05:00',timeEnd:'08:00'},
+  {label:'PETIT-DÉJ',  id:'breakfast',    emoji:'🍳',timeStart:'05:00',timeEnd:'08:00'},
   {label:'COLLATION 1',id:'snack1',       emoji:'🥜',timeStart:'09:00',timeEnd:'12:00'},
-  {label:'DEJEUNER',   id:'lunch',        emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},
+  {label:'DÉJEUNER',   id:'lunch',        emoji:'🍱',timeStart:'12:00',timeEnd:'14:00'},
   {label:'COLLATION 2',id:'snack2',       emoji:'🍎',timeStart:'14:00',timeEnd:'17:00'},
-  {label:'DINNER',     id:'dinner',       emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'},
+  {label:'DÎNER',      id:'dinner',       emoji:'🍝',timeStart:'19:00',timeEnd:'21:00'},
   {label:'COLLATION 3',id:'eveningSnack', emoji:'🥛',timeStart:'21:00',timeEnd:'22:00'},
 ];
 
@@ -7396,7 +7396,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose}){
         <div style={{fontSize:40,marginBottom:16}}>⚠️</div>
         <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Abandonner la séance ?</div>
         <div style={{fontSize:13,color:T.textFaint,marginBottom:28,textAlign:'center',lineHeight:1.6}}>
-          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrés
+          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrée{totalSets>1?'s':''}
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
           <button onClick={onClose} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
@@ -7742,7 +7742,7 @@ function CoachScreen({authToken,authUser}){
       reloadDetail(selected.id);
       load();
     }catch(err){
-      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (6 car. min)'};
+      const msgs={email_already_used:'Email déjà utilisé',password_too_short:'Mot de passe trop court (8 car. min)'};
       alert(msgs[err.message]||'Erreur: '+err.message);
     }
     setEditing(false);
@@ -9357,7 +9357,7 @@ function ExplorerScreen({profile,onStartWorkout}){
       await apiCall('/api/premium/unlock',{method:'POST',body:{code:code.trim().toUpperCase()}});
       setPremium(true);
     }catch(err){
-      setCodeErr(err.message==='invalid_code'?'Code invalide.':err.message==='code_already_used'?'Ce code a déjà été utilisé.':'Erreur, réessaye.');
+      setCodeErr(err.message==='invalid_code'?'Code invalide.':err.message==='code_already_used'?'Ce code a déjà été utilisé.':'Erreur, réessaie.');
     }finally{setUnlocking(false);}
   };
 
@@ -10146,7 +10146,7 @@ function NutritionAIWizard({authUser}){
           width:'100%',padding:'11px',borderRadius:13,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',
           background:'transparent',color:T.textDim,fontWeight:600,fontSize:13,
         }}>
-          ↺ Regénérer un nouveau plan
+          ↺ Régénérer un nouveau plan
         </button>
       </div>
 
