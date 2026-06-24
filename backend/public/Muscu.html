@@ -1027,6 +1027,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       return anyChange?next:prev;
     });
   },[lastExData]);
+  React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
   React.useEffect(()=>{if(setTimerSecs<=0)return;const t=setTimeout(()=>setSetTimerSecs(s=>s-1),1000);return()=>clearTimeout(t);},[setTimerSecs]);
 
@@ -8259,9 +8260,10 @@ function CoachScreen({authToken,authUser}){
                 const out=[];
                 Object.entries(a.program.data).forEach(([month,days])=>{
                   Object.entries(days).forEach(([day,exs])=>{
-                    if(!Array.isArray(exs)||!exs.length)return;
-                    const muscles=[...new Set((exs||[]).map(e=>e.muscle).filter(Boolean))].join(', ');
-                    out.push({name:`${month} — ${day}`,muscles,exercises:exs,_source:'program',savedAt:a.program.assignedAt});
+                    const dayEx=Array.isArray(exs)?exs:(exs?.exercises||[]);
+                    if(!dayEx.length)return;
+                    const muscles=[...new Set(dayEx.map(e=>e.muscle).filter(Boolean))].join(', ');
+                    out.push({name:`${month} — ${day}`,muscles,exercises:dayEx,_source:'program',savedAt:a.program.assignedAt});
                   });
                 });
                 return out;
