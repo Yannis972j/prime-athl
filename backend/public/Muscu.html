@@ -1003,7 +1003,30 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return map;
   },[history]);
 
-  React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
+  // Auto-fill weights from history for sets with weight=0
+  const prefilled=React.useRef(false);
+  React.useEffect(()=>{
+    if(prefilled.current)return;
+    if(!Object.keys(lastExData).length)return;
+    prefilled.current=true;
+    setExercises(prev=>{
+      let anyChange=false;
+      const next=prev.map(ex=>{
+        const hist=lastExData[ex.name];
+        if(!hist)return ex;
+        let exChanged=false;
+        const newSets=ex.sets.map((s,si)=>{
+          if(s.done||(s.weight&&s.weight>0))return s;
+          const hSet=hist.allSets?.[si]||hist.allSets?.[0];
+          if(hSet&&hSet.weight>0){exChanged=true;return{...s,weight:hSet.weight};}
+          return s;
+        });
+        if(exChanged){anyChange=true;return{...ex,sets:newSets};}
+        return ex;
+      });
+      return anyChange?next:prev;
+    });
+  },[lastExData]);
   React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
   React.useEffect(()=>{if(setTimerSecs<=0)return;const t=setTimeout(()=>setSetTimerSecs(s=>s-1),1000);return()=>clearTimeout(t);},[setTimerSecs]);
 
