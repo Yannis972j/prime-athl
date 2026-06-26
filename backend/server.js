@@ -1425,9 +1425,21 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   const a = DATA.users[s.userId];
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   if (req.body.date) s.date = req.body.date;
+  if (req.body.name) s.name = String(req.body.name).slice(0, 120);
+  if (Array.isArray(req.body.exercises)) {
+    s.exercises = req.body.exercises.map(e => ({
+      name: e.name || '', muscle: e.muscle || '',
+      brand: e.brand ? String(e.brand).slice(0, 60) : '',
+      groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
+      groupType: ['classic','superset','triset'].includes(e.groupType) ? e.groupType : 'classic',
+      sets: (e.sets || []).map(st => ({ weight: +st.weight || 0, reps: +st.reps || 0, rest: +st.rest || 0 })),
+    }));
+    s.totalVolume = +req.body.totalVolume || 0;
+  }
+  if (req.body.duration != null) s.duration = +req.body.duration || 0;
   persist();
-  io.to('user:' + s.userId).emit('session-moved', { sessionId: req.params.sessionId, date: s.date });
-  res.json({ ok: true, date: s.date });
+  io.to('user:' + s.userId).emit('session-updated', { session: s });
+  res.json({ ok: true, session: s });
 });
 
 // Coach crée une séance pour un athlète (import à l'unité)
