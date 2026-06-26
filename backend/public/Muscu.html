@@ -7878,6 +7878,10 @@ function CoachScreen({authToken,authUser}){
     return <>{liveSessionEl}<CoachCalendarView authToken={authToken} athletes={athletes} refreshKey={calRefreshKey} onBack={()=>setCoachView('athletes')} onOpenAthlete={a=>{setCoachView('athletes');openDetail(a);}}/></>;
   }
 
+  if(coachView==='programs'){
+    return <div style={{height:'100%',overflow:'auto'}}><TPAdminScreen onBack={()=>setCoachView('athletes')}/></div>;
+  }
+
   // ── Detail view ─────────────────────────────────
   if(selected){
     const a=detail||selected;
@@ -8465,6 +8469,9 @@ function CoachScreen({authToken,authUser}){
           <button onClick={()=>setCoachView('calendar')} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} title="Calendrier">
             📅
           </button>
+          {isMain&&<button onClick={()=>setCoachView('programs')} style={{width:40,height:40,borderRadius:13,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} title="Gérer les programmes">
+            📋
+          </button>}
           <button onClick={()=>setShowCreateAthlete(true)} style={{width:40,height:40,borderRadius:13,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 14px rgba(44,196,160,0.4)'}} title="Créer un athlète">
             <Icon name="plus" size={18} stroke="#000" strokeWidth={2.6}/>
           </button>
@@ -9360,6 +9367,747 @@ function AIGeneratorCard({onStartWorkout,standalone=false}){
 }
 
 // ── Explorer Screen ───────────────────────────────────────────────────────────
+// ── Training Programs Module ─────────────────────────────────────────────────
+const TP_CATS=[
+  {id:'jambes',label:'Focus Jambes',emoji:'🦵',color:'#2CC4A0'},
+  {id:'dos',label:'Focus Dos',emoji:'🔙',color:'#5A8AE0'},
+  {id:'pecs',label:'Focus Pectoraux',emoji:'💪',color:'#BFA060'},
+  {id:'epaules',label:'Focus Épaules',emoji:'🏔️',color:'#9090c4'},
+  {id:'bras',label:'Focus Bras',emoji:'💪',color:'#C89040'},
+  {id:'fullbody',label:'Full Body',emoji:'🔥',color:'#E06050'},
+  {id:'masse',label:'Prise de masse',emoji:'📈',color:'#6366f1'},
+  {id:'sèche',label:'Perte de gras',emoji:'🔥',color:'#B85070'},
+  {id:'fessiers',label:'Fessiers',emoji:'🍑',color:'#D4688A'},
+];
+const TP_LEVELS=['Débutant','Intermédiaire','Avancé'];
+const TP_DURATIONS={'1month':'1 mois','2months':'2 mois','3months':'3 mois'};
+const TP_ACCENT='#E07020';
+const TP_ACCENT2='#D4883A';
+const TP_GRAD='linear-gradient(135deg,#E07020,#D4883A)';
+
+function TrainingProgramsScreen({authUser,onStartWorkout}){
+  const[view,setView]=React.useState('catalog');
+  const[selectedId,setSelectedId]=React.useState(null);
+  const[myProgramId,setMyProgramId]=React.useState(null);
+  const openDetail=id=>{setSelectedId(id);setView('detail');};
+  const openMyProgram=id=>{setMyProgramId(id);setView('myprogram');};
+  const back=()=>{setView('catalog');setSelectedId(null);setMyProgramId(null);};
+
+  if(view==='detail'&&selectedId)return<TPDetailScreen programId={selectedId} onBack={back} authUser={authUser} onPurchased={()=>{setView('myprograms');}}/>;
+  if(view==='myprogram'&&myProgramId)return<TPMyProgramView programId={myProgramId} onBack={()=>setView('myprograms')} authUser={authUser} onStartWorkout={onStartWorkout}/>;
+  if(view==='myprograms')return<TPMyProgramsScreen onBack={back} onSelect={openMyProgram}/>;
+  return<TPCatalogScreen onSelect={openDetail} onShowMyPrograms={()=>setView('myprograms')} authUser={authUser}/>;
+}
+
+function TPCatalogScreen({onSelect,onShowMyPrograms,authUser}){
+  const[programs,setPrograms]=React.useState([]);
+  const[loading,setLoading]=React.useState(true);
+  const[category,setCategory]=React.useState(null);
+  const[level,setLevel]=React.useState(null);
+  const[myCount,setMyCount]=React.useState(0);
+
+  React.useEffect(()=>{
+    setLoading(true);
+    let url='/api/training-programs';
+    const params=[];
+    if(category)params.push('category='+category);
+    if(level)params.push('level='+encodeURIComponent(level));
+    if(params.length)url+='?'+params.join('&');
+    apiCall(url).then(d=>{setPrograms(d);setLoading(false);}).catch(()=>{setPrograms([]);setLoading(false);});
+  },[category,level]);
+
+  React.useEffect(()=>{
+    apiCall('/api/training-programs/my-programs').then(d=>setMyCount(d.length)).catch(()=>{});
+  },[]);
+
+  return(
+    <div style={{padding:'18px 18px 90px',color:T.text}}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Programmes</div>
+        <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}><HoloText>Programmes d'entraînement</HoloText></div>
+        <div style={{fontSize:13,color:T.textDim,marginTop:6}}>Des programmes complets pour atteindre tes objectifs</div>
+      </div>
+
+      {myCount>0&&(
+        <button onClick={onShowMyPrograms} style={{width:'100%',padding:'14px 16px',borderRadius:16,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,cursor:'pointer',display:'flex',alignItems:'center',gap:12,marginBottom:16,textAlign:'left'}}>
+          <div style={{width:44,height:44,borderRadius:13,background:TP_GRAD,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0,boxShadow:`0 6px 18px ${TP_ACCENT}40`}}>📋</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Mes programmes</div>
+            <div style={{fontSize:12,color:T.textDim}}>{myCount} programme{myCount>1?'s':''} en cours</div>
+          </div>
+          <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+        </button>
+      )}
+
+      <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:4,marginBottom:10,WebkitOverflowScrolling:'touch'}}>
+        <button onClick={()=>setCategory(null)} style={{flexShrink:0,height:32,padding:'0 14px',borderRadius:16,border:!category?'1px solid transparent':'1px solid rgba(255,255,255,0.1)',background:!category?`${TP_ACCENT}20`:'rgba(255,255,255,0.03)',color:!category?TP_ACCENT:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer'}}>Tout</button>
+        {TP_CATS.map(cat=>(
+          <button key={cat.id} onClick={()=>setCategory(category===cat.id?null:cat.id)} style={{flexShrink:0,height:32,padding:'0 12px',borderRadius:16,border:category===cat.id?`1px solid ${cat.color}60`:'1px solid rgba(255,255,255,0.1)',background:category===cat.id?`${cat.color}18`:'rgba(255,255,255,0.03)',color:category===cat.id?cat.color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+            {cat.emoji} {cat.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:4,marginBottom:16}}>
+        {TP_LEVELS.map(lv=>(
+          <button key={lv} onClick={()=>setLevel(level===lv?null:lv)} style={{flexShrink:0,height:30,padding:'0 12px',borderRadius:14,border:level===lv?`1px solid ${TP_ACCENT}60`:'1px solid rgba(255,255,255,0.08)',background:level===lv?`${TP_ACCENT}15`:'rgba(255,255,255,0.03)',color:level===lv?TP_ACCENT:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer'}}>{lv}</button>
+        ))}
+      </div>
+
+      {loading?(
+        <div style={{padding:40,textAlign:'center',color:T.textFaint,fontSize:13}}>Chargement…</div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {programs.map(p=>{
+            const cat=TP_CATS.find(c=>c.id===p.category);
+            const accentColor=cat?.color||TP_ACCENT;
+            return(
+              <button key={p.id} onClick={()=>onSelect(p.id)} style={{width:'100%',textAlign:'left',borderRadius:20,border:`1px solid ${accentColor}25`,background:'rgba(255,255,255,0.02)',cursor:'pointer',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                {p.coverImage?(
+                  <div style={{width:'100%',height:140,background:`url(${p.coverImage}) center/cover no-repeat`,position:'relative'}}>
+                    <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:'linear-gradient(transparent,rgba(7,7,14,0.95))'}}/>
+                  </div>
+                ):(
+                  <div style={{width:'100%',height:100,background:`linear-gradient(135deg,${accentColor}25,${accentColor}08)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:42}}>{cat?.emoji||'🏋️'}</div>
+                )}
+                <div style={{padding:'14px 16px 16px'}}>
+                  <div style={{fontSize:16,fontWeight:800,letterSpacing:-0.3,marginBottom:6,color:T.text}}>{p.name}</div>
+                  {p.shortDescription&&<div style={{fontSize:12,color:T.textDim,lineHeight:1.5,marginBottom:10,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{p.shortDescription}</div>}
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                    <Pill color={accentColor}>{cat?.emoji} {cat?.label||p.category}</Pill>
+                    <Pill color={T.accent}>📊 {p.level}</Pill>
+                    <Pill color={T.accent}>⏱ {TP_DURATIONS[p.duration]||p.duration}</Pill>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <div style={{fontSize:20,fontWeight:800,color:TP_ACCENT}}>{p.price>0?((p.price/100).toFixed(2).replace('.',',')+' €'):'Gratuit'}</div>
+                    <div style={{fontSize:11,color:T.textDim}}>{p.sessionsPerWeek} séances/sem · {p.weekCount} sem.</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+          {programs.length===0&&!loading&&(
+            <div style={{padding:40,textAlign:'center',color:T.textFaint,fontSize:13}}>Aucun programme disponible dans cette catégorie.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TPDetailScreen({programId,onBack,authUser,onPurchased}){
+  const[prog,setProg]=React.useState(null);
+  const[loading,setLoading]=React.useState(true);
+  const[buying,setBuying]=React.useState(false);
+  const[owned,setOwned]=React.useState(false);
+  const[expandWeek,setExpandWeek]=React.useState(null);
+
+  React.useEffect(()=>{
+    setLoading(true);
+    Promise.all([
+      apiCall('/api/training-programs/'+programId),
+      apiCall('/api/training-programs/my-programs').catch(()=>[]),
+    ]).then(([p,myProgs])=>{
+      setProg(p);
+      setOwned(myProgs.some(mp=>mp.programId===programId));
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[programId]);
+
+  const purchase=async()=>{
+    setBuying(true);
+    try{
+      const r=await apiCall('/api/training-programs/'+programId+'/purchase',{method:'POST'});
+      if(r.alreadyOwned||r.free){
+        setOwned(true);
+        onPurchased&&onPurchased();
+      }else if(r.url){
+        window.location.href=r.url;
+      }
+    }catch(e){
+      console.error('purchase error',e);
+    }finally{setBuying(false);}
+  };
+
+  if(loading)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>;
+  if(!prog)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Programme introuvable</div>;
+
+  const cat=TP_CATS.find(c=>c.id===prog.category);
+  const ac=cat?.color||TP_ACCENT;
+  const allExercises=[];
+  (prog.weeks||[]).forEach(w=>(w.sessions||[]).forEach(s=>(s.exercises||[]).forEach(ex=>{
+    if(!allExercises.find(e=>e.name===ex.name))allExercises.push(ex);
+  })));
+
+  return(
+    <div style={{color:T.text,paddingBottom:90}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,margin:'14px 18px',background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+      </button>
+
+      {prog.coverImage?(
+        <div style={{width:'100%',height:200,background:`url(${prog.coverImage}) center/cover no-repeat`,position:'relative'}}>
+          <div style={{position:'absolute',bottom:0,left:0,right:0,height:80,background:'linear-gradient(transparent,#07070e)'}}/>
+        </div>
+      ):(
+        <div style={{width:'100%',height:160,background:`linear-gradient(135deg,${ac}30,${ac}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:56}}>{cat?.emoji||'🏋️'}</div>
+      )}
+
+      <div style={{padding:'0 18px'}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,marginTop:prog.coverImage?-20:12,position:'relative',zIndex:1}}>
+          <Pill color={ac}>{cat?.emoji} {cat?.label||prog.category}</Pill>
+          <Pill color={T.accent}>📊 {prog.level}</Pill>
+          <Pill color={T.accent}>⏱ {TP_DURATIONS[prog.duration]||prog.duration}</Pill>
+        </div>
+
+        <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5,marginBottom:8}}>{prog.name}</div>
+
+        {prog.description&&<div style={{fontSize:14,color:T.textDim,lineHeight:1.65,marginBottom:18}}>{prog.description}</div>}
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
+          {[
+            {label:'Séances/semaine',value:prog.sessionsPerWeek||'—',icon:'📅'},
+            {label:'Durée séance',value:prog.sessionDuration||'—',icon:'⏱'},
+            {label:'Semaines',value:(prog.weeks||[]).length||'—',icon:'📆'},
+            {label:'Exercices',value:allExercises.length||'—',icon:'💪'},
+          ].map((item,i)=>(
+            <div key={i} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:18,marginBottom:4}}>{item.icon}</div>
+              <div style={{fontSize:18,fontWeight:800,color:T.text}}>{item.value}</div>
+              <div style={{fontSize:11,color:T.textFaint,fontWeight:600}}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {prog.objectives&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>🎯 Objectifs</div>
+            <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>{prog.objectives}</div>
+          </div>
+        )}
+
+        {prog.expectedResults&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>📈 Résultats attendus</div>
+            <div style={{fontSize:13,color:T.textDim,lineHeight:1.6,padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>{prog.expectedResults}</div>
+          </div>
+        )}
+
+        {(prog.weeks||[]).length>0&&(
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Aperçu du programme</div>
+            {(prog.weeks||[]).map((week,wi)=>(
+              <div key={wi} style={{marginBottom:6}}>
+                <button onClick={()=>setExpandWeek(expandWeek===wi?null:wi)} style={{width:'100%',padding:'10px 14px',borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text}}>
+                  <span style={{fontSize:13,fontWeight:700}}>Semaine {wi+1}</span>
+                  <span style={{fontSize:11,color:T.textDim}}>{(week.sessions||[]).length} séance{(week.sessions||[]).length>1?'s':''} {expandWeek===wi?'▲':'▼'}</span>
+                </button>
+                {expandWeek===wi&&(
+                  <div style={{padding:'8px 0 0 12px'}}>
+                    {(week.sessions||[]).map((sess,si)=>(
+                      <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>{sess.name||`Séance ${si+1}`}</div>
+                        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                          {(sess.exercises||[]).slice(0,4).map((ex,ei)=>(
+                            <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {ex.sets}×{ex.reps} {ex.rest?`(repos ${ex.rest})`:''}</div>
+                          ))}
+                          {(sess.exercises||[]).length>4&&<div style={{fontSize:10,color:T.textFaint}}>+{(sess.exercises||[]).length-4} exercices</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {owned?(
+          <button onClick={onPurchased} style={{width:'100%',height:56,borderRadius:16,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 10px 28px rgba(44,196,160,0.4)',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
+            ✓ Programme débloqué — Voir ma progression
+          </button>
+        ):(
+          <button onClick={purchase} disabled={buying} style={{width:'100%',height:56,borderRadius:16,border:'none',background:TP_GRAD,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${TP_ACCENT}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,opacity:buying?0.7:1}}>
+            {buying?'Redirection…':(prog.price>0?`Acheter — ${(prog.price/100).toFixed(2).replace('.',',')} €`:'Obtenir gratuitement')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TPMyProgramsScreen({onBack,onSelect}){
+  const[programs,setPrograms]=React.useState([]);
+  const[loading,setLoading]=React.useState(true);
+
+  React.useEffect(()=>{
+    apiCall('/api/training-programs/my-programs').then(d=>{setPrograms(d);setLoading(false);}).catch(()=>setLoading(false));
+  },[]);
+
+  return(
+    <div style={{padding:'18px 18px 90px',color:T.text}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:18,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour au catalogue
+      </button>
+      <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Mes programmes</div>
+      <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.4,marginBottom:20}}><HoloText>Ma progression</HoloText></div>
+
+      {loading?(
+        <div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {programs.map(p=>{
+            const cat=TP_CATS.find(c=>c.id===p.category);
+            const ac=cat?.color||TP_ACCENT;
+            const pct=p.progress||0;
+            return(
+              <button key={p.purchaseId} onClick={()=>onSelect(p.programId)} style={{width:'100%',textAlign:'left',padding:'16px',borderRadius:18,border:`1px solid ${ac}25`,background:'rgba(255,255,255,0.02)',cursor:'pointer'}}>
+                <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:12}}>
+                  {p.coverImage?(
+                    <div style={{width:56,height:56,borderRadius:14,background:`url(${p.coverImage}) center/cover no-repeat`,flexShrink:0}}/>
+                  ):(
+                    <div style={{width:56,height:56,borderRadius:14,background:`linear-gradient(135deg,${ac}30,${ac}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0}}>{cat?.emoji||'🏋️'}</div>
+                  )}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:800,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                    <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{TP_DURATIONS[p.duration]||p.duration} · {p.level}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:22,fontWeight:800,color:pct>=100?T.good:ac}}>{pct}%</div>
+                  </div>
+                </div>
+                <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.06)',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:pct+'%',borderRadius:3,background:pct>=100?T.good:`linear-gradient(90deg,${ac},${ac}cc)`,transition:'width 0.5s ease'}}/>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
+                  <div style={{fontSize:11,color:T.textDim}}>{p.completedSessions}/{p.totalSessions} séances</div>
+                  {p.lastSessionAt&&<div style={{fontSize:10,color:T.textFaint}}>Dernière : {new Date(p.lastSessionAt).toLocaleDateString('fr-FR')}</div>}
+                </div>
+              </button>
+            );
+          })}
+          {programs.length===0&&(
+            <div style={{padding:40,textAlign:'center',color:T.textFaint,fontSize:13}}>Tu n'as pas encore de programme. Explore le catalogue !</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
+  const[prog,setProg]=React.useState(null);
+  const[progress,setProgress]=React.useState({completedSessions:[],progress:0,totalSessions:0});
+  const[loading,setLoading]=React.useState(true);
+  const[expandWeek,setExpandWeek]=React.useState(0);
+
+  React.useEffect(()=>{
+    Promise.all([
+      apiCall('/api/training-programs/'+programId),
+      apiCall('/api/training-programs/'+programId+'/my-progress'),
+    ]).then(([p,pr])=>{
+      setProg(p);
+      setProgress(pr);
+      const completed=pr.completedSessions||[];
+      const firstIncomplete=(p.weeks||[]).findIndex((w,wi)=>(w.sessions||[]).some((_,si)=>!completed.includes('w'+wi+'s'+si)));
+      setExpandWeek(firstIncomplete>=0?firstIncomplete:0);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[programId]);
+
+  const markDone=async(wi,si)=>{
+    const key='w'+wi+'s'+si;
+    const isDone=(progress.completedSessions||[]).includes(key);
+    const endpoint=isDone?'/api/training-programs/'+programId+'/uncomplete':'/api/training-programs/'+programId+'/progress';
+    try{
+      const r=await apiCall(endpoint,{method:'POST',body:{weekIndex:wi,sessionIndex:si}});
+      setProgress(prev=>({...prev,completedSessions:r.completedSessions,progress:r.progress}));
+    }catch(e){console.error(e);}
+  };
+
+  const launchSession=(sess,wi,si)=>{
+    if(!sess||!Array.isArray(sess.exercises)||sess.exercises.length===0)return;
+    const exercises=sess.exercises.map(ex=>({
+      id:Math.random().toString(36).slice(2),
+      name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
+      rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
+      weightStr:'',repsStr:String(ex.reps||''),cardio:null,
+      coachNotes:ex.coachNotes||'',
+      sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
+        weight:0,reps:0,done:false,
+        target:parseInt(String(ex.reps))||10,
+        targetStr:String(ex.reps||''),
+      })),
+    }));
+    onStartWorkout({name:sess.name||`Semaine ${wi+1} — Séance ${si+1}`,muscles:'',exercises,fromTrainingProgram:true,tpMeta:{programId,weekIndex:wi,sessionIndex:si}});
+  };
+
+  if(loading)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>;
+  if(!prog)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Programme introuvable</div>;
+
+  const cat=TP_CATS.find(c=>c.id===prog.category);
+  const ac=cat?.color||TP_ACCENT;
+  const pct=progress.progress||0;
+  const completed=progress.completedSessions||[];
+
+  return(
+    <div style={{padding:'14px 18px 90px',color:T.text}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Mes programmes
+      </button>
+
+      <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16}}>
+        {prog.coverImage?(
+          <div style={{width:56,height:56,borderRadius:16,background:`url(${prog.coverImage}) center/cover no-repeat`,flexShrink:0}}/>
+        ):(
+          <div style={{width:56,height:56,borderRadius:16,background:`linear-gradient(135deg,${ac}30,${ac}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0}}>{cat?.emoji||'🏋️'}</div>
+        )}
+        <div style={{flex:1}}>
+          <div style={{fontSize:18,fontWeight:800,letterSpacing:-0.3}}>{prog.name}</div>
+          <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{TP_DURATIONS[prog.duration]} · {prog.level}</div>
+        </div>
+      </div>
+
+      <div style={{padding:'14px 16px',borderRadius:16,background:`${ac}10`,border:`1px solid ${ac}25`,marginBottom:20}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontSize:13,fontWeight:700}}>Progression</div>
+          <div style={{fontSize:20,fontWeight:800,color:pct>=100?T.good:ac}}>{pct}%</div>
+        </div>
+        <div style={{height:8,borderRadius:4,background:'rgba(255,255,255,0.06)',overflow:'hidden'}}>
+          <div style={{height:'100%',width:pct+'%',borderRadius:4,background:pct>=100?T.good:`linear-gradient(90deg,${ac},${ac}cc)`,transition:'width 0.5s ease'}}/>
+        </div>
+        <div style={{fontSize:11,color:T.textDim,marginTop:6}}>{completed.length}/{progress.totalSessions} séances terminées</div>
+      </div>
+
+      {(prog.weeks||[]).map((week,wi)=>{
+        const weekDone=(week.sessions||[]).every((_,si)=>completed.includes('w'+wi+'s'+si));
+        const weekSessions=(week.sessions||[]).length;
+        const weekCompleted=(week.sessions||[]).filter((_,si)=>completed.includes('w'+wi+'s'+si)).length;
+        return(
+          <div key={wi} style={{marginBottom:8}}>
+            <button onClick={()=>setExpandWeek(expandWeek===wi?null:wi)} style={{width:'100%',padding:'12px 14px',borderRadius:14,border:`1px solid ${weekDone?T.good+'40':T.border}`,background:weekDone?'rgba(44,196,160,0.06)':'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:28,height:28,borderRadius:8,background:weekDone?`${T.good}20`:`${ac}15`,border:`1px solid ${weekDone?T.good+'40':ac+'30'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:weekDone?14:11,fontWeight:700,color:weekDone?T.good:ac}}>{weekDone?'✓':wi+1}</div>
+                <span style={{fontSize:14,fontWeight:700}}>Semaine {wi+1}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:11,color:T.textDim}}>{weekCompleted}/{weekSessions}</span>
+                <span style={{fontSize:10,color:T.textFaint}}>{expandWeek===wi?'▲':'▼'}</span>
+              </div>
+            </button>
+            {expandWeek===wi&&(
+              <div style={{padding:'8px 0 0 0'}}>
+                {(week.sessions||[]).map((sess,si)=>{
+                  const key='w'+wi+'s'+si;
+                  const done=completed.includes(key);
+                  return(
+                    <div key={si} style={{padding:'12px 14px',borderRadius:13,background:done?'rgba(44,196,160,0.05)':'rgba(255,255,255,0.02)',border:`1px solid ${done?T.good+'30':T.border}`,marginBottom:6}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <button onClick={()=>markDone(wi,si)} style={{width:24,height:24,borderRadius:7,border:`2px solid ${done?T.good:T.textFaint}`,background:done?T.good:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,fontSize:12,color:'#fff',fontWeight:700}}>{done?'✓':''}</button>
+                          <div style={{fontSize:13,fontWeight:700,color:done?T.textDim:T.text,textDecoration:done?'line-through':'none'}}>{sess.name||`Séance ${si+1}`}</div>
+                        </div>
+                        <button onClick={()=>launchSession(sess,wi,si)} style={{height:32,padding:'0 14px',borderRadius:10,border:'none',background:done?'rgba(255,255,255,0.05)':TP_GRAD,color:done?T.textDim:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',boxShadow:done?'none':`0 4px 12px ${TP_ACCENT}40`}}>
+                          {done?'Refaire':'Lancer'}
+                        </button>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:2,paddingLeft:32}}>
+                        {(sess.exercises||[]).map((ex,ei)=>(
+                          <div key={ei} style={{fontSize:11,color:T.textDim}}>
+                            {ex.name} — {ex.sets}×{ex.reps} {ex.rest?`(${ex.rest})`:''}{ex.coachNotes?` 💡 ${ex.coachNotes}`:''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TPAdminScreen(){
+  const[programs,setPrograms]=React.useState([]);
+  const[loading,setLoading]=React.useState(true);
+  const[editing,setEditing]=React.useState(null);
+  const[creating,setCreating]=React.useState(false);
+
+  const load=()=>{
+    setLoading(true);
+    apiCall('/api/admin/training-programs').then(d=>{setPrograms(d);setLoading(false);}).catch(()=>setLoading(false));
+  };
+  React.useEffect(load,[]);
+
+  const togglePublish=async(p)=>{
+    try{
+      const r=await apiCall('/api/admin/training-programs/'+p.id,{method:'PUT',body:{published:!p.published}});
+      setPrograms(ps=>ps.map(x=>x.id===p.id?r:x));
+    }catch(e){console.error(e);}
+  };
+
+  const deleteProgram=async(id)=>{
+    if(!confirm('Supprimer ce programme ?'))return;
+    try{await apiCall('/api/admin/training-programs/'+id,{method:'DELETE'});setPrograms(ps=>ps.filter(x=>x.id!==id));}catch(e){console.error(e);}
+  };
+
+  if(editing)return<TPAdminEditor program={editing} onBack={()=>{setEditing(null);load();}} />;
+  if(creating)return<TPAdminEditor program={null} onBack={()=>{setCreating(false);load();}} />;
+
+  return(
+    <div style={{padding:'18px 18px 90px',color:T.text}}>
+      <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Administration</div>
+      <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:16}}><HoloText>Programmes d'entraînement</HoloText></div>
+
+      <button onClick={()=>setCreating(true)} style={{width:'100%',height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20}}>
+        + Créer un programme
+      </button>
+
+      {loading?(
+        <div style={{padding:20,textAlign:'center',color:T.textFaint}}>Chargement…</div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {programs.map(p=>{
+            const cat=TP_CATS.find(c=>c.id===p.category);
+            return(
+              <div key={p.id} style={{padding:'14px 16px',borderRadius:16,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.02)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:`linear-gradient(135deg,${(cat?.color||TP_ACCENT)}30,${(cat?.color||TP_ACCENT)}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{cat?.emoji||'🏋️'}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                    <div style={{fontSize:11,color:T.textDim}}>{p.level} · {TP_DURATIONS[p.duration]||p.duration} · {p.price>0?((p.price/100).toFixed(2)+' €'):'Gratuit'}</div>
+                  </div>
+                  <div style={{padding:'4px 8px',borderRadius:8,background:p.published?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',color:p.published?T.good:T.danger,fontSize:10,fontWeight:700}}>{p.published?'Publié':'Brouillon'}</div>
+                </div>
+                <div style={{fontSize:11,color:T.textDim,marginBottom:10}}>{(p.weeks||[]).length} semaines · {(p.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0)} séances</div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>setEditing(p)} style={{flex:1,height:34,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Modifier</button>
+                  <button onClick={()=>togglePublish(p)} style={{flex:1,height:34,borderRadius:10,border:'none',background:p.published?'rgba(184,80,112,0.10)':'rgba(44,196,160,0.10)',color:p.published?T.danger:T.good,fontSize:12,fontWeight:600,cursor:'pointer'}}>{p.published?'Dépublier':'Publier'}</button>
+                  <button onClick={()=>deleteProgram(p.id)} style={{width:34,height:34,borderRadius:10,border:`1px solid rgba(184,80,112,0.25)`,background:'rgba(184,80,112,0.06)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={14} stroke={T.danger}/></button>
+                </div>
+              </div>
+            );
+          })}
+          {programs.length===0&&<div style={{padding:20,textAlign:'center',color:T.textFaint}}>Aucun programme créé</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TPAdminEditor({program,onBack}){
+  const isNew=!program;
+  const[form,setForm]=React.useState(program?{...program}:{
+    name:'',shortDescription:'',description:'',coverImage:'',duration:'1month',
+    price:0,level:'Débutant',category:'fullbody',objectives:'',sessionsPerWeek:3,
+    sessionDuration:'60min',expectedResults:'',weeks:[],
+  });
+  const[saving,setSaving]=React.useState(false);
+  const[editWeek,setEditWeek]=React.useState(null);
+  const[editSession,setEditSession]=React.useState(null);
+  const coverRef=React.useRef(null);
+
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  const save=async()=>{
+    setSaving(true);
+    try{
+      if(isNew){
+        await apiCall('/api/admin/training-programs',{method:'POST',body:form});
+      }else{
+        await apiCall('/api/admin/training-programs/'+form.id,{method:'PUT',body:form});
+      }
+      onBack();
+    }catch(e){console.error(e);}
+    setSaving(false);
+  };
+
+  const uploadCover=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    if(isNew){
+      const r=new FileReader();
+      r.onload=()=>set('coverImage',r.result);
+      r.readAsDataURL(file);
+      return;
+    }
+    const fd=new FormData();
+    fd.append('cover',file);
+    try{
+      const r=await apiCall('/api/admin/training-programs/'+form.id+'/upload-cover',{method:'POST',body:fd});
+      set('coverImage',r.coverImage);
+    }catch(e){console.error(e);}
+  };
+
+  const addWeek=()=>{
+    set('weeks',[...(form.weeks||[]),{weekNumber:(form.weeks||[]).length+1,sessions:[]}]);
+  };
+  const removeWeek=(wi)=>{
+    const w=[...(form.weeks||[])];w.splice(wi,1);
+    w.forEach((wk,i)=>wk.weekNumber=i+1);
+    set('weeks',w);
+  };
+  const addSession=(wi)=>{
+    const w=[...(form.weeks||[])];
+    w[wi]={...w[wi],sessions:[...(w[wi].sessions||[]),{name:`Séance ${(w[wi].sessions||[]).length+1}`,exercises:[]}]};
+    set('weeks',w);
+  };
+  const removeSession=(wi,si)=>{
+    const w=[...(form.weeks||[])];
+    w[wi]={...w[wi],sessions:(w[wi].sessions||[]).filter((_,i)=>i!==si)};
+    set('weeks',w);
+  };
+  const updateSession=(wi,si,sess)=>{
+    const w=[...(form.weeks||[])];
+    w[wi]={...w[wi],sessions:(w[wi].sessions||[]).map((s,i)=>i===si?sess:s)};
+    set('weeks',w);
+    setEditSession(null);
+  };
+
+  if(editSession!==null){
+    const{wi,si}=editSession;
+    const sess=(form.weeks||[])[wi]?.sessions?.[si];
+    if(!sess)return null;
+    return<TPSessionEditor session={sess} weekIndex={wi} sessionIndex={si} onSave={(s)=>updateSession(wi,si,s)} onBack={()=>setEditSession(null)}/>;
+  }
+
+  const INP={width:'100%',height:42,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
+  const LBL={fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5,display:'block'};
+
+  return(
+    <div style={{padding:'14px 18px 90px',color:T.text}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+      </button>
+      <div style={{fontSize:18,fontWeight:800,marginBottom:16}}>{isNew?'Nouveau programme':'Modifier le programme'}</div>
+
+      <input type="file" ref={coverRef} accept="image/*" style={{display:'none'}} onChange={uploadCover}/>
+      <button onClick={()=>coverRef.current?.click()} style={{width:'100%',height:120,borderRadius:16,border:`2px dashed ${T.border}`,background:form.coverImage?`url(${form.coverImage}) center/cover`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:13,fontWeight:600,marginBottom:16,overflow:'hidden'}}>
+        {form.coverImage?'':'📷 Ajouter une image de couverture'}
+      </button>
+
+      <div style={{marginBottom:12}}><label style={LBL}>Nom du programme</label><input value={form.name} onChange={e=>set('name',e.target.value)} style={INP} placeholder="Ex: Masse musculaire 3 mois"/></div>
+      <div style={{marginBottom:12}}><label style={LBL}>Description courte</label><input value={form.shortDescription} onChange={e=>set('shortDescription',e.target.value)} style={INP} placeholder="Résumé en 1-2 lignes"/></div>
+      <div style={{marginBottom:12}}><label style={LBL}>Description complète</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Présentation détaillée du programme"/></div>
+
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <div style={{flex:1}}><label style={LBL}>Durée</label>
+          <select value={form.duration} onChange={e=>set('duration',e.target.value)} style={{...INP,cursor:'pointer'}}>
+            <option value="1month">1 mois</option><option value="2months">2 mois</option><option value="3months">3 mois</option>
+          </select>
+        </div>
+        <div style={{flex:1}}><label style={LBL}>Prix (centimes €)</label><input type="number" value={form.price} onChange={e=>set('price',e.target.value)} style={INP} placeholder="Ex: 2990 = 29,90€"/></div>
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <div style={{flex:1}}><label style={LBL}>Niveau</label>
+          <select value={form.level} onChange={e=>set('level',e.target.value)} style={{...INP,cursor:'pointer'}}>
+            {TP_LEVELS.map(lv=><option key={lv} value={lv}>{lv}</option>)}
+          </select>
+        </div>
+        <div style={{flex:1}}><label style={LBL}>Catégorie</label>
+          <select value={form.category} onChange={e=>set('category',e.target.value)} style={{...INP,cursor:'pointer'}}>
+            {TP_CATS.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <div style={{flex:1}}><label style={LBL}>Séances/semaine</label><input type="number" value={form.sessionsPerWeek} onChange={e=>set('sessionsPerWeek',e.target.value)} style={INP} min="1" max="7"/></div>
+        <div style={{flex:1}}><label style={LBL}>Durée séance</label><input value={form.sessionDuration} onChange={e=>set('sessionDuration',e.target.value)} style={INP} placeholder="Ex: 60min"/></div>
+      </div>
+
+      <div style={{marginBottom:12}}><label style={LBL}>Objectifs</label><textarea value={form.objectives} onChange={e=>set('objectives',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Que va obtenir l'athlète ?"/></div>
+      <div style={{marginBottom:16}}><label style={LBL}>Résultats attendus</label><textarea value={form.expectedResults} onChange={e=>set('expectedResults',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Gains, transformations visibles"/></div>
+
+      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Semaines & Séances</div>
+      {(form.weeks||[]).map((week,wi)=>(
+        <div key={wi} style={{marginBottom:8,padding:'12px 14px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.02)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700}}>Semaine {wi+1}</div>
+            <button onClick={()=>removeWeek(wi)} style={{background:'none',border:'none',color:T.danger,cursor:'pointer',fontSize:11,fontWeight:600}}>Supprimer</button>
+          </div>
+          {(week.sessions||[]).map((sess,si)=>(
+            <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)',marginBottom:4}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
+                <div style={{fontSize:10,color:T.textFaint}}>{(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
+              </div>
+              <button onClick={()=>setEditSession({wi,si})} style={{height:28,padding:'0 10px',borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:11,fontWeight:600,cursor:'pointer'}}>Modifier</button>
+              <button onClick={()=>removeSession(wi,si)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(184,80,112,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={12} stroke={T.danger}/></button>
+            </div>
+          ))}
+          <button onClick={()=>addSession(wi)} style={{width:'100%',height:32,borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',marginTop:4}}>+ Ajouter une séance</button>
+        </div>
+      ))}
+      <button onClick={addWeek} style={{width:'100%',height:40,borderRadius:12,border:`1px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:20}}>+ Ajouter une semaine</button>
+
+      <button onClick={save} disabled={saving||!form.name} style={{width:'100%',height:52,borderRadius:14,border:'none',background:form.name?TP_GRAD:'rgba(255,255,255,0.06)',color:form.name?'#fff':T.textFaint,fontSize:14,fontWeight:800,cursor:form.name?'pointer':'default',boxShadow:form.name?`0 8px 24px ${TP_ACCENT}40`:'none'}}>
+        {saving?'Enregistrement…':(isNew?'Créer le programme':'Enregistrer les modifications')}
+      </button>
+    </div>
+  );
+}
+
+function TPSessionEditor({session,weekIndex,sessionIndex,onSave,onBack}){
+  const[sess,setSess]=React.useState({...session,exercises:[...(session.exercises||[]).map(e=>({...e}))]});
+  const set=(k,v)=>setSess(s=>({...s,[k]:v}));
+  const updateEx=(i,k,v)=>{const exs=[...sess.exercises];exs[i]={...exs[i],[k]:v};set('exercises',exs);};
+  const addEx=()=>set('exercises',[...sess.exercises,{name:'',sets:3,reps:'10',rest:'60s',coachNotes:'',muscle:''}]);
+  const removeEx=(i)=>set('exercises',sess.exercises.filter((_,j)=>j!==i));
+  const moveEx=(i,dir)=>{
+    const exs=[...sess.exercises];
+    const ni=i+dir;
+    if(ni<0||ni>=exs.length)return;
+    [exs[i],exs[ni]]=[exs[ni],exs[i]];
+    set('exercises',exs);
+  };
+
+  const INP={width:'100%',height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,padding:'0 10px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
+
+  return(
+    <div style={{padding:'14px 18px 90px',color:T.text}}>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
+        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
+      </button>
+      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Semaine {weekIndex+1} — Séance {sessionIndex+1}</div>
+
+      <div style={{marginBottom:14}}>
+        <label style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5,display:'block'}}>Nom de la séance</label>
+        <input value={sess.name} onChange={e=>set('name',e.target.value)} style={{...INP,height:42}} placeholder="Ex: Push jour 1"/>
+      </div>
+
+      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>Exercices ({sess.exercises.length})</div>
+      {sess.exercises.map((ex,i)=>(
+        <div key={i} style={{padding:'12px',borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.02)',marginBottom:6}}>
+          <div style={{display:'flex',gap:6,marginBottom:6}}>
+            <div style={{flex:2}}><input value={ex.name} onChange={e=>updateEx(i,'name',e.target.value)} style={INP} placeholder="Nom exercice"/></div>
+            <div style={{flex:1}}><input value={ex.muscle||''} onChange={e=>updateEx(i,'muscle',e.target.value)} style={INP} placeholder="Muscle"/></div>
+          </div>
+          <div style={{display:'flex',gap:6,marginBottom:6}}>
+            <div style={{flex:1}}><input type="number" value={ex.sets} onChange={e=>updateEx(i,'sets',parseInt(e.target.value)||0)} style={INP} placeholder="Séries" min="1"/></div>
+            <div style={{flex:1}}><input value={ex.reps} onChange={e=>updateEx(i,'reps',e.target.value)} style={INP} placeholder="Reps"/></div>
+            <div style={{flex:1}}><input value={ex.rest} onChange={e=>updateEx(i,'rest',e.target.value)} style={INP} placeholder="Repos"/></div>
+          </div>
+          <input value={ex.coachNotes||''} onChange={e=>updateEx(i,'coachNotes',e.target.value)} style={{...INP,marginBottom:6}} placeholder="💡 Notes du coach (optionnel)"/>
+          <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+            <button onClick={()=>moveEx(i,-1)} disabled={i===0} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:i>0?'pointer':'default',opacity:i>0?1:0.3,display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:12}}>↑</button>
+            <button onClick={()=>moveEx(i,1)} disabled={i===sess.exercises.length-1} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:i<sess.exercises.length-1?'pointer':'default',opacity:i<sess.exercises.length-1?1:0.3,display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:12}}>↓</button>
+            <button onClick={()=>removeEx(i)} style={{width:28,height:28,borderRadius:6,border:'none',background:'rgba(184,80,112,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={12} stroke={T.danger}/></button>
+          </div>
+        </div>
+      ))}
+
+      <button onClick={addEx} style={{width:'100%',height:38,borderRadius:10,border:`1px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:20}}>+ Ajouter un exercice</button>
+
+      <button onClick={()=>onSave(sess)} style={{width:'100%',height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`}}>Enregistrer la séance</button>
+    </div>
+  );
+}
+
 const CATEGORIES=[
   {id:'pecs',label:'Pecs & Épaules',emoji:'💪',color:'#BFA060'},
   {id:'dos',label:'Dos & Biceps',emoji:'🔙',color:'#5A8AE0'},
@@ -9579,6 +10327,8 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
      grad:'linear-gradient(135deg,#6366f1,#8b5cf6)',glow:'rgba(99,102,241,0.4)',border:'rgba(99,102,241,0.3)',bg:'rgba(99,102,241,0.07)',plan:'ia'},
     {id:'explorer',emoji:'🧭',title:'Explorer',desc:'Séances prêtes à démarrer, classées par groupe musculaire',
      grad:'linear-gradient(135deg,#0d9488,#06b6d4)',glow:'rgba(13,148,136,0.4)',border:'rgba(13,148,136,0.3)',bg:'rgba(13,148,136,0.07)',plan:'explorer'},
+    {id:'programmes',emoji:'📋',title:'Programmes',desc:'Programmes structurés multi-semaines à acheter et suivre',
+     grad:'linear-gradient(135deg,#E07020,#D4883A)',glow:'rgba(224,112,32,0.4)',border:'rgba(224,112,32,0.3)',bg:'rgba(224,112,32,0.07)',plan:null},
   ];
   const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+7*24*3600*1000);
   const trialDaysLeft=inTrial?Math.ceil(((authUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
@@ -9610,7 +10360,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
       )}
       <div style={{display:'flex',flexDirection:'column',gap:16}}>
         {UNIVERSES.map(u=>{
-          const hasAccess=userHasAccessFE(authUser,u.id);
+          const hasAccess=u.plan===null?true:userHasAccessFE(authUser,u.id);
           return(
             <button key={u.id} onClick={()=>hasAccess?onSelect(u.id):onShowPricing&&onShowPricing()} style={{
               width:'100%',padding:'22px 20px',borderRadius:24,
@@ -10569,8 +11319,19 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const clean=window.location.pathname;
       window.history.replaceState({},'',clean);
     }
+    const tpPurchased=p.get('tp_purchased');
+    if(tpPurchased){
+      window.history.replaceState({},'',window.location.pathname);
+      setTab('univers');
+      setActiveUniverse('programmes');
+      setShowTPSuccess(true);
+      setTimeout(()=>setShowTPSuccess(false),4000);
+    }else if(p.get('tp_cancel')){
+      window.history.replaceState({},'',window.location.pathname);
+    }
   },[]);
 
+  const[showTPSuccess,setShowTPSuccess]=React.useState(false);
   const[showStripeSuccess,setShowStripeSuccess]=React.useState(false);
 
   // Wrap setImportedPrograms: local + push to backend (athlete) or coach UI handles its own
@@ -10637,6 +11398,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           🎉 Abonnement activé, bienvenue !
         </div>
       )}
+      {showTPSuccess&&(
+        <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,left:'50%',transform:'translateX(-50%)',zIndex:99,padding:'8px 16px',borderRadius:999,background:'rgba(224,112,32,0.18)',border:'1px solid rgba(224,112,32,0.4)',color:'#E07020',fontSize:12,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(224,112,32,0.2)',animation:'holoText 1s ease',pointerEvents:'none',whiteSpace:'nowrap'}}>
+          🎉 Programme acheté avec succès !
+        </div>
+      )}
       {saveFlash&&(
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(44,196,160,0.18)',border:'1px solid rgba(44,196,160,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(44,196,160,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
           ✓ Sync cloud
@@ -10658,7 +11424,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
@@ -10701,6 +11467,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {tab==='univers'&&activeUniverse==='explorer'&&(
               <UniverseShell title="🧭 Explorer" grad="linear-gradient(135deg,#0d9488,#06b6d4)" onBack={()=>setActiveUniverse(null)}>
                 <ExplorerScreen profile={profile} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
+              </UniverseShell>
+            )}
+            {tab==='univers'&&activeUniverse==='programmes'&&(
+              <UniverseShell title="📋 Programmes" grad="linear-gradient(135deg,#E07020,#D4883A)" onBack={()=>setActiveUniverse(null)}>
+                <TrainingProgramsScreen authUser={authUser} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
               </UniverseShell>
             )}
             {tab==='stats'&&<div style={{flex:1,overflow:'auto'}}><StatsScreen history={history} profile={profile}/></div>}

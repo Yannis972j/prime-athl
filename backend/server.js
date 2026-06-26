@@ -122,7 +122,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -2595,6 +2595,246 @@ app.post('/api/access/grant/:userId', authRequired, coachOnly, mainCoachOnly, (r
   res.json({ ok: true, fullAccess: u.fullAccess });
 });
 
+// ── Training Programs (Programmes d'entraînement) ───────────────────────────
+// Catalogue de programmes achetables, avec suivi de progression par utilisateur.
+
+const TP_CATEGORIES = [
+  { id: 'jambes', label: 'Focus Jambes', emoji: '🦵' },
+  { id: 'dos', label: 'Focus Dos', emoji: '🔙' },
+  { id: 'pecs', label: 'Focus Pectoraux', emoji: '💪' },
+  { id: 'epaules', label: 'Focus Épaules', emoji: '🏔️' },
+  { id: 'bras', label: 'Focus Bras', emoji: '💪' },
+  { id: 'fullbody', label: 'Full Body', emoji: '🔥' },
+  { id: 'masse', label: 'Prise de masse', emoji: '📈' },
+  { id: 'sèche', label: 'Perte de gras', emoji: '🔥' },
+  { id: 'fessiers', label: 'Fessiers', emoji: '🍑' },
+];
+
+app.get('/api/training-programs/categories', (req, res) => {
+  res.json(TP_CATEGORIES);
+});
+
+app.get('/api/training-programs', (req, res) => {
+  const { category, level } = req.query;
+  let list = Object.values(DATA.trainingPrograms || {}).filter(p => p.published);
+  if (category) list = list.filter(p => p.category === category);
+  if (level) list = list.filter(p => p.level === level);
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const safe = list.map(p => ({
+    id: p.id, name: p.name, shortDescription: p.shortDescription, coverImage: p.coverImage,
+    duration: p.duration, price: p.price, level: p.level, category: p.category,
+    sessionsPerWeek: p.sessionsPerWeek, weekCount: (p.weeks || []).length,
+  }));
+  res.json(safe);
+});
+
+app.get('/api/training-programs/my-programs', authRequired, (req, res) => {
+  const purchases = Object.values(DATA.userPurchasedPrograms || {}).filter(p => p.userId === req.user.id);
+  const result = purchases.map(purchase => {
+    const prog = DATA.trainingPrograms[purchase.programId];
+    if (!prog) return null;
+    const totalSessions = (prog.weeks || []).reduce((s, w) => s + (w.sessions || []).length, 0);
+    const completed = (purchase.completedSessions || []).length;
+    return {
+      purchaseId: purchase.id,
+      programId: prog.id, name: prog.name, coverImage: prog.coverImage,
+      duration: prog.duration, level: prog.level, category: prog.category,
+      weekCount: (prog.weeks || []).length, totalSessions,
+      completedSessions: completed,
+      progress: totalSessions > 0 ? Math.round((completed / totalSessions) * 100) : 0,
+      lastSessionAt: purchase.lastSessionAt || null,
+      purchasedAt: purchase.purchasedAt,
+    };
+  }).filter(Boolean);
+  res.json(result);
+});
+
+app.get('/api/training-programs/:id', (req, res) => {
+  const prog = DATA.trainingPrograms[req.params.id];
+  if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
+  res.json(prog);
+});
+
+app.get('/api/training-programs/:id/my-progress', authRequired, (req, res) => {
+  const purchase = Object.values(DATA.userPurchasedPrograms || {}).find(
+    p => p.userId === req.user.id && p.programId === req.params.id
+  );
+  if (!purchase) return res.status(404).json({ error: 'not_purchased' });
+  const prog = DATA.trainingPrograms[purchase.programId];
+  if (!prog) return res.status(404).json({ error: 'not_found' });
+  const totalSessions = (prog.weeks || []).reduce((s, w) => s + (w.sessions || []).length, 0);
+  const completed = (purchase.completedSessions || []).length;
+  res.json({
+    purchaseId: purchase.id,
+    completedSessions: purchase.completedSessions || [],
+    lastSessionAt: purchase.lastSessionAt || null,
+    progress: totalSessions > 0 ? Math.round((completed / totalSessions) * 100) : 0,
+    totalSessions,
+  });
+});
+
+app.post('/api/training-programs/:id/progress', authRequired, (req, res) => {
+  const { weekIndex, sessionIndex } = req.body || {};
+  if (weekIndex === undefined || sessionIndex === undefined) return res.status(400).json({ error: 'missing_fields' });
+  const purchase = Object.values(DATA.userPurchasedPrograms || {}).find(
+    p => p.userId === req.user.id && p.programId === req.params.id
+  );
+  if (!purchase) return res.status(403).json({ error: 'not_purchased' });
+  const key = `w${weekIndex}s${sessionIndex}`;
+  if (!purchase.completedSessions) purchase.completedSessions = [];
+  if (!purchase.completedSessions.includes(key)) {
+    purchase.completedSessions.push(key);
+    purchase.lastSessionAt = Date.now();
+    persist();
+  }
+  const prog = DATA.trainingPrograms[purchase.programId];
+  const totalSessions = prog ? (prog.weeks || []).reduce((s, w) => s + (w.sessions || []).length, 0) : 0;
+  res.json({
+    completedSessions: purchase.completedSessions,
+    progress: totalSessions > 0 ? Math.round((purchase.completedSessions.length / totalSessions) * 100) : 0,
+  });
+});
+
+app.post('/api/training-programs/:id/uncomplete', authRequired, (req, res) => {
+  const { weekIndex, sessionIndex } = req.body || {};
+  const purchase = Object.values(DATA.userPurchasedPrograms || {}).find(
+    p => p.userId === req.user.id && p.programId === req.params.id
+  );
+  if (!purchase) return res.status(403).json({ error: 'not_purchased' });
+  const key = `w${weekIndex}s${sessionIndex}`;
+  purchase.completedSessions = (purchase.completedSessions || []).filter(k => k !== key);
+  persist();
+  const prog = DATA.trainingPrograms[purchase.programId];
+  const totalSessions = prog ? (prog.weeks || []).reduce((s, w) => s + (w.sessions || []).length, 0) : 0;
+  res.json({
+    completedSessions: purchase.completedSessions,
+    progress: totalSessions > 0 ? Math.round((purchase.completedSessions.length / totalSessions) * 100) : 0,
+  });
+});
+
+app.post('/api/training-programs/:id/purchase', authRequired, async (req, res) => {
+  const prog = DATA.trainingPrograms[req.params.id];
+  if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
+  const already = Object.values(DATA.userPurchasedPrograms || {}).find(
+    p => p.userId === req.user.id && p.programId === prog.id
+  );
+  if (already) return res.json({ alreadyOwned: true });
+  if (!prog.price || prog.price <= 0) {
+    const purchaseId = uid();
+    DATA.userPurchasedPrograms[purchaseId] = {
+      id: purchaseId, userId: req.user.id, programId: prog.id,
+      purchasedAt: Date.now(), completedSessions: [], lastSessionAt: null,
+    };
+    persist();
+    return res.json({ ok: true, free: true, purchaseId });
+  }
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  const u = DATA.users[req.user.id];
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  try {
+    let customerId = u.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: u.email, metadata: { userId: u.id } });
+      customerId = customer.id;
+      u.stripeCustomerId = customerId;
+      persist();
+    }
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'eur',
+          product_data: { name: prog.name, description: prog.shortDescription || '' },
+          unit_amount: prog.price,
+        },
+        quantity: 1,
+      }],
+      metadata: { type: 'training_program', programId: prog.id, userId: u.id },
+      success_url: `${PUBLIC_URL}/Muscu.html?tp_purchased=${prog.id}`,
+      cancel_url: `${PUBLIC_URL}/Muscu.html?tp_cancel=1`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error('[stripe] training program checkout error:', e.message);
+    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+  }
+});
+
+app.post('/api/admin/training-programs', authRequired, mainCoachOnly, (req, res) => {
+  const { name, shortDescription, description, coverImage, duration, price, level, category,
+    objectives, sessionsPerWeek, sessionDuration, expectedResults, weeks } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name_required' });
+  const id = uid();
+  DATA.trainingPrograms[id] = {
+    id, name, shortDescription: shortDescription || '', description: description || '',
+    coverImage: coverImage || '', duration: duration || '1month',
+    price: parseInt(price) || 0, level: level || 'Débutant',
+    category: category || 'fullbody',
+    objectives: objectives || '', sessionsPerWeek: parseInt(sessionsPerWeek) || 3,
+    sessionDuration: sessionDuration || '60min', expectedResults: expectedResults || '',
+    published: false, weeks: weeks || [],
+    createdAt: Date.now(), updatedAt: Date.now(),
+  };
+  persist();
+  res.json(DATA.trainingPrograms[id]);
+});
+
+app.put('/api/admin/training-programs/:id', authRequired, mainCoachOnly, (req, res) => {
+  const prog = DATA.trainingPrograms[req.params.id];
+  if (!prog) return res.status(404).json({ error: 'not_found' });
+  const allowed = ['name', 'shortDescription', 'description', 'coverImage', 'duration', 'price',
+    'level', 'category', 'objectives', 'sessionsPerWeek', 'sessionDuration', 'expectedResults',
+    'published', 'weeks'];
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) prog[k] = req.body[k];
+  }
+  if (req.body.price !== undefined) prog.price = parseInt(req.body.price) || 0;
+  if (req.body.sessionsPerWeek !== undefined) prog.sessionsPerWeek = parseInt(req.body.sessionsPerWeek) || 3;
+  prog.updatedAt = Date.now();
+  persist();
+  res.json(prog);
+});
+
+app.delete('/api/admin/training-programs/:id', authRequired, mainCoachOnly, (req, res) => {
+  if (!DATA.trainingPrograms[req.params.id]) return res.status(404).json({ error: 'not_found' });
+  delete DATA.trainingPrograms[req.params.id];
+  persist();
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/training-programs', authRequired, mainCoachOnly, (req, res) => {
+  const list = Object.values(DATA.trainingPrograms || {});
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  res.json(list);
+});
+
+app.post('/api/admin/training-programs/:id/upload-cover', authRequired, mainCoachOnly, upload.single('cover'), async (req, res) => {
+  const prog = DATA.trainingPrograms[req.params.id];
+  if (!prog) return res.status(404).json({ error: 'not_found' });
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+  if (process.env.CLOUDINARY_URL) {
+    try {
+      const b64 = req.file.buffer.toString('base64');
+      const dataUri = `data:${req.file.mimetype};base64,${b64}`;
+      const result = await cloudinary.uploader.upload(dataUri, {
+        folder: 'prime-athl/training-programs',
+        transformation: [{ width: 800, height: 600, crop: 'fill', quality: 'auto' }],
+      });
+      prog.coverImage = result.secure_url;
+    } catch (e) {
+      console.error('[cloudinary] upload error:', e.message);
+      return res.status(500).json({ error: 'upload_failed' });
+    }
+  } else {
+    if (req.file.size > 500 * 1024) return res.status(413).json({ error: 'file_too_large' });
+    prog.coverImage = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  }
+  prog.updatedAt = Date.now();
+  persist();
+  res.json({ coverImage: prog.coverImage });
+});
+
 // ── Stripe routes ────────────────────────────────────
 
 // Statut abonnement de l'utilisateur connecté
@@ -2701,6 +2941,29 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
     case 'customer.subscription.deleted':
       applySubscription({ ...event.data.object, status: 'canceled' });
       break;
+    case 'checkout.session.completed': {
+      const sess = event.data.object;
+      if (sess.metadata?.type === 'training_program') {
+        const { programId, userId } = sess.metadata;
+        if (userId && programId && DATA.trainingPrograms[programId]) {
+          const already = Object.values(DATA.userPurchasedPrograms || {}).find(
+            p => p.userId === userId && p.programId === programId
+          );
+          if (!already) {
+            const purchaseId = uid();
+            DATA.userPurchasedPrograms[purchaseId] = {
+              id: purchaseId, userId, programId,
+              purchasedAt: Date.now(), completedSessions: [], lastSessionAt: null,
+              stripeSessionId: sess.id,
+            };
+            persist();
+            io.to('user:' + userId).emit('program-purchased', { programId });
+            console.log(`[stripe] training program purchased: user=${userId} program=${programId}`);
+          }
+        }
+      }
+      break;
+    }
     default:
       break;
   }
