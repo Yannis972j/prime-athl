@@ -939,11 +939,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   });
   const[currentEx,setCurrentEx]=React.useState(0);
   const[restSeconds,setRestSeconds]=React.useState(0);
+  const restEndRef=React.useRef(0);
   const[restTotal,setRestTotal]=React.useState(0);
   const[sessionTime,setSessionTime]=React.useState(()=>{
     try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&s.sessionTime)return s.sessionTime;}catch{}
     return 0;
   });
+  const sessionStartRef=React.useRef(Date.now()-sessionTime*1000);
   const[editMode,setEditMode]=React.useState(false);
   // Focus mode : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono repos plein écran
   // Persisté localStorage pour respecter le choix utilisateur entre séances
@@ -967,8 +969,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return map;
   },[history]);
 
-  React.useEffect(()=>{const t=setInterval(()=>setSessionTime(s=>s+1),1000);return()=>clearInterval(t);},[]);
-  React.useEffect(()=>{if(restSeconds<=0)return;const t=setTimeout(()=>setRestSeconds(s=>s-1),1000);return()=>clearTimeout(t);},[restSeconds]);
+  React.useEffect(()=>{const tick=()=>setSessionTime(Math.floor((Date.now()-sessionStartRef.current)/1000));const t=setInterval(tick,1000);const onVis=()=>{if(document.visibilityState==='visible')tick();};document.addEventListener('visibilitychange',onVis);return()=>{clearInterval(t);document.removeEventListener('visibilitychange',onVis);};},[]);
+  React.useEffect(()=>{if(restSeconds<=0){restEndRef.current=0;return;}if(!restEndRef.current){restEndRef.current=Date.now()+restSeconds*1000;}else{const exp=Math.max(0,Math.ceil((restEndRef.current-Date.now())/1000));if(Math.abs(restSeconds-exp)>2)restEndRef.current=Date.now()+restSeconds*1000;}const t=setInterval(()=>{const r=Math.max(0,Math.ceil((restEndRef.current-Date.now())/1000));setRestSeconds(r);if(r<=0){restEndRef.current=0;clearInterval(t);}},500);return()=>clearInterval(t);},[restSeconds]);
 
   // Vibration + bip quand le chrono repos arrive à 0 (uniquement après avoir démarré un repos)
   const prevRestRef=React.useRef(0);
