@@ -44,3 +44,8 @@ design_content.txt
 # Local snapshots
 prod.html
 prod-snapshot.html
+
+# Root-level Playwright/temp files
+/screenshots.mjs
+/package.json
+/package-lock.json
