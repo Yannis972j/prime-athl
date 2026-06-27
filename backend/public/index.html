@@ -23,828 +23,270 @@
 <link rel="manifest" href="/manifest.webmanifest"/>
 <link rel="apple-touch-icon" href="/icon-192.png"/>
 <link rel="preconnect" href="https://rsms.me"/>
-<link rel="preconnect" href="https://unpkg.com"/>
-<link rel="preconnect" href="https://cdn.sheetjs.com"/>
-<link rel="preconnect" href="https://cdn.socket.io"/>
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
-<!-- Analytics : decommenter et remplacer YOURCODE par ton code Goatcounter (https://www.goatcounter.com — gratuit) -->
-<!-- <script data-goatcounter="https://YOURCODE.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script> -->
 <style>
-/* ── Thème par défaut : Dark Prime ── */
 :root{
-  --bg:#0a0a0e; --bg-2:#13131a; --bg-3:#1a1a24;
-  --text:#f4f1ed; --dim:#a8a097; --faint:#6e655c;
-  --line:rgba(255,255,255,0.06); --line-2:rgba(255,255,255,0.10);
-  --accent:#BFA060; --rose:#B85070; --steel:#5A8AE0; --gold:#C89040; --sage:#2CC4A0;
+  --bg:#0a0a0e;--bg2:#13131a;--bg3:#1a1a24;
+  --text:#f4f1ed;--dim:#a8a097;--faint:#6e655c;
+  --line:rgba(255,255,255,0.06);--line2:rgba(255,255,255,0.10);
+  --accent:#BFA060;--gold:#C89040;
   --grad:linear-gradient(135deg,#BFA060 0%,#D4B060 60%,#C89040 100%);
-  --grad-soft:linear-gradient(135deg,rgba(191,160,96,0.18),rgba(184,80,112,0.08),rgba(200,144,64,0.06));
-  --shadow-card:0 30px 80px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.04) inset;
-  --card-bg:rgba(12,12,20,0.90); --card-bg2:rgba(10,10,15,0.9); --feat-preview-bg:rgba(12,12,18,0.95);
-  --header-bg:rgba(10,10,14,0.78);
 }
-/* ── Thème Luxe Gris ── */
-[data-theme="luxe"]{
-  --bg:#0c0c10; --bg-2:#14141a; --bg-3:#1c1c24;
-  --text:#dddde6; --dim:#8080a0; --faint:#505068;
-  --line:rgba(200,200,255,0.06); --line-2:rgba(200,200,255,0.10);
-  --accent:#9090c4; --rose:#a080b4; --steel:#6080b0; --gold:#908060; --sage:#509080;
-  --grad:linear-gradient(135deg,#6868a8 0%,#8888bc 50%,#585894 100%);
-  --card-bg:rgba(18,18,26,0.9); --card-bg2:rgba(12,12,18,0.92); --feat-preview-bg:rgba(10,10,16,0.92);
-  --header-bg:rgba(12,12,16,0.82);
-}
-/* ── Thème Blanc-Noir ── */
-[data-theme="light"]{
-  --bg:#f4f4f2; --bg-2:#ffffff; --bg-3:#e8e8e6;
-  --text:#0c0c14; --dim:#484858; --faint:#88889a;
-  --line:rgba(0,0,0,0.07); --line-2:rgba(0,0,0,0.12);
-  --accent:#BFA060; --rose:#B85070; --steel:#4a7aaa; --gold:#a07820; --sage:#2a8a60;
-  --grad:linear-gradient(135deg,#BFA060 0%,#D4B060 60%,#C89040 100%);
-  --card-bg:rgba(255,255,255,0.9); --card-bg2:rgba(240,240,238,0.95); --feat-preview-bg:rgba(234,234,232,0.95);
-  --header-bg:rgba(244,244,242,0.88);
-}
-[data-theme="light"] .feature{background:var(--card-bg);border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .feat-preview{background:var(--feat-preview-bg);border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .audience-card{border-color:rgba(0,0,0,0.10)}
-[data-theme="light"] .audience-preview{border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .audience-coach .audience-preview{background:linear-gradient(160deg,rgba(191,160,96,0.06),rgba(244,244,242,1))}
-[data-theme="light"] .audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(74,122,170,0.06),rgba(244,244,242,1))}
-[data-theme="light"] .audience-body{background:rgba(255,255,255,0.95)}
-[data-theme="light"] .header{background:var(--header-bg);border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .cal-mock,[data-theme="light"] .nutri-mock{background:rgba(255,255,255,0.95);border-color:rgba(0,0,0,0.09)}
-[data-theme="light"] .cal-d{background:rgba(0,0,0,0.03);color:var(--dim)}
-[data-theme="light"] .nutri-macro{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.07)}
-[data-theme="light"] .nutri-meal{background:rgba(0,0,0,0.025);border-color:rgba(0,0,0,0.06)}
-[data-theme="light"] .step,[data-theme="light"] .faq-item{background:rgba(255,255,255,0.8);border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .final-cta{background:linear-gradient(160deg,rgba(191,160,96,0.08),rgba(248,248,246,0.98));border-color:rgba(191,160,96,0.18)}
-[data-theme="light"] .hero::before{background:radial-gradient(ellipse,rgba(191,160,96,0.10) 0%,transparent 55%)}
-[data-theme="light"] .sync-log,[data-theme="light"] .xl-table th{border-color:rgba(0,0,0,0.10)}
-[data-theme="light"] .chat-bubble-coach{background:rgba(191,160,96,0.12);border-color:rgba(191,160,96,0.25)}
-[data-theme="light"] .chat-bubble-athlete{background:rgba(74,122,170,0.12);border-color:rgba(74,122,170,0.25)}
-[data-theme="light"] .mb-track{background:rgba(0,0,0,0.07)}
-[data-theme="light"] .mb-meal-chip{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.09)}
-[data-theme="light"] .bc-bar:nth-child(-n+5){background:rgba(191,160,96,0.35)}
-[data-theme="light"] .bc-bar:last-child,[data-theme="light"] .bc-bar:nth-last-child(2){background:rgba(0,0,0,0.08)}
-[data-theme="light"] .bc-title,[data-theme="light"] .mb-title{color:var(--text)}
-[data-theme="light"] .wi-ex-name,[data-theme="light"] .sync-log-row{color:var(--dim)}
-[data-theme="light"] .cal-mock-title,[data-theme="light"] .nutri-mock-title,[data-theme="light"] .nutri-meal-name{color:var(--text)}
-[data-theme="light"] .btn-ghost{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12)}
-[data-theme="light"] .btn-ghost:hover{background:rgba(0,0,0,0.08);border-color:rgba(0,0,0,0.20)}
-[data-theme="light"] .footer{border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .footer-bottom{border-color:rgba(0,0,0,0.06)}
-
-/* ── Theme Picker ── */
-.theme-picker{display:flex;align-items:center;gap:5px;margin-right:8px}
-.theme-swatch{width:19px;height:19px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.2s;flex-shrink:0}
-.theme-swatch:hover{transform:scale(1.18)}
-.theme-swatch.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
-@media(max-width:560px){.theme-picker{gap:4px}.theme-swatch{width:16px;height:16px}}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
-html,body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;font-feature-settings:'cv11','ss03'}
-body{overflow-x:hidden;line-height:1.5}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif}
+body{overflow-x:hidden;line-height:1.55}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;border:none;cursor:pointer;background:transparent;color:inherit}
-img{display:block;max-width:100%}
 
 @keyframes shift{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-@keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
-@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes pulse{0%,100%{opacity:0.6;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+@keyframes fadeUp{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
 
-.container{width:100%;max-width:1180px;margin:0 auto;padding:0 24px}
-.section{padding:96px 0;position:relative}
-.section-sm{padding:64px 0}
+.ctn{max-width:1080px;margin:0 auto;padding:0 24px}
+.sec{padding:80px 0}
 
-/* Header */
-.header{position:fixed;top:0;left:0;right:0;z-index:100;background:var(--header-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
-.header-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
-.logo{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-0.3px;font-size:17px}
-.logo-mark{width:34px;height:34px;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.logo-mark>img{width:34px;height:34px;border-radius:10px;object-fit:cover;display:block}
-.nav-links{display:flex;align-items:center;gap:32px}
-.nav-links a{font-size:13px;font-weight:500;color:var(--dim);transition:color 0.2s}
-.nav-links a:hover{color:var(--text)}
-.btn-cta{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 18px;border-radius:12px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;color:#fff;font-size:13px;font-weight:700;letter-spacing:0.1px;box-shadow:0 8px 24px rgba(191,160,96,0.35);transition:transform 0.15s ease,box-shadow 0.15s ease}
-.btn-cta:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(191,160,96,0.45)}
-.btn-cta-lg{height:54px;padding:0 28px;font-size:14.5px;border-radius:14px}
-.btn-ghost{display:inline-flex;align-items:center;gap:7px;height:54px;padding:0 22px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid var(--line-2);color:var(--text);font-size:14px;font-weight:600;transition:all 0.2s}
-.btn-ghost:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.16)}
-@media(max-width:720px){.nav-links a:not(.btn-cta){display:none}.nav-links{gap:0}}
+/* ── Header ── */
+.hdr{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,14,0.80);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.hdr-in{display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px}
+.logo img{width:32px;height:32px;border-radius:9px}
+.hdr-nav{display:flex;align-items:center;gap:24px}
+.hdr-nav a{font-size:13px;font-weight:500;color:var(--dim);transition:color .2s}
+.hdr-nav a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 20px;border-radius:12px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;color:#fff;font-size:13px;font-weight:700;box-shadow:0 6px 20px rgba(191,160,96,0.35);transition:transform .15s,box-shadow .15s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(191,160,96,0.45)}
+.btn-lg{height:54px;padding:0 28px;font-size:15px;border-radius:14px}
+.btn-outline{height:54px;padding:0 24px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid var(--line2);color:var(--text);font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:all .2s}
+.btn-outline:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.16)}
+@media(max-width:640px){.hdr-nav a:not(.btn){display:none}}
 
-/* Hero */
-.hero{padding:140px 0 80px;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;top:-20%;right:-10%;width:60%;height:80%;background:radial-gradient(ellipse,rgba(191,160,96,0.18) 0%,transparent 55%);filter:blur(40px);pointer-events:none;z-index:0}
-.hero::after{content:'';position:absolute;bottom:-30%;left:-15%;width:55%;height:75%;background:radial-gradient(ellipse,rgba(90,138,224,0.10) 0%,transparent 60%);filter:blur(50px);pointer-events:none;z-index:0}
-.hero-inner{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr 1fr;gap:80px;align-items:center}
-@media(max-width:920px){.hero-inner{grid-template-columns:1fr;gap:60px}}
-.hero-pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 8px;border-radius:999px;background:rgba(191,160,96,0.10);border:1px solid rgba(191,160,96,0.30);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:0.3px;margin-bottom:22px;animation:fadeUp 0.6s ease both}
-.hero-pill-dot{width:6px;height:6px;border-radius:3px;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
-.hero h1{font-size:clamp(38px,5.5vw,68px);font-weight:800;letter-spacing:-2px;line-height:1.05;margin-bottom:22px;animation:fadeUp 0.7s ease 0.05s both}
-.gradient-text{background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 8s linear infinite}
-.hero p{font-size:18px;color:var(--dim);max-width:520px;margin-bottom:36px;line-height:1.6;animation:fadeUp 0.7s ease 0.15s both}
-.hero-ctas{display:flex;gap:12px;flex-wrap:wrap;animation:fadeUp 0.7s ease 0.25s both}
-.hero-meta{display:flex;gap:32px;margin-top:42px;animation:fadeUp 0.7s ease 0.35s both}
-@media(max-width:520px){.hero-meta{gap:20px}}
-.hero-meta-item{display:flex;flex-direction:column}
-.hero-meta-item strong{font-size:22px;font-weight:800;letter-spacing:-0.5px;background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 10s linear infinite}
-.hero-meta-item span{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-top:2px}
-
-/* Phone mockup */
-.phone-wrap{position:relative;display:flex;justify-content:center;animation:fadeUp 0.8s ease 0.3s both}
-.phone{width:280px;height:580px;border-radius:42px;padding:8px;background:linear-gradient(160deg,#2a2a32,#13131a);box-shadow:0 50px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.05) inset,0 30px 60px rgba(191,160,96,0.15);position:relative;animation:floatY 6s ease-in-out infinite}
-.phone-screen{width:100%;height:100%;border-radius:34px;background:radial-gradient(ellipse at 30% 0%,#1d1410 0%,#0a0a0e 60%);overflow:hidden;position:relative;display:flex;flex-direction:column;padding:32px 18px 22px}
-.phone-notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:110px;height:24px;border-radius:14px;background:#000;z-index:5}
-.phone-time{position:absolute;top:18px;left:32px;font-size:13px;font-weight:700;color:#fff;letter-spacing:-0.2px}
-.phone-status{position:absolute;top:20px;right:32px;display:flex;align-items:center;gap:5px;color:#fff}
-.phone-bars{display:flex;gap:1.5px;align-items:flex-end}
-.phone-bars span{width:2.5px;background:#fff;border-radius:1px}
-.phone-bars span:nth-child(1){height:5px}.phone-bars span:nth-child(2){height:7px}.phone-bars span:nth-child(3){height:9px}.phone-bars span:nth-child(4){height:11px}
-.phone-batt{width:22px;height:11px;border-radius:3px;border:1px solid rgba(255,255,255,0.5);position:relative;padding:1px}
-.phone-batt::after{content:'';display:block;width:100%;height:100%;background:#fff;border-radius:1px}
-.pc-head{display:flex;align-items:center;justify-content:space-between;margin-top:30px;margin-bottom:18px}
-.pc-back{width:34px;height:34px;border-radius:17px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
-.pc-title{text-align:center}
-.pc-title-sub{font-size:10px;color:var(--dim);font-weight:600;letter-spacing:0.4px;text-transform:uppercase}
-.pc-title-main{font-size:14px;font-weight:700;color:#fff;margin-top:1px}
-.pc-edit{width:34px;height:34px;border-radius:17px;background:rgba(191,160,96,0.12);border:1px solid rgba(191,160,96,0.3);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:12px}
-.pc-progress{display:flex;gap:3px;margin-bottom:8px}
-.pc-progress span{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08)}
-.pc-progress span.done{background:var(--accent)}
-.pc-progress span.active{background:var(--grad)}
-.pc-meta{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);font-weight:600;margin-bottom:16px}
-.pc-ex{flex:1;border-radius:14px;background:rgba(14,14,20,0.85);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.08);padding:14px 12px;position:relative;overflow:hidden}
-.pc-ex::before{content:'';position:absolute;top:-30%;right:-30%;width:120%;height:80%;background:radial-gradient(ellipse,rgba(191,160,96,0.20) 0%,transparent 60%);filter:blur(20px)}
-.pc-ex-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(191,160,96,0.18);border:1px solid rgba(191,160,96,0.35);color:var(--accent);font-size:8px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;position:relative}
-.pc-ex-title{font-size:16px;font-weight:700;color:#fff;margin-top:4px;margin-bottom:3px;position:relative}
-.pc-ex-prev{font-size:8px;color:var(--steel);background:rgba(90,138,224,0.10);border:1px solid rgba(90,138,224,0.3);padding:2px 6px;border-radius:999px;display:inline-block;margin-bottom:8px;position:relative}
-.pc-set{display:flex;align-items:center;gap:5px;padding:4px 5px 4px 7px;border-radius:9px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);margin-bottom:5px;position:relative}
-.pc-set.done{background:rgba(191,160,96,0.07);border-color:rgba(191,160,96,0.18)}
-.pc-set.active{background:rgba(191,160,96,0.04);border-color:rgba(191,160,96,0.35)}
-.pc-set-num{width:18px;height:18px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--faint);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.pc-set.done .pc-set-num{background:var(--accent);color:#fff}
-.pc-set.active .pc-set-num{background:rgba(191,160,96,0.18);color:var(--accent)}
-.pc-stepper{display:inline-flex;align-items:center;gap:2px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;height:22px;padding:0 4px;font-size:10px;font-weight:700;color:#fff}
-.pc-stepper-sm{font-size:7px;color:var(--faint);font-weight:600}
-.pc-x{color:var(--faint);font-size:9px;font-weight:600}
-.pc-check{margin-left:auto;width:26px;height:24px;border-radius:7px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center}
-.pc-set.active .pc-check{background:var(--grad);box-shadow:0 4px 10px rgba(191,160,96,0.4)}
-.pc-set.done .pc-check{color:var(--accent);background:transparent;border:1px solid rgba(191,160,96,0.18);font-size:8px;font-weight:700}
-
-/* Section heading */
-.eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
-.section-title{font-size:clamp(30px,4vw,46px);font-weight:800;letter-spacing:-1.2px;line-height:1.1;margin-bottom:18px}
-.section-sub{font-size:17px;color:var(--dim);max-width:640px;line-height:1.6;margin-bottom:60px}
-.section-head{text-align:center;max-width:760px;margin:0 auto 60px}
-.section-head .section-sub{margin:0 auto}
-
-/* Features */
-.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-@media(max-width:960px){.features{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.features{grid-template-columns:1fr}}
-.feature{border-radius:20px;background:var(--card-bg);border:1px solid var(--line);transition:all 0.25s ease;overflow:hidden;display:flex;flex-direction:column}
-.feature:hover{transform:translateY(-3px);border-color:rgba(191,160,96,0.28);box-shadow:0 20px 48px rgba(0,0,0,0.5),0 0 0 1px rgba(191,160,96,0.08) inset}
-.feat-preview{height:172px;background:var(--feat-preview-bg);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
-/* Glow coloré par type de carte */
-.feature:nth-child(1) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 10%,rgba(191,160,96,0.20) 0%,transparent 60%);pointer-events:none}
-.feature:nth-child(2) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(44,196,160,0.18) 0%,transparent 60%);pointer-events:none}
-.feature:nth-child(3) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 15%,rgba(44,196,160,0.16) 0%,transparent 60%);pointer-events:none}
-.feature:nth-child(4) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(200,144,64,0.18) 0%,transparent 60%);pointer-events:none}
-.feature:nth-child(5) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 10%,rgba(191,160,96,0.18) 0%,transparent 60%);pointer-events:none}
-.feature:nth-child(6) .feat-preview::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(90,138,224,0.18) 0%,transparent 60%);pointer-events:none}
-.feat-body{padding:20px 22px 24px}
-.feature-icon{width:38px;height:38px;border-radius:10px;background:rgba(191,160,96,0.10);border:1px solid rgba(191,160,96,0.18);display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:12px}
-.feature h3{font-size:16px;font-weight:700;letter-spacing:-0.2px;margin-bottom:6px}
-.feature p{font-size:13.5px;color:var(--dim);line-height:1.6}
-
-/* Audience */
-.audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-@media(max-width:760px){.audience{grid-template-columns:1fr}}
-.audience-card{border-radius:24px;overflow:hidden;border:1px solid var(--line-2);display:flex;flex-direction:column}
-.audience-preview{height:300px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
-.audience-coach .audience-preview{background:linear-gradient(160deg,rgba(191,160,96,0.10) 0%,rgba(191,160,96,0.02) 50%,var(--bg-2) 100%)}
-.audience-athlete .audience-preview{background:linear-gradient(160deg,rgba(90,138,224,0.10) 0%,rgba(90,138,224,0.02) 50%,var(--bg-2) 100%)}
-.audience-body{padding:26px 28px 30px;background:var(--card-bg2)}
-
-/* Calendar mockup */
-.cal-mock{position:absolute;top:16px;left:16px;right:16px;background:rgba(18,18,26,0.98);border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
-.cal-mock-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.cal-mock-title{font-size:13px;font-weight:700;color:#fff}
-.cal-mock-nav{display:flex;gap:6px}
-.cal-mock-nav span{width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dim)}
-.cal-mock-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px}
-.cal-mock-days span{text-align:center;font-size:9px;font-weight:700;color:var(--faint);padding:2px 0;letter-spacing:0.3px}
-.cal-mock-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.cal-d{height:28px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--dim);background:rgba(255,255,255,0.02);position:relative;gap:2px}
-.cal-d.today{background:rgba(191,160,96,0.20);color:var(--accent);border:1px solid rgba(191,160,96,0.35)}
-.cal-d.prev{color:var(--faint);opacity:0.4}
-.cal-d-dots{display:flex;gap:2px;justify-content:center}
-.cal-dot{width:4px;height:4px;border-radius:2px}
-
-/* Nutrition mockup */
-.nutri-mock{position:absolute;top:16px;left:16px;right:16px;background:rgba(18,18,26,0.98);border:1px solid rgba(255,255,255,0.14);border-radius:16px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
-.nutri-mock-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
-.nutri-mock-sub{font-size:9px;color:var(--faint);font-weight:600;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:12px}
-.nutri-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
-.nutri-macro{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 6px;text-align:center}
-.nutri-macro strong{display:block;font-size:13px;font-weight:800;letter-spacing:-0.4px}
-.nutri-macro span{font-size:8px;color:var(--faint);font-weight:600;letter-spacing:0.3px;text-transform:uppercase;margin-top:2px;display:block}
-.nutri-macro-kcal strong{color:#BFA060}
-.nutri-macro-p strong{color:#2CC4A0}
-.nutri-macro-g strong{color:#5A8AE0}
-.nutri-macro-l strong{color:#C89040}
-.nutri-meal{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:9px 10px;margin-bottom:6px}
-.nutri-meal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
-.nutri-meal-name{font-size:10px;font-weight:700;color:#fff}
-.nutri-meal-kcal{font-size:9px;color:var(--accent);font-weight:700;background:rgba(191,160,96,0.12);border:1px solid rgba(191,160,96,0.25);padding:2px 6px;border-radius:999px}
-.nutri-item{display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-top:1px solid rgba(255,255,255,0.04)}
-.nutri-item-name{font-size:9px;color:var(--dim)}
-.nutri-item-qty{font-size:9px;color:var(--faint);font-weight:600}
-
-/* Audience body */
-.audience-tag{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;margin-bottom:14px}
-.audience-coach .audience-tag{background:rgba(191,160,96,0.15);color:var(--accent);border:1px solid rgba(191,160,96,0.3)}
-.audience-athlete .audience-tag{background:rgba(90,138,224,0.15);color:var(--steel);border:1px solid rgba(90,138,224,0.3)}
-.audience-body h3{font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:9px}
-.audience-body p{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:18px}
-.audience-list{list-style:none;display:flex;flex-direction:column;gap:9px}
-.audience-list li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text);line-height:1.5}
-.audience-list li::before{content:'✓';flex-shrink:0;width:17px;height:17px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
-.audience-coach .audience-list li::before{background:rgba(191,160,96,0.18);color:var(--accent)}
-.audience-athlete .audience-list li::before{background:rgba(90,138,224,0.18);color:var(--steel)}
-
-/* Feature preview content wrappers */
-.feat-preview>*{position:relative;z-index:1;width:100%}
-/* Overrides light-mode feat-preview illustrations */
-[data-theme="light"] .wi-ex{background:rgba(191,160,96,0.09);border-color:rgba(191,160,96,0.22)}
-[data-theme="light"] .wi-ex-name{color:var(--text)}
-[data-theme="light"] .wi-step{background:rgba(0,0,0,0.06);border-color:rgba(0,0,0,0.14);color:var(--text)}
-[data-theme="light"] .mb-label{color:var(--dim)}
-[data-theme="light"] .mb-track{background:rgba(0,0,0,0.08)}
-[data-theme="light"] .mb-meal-chip{background:rgba(0,0,0,0.05);border-color:rgba(0,0,0,0.10);color:var(--dim)}
-[data-theme="light"] .xl-table th{color:var(--faint);border-color:rgba(0,0,0,0.10)}
-[data-theme="light"] .xl-table td{color:var(--dim);border-color:rgba(0,0,0,0.05)}
-[data-theme="light"] .sync-node{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12)}
-[data-theme="light"] .sync-node-label{color:var(--faint)}
-[data-theme="light"] .sync-node-val{color:var(--text)}
-[data-theme="light"] .sync-log{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.08)}
-[data-theme="light"] .sync-log-row{color:var(--dim);border-color:rgba(0,0,0,0.06)}
-[data-theme="light"] .sync-log-time{color:var(--faint)}
-[data-theme="light"] .bc-label{color:var(--faint)}
-[data-theme="light"] .chat-bubble{color:var(--text)}
-
-/* Workout illustration */
-.wi-ex{background:rgba(191,160,96,0.12);border:1px solid rgba(191,160,96,0.30);border-radius:12px;padding:11px;width:100%}
-.wi-ex-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(191,160,96,0.22);color:var(--accent);font-size:8px;font-weight:700;margin-bottom:3px}
-.wi-ex-name{font-size:12px;font-weight:800;color:#fff;margin-bottom:2px}
-.wi-ex-prev{font-size:8px;color:#5A8AE0;margin-bottom:7px}
-.wi-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
-.wi-step{background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:3px 7px;font-size:9px;font-weight:700;color:#fff}
-.wi-x{font-size:8px;color:var(--faint)}
-.wi-check{margin-left:auto;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px}
-.wi-check.done{background:rgba(191,160,96,0.28);color:var(--accent);border:1px solid rgba(191,160,96,0.45)}
-.wi-check.active{background:var(--grad);color:#fff;box-shadow:0 2px 8px rgba(191,160,96,0.5)}
-.wi-timer{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;font-weight:700;color:#2CC4A0}
-
-/* Macro bars */
-.mb-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
-.mb-row{margin-bottom:7px}
-.mb-label{display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.70);margin-bottom:3px;font-weight:600}
-.mb-track{height:6px;border-radius:3px;background:rgba(255,255,255,0.10);overflow:hidden}
-.mb-fill{height:100%;border-radius:3px}
-.mb-meals{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
-.mb-meal-chip{padding:3px 8px;border-radius:999px;font-size:8px;font-weight:600;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.65)}
-.mb-meal-chip span{color:var(--accent);margin-left:3px}
-.mb-meal-pending{opacity:0.5}
-
-/* Excel table */
-.xl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
-.xl-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:7px;background:rgba(44,196,160,0.16);border:1px solid rgba(44,196,160,0.35);color:#2CC4A0;font-size:9px;font-weight:700}
-.xl-status{font-size:9px;color:#2CC4A0;font-weight:700}
-.xl-table{width:100%;border-collapse:collapse}
-.xl-table th{font-size:8px;color:rgba(255,255,255,0.40);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;padding:3px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.10)}
-.xl-table td{font-size:9px;color:rgba(255,255,255,0.65);padding:4px 4px;border-bottom:1px solid rgba(255,255,255,0.05)}
-.xl-table tr:last-child td{border:none}
-.xl-day{color:#BFA060!important;font-weight:800}
-
-/* Sync illustration */
-.sync-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.sync-node{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:10px;padding:8px 10px;text-align:center}
-.sync-node-label{font-size:8px;color:rgba(255,255,255,0.45);font-weight:700;letter-spacing:0.4px;text-transform:uppercase}
-.sync-node-val{font-size:13px;font-weight:800;color:#fff;margin-top:2px}
-.sync-arrow{font-size:22px;animation:pulse 2s ease-in-out infinite;flex-shrink:0;filter:drop-shadow(0 0 6px rgba(200,144,64,0.7))}
-.sync-log{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:9px 11px}
-.sync-log-row{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:9px;color:rgba(255,255,255,0.65);border-bottom:1px solid rgba(255,255,255,0.05)}
-.sync-log-row:last-child{border:none}
-.sync-log-dot{width:6px;height:6px;border-radius:3px;flex-shrink:0}
-.sync-log-time{margin-left:auto;color:rgba(255,255,255,0.35);font-size:8px;font-weight:600}
-
-/* Bar chart */
-.bc-title{font-size:10px;font-weight:700;color:#fff;margin-bottom:10px}
-.bc-bars{display:flex;align-items:flex-end;gap:5px;height:64px;margin-bottom:5px}
-.bc-bar{flex:1;border-radius:5px 5px 0 0;min-height:4px}
-.bc-labels{display:flex;gap:5px}
-.bc-label{flex:1;text-align:center;font-size:8px;color:rgba(255,255,255,0.40);font-weight:600}
-.bc-streak{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;font-weight:700;color:var(--accent)}
-
-/* Chat preview */
-.chat-preview{display:flex;flex-direction:column;gap:8px;width:100%}
-.chat-msg{display:flex;align-items:flex-end;gap:7px}
-.chat-msg-athlete{flex-direction:row-reverse}
-.chat-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
-.chat-avatar-coach{background:linear-gradient(135deg,#BFA060,#B85070);color:#fff;box-shadow:0 2px 8px rgba(191,160,96,0.4)}
-.chat-avatar-athlete{background:linear-gradient(135deg,#5A8AE0,#8e6cb6);color:#fff;box-shadow:0 2px 8px rgba(90,138,224,0.4)}
-.chat-bubble{max-width:82%;padding:7px 10px;border-radius:13px;font-size:10.5px;line-height:1.45;color:#fff}
-.chat-bubble-coach{background:rgba(191,160,96,0.30);border:1px solid rgba(191,160,96,0.45);border-bottom-left-radius:3px}
-.chat-bubble-athlete{background:rgba(90,138,224,0.28);border:1px solid rgba(90,138,224,0.42);border-bottom-right-radius:3px}
-
-/* Steps */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
-@media(max-width:760px){.steps{grid-template-columns:1fr}}
-.step{padding:28px;border-radius:20px;background:rgba(28,28,40,0.4);border:1px solid var(--line);position:relative}
-.step-num{position:absolute;top:-18px;left:24px;width:36px;height:36px;border-radius:10px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;box-shadow:0 6px 16px rgba(191,160,96,0.4)}
-.step h3{font-size:18px;font-weight:700;letter-spacing:-0.3px;margin:14px 0 8px}
-.step p{font-size:14px;color:var(--dim);line-height:1.6}
-
-/* FAQ */
-.faq{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
-.faq-item{border-radius:14px;background:rgba(28,28,40,0.5);border:1px solid var(--line);overflow:hidden;transition:all 0.25s}
-.faq-item:hover{border-color:var(--line-2)}
-.faq-q{width:100%;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;font-size:15.5px;font-weight:600;text-align:left;color:var(--text);transition:color 0.2s}
-.faq-q:hover{color:var(--accent)}
-.faq-q-icon{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px;font-weight:700;flex-shrink:0;margin-left:16px;transition:transform 0.25s ease}
-.faq-item.open .faq-q-icon{transform:rotate(45deg);background:rgba(191,160,96,0.18);color:var(--accent)}
-.faq-a{padding:0 24px;max-height:0;overflow:hidden;transition:max-height 0.3s ease,padding 0.3s ease;color:var(--dim);font-size:14px;line-height:1.65}
-.faq-item.open .faq-a{padding:0 24px 20px;max-height:300px}
-
-/* Final CTA */
-.final-cta{text-align:center;padding:72px 32px;border-radius:32px;background:linear-gradient(160deg,rgba(191,160,96,0.12),rgba(20,20,28,0.95));border:1px solid rgba(191,160,96,0.20);position:relative;overflow:hidden}
-.final-cta::before{content:'';position:absolute;top:-40%;right:-20%;width:60%;height:120%;background:radial-gradient(ellipse,rgba(191,160,96,0.20),transparent 60%);filter:blur(40px);pointer-events:none}
-.final-cta::after{content:'';position:absolute;bottom:-40%;left:-20%;width:55%;height:120%;background:radial-gradient(ellipse,rgba(142,108,182,0.15),transparent 60%);filter:blur(40px);pointer-events:none}
-.final-cta>*{position:relative}
-.final-cta h2{font-size:clamp(28px,3.5vw,42px);font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:14px}
-.final-cta p{font-size:17px;color:var(--dim);max-width:520px;margin:0 auto 30px;line-height:1.6}
-
-/* Footer */
-.footer{padding:60px 0 36px;border-top:1px solid var(--line);margin-top:60px}
-.footer-inner{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;justify-content:space-between}
-.footer-brand{max-width:280px}
-.footer-brand p{font-size:13px;color:var(--dim);line-height:1.6;margin-top:12px}
-.footer-cols{display:flex;gap:60px;flex-wrap:wrap}
-.footer-col h5{font-size:11px;color:var(--faint);font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:14px}
-.footer-col a{display:block;font-size:13.5px;color:var(--dim);font-weight:500;margin-bottom:9px;transition:color 0.2s}
-.footer-col a:hover{color:var(--text)}
-.footer-bottom{margin-top:44px;padding-top:24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--faint)}
-
-/* ── Mobile ──────────────────────────────────────────────── */
+/* ── Hero ── */
+.hero{padding:130px 0 72px;position:relative;overflow:hidden;text-align:center}
+.hero::before{content:'';position:absolute;top:-30%;left:50%;transform:translateX(-50%);width:80%;height:80%;background:radial-gradient(ellipse,rgba(191,160,96,0.16) 0%,transparent 60%);filter:blur(50px);pointer-events:none}
+.hero>*{position:relative}
+.hero-pill{display:inline-flex;align-items:center;gap:8px;padding:7px 16px 7px 10px;border-radius:999px;background:rgba(191,160,96,0.10);border:1px solid rgba(191,160,96,0.28);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.3px;margin-bottom:24px;animation:fadeUp .6s ease both}
+.hero-dot{width:6px;height:6px;border-radius:3px;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+.hero h1{font-size:clamp(36px,5.5vw,64px);font-weight:800;letter-spacing:-2px;line-height:1.08;margin-bottom:20px;animation:fadeUp .7s ease .05s both}
+.grad{background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 8s linear infinite}
+.hero p{font-size:18px;color:var(--dim);max-width:560px;margin:0 auto 32px;line-height:1.6;animation:fadeUp .7s ease .15s both}
+.hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;animation:fadeUp .7s ease .25s both}
+.hero-stats{display:flex;gap:40px;justify-content:center;margin-top:48px;animation:fadeUp .7s ease .35s both}
+.hero-stat strong{display:block;font-size:24px;font-weight:800;letter-spacing:-.5px;background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 10s linear infinite}
+.hero-stat span{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:2px;display:block}
 @media(max-width:640px){
-  .container{padding:0 16px}
-  .section{padding:60px 0}
-  .section-head{margin-bottom:36px}
-  .section-sub{font-size:15px;margin-bottom:36px}
-  .section-title{letter-spacing:-0.8px}
-
-  /* Hero */
-  .hero{padding:96px 0 48px}
+  .hero{padding:100px 0 48px}
   .hero p{font-size:16px}
-  .hero-ctas{flex-direction:column;gap:10px}
-  .hero-ctas .btn-cta-lg,.hero-ctas .btn-ghost{width:100%;justify-content:center;height:52px}
-  .hero-meta{gap:16px;margin-top:32px}
-  .hero-meta-item strong{font-size:18px}
-  /* Masquer le mockup téléphone — trop encombrant sur mobile */
-  .phone-wrap{display:none}
-
-  /* Features */
-  .feat-preview{height:140px}
-  .feat-body{padding:16px 18px 20px}
-  .feature h3{font-size:15px}
-  .feature p{font-size:13px}
-
-  /* Audience */
-  .audience-preview{height:220px}
-  .audience-body{padding:20px 20px 24px}
-  .audience-body h3{font-size:19px}
-
-  /* Steps */
-  .steps{gap:36px;padding-top:8px}
-  .step{padding:22px 20px 20px}
-  .step h3{font-size:16px;margin:12px 0 6px}
-  .step p{font-size:13px}
-
-  /* FAQ */
-  .faq-q{font-size:14px;padding:17px 18px}
-  .faq-a{font-size:13px}
-  .faq-item.open .faq-a{padding:0 18px 16px}
-
-  /* Final CTA */
-  .final-cta{padding:48px 20px;border-radius:22px}
-  .final-cta p{font-size:15px}
-  .final-cta .btn-cta-lg{width:100%;justify-content:center}
-
-  /* Footer */
-  .footer{padding:44px 0 28px;margin-top:40px}
-  .footer-cols{gap:28px}
-  .footer-bottom{flex-direction:column;align-items:flex-start;gap:6px}
+  .hero-ctas{flex-direction:column;align-items:center;gap:10px}
+  .hero-ctas .btn-lg,.hero-ctas .btn-outline{width:100%;justify-content:center}
+  .hero-stats{gap:20px;flex-wrap:wrap}
+  .hero-stat strong{font-size:20px}
 }
 
-@media(max-width:380px){
-  .hero h1{font-size:34px;letter-spacing:-1px}
-  .hero-pill{font-size:11px}
-  .hero-meta{flex-wrap:wrap}
+/* ── Section heading ── */
+.sh{text-align:center;margin-bottom:56px}
+.eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
+.sh h2{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-1px;line-height:1.1}
+
+/* ── Features ── */
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:860px){.feats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.feats{grid-template-columns:1fr}}
+.feat{border-radius:20px;background:rgba(12,12,20,0.90);border:1px solid var(--line);padding:28px 24px;transition:all .25s}
+.feat:hover{transform:translateY(-3px);border-color:rgba(191,160,96,0.25);box-shadow:0 16px 40px rgba(0,0,0,0.4)}
+.feat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+.feat h3{font-size:17px;font-weight:700;letter-spacing:-.2px;margin-bottom:8px}
+.feat p{font-size:14px;color:var(--dim);line-height:1.6}
+.feat-highlight{font-size:12px;margin-top:12px;display:inline-block;padding:4px 10px;border-radius:8px;font-weight:600}
+
+/* ── Audience (Coach / Athlète) ── */
+.audience{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:700px){.audience{grid-template-columns:1fr}}
+.aud{border-radius:22px;border:1px solid var(--line2);overflow:hidden;display:flex;flex-direction:column}
+.aud-head{padding:28px 28px 20px;position:relative;overflow:hidden}
+.aud-head::before{content:'';position:absolute;inset:0;pointer-events:none}
+.aud-coach .aud-head{background:linear-gradient(160deg,rgba(191,160,96,0.12),rgba(12,12,20,0.95))}
+.aud-coach .aud-head::before{background:radial-gradient(ellipse at 80% 0%,rgba(191,160,96,0.15),transparent 60%)}
+.aud-athlete .aud-head{background:linear-gradient(160deg,rgba(90,138,224,0.12),rgba(12,12,20,0.95))}
+.aud-athlete .aud-head::before{background:radial-gradient(ellipse at 80% 0%,rgba(90,138,224,0.15),transparent 60%)}
+.aud-tag{display:inline-block;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;margin-bottom:12px}
+.aud-coach .aud-tag{background:rgba(191,160,96,0.15);color:var(--accent);border:1px solid rgba(191,160,96,0.3)}
+.aud-athlete .aud-tag{background:rgba(90,138,224,0.15);color:#5A8AE0;border:1px solid rgba(90,138,224,0.3)}
+.aud h3{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-bottom:8px;position:relative}
+.aud>p{font-size:14px;color:var(--dim);line-height:1.6;position:relative}
+.aud-body{padding:20px 28px 28px;background:rgba(10,10,15,0.9)}
+.aud-list{list-style:none;display:flex;flex-direction:column;gap:10px}
+.aud-list li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--text);line-height:1.5}
+.aud-list li::before{content:'';flex-shrink:0;width:18px;height:18px;border-radius:5px;margin-top:2px;display:flex;align-items:center;justify-content:center}
+.aud-coach .aud-list li::before{background:rgba(191,160,96,0.18)}
+.aud-athlete .aud-list li::before{background:rgba(90,138,224,0.18)}
+@media(max-width:640px){
+  .aud-head{padding:22px 20px 16px}
+  .aud-body{padding:16px 20px 24px}
+  .aud h3{font-size:19px}
+}
+
+/* ── Steps ── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+@media(max-width:700px){.steps{grid-template-columns:1fr}}
+.step{padding:28px 24px;border-radius:18px;background:rgba(28,28,40,0.4);border:1px solid var(--line);position:relative}
+.step-n{position:absolute;top:-16px;left:22px;width:32px;height:32px;border-radius:9px;background:var(--grad);background-size:200% 200%;animation:shift 12s linear infinite;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;box-shadow:0 5px 14px rgba(191,160,96,0.4)}
+.step h3{font-size:17px;font-weight:700;margin:12px 0 6px}
+.step p{font-size:14px;color:var(--dim);line-height:1.6}
+
+/* ── FAQ ── */
+.faq{max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.faq-item{border-radius:14px;background:rgba(28,28,40,0.5);border:1px solid var(--line);overflow:hidden;transition:all .25s}
+.faq-q{width:100%;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;font-size:15px;font-weight:600;text-align:left;color:var(--text);transition:color .2s}
+.faq-q:hover{color:var(--accent)}
+.faq-ico{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px;font-weight:700;flex-shrink:0;margin-left:14px;transition:transform .25s}
+.faq-item.open .faq-ico{transform:rotate(45deg);background:rgba(191,160,96,0.18);color:var(--accent)}
+.faq-a{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .3s,padding .3s;color:var(--dim);font-size:14px;line-height:1.65}
+.faq-item.open .faq-a{padding:0 22px 18px;max-height:200px}
+
+/* ── Final CTA ── */
+.cta-box{text-align:center;padding:64px 32px;border-radius:28px;background:linear-gradient(160deg,rgba(191,160,96,0.12),rgba(20,20,28,0.95));border:1px solid rgba(191,160,96,0.20);position:relative;overflow:hidden}
+.cta-box::before{content:'';position:absolute;top:-40%;right:-20%;width:60%;height:120%;background:radial-gradient(ellipse,rgba(191,160,96,0.18),transparent 60%);filter:blur(40px);pointer-events:none}
+.cta-box>*{position:relative}
+.cta-box h2{font-size:clamp(26px,3.5vw,40px);font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:14px}
+.cta-box p{font-size:16px;color:var(--dim);max-width:480px;margin:0 auto 28px;line-height:1.6}
+
+/* ── Footer ── */
+.ftr{padding:48px 0 28px;border-top:1px solid var(--line);margin-top:48px}
+.ftr-in{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start;justify-content:space-between}
+.ftr-brand{max-width:260px}
+.ftr-brand p{font-size:13px;color:var(--dim);line-height:1.6;margin-top:10px}
+.ftr-cols{display:flex;gap:48px;flex-wrap:wrap}
+.ftr-col h5{font-size:11px;color:var(--faint);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:12px}
+.ftr-col a{display:block;font-size:13px;color:var(--dim);font-weight:500;margin-bottom:8px;transition:color .2s}
+.ftr-col a:hover{color:var(--text)}
+.ftr-bot{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--faint)}
+@media(max-width:640px){
+  .sec{padding:56px 0}
+  .ctn{padding:0 16px}
+  .cta-box{padding:40px 18px;border-radius:20px}
+  .ftr-bot{flex-direction:column;gap:4px}
 }
 </style>
 </head>
 <body>
 
-<!-- Header -->
-<header class="header">
-  <div class="container header-inner">
-    <a href="/" class="logo">
-      <div class="logo-mark"><img src="/logo.svg" alt="Prime Athlète"/></div>
-      Prime Athlète
-    </a>
-    <nav class="nav-links">
+<header class="hdr">
+  <div class="ctn hdr-in">
+    <a href="/" class="logo"><img src="/logo.svg" alt="Prime Athl"/>Prime Athl</a>
+    <nav class="hdr-nav">
       <a href="#fonctions">Fonctionnalités</a>
       <a href="#qui">Pour qui</a>
       <a href="#faq">FAQ</a>
-      <div class="theme-picker" title="Changer le thème">
-        <button class="theme-swatch" data-theme="dark" style="background:linear-gradient(135deg,#0a0a0e 40%,#BFA060)" title="Dark Prime"></button>
-        <button class="theme-swatch" data-theme="luxe" style="background:linear-gradient(135deg,#0c0c10 40%,#9090c4)" title="Luxe Gris"></button>
-        <button class="theme-swatch" data-theme="light" style="background:linear-gradient(135deg,#f4f4f2 40%,#0c0c14)" title="Blanc-Noir"></button>
-      </div>
-      <a class="btn-cta" href="/Muscu.html">Lancer l'app →</a>
+      <a class="btn" href="/Muscu.html">Lancer l'app &rarr;</a>
     </nav>
   </div>
 </header>
 
 <!-- Hero -->
 <section class="hero">
-  <div class="container">
-    <div class="hero-inner">
-      <div>
-        <div class="hero-pill"><span class="hero-pill-dot"></span> Coaching · IA · Surcharge progressive · RPE · Temps réel</div>
-        <h1>Le suivi coach-athlète, <span class="gradient-text">enfin simple.</span></h1>
-        <p>Programme, nutrition IA, séances et messagerie — tout est synchronisé entre toi et ton coach, en temps réel, depuis ton téléphone.</p>
-        <div class="hero-ctas">
-          <a class="btn-cta btn-cta-lg" href="/Muscu.html">
-            Essai gratuit 7 jours
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </a>
-          <a class="btn-ghost" href="#fonctions">Voir les fonctionnalités</a>
-        </div>
-        <div class="hero-meta">
-          <div class="hero-meta-item"><strong>7 jours</strong><span>Essai gratuit</span></div>
-          <div class="hero-meta-item"><strong>iOS & Android</strong><span>Installable sans store</span></div>
-          <div class="hero-meta-item"><strong>Temps réel</strong><span>Coach ↔ Athlète</span></div>
-          <div class="hero-meta-item"><strong>RPE & Surcharge</strong><span>Progression guidée</span></div>
-        </div>
-      </div>
-
-      <!-- Mockup téléphone -->
-      <div class="phone-wrap">
-        <div class="phone">
-          <div class="phone-notch"></div>
-          <div class="phone-time">9:41</div>
-          <div class="phone-status">
-            <div class="phone-bars"><span></span><span></span><span></span><span></span></div>
-            <div class="phone-batt"></div>
-          </div>
-          <div class="phone-screen">
-            <div class="pc-head">
-              <div class="pc-back">‹</div>
-              <div class="pc-title">
-                <div class="pc-title-sub">Lundi</div>
-                <div class="pc-title-main">1:15</div>
-              </div>
-              <div class="pc-edit">✎</div>
-            </div>
-            <div class="pc-progress">
-              <span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="active"></span><span></span><span></span><span></span>
-            </div>
-            <div class="pc-meta"><span>Exercice 6/9</span><span>22/36 · 4 250 kg</span></div>
-            <div class="pc-ex">
-              <div class="pc-ex-pill">● Pectoraux</div>
-              <div class="pc-ex-title">Développé couché</div>
-              <div class="pc-ex-prev">↺ Dernière : 80×8 · 80×7 · 80×6</div>
-              <div class="pc-set done">
-                <div class="pc-set-num">✓</div>
-                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
-                <span class="pc-x">×</span>
-                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
-                <div class="pc-check">640<br/>kg</div>
-              </div>
-              <div class="pc-set done">
-                <div class="pc-set-num">✓</div>
-                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
-                <span class="pc-x">×</span>
-                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
-                <div class="pc-check">640<br/>kg</div>
-              </div>
-              <div class="pc-set active">
-                <div class="pc-set-num">3</div>
-                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
-                <span class="pc-x">×</span>
-                <span class="pc-stepper">− 7 <span class="pc-stepper-sm">/8</span> +</span>
-                <div class="pc-check" style="color:#fff">✓</div>
-              </div>
-              <div class="pc-set">
-                <div class="pc-set-num">4</div>
-                <span class="pc-stepper">− 80 <span class="pc-stepper-sm">kg</span> +</span>
-                <span class="pc-x">×</span>
-                <span class="pc-stepper">− 8 <span class="pc-stepper-sm">/8</span> +</span>
-                <div class="pc-check">✓</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <div class="ctn">
+    <div class="hero-pill"><span class="hero-dot"></span> Coaching &middot; IA &middot; Temps r&eacute;el</div>
+    <h1>Le suivi coach-athl&egrave;te,<br><span class="grad">enfin simple.</span></h1>
+    <p>Programme, nutrition, s&eacute;ances et messagerie &mdash; tout est synchronis&eacute; en temps r&eacute;el entre toi et ton coach, depuis ton t&eacute;l&eacute;phone.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-lg" href="/Muscu.html">Essai gratuit 7 jours &rarr;</a>
+      <a class="btn-outline" href="#fonctions">D&eacute;couvrir</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><strong>7 jours</strong><span>Essai gratuit</span></div>
+      <div class="hero-stat"><strong>iOS &amp; Android</strong><span>Sans t&eacute;l&eacute;chargement</span></div>
+      <div class="hero-stat"><strong>Temps r&eacute;el</strong><span>Coach &harr; Athl&egrave;te</span></div>
     </div>
   </div>
 </section>
 
 <!-- Features -->
-<section class="section" id="fonctions">
-  <div class="container">
-    <div class="section-head">
-      <div class="eyebrow">Fonctionnalités</div>
-      <h2 class="section-title">Tout ce qu'il faut, <span class="gradient-text">rien de superflu.</span></h2>
+<section class="sec" id="fonctions">
+  <div class="ctn">
+    <div class="sh">
+      <div class="eyebrow">Fonctionnalit&eacute;s</div>
+      <h2>Tout ce qu'il faut, <span class="grad">rien de superflu.</span></h2>
     </div>
-    <div class="features">
+    <div class="feats">
 
-      <!-- Séance guidée -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div class="wi-ex">
-            <div class="wi-ex-pill">● Pectoraux</div>
-            <div class="wi-ex-name">Développé couché</div>
-            <div class="wi-ex-prev">↺ Dernière : 80×8 · 80×7 · 75×6</div>
-            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 8 +</div><div class="wi-check done">✓</div></div>
-            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 8 +</div><div class="wi-check done">✓</div></div>
-            <div class="wi-row"><div class="wi-step">− 82.5 kg +</div><span class="wi-x">×</span><div class="wi-step">− 7 +</div><div class="wi-check active">✓</div></div>
-            <div class="wi-timer">⏱ Repos · 01:23</div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">💪</div>
-          <h3>Séance guidée</h3>
-          <p>Steppers ±2,5 kg et ±1 rep, chrono de repos auto. Surcharge progressive sous chaque série, sélecteur RPE 1–10 après validation. Wake lock : l'écran reste allumé à la salle.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(191,160,96,0.12);border:1px solid rgba(191,160,96,0.25)">💪</div>
+        <h3>S&eacute;ance guid&eacute;e</h3>
+        <p>Steppers &plusmn;2,5&thinsp;kg et &plusmn;1 rep, chrono de repos auto, surcharge progressive sous chaque s&eacute;rie, s&eacute;lecteur RPE. L'&eacute;cran reste allum&eacute; &agrave; la salle.</p>
       </div>
 
-      <!-- Nutrition complète -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div style="width:100%">
-            <div class="mb-title">🥗 Lundi · Macros du jour</div>
-            <div class="mb-row"><div class="mb-label"><span>Calories</span><span style="color:#BFA060">1 840 / 2 450</span></div><div class="mb-track"><div class="mb-fill" style="width:75%;background:linear-gradient(90deg,#BFA060,#D4B060)"></div></div></div>
-            <div class="mb-row"><div class="mb-label"><span>Protéines</span><span style="color:#2CC4A0">142 / 190g</span></div><div class="mb-track"><div class="mb-fill" style="width:75%;background:#2CC4A0"></div></div></div>
-            <div class="mb-row"><div class="mb-label"><span>Glucides</span><span style="color:#5A8AE0">180 / 270g</span></div><div class="mb-track"><div class="mb-fill" style="width:67%;background:#5A8AE0"></div></div></div>
-            <div class="mb-row"><div class="mb-label"><span>Lipides</span><span style="color:#C89040">48 / 65g</span></div><div class="mb-track"><div class="mb-fill" style="width:74%;background:#C89040"></div></div></div>
-            <div class="mb-meals"><div class="mb-meal-chip">☀️ Petit-déj <span>680 kcal</span></div><div class="mb-meal-chip">🍽️ Déjeuner <span>820 kcal</span></div><div class="mb-meal-chip mb-meal-pending">🌙 Dîner <span>à venir</span></div></div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">🥗</div>
-          <h3>Nutrition complète</h3>
-          <p>Plan sur 7 jours, 200+ aliments sport, calcul automatique des macros. Jauges kcal, protéines, glucides et lipides en temps réel.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(44,196,160,0.12);border:1px solid rgba(44,196,160,0.25)">🥗</div>
+        <h3>Nutrition compl&egrave;te</h3>
+        <p>Plan sur 7 jours, 200+ aliments sport, calcul automatique des macros. Jauges kcal, prot&eacute;ines, glucides et lipides en temps r&eacute;el.</p>
       </div>
 
-      <!-- Import Excel -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div style="width:100%">
-            <div class="xl-head"><div class="xl-badge">📥 Programme.xlsx</div><span class="xl-status">✓ Importé</span></div>
-            <table class="xl-table">
-              <thead><tr><th>Jour</th><th>Exercice</th><th>Kg</th><th>Séries</th><th>Reps</th></tr></thead>
-              <tbody>
-                <tr><td class="xl-day">Lun</td><td>Squat barre</td><td>100</td><td>4</td><td>8</td></tr>
-                <tr><td class="xl-day">Lun</td><td>Fentes</td><td>60</td><td>3</td><td>12</td></tr>
-                <tr><td class="xl-day">Mar</td><td>Dév. couché</td><td>80</td><td>4</td><td>8</td></tr>
-                <tr><td class="xl-day">Jeu</td><td>Épaules</td><td>50</td><td>3</td><td>12</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">📥</div>
-          <h3>Import Excel natif</h3>
-          <p>Le coach glisse son fichier. Détection automatique des jours, exercices, charges, séries, calories et macros. Zéro saisie.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25)">🤖</div>
+        <h3>IA Programme &amp; Nutrition</h3>
+        <p>G&eacute;n&egrave;re un programme muscu et un plan nutrition 7 jours en quelques secondes. L'IA s'adapte &agrave; ton profil, objectif et disponibilit&eacute;s.</p>
       </div>
 
-      <!-- Sync temps réel -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div style="width:100%">
-            <div class="sync-row">
-              <div class="sync-node"><div class="sync-node-label">Coach</div><div class="sync-node-val">Yannis</div></div>
-              <div class="sync-arrow">⚡</div>
-              <div class="sync-node"><div class="sync-node-label">Athlète</div><div class="sync-node-val">Christelle</div></div>
-            </div>
-            <div class="sync-log">
-              <div class="sync-log-row"><span class="sync-log-dot" style="background:#2CC4A0"></span>Programme mis à jour<span class="sync-log-time">0.3s</span></div>
-              <div class="sync-log-row"><span class="sync-log-dot" style="background:#BFA060"></span>Séance terminée ✓<span class="sync-log-time">1s</span></div>
-              <div class="sync-log-row"><span class="sync-log-dot" style="background:#C89040"></span>Push notification 🔔<span class="sync-log-time">2s</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">⚡</div>
-          <h3>Sync temps réel</h3>
-          <p>Le coach modifie un programme → l'athlète le voit dans la seconde. Tout remonte instantanément via notifications push.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(224,112,32,0.12);border:1px solid rgba(224,112,32,0.25)">📋</div>
+        <h3>Programmes d'entra&icirc;nement</h3>
+        <p>Programmes structur&eacute;s multi-semaines &agrave; acheter et suivre. 9 cat&eacute;gories, suivi de progression, s&eacute;ances compl&eacute;t&eacute;es auto &mdash; du d&eacute;butant &agrave; l'avanc&eacute;.</p>
+        <div class="feat-highlight" style="background:rgba(224,112,32,0.12);color:#E07020;border:1px solid rgba(224,112,32,0.25)">Nouveau</div>
       </div>
 
-      <!-- Suivi & historique -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div style="width:100%">
-            <div class="bc-title">📊 Volume hebdo (kg)</div>
-            <div class="bc-bars">
-              <div class="bc-bar" style="height:55%;background:rgba(191,160,96,0.60)"></div>
-              <div class="bc-bar" style="height:72%;background:rgba(191,160,96,0.70)"></div>
-              <div class="bc-bar" style="height:40%;background:rgba(191,160,96,0.55)"></div>
-              <div class="bc-bar" style="height:90%;background:linear-gradient(180deg,#BFA060,#B85070);box-shadow:0 0 12px rgba(191,160,96,0.5)"></div>
-              <div class="bc-bar" style="height:65%;background:rgba(191,160,96,0.65)"></div>
-              <div class="bc-bar" style="height:18%;background:rgba(255,255,255,0.12)"></div>
-              <div class="bc-bar" style="height:10%;background:rgba(255,255,255,0.08)"></div>
-            </div>
-            <div class="bc-labels"><span class="bc-label">L</span><span class="bc-label">M</span><span class="bc-label">M</span><span class="bc-label" style="color:#BFA060;font-weight:700">J</span><span class="bc-label">V</span><span class="bc-label">S</span><span class="bc-label">D</span></div>
-            <div class="bc-streak">🔥 5 jours consécutifs</div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">📊</div>
-          <h3>Suivi & historique</h3>
-          <p>Volume hebdo, streak, courbe de progression par exercice, suivi poids corporel, répartition musculaire, calendrier global. Le coach voit tout depuis un seul écran.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(200,144,64,0.12);border:1px solid rgba(200,144,64,0.25)">⚡</div>
+        <h3>Sync temps r&eacute;el</h3>
+        <p>Le coach modifie un programme &rarr; l'athl&egrave;te le voit dans la seconde. Notifications push, messagerie int&eacute;gr&eacute;e, z&eacute;ro WhatsApp.</p>
       </div>
 
-      <!-- Messagerie directe -->
-      <div class="feature">
-        <div class="feat-preview">
-          <div class="chat-preview">
-            <div class="chat-msg chat-msg-coach"><span class="chat-avatar chat-avatar-coach">Y</span><div class="chat-bubble chat-bubble-coach">Séance top ce matin Christelle 🔥 T'as explosé ton record !</div></div>
-            <div class="chat-msg chat-msg-athlete"><div class="chat-bubble chat-bubble-athlete">Merci coach 💪 Je me suis sentie vraiment forte</div><span class="chat-avatar chat-avatar-athlete">C</span></div>
-            <div class="chat-msg chat-msg-coach"><span class="chat-avatar chat-avatar-coach">Y</span><div class="chat-bubble chat-bubble-coach">C'est le travail des 3 semaines qui paye. On vise +5 kg 🎯</div></div>
-            <div class="chat-msg chat-msg-athlete"><div class="chat-bubble chat-bubble-athlete">Carrément ! J'ai hâte 🚀</div><span class="chat-avatar chat-avatar-athlete">C</span></div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon">💬</div>
-          <h3>Messagerie directe</h3>
-          <p>Chat coach ↔ athlète intégré. Notification push dès qu'un message arrive, même app fermée. Plus besoin de WhatsApp.</p>
-        </div>
-      </div>
-
-      <!-- IA Programme -->
-      <div class="feature">
-        <div class="feat-preview" style="flex-direction:column;gap:8px;padding:14px 16px;align-items:flex-start">
-          <div style="display:flex;align-items:center;gap:8px;width:100%">
-            <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🤖</div>
-            <div style="font-size:11px;font-weight:800;color:#a5b4fc">IA génère ton programme…</div>
-          </div>
-          <div style="width:100%;background:rgba(99,102,241,0.10);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:10px 12px">
-            <div style="font-size:10px;font-weight:800;color:#fff;margin-bottom:6px">Programme Prise de masse · 4j/sem</div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <div style="display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.65)"><span>🦵 Lundi — Jambes</span><span style="color:#a5b4fc">6 exos</span></div>
-              <div style="display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.65)"><span>💪 Mardi — Poitrine</span><span style="color:#a5b4fc">5 exos</span></div>
-              <div style="display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.65)"><span>🏋️ Jeudi — Dos</span><span style="color:#a5b4fc">5 exos</span></div>
-            </div>
-          </div>
-          <div style="width:100%;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.18);border-radius:10px;padding:8px 12px">
-            <div style="font-size:9px;font-weight:700;color:#a5b4fc;margin-bottom:4px">🥗 Plan nutrition 7j · 2 450 kcal</div>
-            <div style="display:flex;gap:4px">
-              <div style="flex:1;text-align:center;background:rgba(99,102,241,0.12);border-radius:6px;padding:4px 2px"><div style="font-size:10px;font-weight:800;color:#fff">190g</div><div style="font-size:7px;color:#a5b4fc">Prot.</div></div>
-              <div style="flex:1;text-align:center;background:rgba(99,102,241,0.12);border-radius:6px;padding:4px 2px"><div style="font-size:10px;font-weight:800;color:#fff">270g</div><div style="font-size:7px;color:#a5b4fc">Gluc.</div></div>
-              <div style="flex:1;text-align:center;background:rgba(99,102,241,0.12);border-radius:6px;padding:4px 2px"><div style="font-size:10px;font-weight:800;color:#fff">65g</div><div style="font-size:7px;color:#a5b4fc">Lip.</div></div>
-            </div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">🤖</div>
-          <h3>IA Programme & Nutrition</h3>
-          <p>Génère un programme muscu personnalisé et un plan nutrition 7 jours en quelques secondes. L'IA s'adapte à ton profil, objectif et disponibilités.</p>
-        </div>
-      </div>
-
-      <!-- Univers & Abonnements -->
-      <div class="feature">
-        <div class="feat-preview" style="flex-direction:column;gap:7px;padding:14px 16px;align-items:flex-start">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.40);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px">Tes univers</div>
-          <div style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:rgba(13,148,136,0.10);border:1px solid rgba(13,148,136,0.28)">
-            <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#0d9488,#06b6d4);display:flex;align-items:center;justify-content:center;font-size:14px">🧭</div>
-            <div style="flex:1"><div style="font-size:11px;font-weight:800;color:#fff">Explorer</div><div style="font-size:9px;color:rgba(255,255,255,0.45)">4,99€/mois</div></div>
-            <div style="font-size:9px;color:#4ade80;font-weight:700">✓ Actif</div>
-          </div>
-          <div style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:rgba(99,102,241,0.10);border:2px solid rgba(99,102,241,0.40)">
-            <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:14px">🤖</div>
-            <div style="flex:1"><div style="font-size:11px;font-weight:800;color:#fff">IA Programme</div><div style="font-size:9px;color:rgba(255,255,255,0.45)">14,99€/mois</div></div>
-            <div style="font-size:9px;background:rgba(99,102,241,0.3);color:#a5b4fc;padding:2px 6px;border-radius:4px;font-weight:700">POPULAIRE</div>
-          </div>
-          <div style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:rgba(191,160,96,0.07);border:1px solid rgba(191,160,96,0.20);opacity:0.6">
-            <div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:14px">🔒</div>
-            <div style="flex:1"><div style="font-size:11px;font-weight:800;color:#fff">Coaching</div><div style="font-size:9px;color:rgba(255,255,255,0.45)">24,99€/mois</div></div>
-          </div>
-        </div>
-        <div class="feat-body">
-          <div class="feature-icon" style="background:rgba(191,160,96,0.10);border-color:rgba(191,160,96,0.20)">🌐</div>
-          <h3>3 univers, 1 app</h3>
-          <p>Explorer, IA Programme ou Coaching — choisis le niveau qui te correspond. 7 jours d'essai gratuit, puis abonnement mensuel sans engagement.</p>
-        </div>
+      <div class="feat">
+        <div class="feat-icon" style="background:rgba(90,138,224,0.12);border:1px solid rgba(90,138,224,0.25)">📊</div>
+        <h3>Suivi &amp; Import Excel</h3>
+        <p>Volume hebdo, courbe de progression, calendrier global. Import Excel natif : le coach glisse son fichier, d&eacute;tection automatique, z&eacute;ro saisie.</p>
       </div>
 
     </div>
   </div>
 </section>
 
-<!-- Audience -->
-<section class="section" id="qui">
-  <div class="container">
-    <div class="section-head">
+<!-- Pour qui -->
+<section class="sec" id="qui">
+  <div class="ctn">
+    <div class="sh">
       <div class="eyebrow">Pour qui</div>
-      <h2 class="section-title">Fait pour <span class="gradient-text">chaque rôle.</span></h2>
+      <h2>Fait pour <span class="grad">chaque r&ocirc;le.</span></h2>
     </div>
     <div class="audience">
 
-      <!-- COACH -->
-      <div class="audience-card audience-coach">
-        <div class="audience-preview">
-          <div class="cal-mock">
-            <div class="cal-mock-head"><span class="cal-mock-title">📅 Mai 2025</span><div class="cal-mock-nav"><span>‹</span><span>›</span></div></div>
-            <div class="cal-mock-days"><span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span></div>
-            <div class="cal-mock-grid">
-              <div class="cal-d prev">28</div><div class="cal-d prev">29</div><div class="cal-d prev">30</div>
-              <div class="cal-d">1</div><div class="cal-d">2<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span><span class="cal-dot" style="background:#5A8AE0"></span></div></div>
-              <div class="cal-d">3<div class="cal-d-dots"><span class="cal-dot" style="background:#2CC4A0"></span></div></div><div class="cal-d">4</div>
-              <div class="cal-d">5<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span></div></div>
-              <div class="cal-d">6<div class="cal-d-dots"><span class="cal-dot" style="background:#5A8AE0"></span><span class="cal-dot" style="background:#C89040"></span></div></div>
-              <div class="cal-d">7<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span></div></div>
-              <div class="cal-d">8<div class="cal-d-dots"><span class="cal-dot" style="background:#2CC4A0"></span><span class="cal-dot" style="background:#5A8AE0"></span></div></div>
-              <div class="cal-d">9<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span></div></div><div class="cal-d">10</div>
-              <div class="cal-d">11<div class="cal-d-dots"><span class="cal-dot" style="background:#C89040"></span></div></div>
-              <div class="cal-d">12<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span><span class="cal-dot" style="background:#5A8AE0"></span></div></div>
-              <div class="cal-d">13<div class="cal-d-dots"><span class="cal-dot" style="background:#2CC4A0"></span></div></div>
-              <div class="cal-d">14<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span></div></div><div class="cal-d">15</div>
-              <div class="cal-d">16<div class="cal-d-dots"><span class="cal-dot" style="background:#5A8AE0"></span></div></div>
-              <div class="cal-d today">17<div class="cal-d-dots"><span class="cal-dot" style="background:#BFA060"></span><span class="cal-dot" style="background:#2CC4A0"></span></div></div>
-              <div class="cal-d">18</div><div class="cal-d">19</div><div class="cal-d">20</div><div class="cal-d">21</div>
-              <div class="cal-d">22</div><div class="cal-d">23</div><div class="cal-d">24</div><div class="cal-d">25</div><div class="cal-d">26</div><div class="cal-d">27</div><div class="cal-d">28</div>
-            </div>
-          </div>
+      <div class="aud aud-coach">
+        <div class="aud-head">
+          <span class="aud-tag">🎯 Coach</span>
+          <h3>Tous tes athl&egrave;tes, un seul &eacute;cran.</h3>
         </div>
-        <div class="audience-body">
-          <span class="audience-tag">🎯 Coach</span>
-          <h3>Tous tes athlètes, un seul écran.</h3>
-          <p>Tu prépares leurs programmes et leur nutrition, tu vois leurs séances en direct, tu leur envoies une notification quand tout est prêt.</p>
-          <ul class="audience-list">
-            <li>Calendrier global multi-athlètes par mois</li>
-            <li>Import Excel programme + nutrition en quelques secondes</li>
-            <li>Messagerie intégrée avec chaque athlète</li>
-            <li>Fiche athlète : profil, séances, nutrition, photos, historique</li>
-            <li>Codes d'invitation pour rattacher rapidement (annulation en un tap)</li>
-            <li>Feedback coach par séance avec détail exercices + RPE athlète</li>
+        <div class="aud-body">
+          <ul class="aud-list">
+            <li>Calendrier global multi-athl&egrave;tes par mois</li>
+            <li>Import Excel programme + nutrition en secondes</li>
+            <li>Messagerie int&eacute;gr&eacute;e avec chaque athl&egrave;te</li>
+            <li>Feedback par s&eacute;ance avec d&eacute;tail exercices + RPE</li>
+            <li>Codes d'invitation &mdash; rattachement en un tap</li>
           </ul>
         </div>
       </div>
 
-      <!-- ATHLÈTE -->
-      <div class="audience-card audience-athlete">
-        <div class="audience-preview">
-          <div class="nutri-mock">
-            <div class="nutri-mock-title">🥗 Plan nutrition</div>
-            <div class="nutri-mock-sub">Lundi · Jour 1</div>
-            <div class="nutri-macros">
-              <div class="nutri-macro nutri-macro-kcal"><strong>2 450</strong><span>kcal</span></div>
-              <div class="nutri-macro nutri-macro-p"><strong>190g</strong><span>Prot.</span></div>
-              <div class="nutri-macro nutri-macro-g"><strong>270g</strong><span>Gluc.</span></div>
-              <div class="nutri-macro nutri-macro-l"><strong>65g</strong><span>Lip.</span></div>
-            </div>
-            <div class="nutri-meal">
-              <div class="nutri-meal-head"><span class="nutri-meal-name">☀️ Petit-déjeuner</span><span class="nutri-meal-kcal">680 kcal</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Flocons d'avoine</span><span class="nutri-item-qty">80g</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Blanc d'œuf</span><span class="nutri-item-qty">200g</span></div>
-            </div>
-            <div class="nutri-meal">
-              <div class="nutri-meal-head"><span class="nutri-meal-name">🍽️ Déjeuner</span><span class="nutri-meal-kcal">820 kcal</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Poulet grillé</span><span class="nutri-item-qty">200g</span></div>
-              <div class="nutri-item"><span class="nutri-item-name">Riz blanc cuit</span><span class="nutri-item-qty">250g</span></div>
-            </div>
-          </div>
+      <div class="aud aud-athlete">
+        <div class="aud-head">
+          <span class="aud-tag">💪 Athl&egrave;te</span>
+          <h3>Ta s&eacute;ance, ton plan, dans ta poche.</h3>
         </div>
-        <div class="audience-body">
-          <span class="audience-tag">💪 Athlète</span>
-          <h3>Ta séance, ton plan, dans ta poche.</h3>
-          <p>Tu vois ce que ton coach a préparé, tu valides tes séries et tes repas. L'app fonctionne même sans bonne connexion à la salle.</p>
-          <ul class="audience-list">
-            <li>Programme du jour prêt à démarrer en un tap</li>
-            <li>Surcharge progressive suggérée + sélecteur RPE après séance</li>
-            <li>Chrono de repos automatique entre les séries</li>
-            <li>Plan nutrition IA 7 jours généré en quelques secondes</li>
-            <li>Macros agrégées selon les repas validés</li>
-            <li>Notifications push pour les nouveaux programmes</li>
-            <li>Courbe de progression par exercice et suivi poids corporel</li>
-            <li>Photos de progression</li>
-            <li>7 jours d'essai gratuit, sans carte bancaire</li>
+        <div class="aud-body">
+          <ul class="aud-list">
+            <li>Programme du jour pr&ecirc;t en un tap</li>
+            <li>Surcharge progressive sugg&eacute;r&eacute;e + RPE</li>
+            <li>Plan nutrition IA 7 jours instantan&eacute;</li>
+            <li>Courbe de progression par exercice</li>
+            <li>Fonctionne m&ecirc;me sans bonne connexion &agrave; la salle</li>
           </ul>
         </div>
       </div>
@@ -853,203 +295,131 @@ img{display:block;max-width:100%}
   </div>
 </section>
 
-<!-- Steps -->
-<section class="section">
-  <div class="container">
-    <div class="section-head">
-      <div class="eyebrow">Comment ça marche</div>
-      <h2 class="section-title">Trois étapes, <span class="gradient-text">c'est parti.</span></h2>
+<!-- Comment ça marche -->
+<section class="sec">
+  <div class="ctn">
+    <div class="sh">
+      <div class="eyebrow">Comment &ccedil;a marche</div>
+      <h2>Trois &eacute;tapes, <span class="grad">c'est parti.</span></h2>
     </div>
     <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <h3>Inscription gratuite</h3>
-        <p>Tu crées ton compte en 30 secondes. 7 jours d'essai gratuit avec tous les univers débloqués — sans carte bancaire.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <h3>Choisis ton univers</h3>
-        <p>Explorer pour les séances guidées, IA Programme pour un plan généré par intelligence artificielle, ou Coaching pour un suivi humain personnalisé.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <h3>Suivi quotidien</h3>
-        <p>Tu valides tes séries à la salle, tes repas dans la journée. Ton coach voit ta progression en direct. La régularité se construit toute seule.</p>
-      </div>
+      <div class="step"><div class="step-n">1</div><h3>Inscription gratuite</h3><p>Compte cr&eacute;&eacute; en 30 secondes. 7 jours d'essai avec tous les univers d&eacute;bloqu&eacute;s &mdash; sans carte bancaire.</p></div>
+      <div class="step"><div class="step-n">2</div><h3>Choisis ton univers</h3><p>Explorer, IA Programme ou Coaching &mdash; le niveau qui te correspond. Abonnement mensuel sans engagement.</p></div>
+      <div class="step"><div class="step-n">3</div><h3>Entra&icirc;ne-toi</h3><p>Valide tes s&eacute;ries &agrave; la salle, tes repas dans la journ&eacute;e. Ton coach voit ta progression en direct.</p></div>
     </div>
   </div>
 </section>
 
 <!-- FAQ -->
-<section class="section" id="faq">
-  <div class="container">
-    <div class="section-head">
-      <div class="eyebrow">Questions fréquentes</div>
-      <h2 class="section-title">Avant de te lancer.</h2>
+<section class="sec" id="faq">
+  <div class="ctn">
+    <div class="sh">
+      <div class="eyebrow">FAQ</div>
+      <h2>Avant de te lancer.</h2>
     </div>
     <div class="faq">
       <div class="faq-item">
-        <button class="faq-q">C'est gratuit ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">Tu bénéficies de 7 jours d'essai gratuit avec tous les univers débloqués — sans carte bancaire. Après l'essai, tu choisis l'abonnement qui te correspond : Explorer à 4,99 €/mois, IA Programme à 14,99 €/mois, ou Coaching à 24,99 €/mois. Sans abonnement actif, l'accès reste gratuit avec les fonctions de base.</div>
+        <button class="faq-q">C'est gratuit ?<span class="faq-ico">+</span></button>
+        <div class="faq-a">7 jours d'essai gratuit sans carte bancaire. Ensuite : Explorer &agrave; 4,99&thinsp;&euro;/mois, IA Programme &agrave; 14,99&thinsp;&euro;/mois, ou Coaching &agrave; 24,99&thinsp;&euro;/mois. Sans abonnement, l'acc&egrave;s reste gratuit avec les fonctions de base.</div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">Je peux l'utiliser sans coach ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">Oui. Tu importes toi-même ton programme Excel et ton plan nutrition, puis tu te suis en autonomie. Si tu rejoins un coach plus tard, il reprend la main sans que tu perdes ton historique.</div>
+        <button class="faq-q">Je peux l'utiliser sans coach ?<span class="faq-ico">+</span></button>
+        <div class="faq-a">Oui. Importe ton programme Excel ou g&eacute;n&egrave;re-le par IA, puis suis-toi en autonomie. Si tu rejoins un coach plus tard, il reprend la main sans perte d'historique.</div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">Comment fonctionne l'import Excel ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">Programme : feuilles par mois avec colonnes Jour / Exercice / Charge / Séries / Répétitions / Repos. Nutrition : 7 feuilles (Lundi à Dimanche) avec colonnes Repas / Aliment / Quantité / Calories / Protéines / Glucides / Lipides. La détection est automatique.</div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q">Ça marche avec un réseau faible à la salle ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">La séance en cours est sauvegardée localement — tu peux saisir tes séries hors ligne. La synchronisation avec ton coach se fait dès que la connexion revient. Prime Athl est une PWA : installe-la sur ton écran d'accueil comme une vraie app.</div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-q">Sur quels appareils ça fonctionne ?<span class="faq-q-icon">+</span></button>
-        <div class="faq-a">iPhone (Safari), Android (Chrome), Mac, PC. Aucune installation depuis un store — un simple lien suffit. Pour la meilleure expérience mobile, ajoute Prime Athl à ton écran d'accueil depuis le menu du navigateur.</div>
+        <button class="faq-q">Sur quels appareils ?<span class="faq-ico">+</span></button>
+        <div class="faq-a">iPhone, Android, Mac, PC. Aucune installation depuis un store &mdash; ajoute Prime Athl &agrave; ton &eacute;cran d'accueil comme une vraie app. Fonctionne m&ecirc;me avec un r&eacute;seau faible.</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Final CTA -->
-<section class="section">
-  <div class="container">
-    <div class="final-cta">
-      <h2>Prêt à <span class="gradient-text">passer au niveau supérieur</span> ?</h2>
-      <p>Crée ton compte en 30 secondes. 7 jours d'essai gratuit, sans carte bancaire. Installe l'app sur ton téléphone en un tap.</p>
-      <a class="btn-cta btn-cta-lg" href="/Muscu.html">
-        Lancer Prime Athl
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </a>
+<!-- CTA final -->
+<section class="sec">
+  <div class="ctn">
+    <div class="cta-box">
+      <h2>Pr&ecirc;t &agrave; <span class="grad">passer au niveau sup&eacute;rieur</span>&thinsp;?</h2>
+      <p>Cr&eacute;e ton compte en 30 secondes. Essai gratuit 7 jours, sans carte bancaire.</p>
+      <a class="btn btn-lg" href="/Muscu.html">Lancer Prime Athl &rarr;</a>
     </div>
   </div>
 </section>
 
 <!-- Footer -->
-<footer class="footer">
-  <div class="container">
-    <div class="footer-inner">
-      <div class="footer-brand">
-        <a href="/" class="logo">
-          <div class="logo-mark"><img src="/logo.svg" alt="Prime Athlète"/></div>
-          Prime Athlète
-        </a>
-        <p>Plateforme coach-athlète pour la salle de sport. Programmes, nutrition, suivi en direct.</p>
+<footer class="ftr">
+  <div class="ctn">
+    <div class="ftr-in">
+      <div class="ftr-brand">
+        <a href="/" class="logo"><img src="/logo.svg" alt="Prime Athl"/>Prime Athl</a>
+        <p>Plateforme coach-athl&egrave;te pour la salle de sport. Programmes, nutrition, suivi en direct.</p>
       </div>
-      <div class="footer-cols">
-        <div class="footer-col">
+      <div class="ftr-cols">
+        <div class="ftr-col">
           <h5>Produit</h5>
-          <a href="#fonctions">Fonctionnalités</a>
+          <a href="#fonctions">Fonctionnalit&eacute;s</a>
           <a href="#qui">Pour qui</a>
           <a href="#faq">FAQ</a>
         </div>
-        <div class="footer-col">
+        <div class="ftr-col">
           <h5>Application</h5>
           <a href="/Muscu.html">Lancer l'app</a>
           <a href="/Muscu.html">Se connecter</a>
-          <a href="/Muscu.html">Créer un compte</a>
         </div>
-        <div class="footer-col">
-          <h5>Légal</h5>
+        <div class="ftr-col">
+          <h5>L&eacute;gal</h5>
           <a href="/legal/cgu.html">CGU</a>
-          <a href="/legal/confidentialite.html">Confidentialité</a>
-          <a href="/legal/mentions.html">Mentions légales</a>
-        </div>
-        <div class="footer-col">
-          <h5>Contact</h5>
-          <a href="mailto:yannisjanvier@gmail.com">Email</a>
+          <a href="/legal/confidentialite.html">Confidentialit&eacute;</a>
+          <a href="/legal/mentions.html">Mentions l&eacute;gales</a>
         </div>
       </div>
     </div>
-    <div class="footer-bottom">
-      <div>© <span id="year"></span> Prime Athl. Tous droits réservés.</div>
-      <div>Hébergé en Europe · Données sécurisées</div>
+    <div class="ftr-bot">
+      <div>&copy; <span id="yr"></span> Prime Athl. Tous droits r&eacute;serv&eacute;s.</div>
+      <div>H&eacute;berg&eacute; en Europe &middot; Donn&eacute;es s&eacute;curis&eacute;es</div>
     </div>
   </div>
 </footer>
 
 <script>
-// Theme picker
-(function(){
-  function applyTheme(t){
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('prime-theme', t);
-    document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === t));
-  }
-  document.querySelectorAll('.theme-swatch').forEach(s => s.addEventListener('click', () => applyTheme(s.dataset.theme)));
-  applyTheme(localStorage.getItem('prime-theme') || 'dark');
-})();
-
-document.querySelectorAll('.faq-q').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const item = btn.parentElement;
-    const wasOpen = item.classList.contains('open');
-    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
-    if (!wasOpen) item.classList.add('open');
+document.querySelectorAll('.faq-q').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const it=b.parentElement,open=it.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open'));
+    if(!open)it.classList.add('open');
   });
 });
-document.getElementById('year').textContent = new Date().getFullYear();
-document.querySelectorAll('a[href^="#"]').forEach(a => {
-  a.addEventListener('click', e => {
-    const id = a.getAttribute('href');
-    if (id.length > 1) {
-      const target = document.querySelector(id);
-      if (target) { e.preventDefault(); target.scrollIntoView({behavior:'smooth',block:'start'}); }
-    }
+document.getElementById('yr').textContent=new Date().getFullYear();
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const t=document.querySelector(a.getAttribute('href'));
+    if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}
   });
 });
 
-// Cold start Render : overlay de chargement si /Muscu.html met plus de 1.5s à répondre
+// Cold start overlay
 (function(){
-  const overlay = document.createElement('div');
-  overlay.id = 'cold-overlay';
-  overlay.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;gap:18px">
-      <img src="/logo.svg" alt="Prime Athl" style="width:48px;height:48px;border-radius:14px;object-fit:cover;display:block"/>
-      <div style="color:#f4f1ed;font-size:17px;font-weight:700">Lancement en cours…</div>
-      <div style="color:rgba(244,241,237,0.5);font-size:13px;text-align:center;max-width:260px;line-height:1.6">Le serveur se réveille.<br>Prêt dans quelques secondes ☕</div>
-      <div style="width:140px;height:3px;background:rgba(255,255,255,0.10);border-radius:2px;overflow:hidden;margin-top:4px">
-        <div id="cold-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#BFA060,#D4B060);border-radius:2px;transition:width 0.5s ease"></div>
-      </div>
-    </div>`;
-  Object.assign(overlay.style, {
-    position:'fixed',inset:'0',background:'rgba(10,10,14,0.94)',
-    backdropFilter:'blur(12px)',display:'none',alignItems:'center',
-    justifyContent:'center',zIndex:'9999',transition:'opacity 0.3s ease'
-  });
-  document.body.appendChild(overlay);
-
-  let barW = 0, barT;
-  function startBar(){
-    barT = setInterval(() => {
-      barW = Math.min(barW + (barW < 60 ? 5 : 0.8), 90);
-      const b = document.getElementById('cold-bar');
-      if(b) b.style.width = barW + '%';
-    }, 300);
-  }
-
-  let timer;
-  function showOverlay(){
-    overlay.style.display = 'flex';
-    requestAnimationFrame(() => { overlay.style.opacity = '1'; startBar(); });
-  }
-  function hideOverlay(){
-    clearInterval(barT);
-    const b = document.getElementById('cold-bar');
-    if(b) b.style.width = '100%';
-    setTimeout(() => { overlay.style.opacity = '0'; setTimeout(() => overlay.remove(), 300); }, 200);
-  }
-
-  // Intercepte tous les liens vers /Muscu.html
-  document.querySelectorAll('a[href="/Muscu.html"]').forEach(a => {
-    a.addEventListener('click', e => {
-      e.preventDefault();
-      const dest = a.href;
-      timer = setTimeout(showOverlay, 1500); // affiche seulement si > 1.5s
-      fetch('/api/health', { signal: AbortSignal.timeout(500) })
-        .then(() => { clearTimeout(timer); window.location.href = dest; })
-        .catch(() => { showOverlay(); setTimeout(() => { hideOverlay(); window.location.href = dest; }, 3500); });
+  const ov=document.createElement('div');
+  ov.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+    <img src="/logo.svg" alt="Prime Athl" style="width:44px;height:44px;border-radius:12px"/>
+    <div style="color:#f4f1ed;font-size:16px;font-weight:700">Lancement en cours…</div>
+    <div style="color:rgba(244,241,237,0.5);font-size:13px;text-align:center;max-width:240px;line-height:1.5">Le serveur se r&eacute;veille.<br>Pr&ecirc;t dans quelques secondes.</div>
+    <div style="width:120px;height:3px;background:rgba(255,255,255,0.10);border-radius:2px;overflow:hidden;margin-top:4px">
+      <div id="cb" style="height:100%;width:0%;background:linear-gradient(90deg,#BFA060,#D4B060);border-radius:2px;transition:width .5s"></div>
+    </div>
+  </div>`;
+  Object.assign(ov.style,{position:'fixed',inset:'0',background:'rgba(10,10,14,0.94)',backdropFilter:'blur(12px)',display:'none',alignItems:'center',justifyContent:'center',zIndex:'9999',transition:'opacity .3s'});
+  document.body.appendChild(ov);
+  let w=0,t;
+  function go(){t=setInterval(()=>{w=Math.min(w+(w<60?5:.8),90);const b=document.getElementById('cb');if(b)b.style.width=w+'%';},300);}
+  function show(){ov.style.display='flex';requestAnimationFrame(()=>{ov.style.opacity='1';go();});}
+  function hide(){clearInterval(t);const b=document.getElementById('cb');if(b)b.style.width='100%';setTimeout(()=>{ov.style.opacity='0';setTimeout(()=>ov.remove(),300);},200);}
+  document.querySelectorAll('a[href="/Muscu.html"]').forEach(a=>{
+    a.addEventListener('click',e=>{
+      e.preventDefault();const d=a.href;
+      const tm=setTimeout(show,1500);
+      fetch('/api/health',{signal:AbortSignal.timeout(500)})
+        .then(()=>{clearTimeout(tm);window.location.href=d;})
+        .catch(()=>{show();setTimeout(()=>{hide();window.location.href=d;},3500);});
     });
   });
 })();
