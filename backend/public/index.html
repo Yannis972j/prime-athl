@@ -185,35 +185,15 @@ img{display:block;max-width:100%}
 /* ═══════════════════════════════
    5. POURQUOI NOUS
    ═══════════════════════════════ */
-.why{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.why{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
 @media(max-width:760px){.why{grid-template-columns:1fr}}
-.why-list{display:flex;flex-direction:column;gap:20px}
+.why-list{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+@media(max-width:760px){.why-list{grid-template-columns:1fr}}
 .why-item{display:flex;gap:16px;align-items:flex-start;padding:20px;border-radius:16px;background:rgba(14,14,22,0.5);border:1px solid var(--line);transition:all .3s}
 .why-item:hover{border-color:rgba(200,160,80,0.2);background:rgba(200,160,80,0.03)}
 .why-icon{width:44px;height:44px;border-radius:12px;background:rgba(200,160,80,0.10);border:1px solid rgba(200,160,80,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
 .why-item h3{font-size:16px;font-weight:700;margin-bottom:4px}
 .why-item p{font-size:13.5px;color:var(--dim);line-height:1.55}
-.why-visual{display:flex;flex-direction:column;gap:14px}
-.why-compare{display:flex;gap:12px}
-.why-compare-card{flex:1;padding:22px;border-radius:16px;text-align:center}
-.why-compare-card h4{font-size:15px;font-weight:700;margin-bottom:12px}
-.why-compare-card ul{list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13px}
-.why-compare-card li{display:flex;align-items:center;gap:8px}
-.wc-other{background:rgba(255,255,255,0.02);border:1px solid var(--line);color:var(--dim)}
-.wc-us{background:rgba(200,160,80,0.06);border:1px solid rgba(200,160,80,0.2)}
-.wc-other li::before{content:'✗';color:#ff6b6b;font-weight:700;font-size:12px}
-.wc-us li::before{content:'✓';color:var(--sage);font-weight:700;font-size:12px}
-
-/* ═══════════════════════════════
-   6. RÉSULTATS
-   ═══════════════════════════════ */
-.results{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
-@media(max-width:800px){.results{grid-template-columns:repeat(2,1fr)}}
-.result{text-align:center;padding:32px 16px;border-radius:18px;background:rgba(14,14,22,0.5);border:1px solid var(--line);transition:all .3s}
-.result:hover{transform:translateY(-3px);border-color:rgba(200,160,80,0.2)}
-.result-icon{font-size:32px;margin-bottom:12px}
-.result strong{display:block;font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
-.result span{font-size:13px;color:var(--dim);font-weight:500}
 
 /* ═══════════════════════════════
    7. COMMENT ÇA MARCHE
@@ -276,7 +256,7 @@ img{display:block;max-width:100%}
     <nav class="hdr-nav">
       <a href="#benefices">Avantages</a>
       <a href="#fonctions">Fonctionnalités</a>
-      <a href="#resultats">Résultats</a>
+      <a href="#avis">Avis</a>
       <a class="btn btn-sm" href="/Muscu.html">Commencer gratuitement</a>
     </nav>
   </div>
@@ -484,68 +464,11 @@ img{display:block;max-width:100%}
           <div><h3>Zéro installation</h3><p>PWA installable en un tap. Pas de téléchargement depuis un store, pas de mise à jour manuelle. Ça marche même hors ligne.</p></div>
         </div>
       </div>
-      <div class="why-visual reveal">
-        <div class="why-compare">
-          <div class="why-compare-card wc-other">
-            <h4>Les autres</h4>
-            <ul>
-              <li>Interface compliquée</li>
-              <li>Pas de vrai coaching</li>
-              <li>Nutrition absente</li>
-              <li>Pas de sync temps réel</li>
-              <li>Programmes génériques</li>
-            </ul>
-          </div>
-          <div class="why-compare-card wc-us">
-            <h4>Prime Athl</h4>
-            <ul>
-              <li>Simple et intuitif</li>
-              <li>Coach connecté en direct</li>
-              <li>Nutrition IA complète</li>
-              <li>Sync instantanée</li>
-              <li>Programmes sur mesure</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
 
-<!-- ═══ 6. RÉSULTATS ═══ -->
-<section class="sec" id="resultats" style="background:linear-gradient(180deg,var(--bg) 0%,rgba(16,16,26,0.4) 50%,var(--bg) 100%)">
-  <div class="ctn">
-    <div class="sh reveal">
-      <div class="eyebrow">Résultats</div>
-      <h2>Des transformations<br><span class="grad">qui parlent d'elles-mêmes.</span></h2>
-      <p>Nos utilisateurs atteignent leurs objectifs. Voici ce qu'ils obtiennent en moyenne.</p>
-    </div>
-    <div class="results">
-      <div class="result reveal">
-        <div class="result-icon">💪</div>
-        <strong class="grad">+4 kg</strong>
-        <span>Masse musculaire en 3 mois</span>
-      </div>
-      <div class="result reveal">
-        <div class="result-icon">🔥</div>
-        <strong class="grad">-5%</strong>
-        <span>Masse grasse en 2 mois</span>
-      </div>
-      <div class="result reveal">
-        <div class="result-icon">📈</div>
-        <strong class="grad">+25%</strong>
-        <span>Force sur les mouvements de base</span>
-      </div>
-      <div class="result reveal">
-        <div class="result-icon">🏆</div>
-        <strong class="grad">92%</strong>
-        <span>Régularité d'entraînement</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ 7. COMMENT ÇA MARCHE ═══ -->
+<!-- ═══ 6. COMMENT ÇA MARCHE ═══ -->
 <section class="sec">
   <div class="ctn">
     <div class="sh reveal">
@@ -612,7 +535,7 @@ img{display:block;max-width:100%}
           <h5>Produit</h5>
           <a href="#benefices">Avantages</a>
           <a href="#fonctions">Fonctionnalités</a>
-          <a href="#resultats">Résultats</a>
+          <a href="#avis">Avis</a>
           <a href="#avis">Avis</a>
         </div>
         <div class="ftr-col">
