@@ -7170,7 +7170,12 @@ const EQUIP=[
 ];
 const EQUIP_BRANDS=['Tous','Technogym','Gym 80','Hammer Strength','Barres & Haltères','Poids du corps','Câbles','Personnel'];
 
-function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession}){
+const LIVE_STORAGE_KEY='pa_live_in_progress';
+function saveLiveToStorage(data){try{localStorage.setItem(LIVE_STORAGE_KEY,JSON.stringify({...data,savedAt:Date.now()}));}catch(e){}}
+function loadLiveFromStorage(){try{const d=localStorage.getItem(LIVE_STORAGE_KEY);return d?JSON.parse(d):null;}catch(e){return null;}}
+function clearLiveStorage(){try{localStorage.removeItem(LIVE_STORAGE_KEY);}catch(e){}}
+
+function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession,resumeData}){
   const uid=()=>Math.random().toString(36).slice(2);
 
   const catalog=React.useMemo(()=>{
@@ -7189,15 +7194,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   },[detail]);
 
   const[exercises,setExercises]=React.useState(()=>{
-    if(!editSession)return[];
-    return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    if(resumeData)return(resumeData.exercises||[]).map(e=>({...e,id:e.id||uid()}));
+    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    return[];
   });
-  const[elapsed,setElapsed]=React.useState(editSession?(editSession.duration||0)*60:0);
+  const[elapsed,setElapsed]=React.useState(()=>{
+    if(resumeData){const extra=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);return(resumeData.elapsed||0)+extra;}
+    if(editSession)return(editSession.duration||0)*60;
+    return 0;
+  });
   const[mode,setMode]=React.useState('session');
   const[brandFilter,setBrandFilter]=React.useState('Tous');
   const[query,setQuery]=React.useState('');
   const[pendingEx,setPendingEx]=React.useState({name:'',muscle:'',brand:''});
-  const[addingTo,setAddingTo]=React.useState(null); // null=new exercise, {exIdx} for adding set
+  const[addingTo,setAddingTo]=React.useState(null);
   const[pendingGroupType,setPendingGroupType]=React.useState('classic');
   const[pendingGroupId,setPendingGroupId]=React.useState(null);
   const[setW,setSetW]=React.useState(0);
@@ -7207,12 +7217,22 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const[reviewing,setReviewing]=React.useState(false);
-  const[sessionName,setSessionName]=React.useState(editSession?.name||'');
-  const[editingSet,setEditingSet]=React.useState(null); // {exIdx,setIdx}
+  const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||'');
+  const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
 
   React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
+  React.useEffect(()=>{
+    if(editSession)return;
+    if(exercises.length===0&&!sessionName){clearLiveStorage();return;}
+    saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName});
+  },[exercises,sessionName]);
+  React.useEffect(()=>{
+    if(editSession||exercises.length===0)return;
+    const t=setTimeout(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName}),10000);
+    return()=>clearTimeout(t);
+  },[elapsed]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -7289,11 +7309,12 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
       }else{
         await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:sessionName.trim()||'Séance Live',date:new Date().toISOString(),exercises:exData,totalVolume,duration:Math.round(elapsed/60)}});
       }
+      clearLiveStorage();
       onSaved();
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
-  const confirmClose=()=>{if(exercises.length>0){setConfirmingClose(true);return;}onClose();};
+  const confirmClose=()=>{if(exercises.length>0){setConfirmingClose(true);return;}clearLiveStorage();onClose();};
   const adj=(setter,delta,min=0)=>setter(v=>Math.max(min,+(v+delta).toFixed(1)));
 
   const groups=React.useMemo(()=>{
@@ -7432,7 +7453,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
           {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrée{totalSets>1?'s':''}
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
-          <button onClick={onClose} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+          <button onClick={()=>{clearLiveStorage();onClose();}} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
           <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
         </div>
       </div>
@@ -7598,6 +7619,7 @@ function CoachScreen({authToken,authUser}){
   const libFileRef=React.useRef(null);
   const[showLiveSession,setShowLiveSession]=React.useState(false);
   const[editingSession,setEditingSession]=React.useState(null);
+  const[resumeLive,setResumeLive]=React.useState(null);
   const[confirmAction,setConfirmAction]=React.useState(null); // {msg,onConfirm}
   const[calRefreshKey,setCalRefreshKey]=React.useState(0);
 
@@ -7861,14 +7883,15 @@ function CoachScreen({authToken,authUser}){
   };
 
   // ── Live session overlay — rendu via portal pour échapper au willChange:transform du gestureRef
-  const liveSessionEl=(showLiveSession||editingSession)&&selected?ReactDOM.createPortal(
+  const liveSessionEl=(showLiveSession||editingSession||resumeLive)&&(selected||resumeLive)?ReactDOM.createPortal(
     <CoachLiveSessionScreen
-      athleteId={selected.id}
-      athleteName={(detail||selected).firstName||selected.email.split('@')[0]}
+      athleteId={resumeLive?resumeLive.athleteId:selected.id}
+      athleteName={resumeLive?resumeLive.athleteName:(detail||selected).firstName||selected.email.split('@')[0]}
       detail={detail||{}}
       editSession={editingSession}
-      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setDetailTab('historique');reloadDetail(selected.id);flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
-      onClose={()=>{setShowLiveSession(false);setEditingSession(null);}}
+      resumeData={resumeLive}
+      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab('historique');reloadDetail(selected.id);}flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
+      onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);}}
     />,
     document.body
   ):null;
@@ -8482,6 +8505,24 @@ function CoachScreen({authToken,authUser}){
       </div>
 
       {msg&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
+
+      {(()=>{const saved=loadLiveFromStorage();if(!saved||!saved.exercises?.length)return null;const mins=Math.round(((Date.now()-(saved.savedAt||Date.now()))/60000));return(
+        <div style={{marginBottom:16,padding:'14px 16px',borderRadius:16,background:'rgba(232,64,64,0.08)',border:'1px solid rgba(232,64,64,0.3)',display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:40,height:40,borderRadius:12,background:'rgba(232,64,64,0.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <span style={{width:10,height:10,borderRadius:5,background:'#e84040',animation:'fadeIn 1s ease infinite alternate'}}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>Séance Live en cours</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{saved.athleteName} · {saved.exercises.length} ex. · {mins<1?'à l\'instant':'il y a '+mins+' min'}</div>
+          </div>
+          <button onClick={()=>setResumeLive(saved)} style={{height:36,padding:'0 14px',borderRadius:12,border:'none',background:'linear-gradient(135deg,#e84040,#c03030)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',boxShadow:'0 4px 12px rgba(232,64,64,0.3)'}}>
+            Reprendre
+          </button>
+          <button onClick={()=>{clearLiveStorage();setMsg('Séance abandonnée');}} style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Icon name="x" size={14} stroke={T.textFaint}/>
+          </button>
+        </div>
+      );})()}
 
       {/* Pending approval requests (main coach only) */}
       {isMain&&pending.length>0&&(
