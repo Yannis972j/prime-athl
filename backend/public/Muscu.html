@@ -9380,7 +9380,7 @@ const TP_CATS=[
   {id:'fessiers',label:'Fessiers',emoji:'🍑',color:'#D4688A'},
 ];
 const TP_LEVELS=['Débutant','Intermédiaire','Avancé'];
-const TP_DURATIONS={'1month':'1 mois','2months':'2 mois','3months':'3 mois'};
+const TP_DURATIONS={'1month':'1 mois','2months':'2 mois','3months':'3 mois','4months':'4 mois','5months':'5 mois','6months':'6 mois','7months':'7 mois','8months':'8 mois','9months':'9 mois','10months':'10 mois','11months':'11 mois','12months':'12 mois'};
 const TP_ACCENT='#E07020';
 const TP_ACCENT2='#D4883A';
 const TP_GRAD='linear-gradient(135deg,#E07020,#D4883A)';
@@ -9882,7 +9882,7 @@ function TPAdminScreen(){
                   </div>
                   <div style={{padding:'4px 8px',borderRadius:8,background:p.published?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',color:p.published?T.good:T.danger,fontSize:10,fontWeight:700}}>{p.published?'Publié':'Brouillon'}</div>
                 </div>
-                <div style={{fontSize:11,color:T.textDim,marginBottom:10}}>{(p.weeks||[]).length} module{(p.weeks||[]).length>1?'s':''} · {(p.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0)} séances</div>
+                <div style={{fontSize:11,color:T.textDim,marginBottom:10}}>{(p.weeks||[]).length} séquence{(p.weeks||[]).length>1?'s':''} · {(p.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0)} séances</div>
                 <div style={{display:'flex',gap:6}}>
                   <button onClick={()=>setEditing(p)} style={{flex:1,height:34,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Modifier</button>
                   <button onClick={()=>togglePublish(p)} style={{flex:1,height:34,borderRadius:10,border:'none',background:p.published?'rgba(184,80,112,0.10)':'rgba(44,196,160,0.10)',color:p.published?T.danger:T.good,fontSize:12,fontWeight:600,cursor:'pointer'}}>{p.published?'Dépublier':'Publier'}</button>
@@ -9898,16 +9898,224 @@ function TPAdminScreen(){
   );
 }
 
+function TPImportSessionModal({onImport,onClose}){
+  const[sessions,setSessions]=React.useState([]);
+  const[loading,setLoading]=React.useState(true);
+  const[search,setSearch]=React.useState('');
+  const[selected,setSelected]=React.useState(new Set());
+
+  React.useEffect(()=>{
+    apiCall('/api/sessions').then(d=>{setSessions(d||[]);setLoading(false);}).catch(()=>{setSessions([]);setLoading(false);});
+  },[]);
+
+  const filtered=sessions.filter(s=>{
+    if(!search)return true;
+    const q=search.toLowerCase();
+    return(s.name||'').toLowerCase().includes(q)||(s.muscles||'').toLowerCase().includes(q);
+  });
+
+  const toggle=id=>{
+    const n=new Set(selected);
+    if(n.has(id))n.delete(id);else n.add(id);
+    setSelected(n);
+  };
+
+  const doImport=()=>{
+    const picked=sessions.filter(s=>selected.has(s.id||s._id));
+    const converted=picked.map(s=>({
+      name:s.name||'Séance importée',
+      exercises:(s.exercises||[]).map(ex=>({
+        id:Math.random().toString(36).slice(2),
+        name:ex.name||'',
+        muscle:ex.muscle||'',
+        sets:(ex.sets||[]).map(st=>({weight:st.weight||0,reps:st.reps||0,target:st.target||st.reps||10})),
+      })),
+    }));
+    onImport(converted);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(10px)',zIndex:1000,display:'flex',flexDirection:'column'}}>
+      <div style={{flex:1,display:'flex',flexDirection:'column',maxWidth:500,width:'100%',margin:'0 auto',background:T.bg,overflow:'hidden'}}>
+        <div style={{padding:'16px 18px 12px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <div style={{fontSize:16,fontWeight:800,color:T.text}}>Importer des séances</div>
+            <button onClick={onClose} style={{width:34,height:34,borderRadius:17,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="x" size={16} stroke={T.textDim}/>
+            </button>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher une séance..." style={{width:'100%',height:40,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          {selected.size>0&&<div style={{marginTop:8,fontSize:12,fontWeight:700,color:TP_ACCENT}}>{selected.size} séance{selected.size>1?'s':''} sélectionnée{selected.size>1?'s':''}</div>}
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'10px 18px'}}>
+          {loading&&<div style={{padding:30,textAlign:'center',color:T.textDim,fontSize:13}}>Chargement…</div>}
+          {!loading&&filtered.length===0&&<div style={{padding:30,textAlign:'center',color:T.textFaint,fontSize:13}}>Aucune séance trouvée</div>}
+          {filtered.map(s=>{
+            const sid=s.id||s._id;
+            const isSel=selected.has(sid);
+            const exCount=(s.exercises||[]).length;
+            const date=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'';
+            return(
+              <div key={sid} onClick={()=>toggle(sid)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,border:`1px solid ${isSel?TP_ACCENT+'60':T.border}`,background:isSel?`${TP_ACCENT}12`:'rgba(255,255,255,0.02)',marginBottom:8,cursor:'pointer',transition:'all 0.2s'}}>
+                <div style={{width:28,height:28,borderRadius:8,border:`2px solid ${isSel?TP_ACCENT:T.border}`,background:isSel?TP_ACCENT:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}>
+                  {isSel&&<Icon name="check" size={14} stroke="#fff" strokeWidth={2.5}/>}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Sans nom'}</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.muscles||''}{s.muscles&&exCount?' · ':''}{exCount} exercice{exCount>1?'s':''}{date?' · '+date:''}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {selected.size>0&&(
+          <div style={{padding:'12px 18px 20px',borderTop:`1px solid ${T.border}`,flexShrink:0}}>
+            <button onClick={doImport} style={{width:'100%',height:50,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',boxShadow:`0 8px 24px ${TP_ACCENT}40`,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              <Icon name="download" size={18} stroke="#fff"/>Importer {selected.size} séance{selected.size>1?'s':''}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TPSessionEditor({session,onSave,onBack,seqName,seqIndex}){
+  const uid=()=>Math.random().toString(36).slice(2);
+  const[sess,setSess]=React.useState(()=>{
+    const exs=(session.exercises||[]).map(e=>({
+      id:e.id||uid(),
+      name:e.name||'',
+      muscle:e.muscle||'',
+      sets:Array.isArray(e.sets)?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,target:s.target||s.reps||10}))
+        :[...Array(e.sets||3)].map(()=>({weight:20,reps:0,target:parseInt(e.reps)||10})),
+    }));
+    return{name:session.name||'',exercises:exs};
+  });
+  const set=(k,v)=>setSess(s=>({...s,[k]:v}));
+  const updEx=(idx,patch)=>set('exercises',sess.exercises.map((e,i)=>i===idx?{...e,...patch}:e));
+  const updSet=(ei,si,patch)=>set('exercises',sess.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
+  const delEx=idx=>set('exercises',sess.exercises.filter((_,i)=>i!==idx));
+  const delSet=(ei,si)=>set('exercises',sess.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.filter((_,j)=>j!==si)}));
+  const addSet=ei=>set('exercises',sess.exercises.map((e,i)=>i!==ei?e:{...e,sets:[...e.sets,{weight:e.sets[e.sets.length-1]?.weight||20,reps:0,target:e.sets[e.sets.length-1]?.target||10}]}));
+  const addEx=()=>set('exercises',[...sess.exercises,{id:uid(),name:'',muscle:'',sets:[{weight:20,reps:0,target:10},{weight:20,reps:0,target:10},{weight:20,reps:0,target:10}]}]);
+  const moveEx=(i,dir)=>{
+    const exs=[...sess.exercises];const ni=i+dir;
+    if(ni<0||ni>=exs.length)return;
+    [exs[i],exs[ni]]=[exs[ni],exs[i]];
+    set('exercises',exs);
+  };
+
+  const inpStyle=(w='100%',fs=14)=>({width:w,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:fs,fontWeight:600,padding:'6px 10px',fontFamily:'inherit',boxSizing:'border-box',outline:'none'});
+  const numStyle={width:60,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:15,fontWeight:700,padding:'6px 8px',fontFamily:'inherit',textAlign:'center',boxSizing:'border-box',outline:'none'};
+
+  const handleSave=()=>{
+    const out={
+      name:sess.name,
+      exercises:sess.exercises.map(ex=>({
+        id:ex.id,name:ex.name,muscle:ex.muscle,
+        sets:ex.sets.map(s=>({weight:s.weight,reps:s.reps,target:s.target})),
+      })),
+    };
+    onSave(out);
+  };
+
+  return(
+    <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'6px 18px 12px',background:`linear-gradient(180deg,${T.bg} 60%,transparent)`,zIndex:5,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6}}>
+          <button onClick={onBack} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Icon name="chevronLeft" size={18}/>
+          </button>
+          <div style={{textAlign:'center',flex:1,minWidth:0}}>
+            <div style={{fontSize:10,color:TP_ACCENT,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>{seqName||`Séquence ${(seqIndex||0)+1}`}</div>
+            <div style={{fontSize:15,fontWeight:700}}>Éditeur de séance</div>
+          </div>
+          <button onClick={handleSave} style={{height:34,padding:'0 14px',borderRadius:17,border:'none',background:TP_GRAD,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',boxShadow:`0 4px 12px ${TP_ACCENT}40`}}>
+            Valider
+          </button>
+        </div>
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Nom de la séance</div>
+          <input style={inpStyle('100%',17)} value={sess.name} onChange={e=>set('name',e.target.value)} placeholder="Nom de la séance"/>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflowY:'auto',padding:'0 18px 100px'}}>
+        {sess.exercises.map((ex,ei)=>(
+          <div key={ex.id} style={{marginBottom:16}}>
+            <GlassCard padding={14}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:12}}>
+                <div style={{flex:1}}>
+                  <input style={inpStyle('100%',15)} value={ex.name} onChange={e=>updEx(ei,{name:e.target.value})} placeholder="Nom de l'exercice"/>
+                  <input style={{...inpStyle('100%',12),marginTop:6,fontWeight:500,color:T.textDim}} value={ex.muscle} onChange={e=>updEx(ei,{muscle:e.target.value})} placeholder="Groupe musculaire"/>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0,marginTop:2}}>
+                  <div style={{display:'flex',gap:3}}>
+                    <button onClick={()=>moveEx(ei,-1)} disabled={ei===0} style={{width:28,height:28,borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:ei>0?'pointer':'default',opacity:ei>0?1:0.3,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <Icon name="chevronUp" size={13} stroke={T.textDim}/>
+                    </button>
+                    <button onClick={()=>moveEx(ei,1)} disabled={ei===sess.exercises.length-1} style={{width:28,height:28,borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:ei<sess.exercises.length-1?'pointer':'default',opacity:ei<sess.exercises.length-1?1:0.3,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <Icon name="chevronDown" size={13} stroke={T.textDim}/>
+                    </button>
+                  </div>
+                  <button onClick={()=>delEx(ei)} style={{width:59,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="trash" size={14} stroke={T.danger}/>
+                  </button>
+                </div>
+              </div>
+
+              <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr 32px',gap:6,marginBottom:6,paddingLeft:2}}>
+                {['#','Poids (kg)','Reps cible','Reps',''].map((h,i)=>(
+                  <div key={i} style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',textAlign:i>0&&i<4?'center':'left'}}>{h}</div>
+                ))}
+              </div>
+
+              {ex.sets.map((s,si)=>(
+                <div key={si} style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr 32px',gap:6,alignItems:'center',marginBottom:6,padding:'8px 0',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                  <div style={{width:24,height:24,borderRadius:7,background:'rgba(255,255,255,0.06)',color:T.textDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{si+1}</div>
+                  <NumField style={numStyle} value={s.weight||0} decimal placeholder="0"
+                    onCommit={v=>updSet(ei,si,{weight:v})}/>
+                  <RangeField style={numStyle} value={s.targetStr??(s.target?String(s.target):'')} placeholder="0"
+                    onCommit={raw=>{
+                      const m=raw.match(/^(\d+)-(\d+)$/);
+                      const target=m?parseInt(m[1],10):(parseInt(raw,10)||0);
+                      updSet(ei,si,{targetStr:raw,target});
+                    }}/>
+                  <NumField style={{...numStyle,color:T.textDim}} value={s.reps||0} placeholder="0"
+                    onCommit={v=>updSet(ei,si,{reps:v})}/>
+                  <button onClick={()=>delSet(ei,si)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(255,255,255,0.04)',color:T.textFaint,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="x" size={13} stroke={T.textFaint}/>
+                  </button>
+                </div>
+              ))}
+
+              <button onClick={()=>addSet(ei)} style={{width:'100%',marginTop:6,height:34,border:'1px dashed rgba(255,255,255,0.15)',borderRadius:10,background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <Icon name="plus" size={13} stroke={T.textDim}/>Ajouter une série
+              </button>
+            </GlassCard>
+          </div>
+        ))}
+
+        <button onClick={addEx} style={{width:'100%',height:52,borderRadius:16,border:`1px dashed ${TP_ACCENT}50`,background:`${TP_ACCENT}06`,color:TP_ACCENT,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          <Icon name="plus" size={18} stroke={TP_ACCENT}/>Ajouter un exercice
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TPAdminEditor({program,onBack}){
   const isNew=!program;
-  const[form,setForm]=React.useState(program?{...program}:{
-    name:'',shortDescription:'',description:'',coverImage:'',duration:'1month',
-    price:0,level:'Débutant',category:'fullbody',objectives:'',sessionsPerWeek:3,
-    sessionDuration:'60min',expectedResults:'',weeks:[],
+  const[form,setForm]=React.useState(()=>{
+    if(program)return{...program,weeks:[...(program.weeks||[]).map(w=>({...w,sessions:[...(w.sessions||[]).map(s=>({...s,exercises:[...(s.exercises||[])]}))]}))],};
+    return{name:'',shortDescription:'',description:'',coverImage:'',duration:'1month',price:0,level:'Débutant',category:'',objectives:'',sessionsPerWeek:3,sessionDuration:'60min',expectedResults:'',weeks:[]};
   });
   const[saving,setSaving]=React.useState(false);
-  const[editWeek,setEditWeek]=React.useState(null);
+  const[view,setView]=React.useState('info');
+  const[editSeq,setEditSeq]=React.useState(null);
   const[editSession,setEditSession]=React.useState(null);
+  const[showImport,setShowImport]=React.useState(null);
   const coverRef=React.useRef(null);
 
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -9915,42 +10123,30 @@ function TPAdminEditor({program,onBack}){
   const save=async()=>{
     setSaving(true);
     try{
-      if(isNew){
-        await apiCall('/api/admin/training-programs',{method:'POST',body:form});
-      }else{
-        await apiCall('/api/admin/training-programs/'+form.id,{method:'PUT',body:form});
-      }
+      if(isNew){await apiCall('/api/admin/training-programs',{method:'POST',body:form});}
+      else{await apiCall('/api/admin/training-programs/'+form.id,{method:'PUT',body:form});}
       onBack();
     }catch(e){console.error(e);}
     setSaving(false);
   };
 
   const uploadCover=async(e)=>{
-    const file=e.target.files?.[0];
-    if(!file)return;
-    if(isNew){
-      const r=new FileReader();
-      r.onload=()=>set('coverImage',r.result);
-      r.readAsDataURL(file);
-      return;
-    }
-    const fd=new FormData();
-    fd.append('cover',file);
-    try{
-      const r=await apiCall('/api/admin/training-programs/'+form.id+'/upload-cover',{method:'POST',body:fd});
-      set('coverImage',r.coverImage);
-    }catch(e){console.error(e);}
+    const file=e.target.files?.[0];if(!file)return;
+    if(isNew){const r=new FileReader();r.onload=()=>set('coverImage',r.result);r.readAsDataURL(file);return;}
+    const fd=new FormData();fd.append('cover',file);
+    try{const r=await apiCall('/api/admin/training-programs/'+form.id+'/upload-cover',{method:'POST',body:fd});set('coverImage',r.coverImage);}catch(e){console.error(e);}
   };
 
-  const addWeek=()=>{
-    set('weeks',[...(form.weeks||[]),{weekNumber:(form.weeks||[]).length+1,moduleName:`Module ${(form.weeks||[]).length+1}`,sessions:[]}]);
+  const addModule=()=>{
+    set('weeks',[...(form.weeks||[]),{weekNumber:(form.weeks||[]).length+1,moduleName:`Séquence ${(form.weeks||[]).length+1}`,sessions:[]}]);
   };
-  const removeWeek=(wi)=>{
-    const w=[...(form.weeks||[])];w.splice(wi,1);
-    w.forEach((wk,i)=>wk.weekNumber=i+1);
-    set('weeks',w);
+  const removeModule=wi=>{
+    const w=[...(form.weeks||[])];w.splice(wi,1);w.forEach((wk,i)=>wk.weekNumber=i+1);set('weeks',w);
   };
-  const addSession=(wi)=>{
+  const updateModuleName=(wi,name)=>{
+    const w=[...(form.weeks||[])];w[wi]={...w[wi],moduleName:name};set('weeks',w);
+  };
+  const addSession=wi=>{
     const w=[...(form.weeks||[])];
     w[wi]={...w[wi],sessions:[...(w[wi].sessions||[]),{name:`Séance ${(w[wi].sessions||[]).length+1}`,exercises:[]}]};
     set('weeks',w);
@@ -9966,146 +10162,210 @@ function TPAdminEditor({program,onBack}){
     set('weeks',w);
     setEditSession(null);
   };
+  const importSessions=(wi,imported)=>{
+    const w=[...(form.weeks||[])];
+    w[wi]={...w[wi],sessions:[...(w[wi].sessions||[]),...imported]};
+    set('weeks',w);
+    setShowImport(null);
+  };
 
   if(editSession!==null){
     const{wi,si}=editSession;
     const sess=(form.weeks||[])[wi]?.sessions?.[si];
     if(!sess)return null;
-    return<TPSessionEditor session={sess} weekIndex={wi} sessionIndex={si} onSave={(s)=>updateSession(wi,si,s)} onBack={()=>setEditSession(null)}/>;
+    const seq=(form.weeks||[])[wi];
+    return<TPSessionEditor session={sess} seqName={seq?.moduleName} seqIndex={wi} onSave={s=>updateSession(wi,si,s)} onBack={()=>setEditSession(null)}/>;
   }
 
-  const INP={width:'100%',height:42,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
-  const LBL={fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5,display:'block'};
+  if(showImport!==null){
+    return<TPImportSessionModal onImport={sessions=>importSessions(showImport,sessions)} onClose={()=>setShowImport(null)}/>;
+  }
+
+  const INP={width:'100%',height:44,borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
+  const LBL={fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,display:'block'};
+
+  const TABS=[
+    {id:'info',label:'Infos',icon:'edit'},
+    {id:'structure',label:'Structure',icon:'grid'},
+  ];
+
+  const totalSessions=(form.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0);
+  const totalExercises=(form.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).reduce((ss,se)=>ss+(se.exercises||[]).length,0),0);
 
   return(
-    <div style={{padding:'14px 18px 90px',color:T.text}}>
-      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
-        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
-      </button>
-      <div style={{fontSize:18,fontWeight:800,marginBottom:16}}>{isNew?'Nouveau programme':'Modifier le programme'}</div>
-
-      <input type="file" ref={coverRef} accept="image/*" style={{display:'none'}} onChange={uploadCover}/>
-      <button onClick={()=>coverRef.current?.click()} style={{width:'100%',height:120,borderRadius:16,border:`2px dashed ${T.border}`,background:form.coverImage?`url(${form.coverImage}) center/cover`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:13,fontWeight:600,marginBottom:16,overflow:'hidden'}}>
-        {form.coverImage?'':'📷 Ajouter une image de couverture'}
-      </button>
-
-      <div style={{marginBottom:12}}><label style={LBL}>Nom du programme</label><input value={form.name} onChange={e=>set('name',e.target.value)} style={INP} placeholder="Ex: Masse musculaire 3 mois"/></div>
-      <div style={{marginBottom:12}}><label style={LBL}>Description courte</label><input value={form.shortDescription} onChange={e=>set('shortDescription',e.target.value)} style={INP} placeholder="Résumé en 1-2 lignes"/></div>
-      <div style={{marginBottom:12}}><label style={LBL}>Description complète</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Présentation détaillée du programme"/></div>
-
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        <div style={{flex:1}}><label style={LBL}>Durée</label>
-          <select value={form.duration} onChange={e=>set('duration',e.target.value)} style={{...INP,cursor:'pointer'}}>
-            <option value="1month">1 mois</option><option value="2months">2 mois</option><option value="3months">3 mois</option>
-          </select>
-        </div>
-        <div style={{flex:1}}><label style={LBL}>Prix (centimes €)</label><input type="number" value={form.price} onChange={e=>set('price',e.target.value)} style={INP} placeholder="Ex: 2990 = 29,90€"/></div>
-      </div>
-
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        <div style={{flex:1}}><label style={LBL}>Niveau</label>
-          <select value={form.level} onChange={e=>set('level',e.target.value)} style={{...INP,cursor:'pointer'}}>
-            {TP_LEVELS.map(lv=><option key={lv} value={lv}>{lv}</option>)}
-          </select>
-        </div>
-        <div style={{flex:1}}><label style={LBL}>Catégorie</label>
-          <input value={form.category} onChange={e=>set('category',e.target.value)} style={INP} placeholder="Ex: PPL, Full Body, Bras..." list="tp-cat-suggestions"/>
-          <datalist id="tp-cat-suggestions">{TP_CATS.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}</datalist>
-        </div>
-      </div>
-
-      <div style={{display:'flex',gap:8,marginBottom:12}}>
-        <div style={{flex:1}}><label style={LBL}>Séances/semaine</label><input type="number" value={form.sessionsPerWeek} onChange={e=>set('sessionsPerWeek',e.target.value)} style={INP} min="1" max="7"/></div>
-        <div style={{flex:1}}><label style={LBL}>Durée séance</label><input value={form.sessionDuration} onChange={e=>set('sessionDuration',e.target.value)} style={INP} placeholder="Ex: 60min"/></div>
-      </div>
-
-      <div style={{marginBottom:12}}><label style={LBL}>Objectifs</label><textarea value={form.objectives} onChange={e=>set('objectives',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Que va obtenir l'athlète ?"/></div>
-      <div style={{marginBottom:16}}><label style={LBL}>Résultats attendus</label><textarea value={form.expectedResults} onChange={e=>set('expectedResults',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Gains, transformations visibles"/></div>
-
-      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Modules & Séances</div>
-      {(form.weeks||[]).map((week,wi)=>(
-        <div key={wi} style={{marginBottom:10,padding:'14px',borderRadius:16,border:`1px solid ${TP_ACCENT}30`,background:`${TP_ACCENT}06`}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:28,height:28,borderRadius:8,background:TP_GRAD,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,color:'#fff'}}>{wi+1}</div>
-              <input value={week.moduleName||`Module ${wi+1}`} onChange={e=>{const w=[...(form.weeks||[])];w[wi]={...w[wi],moduleName:e.target.value};set('weeks',w);}} style={{height:32,borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:700,padding:'0 10px',outline:'none',fontFamily:'inherit',minWidth:0,flex:1}} placeholder="Nom du module"/>
-            </div>
-            <button onClick={()=>removeWeek(wi)} style={{background:'none',border:'none',color:T.danger,cursor:'pointer',fontSize:11,fontWeight:600}}>Supprimer</button>
+    <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'6px 18px 0',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6,marginBottom:14}}>
+          <button onClick={onBack} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Icon name="chevronLeft" size={18}/>
+          </button>
+          <div style={{textAlign:'center',flex:1}}>
+            <div style={{fontSize:10,color:TP_ACCENT,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Module</div>
+            <div style={{fontSize:16,fontWeight:800}}>{form.name||'Nouveau programme'}</div>
           </div>
-          {(week.sessions||[]).map((sess,si)=>(
-            <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,marginBottom:6}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
-                <div style={{fontSize:11,color:T.textFaint}}>{(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
-              </div>
-              <button onClick={()=>setEditSession({wi,si})} style={{height:30,padding:'0 12px',borderRadius:8,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,color:TP_ACCENT,fontSize:11,fontWeight:700,cursor:'pointer'}}>Modifier</button>
-              <button onClick={()=>removeSession(wi,si)} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(184,80,112,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={13} stroke={T.danger}/></button>
-            </div>
+          <button onClick={save} disabled={saving||!form.name} style={{height:34,padding:'0 16px',borderRadius:17,border:'none',background:form.name?TP_GRAD:'rgba(255,255,255,0.06)',color:form.name?'#fff':T.textFaint,fontSize:12,fontWeight:700,cursor:form.name?'pointer':'default',boxShadow:form.name?`0 4px 12px ${TP_ACCENT}40`:'none'}}>
+            {saving?'…':'Sauver'}
+          </button>
+        </div>
+
+        <div style={{display:'flex',gap:4,padding:3,borderRadius:14,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,marginBottom:14}}>
+          {TABS.map(tab=>(
+            <button key={tab.id} onClick={()=>setView(tab.id)} style={{flex:1,height:38,borderRadius:11,border:'none',background:view===tab.id?`${TP_ACCENT}18`:'transparent',color:view===tab.id?TP_ACCENT:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,transition:'all 0.2s'}}>
+              <Icon name={tab.icon} size={14} stroke={view===tab.id?TP_ACCENT:T.textDim}/>{tab.label}
+            </button>
           ))}
-          <button onClick={()=>addSession(wi)} style={{width:'100%',height:36,borderRadius:10,border:`1px dashed ${TP_ACCENT}40`,background:'transparent',color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginTop:4}}>+ Ajouter une séance</button>
         </div>
-      ))}
-      <button onClick={addWeek} style={{width:'100%',height:44,borderRadius:14,border:`1px dashed ${TP_ACCENT}50`,background:`${TP_ACCENT}10`,color:TP_ACCENT,fontSize:13,fontWeight:800,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>+ Ajouter un module</button>
-
-      <button onClick={save} disabled={saving||!form.name} style={{width:'100%',height:52,borderRadius:14,border:'none',background:form.name?TP_GRAD:'rgba(255,255,255,0.06)',color:form.name?'#fff':T.textFaint,fontSize:14,fontWeight:800,cursor:form.name?'pointer':'default',boxShadow:form.name?`0 8px 24px ${TP_ACCENT}40`:'none'}}>
-        {saving?'Enregistrement…':(isNew?'Créer le programme':'Enregistrer les modifications')}
-      </button>
-    </div>
-  );
-}
-
-function TPSessionEditor({session,weekIndex,sessionIndex,onSave,onBack}){
-  const[sess,setSess]=React.useState({...session,exercises:[...(session.exercises||[]).map(e=>({...e}))]});
-  const set=(k,v)=>setSess(s=>({...s,[k]:v}));
-  const updateEx=(i,k,v)=>{const exs=[...sess.exercises];exs[i]={...exs[i],[k]:v};set('exercises',exs);};
-  const addEx=()=>set('exercises',[...sess.exercises,{name:'',sets:3,reps:'10',rest:'60s',coachNotes:'',muscle:''}]);
-  const removeEx=(i)=>set('exercises',sess.exercises.filter((_,j)=>j!==i));
-  const moveEx=(i,dir)=>{
-    const exs=[...sess.exercises];
-    const ni=i+dir;
-    if(ni<0||ni>=exs.length)return;
-    [exs[i],exs[ni]]=[exs[ni],exs[i]];
-    set('exercises',exs);
-  };
-
-  const INP={width:'100%',height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,padding:'0 10px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
-
-  return(
-    <div style={{padding:'14px 18px 90px',color:T.text}}>
-      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
-        <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
-      </button>
-      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Module {weekIndex+1} — Séance {sessionIndex+1}</div>
-
-      <div style={{marginBottom:14}}>
-        <label style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5,display:'block'}}>Nom de la séance</label>
-        <input value={sess.name} onChange={e=>set('name',e.target.value)} style={{...INP,height:42}} placeholder="Ex: Push jour 1"/>
       </div>
 
-      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>Exercices ({sess.exercises.length})</div>
-      {sess.exercises.map((ex,i)=>(
-        <div key={i} style={{padding:'12px',borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.02)',marginBottom:6}}>
-          <div style={{display:'flex',gap:6,marginBottom:6}}>
-            <div style={{flex:2}}><input value={ex.name} onChange={e=>updateEx(i,'name',e.target.value)} style={INP} placeholder="Nom exercice"/></div>
-            <div style={{flex:1}}><input value={ex.muscle||''} onChange={e=>updateEx(i,'muscle',e.target.value)} style={INP} placeholder="Muscle"/></div>
-          </div>
-          <div style={{display:'flex',gap:6,marginBottom:6}}>
-            <div style={{flex:1}}><input type="number" value={ex.sets} onChange={e=>updateEx(i,'sets',parseInt(e.target.value)||0)} style={INP} placeholder="Séries" min="1"/></div>
-            <div style={{flex:1}}><input value={ex.reps} onChange={e=>updateEx(i,'reps',e.target.value)} style={INP} placeholder="Reps"/></div>
-            <div style={{flex:1}}><input value={ex.rest} onChange={e=>updateEx(i,'rest',e.target.value)} style={INP} placeholder="Repos"/></div>
-          </div>
-          <input value={ex.coachNotes||''} onChange={e=>updateEx(i,'coachNotes',e.target.value)} style={{...INP,marginBottom:6}} placeholder="💡 Notes du coach (optionnel)"/>
-          <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-            <button onClick={()=>moveEx(i,-1)} disabled={i===0} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:i>0?'pointer':'default',opacity:i>0?1:0.3,display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:12}}>↑</button>
-            <button onClick={()=>moveEx(i,1)} disabled={i===sess.exercises.length-1} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',cursor:i<sess.exercises.length-1?'pointer':'default',opacity:i<sess.exercises.length-1?1:0.3,display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:12}}>↓</button>
-            <button onClick={()=>removeEx(i)} style={{width:28,height:28,borderRadius:6,border:'none',background:'rgba(184,80,112,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={12} stroke={T.danger}/></button>
-          </div>
-        </div>
-      ))}
+      <div style={{flex:1,overflowY:'auto',padding:'0 18px 100px'}}>
+        {view==='info'&&(
+          <div>
+            <input type="file" ref={coverRef} accept="image/*" style={{display:'none'}} onChange={uploadCover}/>
+            <button onClick={()=>coverRef.current?.click()} style={{width:'100%',height:130,borderRadius:18,border:`2px dashed ${form.coverImage?'transparent':T.border}`,background:form.coverImage?`url(${form.coverImage}) center/cover`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:T.textDim,fontSize:13,fontWeight:600,marginBottom:18,overflow:'hidden',transition:'all 0.2s'}}>
+              {!form.coverImage&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6}}><Icon name="upload" size={22} stroke={T.textDim}/><span>Image de couverture</span></div>}
+            </button>
 
-      <button onClick={addEx} style={{width:'100%',height:38,borderRadius:10,border:`1px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:20}}>+ Ajouter un exercice</button>
+            <GlassCard padding={16} style={{marginBottom:14}}>
+              <div style={{marginBottom:14}}><label style={LBL}>Nom du programme</label><input value={form.name} onChange={e=>set('name',e.target.value)} style={INP} placeholder="Ex: Prise de masse 3 mois"/></div>
+              <div style={{marginBottom:14}}><label style={LBL}>Description courte</label><input value={form.shortDescription} onChange={e=>set('shortDescription',e.target.value)} style={INP} placeholder="Résumé en 1-2 lignes"/></div>
+              <div><label style={LBL}>Description complète</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Présentation détaillée du programme"/></div>
+            </GlassCard>
 
-      <button onClick={()=>onSave(sess)} style={{width:'100%',height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`}}>Enregistrer la séance</button>
+            <GlassCard padding={16} style={{marginBottom:14}}>
+              <div style={{display:'flex',gap:10,marginBottom:14}}>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Durée</label>
+                  <select value={form.duration} onChange={e=>set('duration',e.target.value)} style={{...INP,cursor:'pointer'}}>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(n=><option key={n} value={n===1?'1month':n+'months'}>{n} mois</option>)}
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Prix (centimes €)</label>
+                  <input type="number" value={form.price} onChange={e=>set('price',e.target.value)} style={INP} placeholder="Ex: 2990"/>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:10,marginBottom:14}}>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Niveau</label>
+                  <select value={form.level} onChange={e=>set('level',e.target.value)} style={{...INP,cursor:'pointer'}}>
+                    {TP_LEVELS.map(lv=><option key={lv} value={lv}>{lv}</option>)}
+                  </select>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Catégorie</label>
+                  <input value={form.category} onChange={e=>set('category',e.target.value)} style={INP} placeholder="Ex: PPL, Full Body..." list="tp-cat-suggestions"/>
+                  <datalist id="tp-cat-suggestions">{TP_CATS.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}</datalist>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:10}}>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Séances/semaine</label>
+                  <input type="number" value={form.sessionsPerWeek} onChange={e=>set('sessionsPerWeek',e.target.value)} style={INP} min="1" max="7"/>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={LBL}>Durée séance</label>
+                  <input value={form.sessionDuration} onChange={e=>set('sessionDuration',e.target.value)} style={INP} placeholder="60min"/>
+                </div>
+              </div>
+            </GlassCard>
+
+            <GlassCard padding={16} style={{marginBottom:14}}>
+              <div style={{marginBottom:14}}><label style={LBL}>Objectifs</label><textarea value={form.objectives} onChange={e=>set('objectives',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Que va obtenir l'athlète ?"/></div>
+              <div><label style={LBL}>Résultats attendus</label><textarea value={form.expectedResults} onChange={e=>set('expectedResults',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Gains, transformations visibles"/></div>
+            </GlassCard>
+
+            <div style={{display:'flex',gap:10,marginBottom:8}}>
+              <GlassCard padding={14} style={{flex:1,textAlign:'center'}}>
+                <div style={{fontSize:22,fontWeight:800,color:TP_ACCENT}}>{(form.weeks||[]).length}</div>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginTop:2}}>Séquences</div>
+              </GlassCard>
+              <GlassCard padding={14} style={{flex:1,textAlign:'center'}}>
+                <div style={{fontSize:22,fontWeight:800,color:TP_ACCENT}}>{totalSessions}</div>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginTop:2}}>Séances</div>
+              </GlassCard>
+              <GlassCard padding={14} style={{flex:1,textAlign:'center'}}>
+                <div style={{fontSize:22,fontWeight:800,color:TP_ACCENT}}>{totalExercises}</div>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginTop:2}}>Exercices</div>
+              </GlassCard>
+            </div>
+          </div>
+        )}
+
+        {view==='structure'&&(
+          <div>
+            {(form.weeks||[]).length===0&&(
+              <div style={{padding:'40px 20px',textAlign:'center'}}>
+                <div style={{fontSize:40,marginBottom:12}}>📋</div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:6}}>Aucune séquence</div>
+                <div style={{fontSize:12,color:T.textDim,marginBottom:20,lineHeight:1.6}}>Ajoutez des séquences (semaines) puis des séances dans chaque séquence.</div>
+              </div>
+            )}
+
+            {(form.weeks||[]).map((seq,wi)=>{
+              const isOpen=editSeq===wi;
+              const sessCount=(seq.sessions||[]).length;
+              const exCount=(seq.sessions||[]).reduce((s,se)=>s+(se.exercises||[]).length,0);
+              return(
+                <div key={wi} style={{marginBottom:12}}>
+                  <GlassCard padding={0} style={{overflow:'hidden',border:`1px solid ${isOpen?TP_ACCENT+'40':T.border}`}}>
+                    <div onClick={()=>setEditSeq(isOpen?null:wi)} style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',cursor:'pointer'}}>
+                      <div style={{width:32,height:32,borderRadius:10,background:TP_GRAD,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800,color:'#fff',flexShrink:0}}>{wi+1}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{seq.moduleName||`Séquence ${wi+1}`}</div>
+                        <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{sessCount} séance{sessCount>1?'s':''} · {exCount} exercice{exCount>1?'s':''}</div>
+                      </div>
+                      <Icon name={isOpen?'chevronUp':'chevronDown'} size={18} stroke={T.textDim}/>
+                    </div>
+
+                    {isOpen&&(
+                      <div style={{padding:'0 16px 16px',borderTop:`1px solid ${T.border}`}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,padding:'12px 0 10px'}}>
+                          <input value={seq.moduleName||''} onChange={e=>updateModuleName(wi,e.target.value)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:700,padding:'0 12px',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}} placeholder="Nom de la séquence"/>
+                          <button onClick={()=>{removeModule(wi);setEditSeq(null);}} style={{height:38,padding:'0 12px',borderRadius:10,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Supprimer</button>
+                        </div>
+
+                        {(seq.sessions||[]).map((sess,si)=>{
+                          const seExCount=(sess.exercises||[]).length;
+                          return(
+                            <div key={si} style={{marginBottom:8}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8,padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,transition:'all 0.2s'}}>
+                                <div style={{width:26,height:26,borderRadius:8,background:`${TP_ACCENT}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:TP_ACCENT,flexShrink:0}}>{si+1}</div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
+                                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{seExCount} exercice{seExCount>1?'s':''}{seExCount>0?' · '+sess.exercises.map(e=>e.name||'?').slice(0,2).join(', ')+(seExCount>2?' …':''):''}</div>
+                                </div>
+                                <button onClick={()=>setEditSession({wi,si})} style={{height:32,padding:'0 12px',borderRadius:10,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}12`,color:TP_ACCENT,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
+                                  <Icon name="edit" size={12} stroke={TP_ACCENT}/>Éditer
+                                </button>
+                                <button onClick={()=>removeSession(wi,si)} style={{width:32,height:32,borderRadius:10,border:'none',background:'rgba(184,80,112,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                                  <Icon name="trash" size={13} stroke={T.danger}/>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        <div style={{display:'flex',gap:8,marginTop:6}}>
+                          <button onClick={()=>addSession(wi)} style={{flex:1,height:40,borderRadius:12,border:`1px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}06`,color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                            <Icon name="plus" size={14} stroke={TP_ACCENT}/>Nouvelle séance
+                          </button>
+                          <button onClick={()=>setShowImport(wi)} style={{flex:1,height:40,borderRadius:12,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                            <Icon name="download" size={14} stroke="#5A8AE0"/>Importer
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </GlassCard>
+                </div>
+              );
+            })}
+
+            <button onClick={addModule} style={{width:'100%',height:52,borderRadius:16,border:`1px dashed ${TP_ACCENT}50`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:4}}>
+              <Icon name="plus" size={18} stroke={TP_ACCENT}/>Ajouter une séquence
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
