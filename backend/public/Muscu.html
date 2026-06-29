@@ -7170,7 +7170,12 @@ const EQUIP=[
 ];
 const EQUIP_BRANDS=['Tous','Technogym','Gym 80','Hammer Strength','Barres & Haltères','Poids du corps','Câbles','Personnel'];
 
-function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession}){
+const LIVE_STORAGE_KEY='pa_live_in_progress';
+function saveLiveToStorage(data){try{localStorage.setItem(LIVE_STORAGE_KEY,JSON.stringify({...data,savedAt:Date.now()}));}catch(e){}}
+function loadLiveFromStorage(){try{const d=localStorage.getItem(LIVE_STORAGE_KEY);return d?JSON.parse(d):null;}catch(e){return null;}}
+function clearLiveStorage(){try{localStorage.removeItem(LIVE_STORAGE_KEY);}catch(e){}}
+
+function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession,resumeData}){
   const uid=()=>Math.random().toString(36).slice(2);
 
   const catalog=React.useMemo(()=>{
@@ -7189,15 +7194,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   },[detail]);
 
   const[exercises,setExercises]=React.useState(()=>{
-    if(!editSession)return[];
-    return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    if(resumeData)return(resumeData.exercises||[]).map(e=>({...e,id:e.id||uid()}));
+    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    return[];
   });
-  const[elapsed,setElapsed]=React.useState(editSession?(editSession.duration||0)*60:0);
+  const[elapsed,setElapsed]=React.useState(()=>{
+    if(resumeData){const extra=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);return(resumeData.elapsed||0)+extra;}
+    if(editSession)return(editSession.duration||0)*60;
+    return 0;
+  });
   const[mode,setMode]=React.useState('session');
   const[brandFilter,setBrandFilter]=React.useState('Tous');
   const[query,setQuery]=React.useState('');
   const[pendingEx,setPendingEx]=React.useState({name:'',muscle:'',brand:''});
-  const[addingTo,setAddingTo]=React.useState(null); // null=new exercise, {exIdx} for adding set
+  const[addingTo,setAddingTo]=React.useState(null);
   const[pendingGroupType,setPendingGroupType]=React.useState('classic');
   const[pendingGroupId,setPendingGroupId]=React.useState(null);
   const[setW,setSetW]=React.useState(0);
@@ -7207,12 +7217,22 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const[reviewing,setReviewing]=React.useState(false);
-  const[sessionName,setSessionName]=React.useState(editSession?.name||'');
-  const[editingSet,setEditingSet]=React.useState(null); // {exIdx,setIdx}
+  const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||'');
+  const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
 
   React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
+  React.useEffect(()=>{
+    if(editSession)return;
+    if(exercises.length===0&&!sessionName){clearLiveStorage();return;}
+    saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName});
+  },[exercises,sessionName]);
+  React.useEffect(()=>{
+    if(editSession||exercises.length===0)return;
+    const t=setTimeout(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName}),10000);
+    return()=>clearTimeout(t);
+  },[elapsed]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -7289,11 +7309,12 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
       }else{
         await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:sessionName.trim()||'Séance Live',date:new Date().toISOString(),exercises:exData,totalVolume,duration:Math.round(elapsed/60)}});
       }
+      clearLiveStorage();
       onSaved();
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
-  const confirmClose=()=>{if(exercises.length>0){setConfirmingClose(true);return;}onClose();};
+  const confirmClose=()=>{if(exercises.length>0){setConfirmingClose(true);return;}clearLiveStorage();onClose();};
   const adj=(setter,delta,min=0)=>setter(v=>Math.max(min,+(v+delta).toFixed(1)));
 
   const groups=React.useMemo(()=>{
@@ -7432,7 +7453,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
           {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrée{totalSets>1?'s':''}
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
-          <button onClick={onClose} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+          <button onClick={()=>{clearLiveStorage();onClose();}} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
           <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
         </div>
       </div>
@@ -7598,6 +7619,7 @@ function CoachScreen({authToken,authUser}){
   const libFileRef=React.useRef(null);
   const[showLiveSession,setShowLiveSession]=React.useState(false);
   const[editingSession,setEditingSession]=React.useState(null);
+  const[resumeLive,setResumeLive]=React.useState(null);
   const[confirmAction,setConfirmAction]=React.useState(null); // {msg,onConfirm}
   const[calRefreshKey,setCalRefreshKey]=React.useState(0);
 
@@ -7861,14 +7883,15 @@ function CoachScreen({authToken,authUser}){
   };
 
   // ── Live session overlay — rendu via portal pour échapper au willChange:transform du gestureRef
-  const liveSessionEl=(showLiveSession||editingSession)&&selected?ReactDOM.createPortal(
+  const liveSessionEl=(showLiveSession||editingSession||resumeLive)&&(selected||resumeLive)?ReactDOM.createPortal(
     <CoachLiveSessionScreen
-      athleteId={selected.id}
-      athleteName={(detail||selected).firstName||selected.email.split('@')[0]}
+      athleteId={resumeLive?resumeLive.athleteId:selected.id}
+      athleteName={resumeLive?resumeLive.athleteName:(detail||selected).firstName||selected.email.split('@')[0]}
       detail={detail||{}}
       editSession={editingSession}
-      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setDetailTab('historique');reloadDetail(selected.id);flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
-      onClose={()=>{setShowLiveSession(false);setEditingSession(null);}}
+      resumeData={resumeLive}
+      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab('historique');reloadDetail(selected.id);}flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
+      onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);}}
     />,
     document.body
   ):null;
@@ -8482,6 +8505,24 @@ function CoachScreen({authToken,authUser}){
       </div>
 
       {msg&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
+
+      {(()=>{const saved=loadLiveFromStorage();if(!saved||!saved.exercises?.length)return null;const mins=Math.round(((Date.now()-(saved.savedAt||Date.now()))/60000));return(
+        <div style={{marginBottom:16,padding:'14px 16px',borderRadius:16,background:'rgba(232,64,64,0.08)',border:'1px solid rgba(232,64,64,0.3)',display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:40,height:40,borderRadius:12,background:'rgba(232,64,64,0.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <span style={{width:10,height:10,borderRadius:5,background:'#e84040',animation:'fadeIn 1s ease infinite alternate'}}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>Séance Live en cours</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{saved.athleteName} · {saved.exercises.length} ex. · {mins<1?'à l\'instant':'il y a '+mins+' min'}</div>
+          </div>
+          <button onClick={()=>setResumeLive(saved)} style={{height:36,padding:'0 14px',borderRadius:12,border:'none',background:'linear-gradient(135deg,#e84040,#c03030)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',boxShadow:'0 4px 12px rgba(232,64,64,0.3)'}}>
+            Reprendre
+          </button>
+          <button onClick={()=>{clearLiveStorage();setMsg('Séance abandonnée');}} style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Icon name="x" size={14} stroke={T.textFaint}/>
+          </button>
+        </div>
+      );})()}
 
       {/* Pending approval requests (main coach only) */}
       {isMain&&pending.length>0&&(
@@ -9998,7 +10039,26 @@ function TPSessionEditor({session,onSave,onBack,seqName,seqIndex}){
   const delEx=idx=>set('exercises',sess.exercises.filter((_,i)=>i!==idx));
   const delSet=(ei,si)=>set('exercises',sess.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.filter((_,j)=>j!==si)}));
   const addSet=ei=>set('exercises',sess.exercises.map((e,i)=>i!==ei?e:{...e,sets:[...e.sets,{weight:e.sets[e.sets.length-1]?.weight||20,reps:0,target:e.sets[e.sets.length-1]?.target||10}]}));
-  const addEx=()=>set('exercises',[...sess.exercises,{id:uid(),name:'',muscle:'',sets:[{weight:20,reps:0,target:10},{weight:20,reps:0,target:10},{weight:20,reps:0,target:10}]}]);
+  const[pickMode,setPickMode]=React.useState(false);
+  const[pickQuery,setPickQuery]=React.useState('');
+  const[pickBrand,setPickBrand]=React.useState('Tous');
+  const[replaceIdx,setReplaceIdx]=React.useState(null);
+  const pickRef=React.useRef(null);
+  const tpNorm=React.useCallback(s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''),[]);
+  const tpCatalog=React.useMemo(()=>EQUIP.map(e=>({name:e.n,muscle:e.m,brand:e.b})),[]);
+  const tpFiltered=React.useMemo(()=>{
+    let list=pickBrand==='Tous'?tpCatalog:tpCatalog.filter(e=>e.brand===pickBrand);
+    if(pickQuery.trim())list=list.filter(e=>tpNorm(e.name).includes(tpNorm(pickQuery))||tpNorm(e.muscle).includes(tpNorm(pickQuery)));
+    return list;
+  },[tpCatalog,pickBrand,pickQuery]);
+  React.useEffect(()=>{if(pickMode)setTimeout(()=>pickRef.current?.focus(),120);},[pickMode]);
+  const openPicker=(idx=null)=>{setPickQuery('');setPickBrand('Tous');setReplaceIdx(idx);setPickMode(true);};
+  const pickExercise=(name,muscle)=>{
+    if(replaceIdx!==null){updEx(replaceIdx,{name,muscle});}
+    else{set('exercises',[...sess.exercises,{id:uid(),name,muscle,sets:[{weight:20,reps:0,target:10},{weight:20,reps:0,target:10},{weight:20,reps:0,target:10}]}]);}
+    setPickMode(false);
+  };
+  const addEx=()=>openPicker();
   const moveEx=(i,dir)=>{
     const exs=[...sess.exercises];const ni=i+dir;
     if(ni<0||ni>=exs.length)return;
@@ -10046,9 +10106,9 @@ function TPSessionEditor({session,onSave,onBack,seqName,seqIndex}){
           <div key={ex.id} style={{marginBottom:16}}>
             <GlassCard padding={14}>
               <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:12}}>
-                <div style={{flex:1}}>
-                  <input style={inpStyle('100%',15)} value={ex.name} onChange={e=>updEx(ei,{name:e.target.value})} placeholder="Nom de l'exercice"/>
-                  <input style={{...inpStyle('100%',12),marginTop:6,fontWeight:500,color:T.textDim}} value={ex.muscle} onChange={e=>updEx(ei,{muscle:e.target.value})} placeholder="Groupe musculaire"/>
+                <div style={{flex:1,cursor:'pointer',padding:'4px 0'}} onClick={()=>openPicker(ei)}>
+                  <div style={{fontSize:15,fontWeight:700,color:ex.name?T.text:T.textFaint,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name||'Choisir un exercice…'}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:T.textDim,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.muscle||'Groupe musculaire'}</div>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0,marginTop:2}}>
                   <div style={{display:'flex',gap:3}}>
@@ -10101,6 +10161,52 @@ function TPSessionEditor({session,onSave,onBack,seqName,seqIndex}){
           <Icon name="plus" size={18} stroke={TP_ACCENT}/>Ajouter un exercice
         </button>
       </div>
+
+      {pickMode&&(
+        <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'calc(16px + env(safe-area-inset-top)) 16px 12px',flexShrink:0,borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10}}>
+            <button onClick={()=>setPickMode(false)} style={{width:36,height:36,borderRadius:18,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <Icon name="chevronLeft" size={18}/>
+            </button>
+            <input ref={pickRef} value={pickQuery} onChange={e=>setPickQuery(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&pickQuery.trim()&&!tpFiltered.some(x=>tpNorm(x.name)===tpNorm(pickQuery.trim())))pickExercise(pickQuery.trim(),'');}}
+              placeholder="Rechercher un exercice..."
+              style={{flex:1,height:44,borderRadius:13,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.06)',color:T.text,fontSize:15,fontWeight:500,padding:'0 14px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
+            />
+          </div>
+          <div style={{padding:'10px 16px 6px',display:'flex',gap:6,overflowX:'auto',flexShrink:0,WebkitOverflowScrolling:'touch'}}>
+            {EQUIP_BRANDS.map(b=>(
+              <button key={b} onClick={()=>setPickBrand(b)} style={{height:30,padding:'0 12px',borderRadius:15,border:`1px solid ${pickBrand===b?TP_ACCENT:T.border}`,background:pickBrand===b?`${TP_ACCENT}18`:'rgba(255,255,255,0.04)',color:pickBrand===b?TP_ACCENT:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                {b}
+              </button>
+            ))}
+          </div>
+          <div style={{flex:1,overflow:'auto',padding:'10px 16px 40px'}}>
+            {pickQuery.trim()&&!tpFiltered.some(x=>tpNorm(x.name)===tpNorm(pickQuery.trim()))&&(
+              <button onClick={()=>pickExercise(pickQuery.trim(),'')} style={{width:'100%',padding:'11px 14px',borderRadius:14,border:`1px dashed ${TP_ACCENT}70`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:14,fontWeight:700,cursor:'pointer',textAlign:'left',marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
+                <Icon name="plus" size={18} stroke={TP_ACCENT}/><span>Créer <strong>"{pickQuery.trim()}"</strong></span>
+              </button>
+            )}
+            {tpFiltered.map((ex,i)=>(
+              <button key={i} onClick={()=>pickExercise(ex.name,ex.muscle)} style={{width:'100%',padding:'11px 14px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:T.text,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:10,marginBottom:5}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                  <div style={{fontSize:11,color:T.textFaint,marginTop:2,display:'flex',gap:8}}>
+                    {ex.brand&&ex.brand!=='Personnel'&&<span style={{color:`${TP_ACCENT}90`,fontWeight:600}}>{ex.brand}</span>}
+                    {ex.muscle&&<span>{ex.muscle}</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+            {tpFiltered.length===0&&!pickQuery.trim()&&(
+              <div style={{padding:30,textAlign:'center',color:T.textFaint,fontSize:13}}>Aucun exercice dans cette catégorie</div>
+            )}
+            {tpFiltered.length===0&&pickQuery.trim()&&(
+              <div style={{padding:20,textAlign:'center',color:T.textFaint,fontSize:13}}>Aucun résultat</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
