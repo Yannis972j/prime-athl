@@ -9568,7 +9568,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
           {[
             {label:'Séances/semaine',value:prog.sessionsPerWeek||'—',icon:'📅'},
             {label:'Durée séance',value:prog.sessionDuration||'—',icon:'⏱'},
-            {label:'Semaines',value:(prog.weeks||[]).length||'—',icon:'📆'},
+            {label:'Modules',value:(prog.weeks||[]).length||'—',icon:'📆'},
             {label:'Exercices',value:allExercises.length||'—',icon:'💪'},
           ].map((item,i)=>(
             <div key={i} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
@@ -9599,7 +9599,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
             {(prog.weeks||[]).map((week,wi)=>(
               <div key={wi} style={{marginBottom:6}}>
                 <button onClick={()=>setExpandWeek(expandWeek===wi?null:wi)} style={{width:'100%',padding:'10px 14px',borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text}}>
-                  <span style={{fontSize:13,fontWeight:700}}>Semaine {wi+1}</span>
+                  <span style={{fontSize:13,fontWeight:700}}>{week.moduleName||`Module ${wi+1}`}</span>
                   <span style={{fontSize:11,color:T.textDim}}>{(week.sessions||[]).length} séance{(week.sessions||[]).length>1?'s':''} {expandWeek===wi?'▲':'▼'}</span>
                 </button>
                 {expandWeek===wi&&(
@@ -9739,7 +9739,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
         targetStr:String(ex.reps||''),
       })),
     }));
-    onStartWorkout({name:sess.name||`Semaine ${wi+1} — Séance ${si+1}`,muscles:'',exercises,fromTrainingProgram:true,tpMeta:{programId,weekIndex:wi,sessionIndex:si}});
+    onStartWorkout({name:sess.name||`Module ${wi+1} — Séance ${si+1}`,muscles:'',exercises,fromTrainingProgram:true,tpMeta:{programId,weekIndex:wi,sessionIndex:si}});
   };
 
   if(loading)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>;
@@ -9788,7 +9788,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
             <button onClick={()=>setExpandWeek(expandWeek===wi?null:wi)} style={{width:'100%',padding:'12px 14px',borderRadius:14,border:`1px solid ${weekDone?T.good+'40':T.border}`,background:weekDone?'rgba(44,196,160,0.06)':'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <div style={{width:28,height:28,borderRadius:8,background:weekDone?`${T.good}20`:`${ac}15`,border:`1px solid ${weekDone?T.good+'40':ac+'30'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:weekDone?14:11,fontWeight:700,color:weekDone?T.good:ac}}>{weekDone?'✓':wi+1}</div>
-                <span style={{fontSize:14,fontWeight:700}}>Semaine {wi+1}</span>
+                <span style={{fontSize:14,fontWeight:700}}>{week.moduleName||`Module ${wi+1}`}</span>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:11,color:T.textDim}}>{weekCompleted}/{weekSessions}</span>
@@ -9882,7 +9882,7 @@ function TPAdminScreen(){
                   </div>
                   <div style={{padding:'4px 8px',borderRadius:8,background:p.published?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',color:p.published?T.good:T.danger,fontSize:10,fontWeight:700}}>{p.published?'Publié':'Brouillon'}</div>
                 </div>
-                <div style={{fontSize:11,color:T.textDim,marginBottom:10}}>{(p.weeks||[]).length} semaines · {(p.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0)} séances</div>
+                <div style={{fontSize:11,color:T.textDim,marginBottom:10}}>{(p.weeks||[]).length} module{(p.weeks||[]).length>1?'s':''} · {(p.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0)} séances</div>
                 <div style={{display:'flex',gap:6}}>
                   <button onClick={()=>setEditing(p)} style={{flex:1,height:34,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Modifier</button>
                   <button onClick={()=>togglePublish(p)} style={{flex:1,height:34,borderRadius:10,border:'none',background:p.published?'rgba(184,80,112,0.10)':'rgba(44,196,160,0.10)',color:p.published?T.danger:T.good,fontSize:12,fontWeight:600,cursor:'pointer'}}>{p.published?'Dépublier':'Publier'}</button>
@@ -9943,7 +9943,7 @@ function TPAdminEditor({program,onBack}){
   };
 
   const addWeek=()=>{
-    set('weeks',[...(form.weeks||[]),{weekNumber:(form.weeks||[]).length+1,sessions:[]}]);
+    set('weeks',[...(form.weeks||[]),{weekNumber:(form.weeks||[]).length+1,moduleName:`Module ${(form.weeks||[]).length+1}`,sessions:[]}]);
   };
   const removeWeek=(wi)=>{
     const w=[...(form.weeks||[])];w.splice(wi,1);
@@ -10009,9 +10009,8 @@ function TPAdminEditor({program,onBack}){
           </select>
         </div>
         <div style={{flex:1}}><label style={LBL}>Catégorie</label>
-          <select value={form.category} onChange={e=>set('category',e.target.value)} style={{...INP,cursor:'pointer'}}>
-            {TP_CATS.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
-          </select>
+          <input value={form.category} onChange={e=>set('category',e.target.value)} style={INP} placeholder="Ex: PPL, Full Body, Bras..." list="tp-cat-suggestions"/>
+          <datalist id="tp-cat-suggestions">{TP_CATS.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}</datalist>
         </div>
       </div>
 
@@ -10023,27 +10022,30 @@ function TPAdminEditor({program,onBack}){
       <div style={{marginBottom:12}}><label style={LBL}>Objectifs</label><textarea value={form.objectives} onChange={e=>set('objectives',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Que va obtenir l'athlète ?"/></div>
       <div style={{marginBottom:16}}><label style={LBL}>Résultats attendus</label><textarea value={form.expectedResults} onChange={e=>set('expectedResults',e.target.value)} rows={2} style={{...INP,height:'auto',padding:'10px 14px',resize:'vertical'}} placeholder="Gains, transformations visibles"/></div>
 
-      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Semaines & Séances</div>
+      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Modules & Séances</div>
       {(form.weeks||[]).map((week,wi)=>(
-        <div key={wi} style={{marginBottom:8,padding:'12px 14px',borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.02)'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:700}}>Semaine {wi+1}</div>
+        <div key={wi} style={{marginBottom:10,padding:'14px',borderRadius:16,border:`1px solid ${TP_ACCENT}30`,background:`${TP_ACCENT}06`}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:28,height:28,borderRadius:8,background:TP_GRAD,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,color:'#fff'}}>{wi+1}</div>
+              <input value={week.moduleName||`Module ${wi+1}`} onChange={e=>{const w=[...(form.weeks||[])];w[wi]={...w[wi],moduleName:e.target.value};set('weeks',w);}} style={{height:32,borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:700,padding:'0 10px',outline:'none',fontFamily:'inherit',minWidth:0,flex:1}} placeholder="Nom du module"/>
+            </div>
             <button onClick={()=>removeWeek(wi)} style={{background:'none',border:'none',color:T.danger,cursor:'pointer',fontSize:11,fontWeight:600}}>Supprimer</button>
           </div>
           {(week.sessions||[]).map((sess,si)=>(
-            <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:10,background:'rgba(255,255,255,0.03)',marginBottom:4}}>
+            <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
-                <div style={{fontSize:10,color:T.textFaint}}>{(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
+                <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
+                <div style={{fontSize:11,color:T.textFaint}}>{(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
               </div>
-              <button onClick={()=>setEditSession({wi,si})} style={{height:28,padding:'0 10px',borderRadius:8,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:11,fontWeight:600,cursor:'pointer'}}>Modifier</button>
-              <button onClick={()=>removeSession(wi,si)} style={{width:28,height:28,borderRadius:8,border:'none',background:'rgba(184,80,112,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={12} stroke={T.danger}/></button>
+              <button onClick={()=>setEditSession({wi,si})} style={{height:30,padding:'0 12px',borderRadius:8,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,color:TP_ACCENT,fontSize:11,fontWeight:700,cursor:'pointer'}}>Modifier</button>
+              <button onClick={()=>removeSession(wi,si)} style={{width:30,height:30,borderRadius:8,border:'none',background:'rgba(184,80,112,0.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="trash" size={13} stroke={T.danger}/></button>
             </div>
           ))}
-          <button onClick={()=>addSession(wi)} style={{width:'100%',height:32,borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',marginTop:4}}>+ Ajouter une séance</button>
+          <button onClick={()=>addSession(wi)} style={{width:'100%',height:36,borderRadius:10,border:`1px dashed ${TP_ACCENT}40`,background:'transparent',color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginTop:4}}>+ Ajouter une séance</button>
         </div>
       ))}
-      <button onClick={addWeek} style={{width:'100%',height:40,borderRadius:12,border:`1px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}08`,color:TP_ACCENT,fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:20}}>+ Ajouter une semaine</button>
+      <button onClick={addWeek} style={{width:'100%',height:44,borderRadius:14,border:`1px dashed ${TP_ACCENT}50`,background:`${TP_ACCENT}10`,color:TP_ACCENT,fontSize:13,fontWeight:800,cursor:'pointer',marginBottom:20,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>+ Ajouter un module</button>
 
       <button onClick={save} disabled={saving||!form.name} style={{width:'100%',height:52,borderRadius:14,border:'none',background:form.name?TP_GRAD:'rgba(255,255,255,0.06)',color:form.name?'#fff':T.textFaint,fontSize:14,fontWeight:800,cursor:form.name?'pointer':'default',boxShadow:form.name?`0 8px 24px ${TP_ACCENT}40`:'none'}}>
         {saving?'Enregistrement…':(isNew?'Créer le programme':'Enregistrer les modifications')}
@@ -10073,7 +10075,7 @@ function TPSessionEditor({session,weekIndex,sessionIndex,onSave,onBack}){
       <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,background:'none',border:'none',color:T.textDim,cursor:'pointer',padding:0,fontSize:13,fontWeight:600}}>
         <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
       </button>
-      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Semaine {weekIndex+1} — Séance {sessionIndex+1}</div>
+      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Module {weekIndex+1} — Séance {sessionIndex+1}</div>
 
       <div style={{marginBottom:14}}>
         <label style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5,display:'block'}}>Nom de la séance</label>
@@ -11532,7 +11534,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   description:'Programme créé automatiquement depuis une séance terminée. Modifie-le pour ajouter des semaines et ajuster les exercices.',
                   duration:'1month',price:0,level:'Intermédiaire',category:'fullbody',
                   sessionsPerWeek:1,sessionDuration:(sess.duration||60)+'min',
-                  weeks:[{weekNumber:1,sessions:[{name:sess.name||'Séance 1',exercises:programExercises}]}]
+                  weeks:[{weekNumber:1,moduleName:'Module 1',sessions:[{name:sess.name||'Séance 1',exercises:programExercises}]}]
                 }});
                 setShowAddToProgramme(false);
                 setLastFinishedSession(null);
