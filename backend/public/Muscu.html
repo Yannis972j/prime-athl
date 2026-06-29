@@ -11344,10 +11344,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const SESS_ACTIVE_KEY='pa_sess_active_'+authUser.id;
   const[sessionActive,setSessionActive]=React.useState(()=>{try{return!!localStorage.getItem('pa_sess_active_'+authUser.id);}catch{return false;}});
   const[showCongrats,setShowCongrats]=React.useState(false);
+  const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
+  const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
+  const[addingToProgramme,setAddingToProgramme]=React.useState(false);
   const startWorkout=w=>{setWorkout(w);setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');};
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
+    setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
     try{
@@ -11483,13 +11487,67 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       </div>
       {/* Écran félicitations post-séance */}
       {showCongrats&&(
-        <div onClick={()=>setShowCongrats(false)} style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.28) 0%, rgba(6,6,10,0.97) 65%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,cursor:'pointer'}}>
+        <div onClick={()=>{setShowCongrats(false);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.28) 0%, rgba(6,6,10,0.97) 65%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,cursor:'pointer'}}>
           <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',pointerEvents:'none'}}>
             <img src="/logo.svg" alt="Prime Athl" style={{width:72,height:72,borderRadius:20,objectFit:'cover',marginBottom:18,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
             <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:8}}>Séance validée ✓</div>
             <div style={{fontSize:32,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:8,color:'#fff'}}>Félicitations !</div>
             <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)]}</div>
             <div style={{fontSize:11,color:'rgba(255,255,255,0.25)',fontWeight:600}}>Appuie n'importe où pour continuer</div>
+          </div>
+        </div>
+      )}
+      {showAddToProgramme&&lastFinishedSession&&(
+        <div style={{position:'absolute',inset:0,zIndex:310,background:'rgba(0,0,0,0.8)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget){setShowAddToProgramme(false);setLastFinishedSession(null);}}}>
+          <div style={{width:'100%',maxWidth:480,background:'linear-gradient(180deg,#16162a,#0d0d14)',border:'1px solid rgba(224,112,32,0.25)',borderRadius:'24px 24px 0 0',padding:'28px 24px 48px',animation:'celebrationPop 0.3s ease'}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)',margin:'0 auto 20px'}}/>
+            <div style={{textAlign:'center',marginBottom:20}}>
+              <div style={{fontSize:32,marginBottom:8}}>📋</div>
+              <div style={{fontSize:18,fontWeight:800,marginBottom:6}}>Ajouter aux Programmes ?</div>
+              <div style={{fontSize:13,color:T.textDim,lineHeight:1.5}}>Ta séance <strong style={{color:T.text}}>"{lastFinishedSession.name}"</strong> peut être sauvegardée comme programme. Tu pourras ensuite la modifier et créer des modules avec.</div>
+            </div>
+            <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:14,marginBottom:20}}>
+              <div style={{fontSize:12,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Contenu de la séance</div>
+              {lastFinishedSession.exercises.map((ex,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:i<lastFinishedSession.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text}}>{ex.name}</div>
+                    <div style={{fontSize:11,color:T.textDim}}>{ex.muscle||''}</div>
+                  </div>
+                  <div style={{fontSize:12,color:T.textFaint,fontWeight:600}}>{ex.sets.length} série{ex.sets.length>1?'s':''}</div>
+                </div>
+              ))}
+            </div>
+            <button disabled={addingToProgramme} onClick={async()=>{
+              setAddingToProgramme(true);
+              try{
+                const sess=lastFinishedSession;
+                const programExercises=sess.exercises.map(ex=>({
+                  name:ex.name,muscle:ex.muscle||'',
+                  sets:ex.sets.map(s=>({reps:s.reps||10,weight:s.weight||0}))
+                }));
+                const prog=await apiCall('/api/admin/training-programs',{method:'POST',body:{
+                  name:sess.name||'Programme sans nom',
+                  shortDescription:'Créé depuis la séance du '+new Date(sess.date).toLocaleDateString('fr-FR'),
+                  description:'Programme créé automatiquement depuis une séance terminée. Modifie-le pour ajouter des semaines et ajuster les exercices.',
+                  duration:'1month',price:0,level:'Intermédiaire',category:'fullbody',
+                  sessionsPerWeek:1,sessionDuration:(sess.duration||60)+'min',
+                  weeks:[{weekNumber:1,sessions:[{name:sess.name||'Séance 1',exercises:programExercises}]}]
+                }});
+                setShowAddToProgramme(false);
+                setLastFinishedSession(null);
+                setAddingToProgramme(false);
+                setTab('univers');setActiveUniverse('programmes');
+              }catch(e){
+                console.error('add to programme',e);
+                setAddingToProgramme(false);
+              }
+            }} style={{width:'100%',height:52,borderRadius:14,border:'none',background:TP_GRAD||'linear-gradient(135deg,#E07020,#D4883A)',color:'#fff',fontSize:15,fontWeight:800,cursor:addingToProgramme?'wait':'pointer',opacity:addingToProgramme?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 8px 24px rgba(224,112,32,0.35)',letterSpacing:0.3}}>
+              {addingToProgramme?'Création...':'Ajouter aux Programmes →'}
+            </button>
+            <button onClick={()=>{setShowAddToProgramme(false);setLastFinishedSession(null);}} style={{width:'100%',height:44,marginTop:10,borderRadius:12,border:'1px solid rgba(255,255,255,0.08)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              Non merci
+            </button>
           </div>
         </div>
       )}
