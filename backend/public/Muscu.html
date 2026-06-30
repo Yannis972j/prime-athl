@@ -2172,7 +2172,8 @@ function PhotoGallery({readOnly,userId,coachMode}){
 
   const del=async(id)=>{
     if(!confirm('Supprimer ce média ?'))return;
-    try{await apiCall(delUrl(id),{method:'DELETE'});setSelected(null);load();}catch{}
+    try{await apiCall(delUrl(id),{method:'DELETE'});setSelected(null);load();}
+    catch(err){alert('Erreur suppression: '+(err.message||err));}
   };
 
   if(loading)return null;
@@ -3318,11 +3319,17 @@ function exportAIProgramPDF(program){
   doc.save(fname);
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
   const days=sheet?(importedPrograms[sheet]||{}):{};
+  const movesByTarget=scheduleMoves||{};
+  const suppressedSources=React.useMemo(()=>{
+    const s=new Set();
+    Object.values(movesByTarget).forEach(m=>s.add(m.sourceDate));
+    return s;
+  },[movesByTarget]);
   const DAY_ORDER=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef=React.useRef(null);
@@ -3767,8 +3774,11 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
             {calDays.map((d,i)=>{
               if(!d)return<div key={i}/>;
               const dayName=getDayName(d);
-              const hasWorkout=!!(days[dayName]);
               const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+              const movedHere=movesByTarget[dateStr];
+              const isMovedAway=!movedHere&&suppressedSources.has(dateStr);
+              const effectiveDayName=movedHere?movedHere.sourceDayName:dayName;
+              const hasWorkout=!!(days[effectiveDayName])&&!isMovedAway;
               const isDone=doneDates.has(dateStr);
               const isToday=dateStr===todayStr;
               const isSel=selectedDay&&selectedDay.dateStr===dateStr;
@@ -3778,22 +3788,22 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,onStartWorkout,on
               let border='1px solid rgba(255,255,255,0.06)';
               let color=T.textFaint;
               if(isDone){bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';color='#2CC4A0';}
-              else if(hasWorkout){bg='rgba(191,160,96,0.1)';border='1px solid rgba(191,160,96,0.3)';color='#BFA060';}
+              else if(hasWorkout){bg=movedHere?'rgba(144,144,196,0.1)':'rgba(191,160,96,0.1)';border=movedHere?'1px solid rgba(144,144,196,0.35)':'1px solid rgba(191,160,96,0.3)';color=movedHere?'#9090c4':'#BFA060';}
               if(isToday)border='2px solid rgba(191,160,96,0.7)';
               if(isSel){bg='rgba(191,160,96,0.22)';border='2px solid #BFA060';}
               if(isDragOver){bg='rgba(44,196,160,0.25)';border='2px solid #2CC4A0';}
               if(isDragSrc){bg='rgba(191,160,96,0.35)';border='2px dashed #BFA060';}
-              const progExercises=days[dayName]?days[dayName].exercises:[];
+              const progExercises=days[effectiveDayName]?days[effectiveDayName].exercises:[];
               const histExercises=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===dateStr)?.exercises||[];
               const exercises=progExercises.length>0?progExercises:histExercises;
               return(
                 <div key={i} data-cal-date={dateStr}
-                  onClick={()=>{if(!dragSrc&&(hasWorkout||isDone))setSelectedDay(isSel?null:{d,dayName,dateStr});}}
-                  onTouchStart={e=>{if(hasWorkout||isDone){clearTimeout(longPressTimer.current);startLongPress(e,d,dayName,dateStr,exercises);}}}
+                  onClick={()=>{if(!dragSrc&&(hasWorkout||isDone))setSelectedDay(isSel?null:{d,dayName:effectiveDayName,dateStr});}}
+                  onTouchStart={e=>{if(hasWorkout||isDone){clearTimeout(longPressTimer.current);startLongPress(e,d,effectiveDayName,dateStr,exercises);}}}
                   onTouchEnd={()=>{if(!dragActive.current)clearTimeout(longPressTimer.current);}}
                   style={{aspectRatio:'1',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:(hasWorkout||isDone)?'pointer':'default',background:bg,border,transition:'background 0.15s,border 0.15s',userSelect:'none',WebkitUserSelect:'none'}}>
                   <span style={{fontSize:12,fontWeight:600,color,opacity:isDragSrc?0.5:1}}>{d}</span>
-                  {(hasWorkout||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#2CC4A0':'#BFA060',marginTop:2}}/>}
+                  {(hasWorkout||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#2CC4A0':(movedHere?'#9090c4':'#BFA060')}}/>}
                   {isDragOver&&<div style={{fontSize:8,color:'#2CC4A0',fontWeight:700,marginTop:2}}>+</div>}
                 </div>
               );
@@ -6009,14 +6019,25 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 }
 
 // ── Athlete Calendar Summary (coach view) ─────────────────
-function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all'}){
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,editable=false,onMovesChange}){
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
   const[sel,setSel]=React.useState(null);
+  const[moveFrom,setMoveFrom]=React.useState(null); // dateStr en cours de déplacement
+  const[moveTarget,setMoveTarget]=React.useState('');
+  const[moveBusy,setMoveBusy]=React.useState(false);
+  const[moveErr,setMoveErr]=React.useState(null);
 
   const JS_TO_DAY=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
   const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  const movesByTarget=moves||{};
+  const suppressedSources=React.useMemo(()=>{
+    const s=new Set();
+    Object.values(movesByTarget).forEach(m=>s.add(m.sourceDate));
+    return s;
+  },[movesByTarget]);
 
   // programme days set (from all sheets)
   const programDayNames=React.useMemo(()=>{
@@ -6024,6 +6045,31 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
     Object.values(program?.data||{}).forEach(sheet=>Object.keys(sheet).forEach(d=>s.add(d)));
     return s;
   },[program]);
+
+  const doMove=async(toDate,force)=>{
+    if(!moveFrom||!athleteId)return;
+    setMoveBusy(true);setMoveErr(null);
+    try{
+      const r=await apiCall(`/api/coach/athletes/${athleteId}/schedule-moves`,{method:'POST',body:{fromDate:moveFrom,toDate,force}});
+      onMovesChange&&onMovesChange(r.scheduleMoves||{});
+      setMoveFrom(null);setMoveTarget('');setSel(toDate);
+    }catch(e){
+      if(e.status===409){
+        if(confirm('Une séance est déjà prévue ce jour-là. La remplacer ?')){await doMove(toDate,true);return;}
+      }else{
+        setMoveErr(e.message==='no_session_on_date'?'Aucune séance à déplacer ce jour-là.':'Erreur lors du déplacement.');
+      }
+    }
+    setMoveBusy(false);
+  };
+
+  const cancelMove=async(targetDate)=>{
+    if(!athleteId)return;
+    try{
+      const r=await apiCall(`/api/coach/athletes/${athleteId}/schedule-moves/${targetDate}`,{method:'DELETE'});
+      onMovesChange&&onMovesChange(r.scheduleMoves||{});
+    }catch(e){}
+  };
 
   // sessions done: map dateStr → session
   const sessionsByDate=React.useMemo(()=>{
@@ -6079,7 +6125,9 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           if(!d)return<div key={i}/>;
           const dayName=JS_TO_DAY[new Date(calYear,calMonth,d).getDay()];
           const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-          const hasProg=mode!=='nutrition'&&programDayNames.has(dayName);
+          const movedHere=movesByTarget[dateStr];
+          const isMovedAway=mode!=='nutrition'&&!movedHere&&suppressedSources.has(dateStr);
+          const hasProg=mode!=='nutrition'&&(movedHere?true:(programDayNames.has(dayName)&&!isMovedAway));
           const sessDone=mode!=='nutrition'&&sessionsByDate[dateStr];
           const nutriOk=mode!=='sport'&&nutriDone[dateStr];
           const isToday=dateStr===todayStr;
@@ -6089,20 +6137,20 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             if(nutriOk){bg='rgba(90,138,224,0.12)';border='1px solid rgba(90,138,224,0.35)';}
           }else{
             if(sessDone){bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';}
-            else if(hasProg){bg='rgba(191,160,96,0.08)';border='1px solid rgba(191,160,96,0.22)';}
+            else if(hasProg){bg=movedHere?'rgba(144,144,196,0.1)':'rgba(191,160,96,0.08)';border=movedHere?'1px solid rgba(144,144,196,0.35)':'1px solid rgba(191,160,96,0.22)';}
             if(mode==='all'&&nutriOk&&!sessDone)border='1px solid rgba(90,138,224,0.25)';
           }
           if(isToday)border='2px solid rgba(191,160,96,0.6)';
           if(isSel){bg='rgba(191,160,96,0.18)';border='2px solid #BFA060';}
-          const canClick=hasProg||sessDone||nutriOk;
-          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':T.textFaint):(sessDone?'#2CC4A0':hasProg?'#BFA060':T.textFaint);
+          const canClick=hasProg||sessDone||nutriOk||isMovedAway;
+          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':T.textFaint):(sessDone?'#2CC4A0':movedHere?'#9090c4':hasProg?'#BFA060':T.textFaint);
           return(
             <div key={i} onClick={()=>canClick&&setSel(isSel?null:dateStr)}
               style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canClick?'pointer':'default',background:bg,border,transition:'background 0.15s,border-color 0.15s',willChange:'auto'}}>
               <span style={{fontSize:11,fontWeight:600,color:numColor,lineHeight:1}}>{d}</span>
               <div style={{display:'flex',gap:2,marginTop:2}}>
                 {sessDone&&<div style={{width:3,height:3,borderRadius:2,background:'#2CC4A0'}}/>}
-                {!sessDone&&hasProg&&<div style={{width:3,height:3,borderRadius:2,background:'#BFA060'}}/>}
+                {!sessDone&&hasProg&&<div style={{width:3,height:3,borderRadius:2,background:movedHere?'#9090c4':'#BFA060'}}/>}
                 {nutriOk&&mode!=='sport'&&<div style={{width:3,height:3,borderRadius:2,background:'#5A8AE0'}}/>}
               </div>
             </div>
@@ -6113,32 +6161,59 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
       {/* Selected day panel */}
       {sel&&(()=>{
         const dayName=JS_TO_DAY[new Date(sel+'T12:00:00').getDay()];
+        const movedHere=movesByTarget[sel];
+        const isMovedAway=!movedHere&&suppressedSources.has(sel);
+        const movedAwayTo=isMovedAway?Object.entries(movesByTarget).find(([,m])=>m.sourceDate===sel)?.[0]:null;
+        const effectiveDayName=movedHere?movedHere.sourceDayName:dayName;
         const sess=sessionsByDate[sel];
         const nutriOk=nutriDone[sel];
-        const hasProg=programDayNames.has(dayName);
+        const hasProg=movedHere?true:(programDayNames.has(dayName)&&!isMovedAway);
         const dateLabel=new Date(sel+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-        const progData=Object.values(program?.data||{}).reduce((acc,sheet)=>acc||sheet[dayName],null);
+        const progData=Object.values(program?.data||{}).reduce((acc,sheet)=>acc||sheet[effectiveDayName],null);
         return(
           <div style={{marginTop:8,padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
             <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:10}}>{dateLabel}</div>
             {mode!=='nutrition'&&(
-              <div style={{marginBottom:8,padding:'8px 10px',borderRadius:10,background:sess?'rgba(44,196,160,0.08)':hasProg?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(44,196,160,0.25)':hasProg?'rgba(191,160,96,0.18)':'rgba(255,255,255,0.06)'}`}}>
-                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:6}}>Séance</div>
+              <div style={{marginBottom:8,padding:'8px 10px',borderRadius:10,background:sess?'rgba(44,196,160,0.08)':hasProg?(movedHere?'rgba(144,144,196,0.08)':'rgba(191,160,96,0.06)'):'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(44,196,160,0.25)':hasProg?(movedHere?'rgba(144,144,196,0.3)':'rgba(191,160,96,0.18)'):'rgba(255,255,255,0.06)'}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint}}>Séance</div>
+                  {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
+                </div>
                 {sess?(
                   <>
-                    <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||dayName}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}</div>
                     <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg</div>
                   </>
                 ):hasProg&&progData?(
                   <>
-                    <div style={{fontSize:12,color:'#BFA060',fontWeight:600,marginBottom:6}}>{dayName} — non effectué</div>
+                    <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName} — non effectué</div>
                     {progData.exercises?.slice(0,3).map((ex,i)=>(
                       <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}</div>
                     ))}
                     {(progData.exercises?.length||0)>3&&<div style={{fontSize:10,color:T.textFaint}}>+{progData.exercises.length-3} ex.</div>}
                   </>
+                ):isMovedAway?(
+                  <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Déplacée au {movedAwayTo?new Date(movedAwayTo+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'?'}</div>
                 ):(
                   <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Jour de repos</div>
+                )}
+                {editable&&!sess&&(
+                  movedHere?(
+                    <button onClick={()=>cancelMove(sel)} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',fontSize:11,fontWeight:700,cursor:'pointer'}}>↩ Annuler le déplacement</button>
+                  ):hasProg?(
+                    <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer cette séance</button>
+                  ):null
+                )}
+                {editable&&moveFrom===sel&&(
+                  <div style={{marginTop:10,padding:10,borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                    <div style={{fontSize:10,color:T.textDim,marginBottom:6}}>Nouvelle date :</div>
+                    <div style={{display:'flex',gap:6}}>
+                      <input type="date" value={moveTarget} onChange={e=>setMoveTarget(e.target.value)} style={{flex:1,height:32,borderRadius:8,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,padding:'0 8px',fontFamily:'inherit'}}/>
+                      <button disabled={moveBusy||!moveTarget||moveTarget===sel} onClick={()=>doMove(moveTarget,false)} style={{height:32,padding:'0 12px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',opacity:(moveBusy||!moveTarget||moveTarget===sel)?0.5:1}}>OK</button>
+                      <button onClick={()=>{setMoveFrom(null);setMoveErr(null);}} style={{height:32,padding:'0 12px',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer'}}>✕</button>
+                    </div>
+                    {moveErr&&<div style={{fontSize:10,color:'#B85070',marginTop:6}}>{moveErr}</div>}
+                  </div>
                 )}
               </div>
             )}
@@ -7764,10 +7839,14 @@ function CoachScreen({authToken,authUser}){
   const flash=t=>{setMsg(t);setTimeout(()=>setMsg(null),2500);};
 
   const generateInvite=async()=>{
-    const{code}=await apiCall('/api/coach/invites',{method:'POST'});
-    if(navigator.clipboard)navigator.clipboard.writeText(code).catch(()=>{});
-    flash(`✓ Code copié : ${code}`);
-    load();
+    try{
+      const{code}=await apiCall('/api/coach/invites',{method:'POST'});
+      if(navigator.clipboard)navigator.clipboard.writeText(code).catch(()=>{});
+      flash(`✓ Code copié : ${code}`);
+      load();
+    }catch(err){
+      flash('✗ '+(err.message||'Erreur'));
+    }
   };
 
   const[showCreateAthlete,setShowCreateAthlete]=React.useState(false);
@@ -7965,7 +8044,7 @@ function CoachScreen({authToken,authUser}){
               <div style={{fontSize:15,fontWeight:700,marginBottom:18,textAlign:'center',lineHeight:1.5}}>{confirmAction.msg}</div>
               <div style={{display:'flex',gap:8}}>
                 <button onClick={()=>setConfirmAction(null)} style={{flex:1,height:46,borderRadius:12,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
-                <button onClick={()=>{const fn=confirmAction.onConfirm;setConfirmAction(null);fn();}} style={{flex:1,height:46,borderRadius:12,border:'none',background:'rgba(184,80,112,0.18)',color:'#e07090',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmer</button>
+                <button onClick={()=>{const fn=confirmAction.onConfirm;setConfirmAction(null);Promise.resolve(fn()).catch(err=>flash('✗ '+(err.message||'Erreur')));}} style={{flex:1,height:46,borderRadius:12,border:'none',background:'rgba(184,80,112,0.18)',color:'#e07090',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmer</button>
               </div>
             </div>
           </div>
@@ -8158,6 +8237,10 @@ function CoachScreen({authToken,authUser}){
               nutriHistory={nutriDetail?.history}
               nutriPlan={nutriDetail?.plan}
               mode="sport"
+              athleteId={a.id}
+              moves={a.scheduleMoves}
+              editable={true}
+              onMovesChange={sm=>setDetail(d=>d?{...d,scheduleMoves:sm}:d)}
             />
 
             {/* Programme journalier */}
@@ -9572,6 +9655,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
   const[prog,setProg]=React.useState(null);
   const[loading,setLoading]=React.useState(true);
   const[buying,setBuying]=React.useState(false);
+  const[buyError,setBuyError]=React.useState(null);
   const[owned,setOwned]=React.useState(false);
   const[expandWeek,setExpandWeek]=React.useState(null);
 
@@ -9589,6 +9673,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
 
   const purchase=async()=>{
     setBuying(true);
+    setBuyError(null);
     try{
       const r=await apiCall('/api/training-programs/'+programId+'/purchase',{method:'POST'});
       if(r.alreadyOwned||r.free){
@@ -9596,9 +9681,14 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
         onPurchased&&onPurchased();
       }else if(r.url){
         window.location.href=r.url;
+        return; // garder buying=true pendant la redirection
+      }else{
+        setBuyError('Réponse inattendue du serveur.');
       }
     }catch(e){
       console.error('purchase error',e);
+      const msgs={stripe_not_configured:'Le paiement n\'est pas encore configuré. Contacte le coach.',not_found:'Programme introuvable.',checkout_failed:'Échec de la création du paiement Stripe.'};
+      setBuyError(msgs[e.message]||e.message||'Erreur lors du paiement.');
     }finally{setBuying(false);}
   };
 
@@ -9700,9 +9790,12 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
             ✓ Programme débloqué — Voir ma progression
           </button>
         ):(
-          <button onClick={purchase} disabled={buying} style={{width:'100%',height:56,borderRadius:16,border:'none',background:TP_GRAD,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${TP_ACCENT}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,opacity:buying?0.7:1}}>
-            {buying?'Redirection…':(prog.price>0?`Acheter — ${(prog.price/100).toFixed(2).replace('.',',')} €`:'Obtenir gratuitement')}
-          </button>
+          <>
+            <button onClick={purchase} disabled={buying} style={{width:'100%',height:56,borderRadius:16,border:'none',background:TP_GRAD,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${TP_ACCENT}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,opacity:buying?0.7:1}}>
+              {buying?'Redirection…':(prog.price>0?`Acheter — ${(prog.price/100).toFixed(2).replace('.',',')} €`:'Obtenir gratuitement')}
+            </button>
+            {buyError&&<div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12.5,fontWeight:600,lineHeight:1.5,textAlign:'center'}}>⚠ {buyError}</div>}
+          </>
         )}
       </div>
     </div>
@@ -9772,9 +9865,11 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   const[prog,setProg]=React.useState(null);
   const[progress,setProgress]=React.useState({completedSessions:[],progress:0,totalSessions:0});
   const[loading,setLoading]=React.useState(true);
+  const[loadError,setLoadError]=React.useState(null);
   const[expandWeek,setExpandWeek]=React.useState(0);
 
   React.useEffect(()=>{
+    setLoading(true);setLoadError(null);
     Promise.all([
       apiCall('/api/training-programs/'+programId),
       apiCall('/api/training-programs/'+programId+'/my-progress'),
@@ -9785,7 +9880,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
       const firstIncomplete=(p.weeks||[]).findIndex((w,wi)=>(w.sessions||[]).some((_,si)=>!completed.includes('w'+wi+'s'+si)));
       setExpandWeek(firstIncomplete>=0?firstIncomplete:0);
       setLoading(false);
-    }).catch(()=>setLoading(false));
+    }).catch(err=>{setLoadError(err.message||'Erreur de chargement');setLoading(false);});
   },[programId]);
 
   const markDone=async(wi,si)=>{
@@ -9816,6 +9911,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   };
 
   if(loading)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>;
+  if(loadError)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Erreur de chargement : {loadError}</div>;
   if(!prog)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Programme introuvable</div>;
 
   const cat=TP_CATS.find(c=>c.id===prog.category);
@@ -11557,6 +11653,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     const a=new URLSearchParams(window.location.search).get('action');
     return a==='session'?'session':null;
   });
+  React.useEffect(()=>{window.scrollTo(0,0);},[tab,screen,activeUniverse]);
   const[editingDayKey,setEditingDayKey]=React.useState(null);
   const[saveFlash,setSaveFlash]=React.useState(false);
   const flashTimer=React.useRef(null);
@@ -11573,6 +11670,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});
   const[programMeta,setProgramMeta]=React.useState({assignedAt:null,assignedBy:null});
+  const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
   const setProfileCloud=React.useCallback(async patch=>{
@@ -11599,6 +11697,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
       setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy});
+      setScheduleMoves(prog.scheduleMoves||{});
       setHistory(sess);
       setSessionLibrary(lib||{sessions:[],assignedAt:null});
       setNutriRefreshKey(k=>k+1); // force NutritionScreen reload
@@ -11612,6 +11711,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/program').then(p=>{
       setImportedPrograms(p.data||{});
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy});
+      setScheduleMoves(p.scheduleMoves||{});
     }).catch(()=>{});
     apiCall('/api/sessions').then(setHistory).catch(()=>{});
     apiCall('/api/session-library').then(lib=>setSessionLibrary(lib||{sessions:[],assignedAt:null})).catch(()=>{});
@@ -11631,6 +11731,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     'program-updated':({data,assignedAt})=>{
       setImportedPrograms(data||{});
       setProgramMeta(m=>({...m,assignedAt}));
+      triggerSave();
+    },
+    'schedule-moves-updated':({scheduleMoves:sm})=>{
+      setScheduleMoves(sm||{});
       triggerSave();
     },
     'session-library-updated':({sessions,assignedAt})=>{
@@ -11796,7 +11900,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const inner=(
     <div style={{height:'100%',width:'100%',display:'flex',flexDirection:'column',position:'relative',paddingTop:isMobile?'env(safe-area-inset-top)':54}}>
-      {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
+      {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{window.scrollTo(0,0);setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
       {showStripeSuccess&&(
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,left:'50%',transform:'translateX(-50%)',zIndex:99,padding:'8px 16px',borderRadius:999,background:'rgba(99,102,241,0.18)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',fontSize:12,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(99,102,241,0.2)',animation:'holoText 1s ease',pointerEvents:'none',whiteSpace:'nowrap'}}>
           🎉 Abonnement activé, bienvenue !
@@ -11855,6 +11959,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <UniverseShell title="👥 Coaching" grad="linear-gradient(135deg,#BFA060,#B85070)" onBack={()=>setActiveUniverse(null)}>
                 <ProgrammeTab
                   workout={workout} importedPrograms={importedPrograms} onImportPrograms={updateOwnProgram}
+                  scheduleMoves={scheduleMoves}
                   onStartWorkout={startWorkout} onEdit={()=>setScreen('editor')} onResume={()=>setScreen('session')}
                   onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
@@ -11959,7 +12064,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           🏋️ Séance en cours — Reprendre
         </button>
       )}
-      {(!screen||screen==='session')&&<BottomTabBar tab={tab} onTab={t=>{setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);if(screen==='session'){setScreen(null);}}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
+      {(!screen||screen==='session')&&<BottomTabBar tab={tab} onTab={t=>{window.scrollTo(0,0);setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);if(screen==='session'){setScreen(null);}}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
     </div>
   );
 
@@ -12588,7 +12693,7 @@ function LiveSessionsView({sessions,onStartWorkout}){
 }
 
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
   const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
@@ -12616,6 +12721,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,onStartWorkout,
       <div style={{flex:1,overflow:'auto'}}>
         {sub==='seances'&&<HomeScreen
           workout={workout} importedPrograms={importedPrograms} onImportPrograms={onImportPrograms}
+          scheduleMoves={scheduleMoves}
           onStartWorkout={onStartWorkout} onEdit={onEdit} onResume={onResume}
           onEditDay={onEditDay} profile={profile} programMeta={programMeta}
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}

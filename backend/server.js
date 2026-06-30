@@ -81,6 +81,9 @@ const STRIPE_PRICE_EXPLORER  = process.env.STRIPE_PRICE_EXPLORER || '';  // 4,99
 const STRIPE_PRICE_IA        = process.env.STRIPE_PRICE_IA || '';         // 14,99€/mois
 const STRIPE_PRICE_COACHING  = process.env.STRIPE_PRICE_COACHING || '';   // 24,99€/mois
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+if (!STRIPE_SECRET_KEY) {
+  console.warn('[config] STRIPE_SECRET_KEY non défini — paiements désactivés (abonnements ET achat de programmes), /api/stripe/* et /api/training-programs/:id/purchase renverront stripe_not_configured');
+}
 
 // Mapping price_id → plan slug
 const PRICE_TO_PLAN = {};
@@ -123,7 +126,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {} };
 
 // Boot : Postgres > fichier local
 let DATA = (() => {
@@ -599,6 +602,9 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
 });
 
 // Déblocage d'urgence du coach principal — accessible sans auth via token URL
+if (IS_PROD && !process.env.UNLOCK_SECRET) {
+  console.warn('[config] WARNING: UNLOCK_SECRET non défini en production — secret par défaut prévisible utilisé pour /api/auth/unlock-main-coach. Définis UNLOCK_SECRET dans les variables d\'environnement.');
+}
 const UNLOCK_SECRET = process.env.UNLOCK_SECRET || 'primeathl-unlock-coach-2024';
 app.get('/api/auth/unlock-main-coach', (req, res) => {
   if (req.query.secret !== UNLOCK_SECRET) return res.status(403).json({ error: 'forbidden' });
@@ -856,7 +862,7 @@ app.patch('/api/me', authRequired, (req, res) => {
 // ── Program ─────────────────────────────────────────
 app.get('/api/program', authRequired, (req, res) => {
   const p = DATA.programs[req.user.id];
-  res.json(p || { data: {}, assignedAt: null, assignedBy: null });
+  res.json({ ...(p || { data: {}, assignedAt: null, assignedBy: null }), scheduleMoves: DATA.scheduleMoves[req.user.id] || {} });
 });
 
 // Athlete uploads their own program (Excel import or manual)
@@ -902,6 +908,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
     sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
+    scheduleMoves: DATA.scheduleMoves[u.id] || {},
   });
 });
 
@@ -915,6 +922,7 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.nutritionPrograms[u.id];
   delete DATA.weightLogs[u.id];
   delete DATA.progressPhotos[u.id];
+  delete DATA.scheduleMoves[u.id];
   // Supprimer les séances (keyées par sessionId, pas userId)
   for (const sid of Object.keys(DATA.sessions || {})) {
     if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
@@ -1042,7 +1050,9 @@ app.post('/api/coach/athletes/:id/reset', authRequired, coachOnly, (req, res) =>
   }
   if (opts.program) {
     delete DATA.programs[u.id];
+    delete DATA.scheduleMoves[u.id];
     io.to('user:' + u.id).emit('program-updated', { data: {}, assignedAt: null });
+    io.to('user:' + u.id).emit('schedule-moves-updated', { scheduleMoves: {} });
   }
   persist();
   const p = profileOf(u);
@@ -1055,8 +1065,10 @@ app.delete('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) 
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   delete DATA.programs[req.params.athleteId];
+  delete DATA.scheduleMoves[req.params.athleteId];
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data: {}, assignedAt: null });
+  io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
   res.json({ ok: true });
 });
 
@@ -1150,11 +1162,78 @@ app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => 
     if (already.length > 5) DATA.savedPrograms[req.params.athleteId] = already.slice(0, 5);
   }
   DATA.programs[req.params.athleteId] = { data, assignedBy: req.user.id, assignedAt: ts };
+  delete DATA.scheduleMoves[req.params.athleteId];
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: ts });
+  io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   pushToUser(req.params.athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts });
+});
+
+// ── Déplacement ponctuel d'une séance (occurrence unique, pas le programme récurrent) ──
+const JS_TO_DAY_FR = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+function programDayNamesOf(athleteId) {
+  const p = DATA.programs[athleteId];
+  const s = new Set();
+  Object.values(p?.data || {}).forEach(sheet => Object.keys(sheet).forEach(d => s.add(d)));
+  return s;
+}
+
+app.post('/api/coach/athletes/:athleteId/schedule-moves', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const { fromDate, toDate, force } = req.body || {};
+  if (!fromDate || !toDate || !/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+    return res.status(400).json({ error: 'invalid_dates' });
+  }
+  if (fromDate === toDate) return res.status(400).json({ error: 'same_date' });
+
+  const dayNames = programDayNamesOf(req.params.athleteId);
+  if (!DATA.scheduleMoves[req.params.athleteId]) DATA.scheduleMoves[req.params.athleteId] = {};
+  const moves = DATA.scheduleMoves[req.params.athleteId];
+
+  // Résoudre l'occurrence source : une séance déjà déplacée vers fromDate, ou le jour naturel du programme.
+  let sourceDayName, sourceDate;
+  if (moves[fromDate]) {
+    sourceDayName = moves[fromDate].sourceDayName;
+    sourceDate = moves[fromDate].sourceDate;
+  } else {
+    sourceDayName = JS_TO_DAY_FR[new Date(fromDate + 'T12:00:00').getDay()];
+    sourceDate = fromDate;
+    if (!dayNames.has(sourceDayName)) return res.status(400).json({ error: 'no_session_on_date' });
+  }
+
+  // La date cible ne doit pas écraser une autre séance prévue sans confirmation explicite.
+  const targetDayName = JS_TO_DAY_FR[new Date(toDate + 'T12:00:00').getDay()];
+  const sourceDatesAlreadyMoved = new Set(Object.values(moves).map(m => m.sourceDate));
+  const targetHasMove = !!moves[toDate];
+  const targetHasNatural = dayNames.has(targetDayName) && !sourceDatesAlreadyMoved.has(toDate);
+  if ((targetHasMove || targetHasNatural) && !force) {
+    return res.status(409).json({ error: 'target_occupied' });
+  }
+
+  delete moves[fromDate];
+  moves[toDate] = { sourceDayName, sourceDate, movedAt: Date.now(), movedBy: req.user.id };
+  persist();
+
+  io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: moves });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const fmtDate = ds => new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  pushToUser(req.params.athleteId, { title: '📅 Séance déplacée', body: `${coachName} a déplacé ta séance au ${fmtDate(toDate)}`, url: '/Muscu.html' });
+
+  res.json({ ok: true, scheduleMoves: moves });
+});
+
+app.delete('/api/coach/athletes/:athleteId/schedule-moves/:date', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const moves = DATA.scheduleMoves[req.params.athleteId] || {};
+  if (!moves[req.params.date]) return res.status(404).json({ error: 'not_found' });
+  delete moves[req.params.date];
+  persist();
+  io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: moves });
+  res.json({ ok: true, scheduleMoves: moves });
 });
 
 // ── Bibliothèque de séances (coach → athlète) ────────────────────────────────
@@ -1531,6 +1610,10 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
       myLibrary: body.myLibrary || {},
+      plannedSessions: body.plannedSessions || {},
+      trainingPrograms: body.trainingPrograms || {},
+      userPurchasedPrograms: body.userPurchasedPrograms || {},
+      scheduleMoves: body.scheduleMoves || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -1603,6 +1686,10 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
       myLibrary: body.myLibrary || {},
+      plannedSessions: body.plannedSessions || {},
+      trainingPrograms: body.trainingPrograms || {},
+      userPurchasedPrograms: body.userPurchasedPrograms || {},
+      scheduleMoves: body.scheduleMoves || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
