@@ -9577,6 +9577,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
   const[prog,setProg]=React.useState(null);
   const[loading,setLoading]=React.useState(true);
   const[buying,setBuying]=React.useState(false);
+  const[buyError,setBuyError]=React.useState(null);
   const[owned,setOwned]=React.useState(false);
   const[expandWeek,setExpandWeek]=React.useState(null);
 
@@ -9594,6 +9595,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
 
   const purchase=async()=>{
     setBuying(true);
+    setBuyError(null);
     try{
       const r=await apiCall('/api/training-programs/'+programId+'/purchase',{method:'POST'});
       if(r.alreadyOwned||r.free){
@@ -9601,9 +9603,14 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
         onPurchased&&onPurchased();
       }else if(r.url){
         window.location.href=r.url;
+        return; // garder buying=true pendant la redirection
+      }else{
+        setBuyError('Réponse inattendue du serveur.');
       }
     }catch(e){
       console.error('purchase error',e);
+      const msgs={stripe_not_configured:'Le paiement n\'est pas encore configuré. Contacte le coach.',not_found:'Programme introuvable.',checkout_failed:'Échec de la création du paiement Stripe.'};
+      setBuyError(msgs[e.message]||e.message||'Erreur lors du paiement.');
     }finally{setBuying(false);}
   };
 
@@ -9705,9 +9712,12 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
             ✓ Programme débloqué — Voir ma progression
           </button>
         ):(
-          <button onClick={purchase} disabled={buying} style={{width:'100%',height:56,borderRadius:16,border:'none',background:TP_GRAD,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${TP_ACCENT}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,opacity:buying?0.7:1}}>
-            {buying?'Redirection…':(prog.price>0?`Acheter — ${(prog.price/100).toFixed(2).replace('.',',')} €`:'Obtenir gratuitement')}
-          </button>
+          <>
+            <button onClick={purchase} disabled={buying} style={{width:'100%',height:56,borderRadius:16,border:'none',background:TP_GRAD,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${TP_ACCENT}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,opacity:buying?0.7:1}}>
+              {buying?'Redirection…':(prog.price>0?`Acheter — ${(prog.price/100).toFixed(2).replace('.',',')} €`:'Obtenir gratuitement')}
+            </button>
+            {buyError&&<div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12.5,fontWeight:600,lineHeight:1.5,textAlign:'center'}}>⚠ {buyError}</div>}
+          </>
         )}
       </div>
     </div>

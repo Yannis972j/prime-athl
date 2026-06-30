@@ -81,6 +81,9 @@ const STRIPE_PRICE_EXPLORER  = process.env.STRIPE_PRICE_EXPLORER || '';  // 4,99
 const STRIPE_PRICE_IA        = process.env.STRIPE_PRICE_IA || '';         // 14,99€/mois
 const STRIPE_PRICE_COACHING  = process.env.STRIPE_PRICE_COACHING || '';   // 24,99€/mois
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+if (!STRIPE_SECRET_KEY) {
+  console.warn('[config] STRIPE_SECRET_KEY non défini — paiements désactivés (abonnements ET achat de programmes), /api/stripe/* et /api/training-programs/:id/purchase renverront stripe_not_configured');
+}
 
 // Mapping price_id → plan slug
 const PRICE_TO_PLAN = {};
