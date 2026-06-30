@@ -599,6 +599,9 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
 });
 
 // Déblocage d'urgence du coach principal — accessible sans auth via token URL
+if (IS_PROD && !process.env.UNLOCK_SECRET) {
+  console.warn('[config] WARNING: UNLOCK_SECRET non défini en production — secret par défaut prévisible utilisé pour /api/auth/unlock-main-coach. Définis UNLOCK_SECRET dans les variables d\'environnement.');
+}
 const UNLOCK_SECRET = process.env.UNLOCK_SECRET || 'primeathl-unlock-coach-2024';
 app.get('/api/auth/unlock-main-coach', (req, res) => {
   if (req.query.secret !== UNLOCK_SECRET) return res.status(403).json({ error: 'forbidden' });
@@ -1531,6 +1534,9 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
       myLibrary: body.myLibrary || {},
+      plannedSessions: body.plannedSessions || {},
+      trainingPrograms: body.trainingPrograms || {},
+      userPurchasedPrograms: body.userPurchasedPrograms || {},
     };
     persist();
     res.json({ ok: true, counts: {
@@ -1603,6 +1609,9 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
       customFoods: body.customFoods || {},
       sessionLibrary: body.sessionLibrary || {},
       myLibrary: body.myLibrary || {},
+      plannedSessions: body.plannedSessions || {},
+      trainingPrograms: body.trainingPrograms || {},
+      userPurchasedPrograms: body.userPurchasedPrograms || {},
     };
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
