@@ -2172,7 +2172,8 @@ function PhotoGallery({readOnly,userId,coachMode}){
 
   const del=async(id)=>{
     if(!confirm('Supprimer ce média ?'))return;
-    try{await apiCall(delUrl(id),{method:'DELETE'});setSelected(null);load();}catch{}
+    try{await apiCall(delUrl(id),{method:'DELETE'});setSelected(null);load();}
+    catch(err){alert('Erreur suppression: '+(err.message||err));}
   };
 
   if(loading)return null;
@@ -7764,10 +7765,14 @@ function CoachScreen({authToken,authUser}){
   const flash=t=>{setMsg(t);setTimeout(()=>setMsg(null),2500);};
 
   const generateInvite=async()=>{
-    const{code}=await apiCall('/api/coach/invites',{method:'POST'});
-    if(navigator.clipboard)navigator.clipboard.writeText(code).catch(()=>{});
-    flash(`✓ Code copié : ${code}`);
-    load();
+    try{
+      const{code}=await apiCall('/api/coach/invites',{method:'POST'});
+      if(navigator.clipboard)navigator.clipboard.writeText(code).catch(()=>{});
+      flash(`✓ Code copié : ${code}`);
+      load();
+    }catch(err){
+      flash('✗ '+(err.message||'Erreur'));
+    }
   };
 
   const[showCreateAthlete,setShowCreateAthlete]=React.useState(false);
@@ -7965,7 +7970,7 @@ function CoachScreen({authToken,authUser}){
               <div style={{fontSize:15,fontWeight:700,marginBottom:18,textAlign:'center',lineHeight:1.5}}>{confirmAction.msg}</div>
               <div style={{display:'flex',gap:8}}>
                 <button onClick={()=>setConfirmAction(null)} style={{flex:1,height:46,borderRadius:12,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
-                <button onClick={()=>{const fn=confirmAction.onConfirm;setConfirmAction(null);fn();}} style={{flex:1,height:46,borderRadius:12,border:'none',background:'rgba(184,80,112,0.18)',color:'#e07090',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmer</button>
+                <button onClick={()=>{const fn=confirmAction.onConfirm;setConfirmAction(null);Promise.resolve(fn()).catch(err=>flash('✗ '+(err.message||'Erreur')));}} style={{flex:1,height:46,borderRadius:12,border:'none',background:'rgba(184,80,112,0.18)',color:'#e07090',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmer</button>
               </div>
             </div>
           </div>
@@ -9772,9 +9777,11 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   const[prog,setProg]=React.useState(null);
   const[progress,setProgress]=React.useState({completedSessions:[],progress:0,totalSessions:0});
   const[loading,setLoading]=React.useState(true);
+  const[loadError,setLoadError]=React.useState(null);
   const[expandWeek,setExpandWeek]=React.useState(0);
 
   React.useEffect(()=>{
+    setLoading(true);setLoadError(null);
     Promise.all([
       apiCall('/api/training-programs/'+programId),
       apiCall('/api/training-programs/'+programId+'/my-progress'),
@@ -9785,7 +9792,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
       const firstIncomplete=(p.weeks||[]).findIndex((w,wi)=>(w.sessions||[]).some((_,si)=>!completed.includes('w'+wi+'s'+si)));
       setExpandWeek(firstIncomplete>=0?firstIncomplete:0);
       setLoading(false);
-    }).catch(()=>setLoading(false));
+    }).catch(err=>{setLoadError(err.message||'Erreur de chargement');setLoading(false);});
   },[programId]);
 
   const markDone=async(wi,si)=>{
@@ -9816,6 +9823,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   };
 
   if(loading)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Chargement…</div>;
+  if(loadError)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Erreur de chargement : {loadError}</div>;
   if(!prog)return<div style={{padding:40,textAlign:'center',color:T.textFaint}}>Programme introuvable</div>;
 
   const cat=TP_CATS.find(c=>c.id===prog.category);
