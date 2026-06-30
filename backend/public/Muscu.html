@@ -2105,28 +2105,34 @@ function CalendarView({history}){
 }
 
 // ── Photo Gallery ─────────────────────────────────────────
-function PhotoGallery({readOnly,userId}){
+function PhotoGallery({readOnly,userId,coachMode}){
   const[photos,setPhotos]=React.useState([]);
   const[loading,setLoading]=React.useState(true);
   const[selected,setSelected]=React.useState(null);
-  const[pending,setPending]=React.useState(null); // {dataUrl, note}
+  const[pending,setPending]=React.useState(null);
+  const[uploading,setUploading]=React.useState(false);
   const fileRef=React.useRef(null);
+  const videoRef=React.useRef(null);
 
-  const url=readOnly&&userId?'/api/coach/athletes/'+userId+'/photos':'/api/photos';
+  const isCoachView=!!(coachMode&&userId)||!!(readOnly&&userId);
+  const canAdd=coachMode||(!readOnly&&!userId);
+  const getUrl=isCoachView?'/api/coach/athletes/'+userId+'/photos':'/api/photos';
+  const postUrl=coachMode&&userId?'/api/coach/athletes/'+userId+'/photos':'/api/photos';
+  const delUrl=(id)=>coachMode&&userId?'/api/coach/athletes/'+userId+'/photos/'+id:'/api/photos/'+id;
 
   const load=React.useCallback(async()=>{
-    try{const r=await apiCall(url);setPhotos(r.photos||[]);}catch{}finally{setLoading(false);}
-  },[url]);
-
+    try{const r=await apiCall(getUrl);setPhotos(r.photos||[]);}catch{}finally{setLoading(false);}
+  },[getUrl]);
   React.useEffect(()=>{load();},[load]);
 
-  const[uploading,setUploading]=React.useState(false);
-
-  const handleFile=async(e)=>{
+  const handleFile=async(e,isVid)=>{
     const file=e.target.files[0];
     e.target.value='';
     if(!file)return;
-    // Compress via canvas before upload
+    if(isVid){
+      setPending({file,videoUrl:URL.createObjectURL(file),isVideo:true,note:''});
+      return;
+    }
     const reader=new FileReader();
     reader.onload=ev=>{
       const img=new Image();
@@ -2137,9 +2143,8 @@ function PhotoGallery({readOnly,userId}){
         canvas.width=img.width*scale;canvas.height=img.height*scale;
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
         canvas.toBlob(blob=>{
-          // Store compressed file as dataUrl preview for the note modal
           const fr=new FileReader();
-          fr.onload=ev2=>setPending({file:blob,preview:ev2.target.result,note:''});
+          fr.onload=ev2=>setPending({file:blob,preview:ev2.target.result,isVideo:false,note:''});
           fr.readAsDataURL(blob);
         },'image/jpeg',0.82);
       };
@@ -2152,53 +2157,76 @@ function PhotoGallery({readOnly,userId}){
     if(!pending||uploading)return;
     setUploading(true);
     try{
-      // 1. Upload fichier → Cloudinary (ou base64 fallback)
       const fd=new FormData();
-      fd.append('file',pending.file,'photo.jpg');
+      fd.append('file',pending.file,pending.isVideo?'video.mp4':'photo.jpg');
       const upJson=await uploadFile(fd);
-      // 2. Enregistre la photo (URL Cloudinary ou base64)
-      await apiCall('/api/photos',{method:'POST',body:{url:upJson.url,note:pending.note,date:Date.now()}});
+      await apiCall(postUrl,{method:'POST',body:{url:upJson.url,note:pending.note,date:Date.now(),isVideo:upJson.isVideo||pending.isVideo}});
+      if(pending.videoUrl)URL.revokeObjectURL(pending.videoUrl);
       load();setPending(null);
     }catch(err){
-      if(err.message==='photo_limit_reached')alert('Album plein (50 photos max). Supprime des photos pour en ajouter.');
-      else alert('Erreur upload: '+(err.message||err));
+      if(err.message==='photo_limit_reached')alert('Album plein (50 max). Supprime des médias pour en ajouter.');
+      else if(err.message==='upload_failed')alert('Erreur upload. Pour les vidéos, Cloudinary doit être configuré.');
+      else alert('Erreur: '+(err.message||err));
     }finally{setUploading(false);}
   };
 
   const del=async(id)=>{
-    if(!confirm('Supprimer cette photo ?'))return;
-    try{await apiCall('/api/photos/'+id,{method:'DELETE'});setSelected(null);load();}catch{}
+    if(!confirm('Supprimer ce média ?'))return;
+    try{await apiCall(delUrl(id),{method:'DELETE'});setSelected(null);load();}catch{}
   };
 
   if(loading)return null;
 
   return(
     <div style={{marginBottom:18}}>
-      {/* Modale confirmation upload avec note */}
+      {/* Modale note avant upload */}
       {pending&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:1100,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24}}>
           <div style={{width:'100%',maxWidth:360,background:'rgba(24,24,32,0.98)',borderRadius:20,border:'1px solid rgba(255,255,255,0.1)',padding:20,display:'flex',flexDirection:'column',gap:14}}>
             <div style={{fontSize:15,fontWeight:700,color:T.text}}>Ajouter une note</div>
-            <img src={pending.preview} alt="" style={{width:'100%',borderRadius:12,objectFit:'cover',maxHeight:200}}/>
+            {pending.isVideo
+              ?<video src={pending.videoUrl} controls muted playsInline style={{width:'100%',borderRadius:12,maxHeight:200,objectFit:'contain',background:'#000'}}/>
+              :<img src={pending.preview} alt="" style={{width:'100%',borderRadius:12,objectFit:'cover',maxHeight:200}}/>
+            }
             <input value={pending.note} onChange={e=>setPending(p=>({...p,note:e.target.value}))} placeholder="Note optionnelle (ex: Semaine 4)" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,color:T.text,fontSize:13,padding:'9px 12px',fontFamily:'inherit',outline:'none'}}/>
             <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setPending(null)} style={{flex:1,height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
+              <button onClick={()=>{if(pending.videoUrl)URL.revokeObjectURL(pending.videoUrl);setPending(null);}} style={{flex:1,height:40,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer'}}>Annuler</button>
               <button onClick={confirmUpload} disabled={uploading} style={{flex:2,height:40,borderRadius:11,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:700,cursor:uploading?'default':'pointer',opacity:uploading?0.7:1}}>{uploading?'Upload…':'Publier'}</button>
             </div>
           </div>
         </div>
       )}
+
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingLeft:2}}>
-        <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Photos de progression</div>
-        {!readOnly&&<button onClick={()=>fileRef.current.click()} style={{height:26,padding:'0 10px',borderRadius:7,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:10,fontWeight:700,cursor:'pointer'}}>+ Photo</button>}
+        <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Photos & vidéos</div>
+        {canAdd&&(
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>fileRef.current.click()} style={{height:26,padding:'0 10px',borderRadius:7,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:10,fontWeight:700,cursor:'pointer'}}>+ Photo</button>
+            <button onClick={()=>videoRef.current.click()} style={{height:26,padding:'0 10px',borderRadius:7,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:10,fontWeight:700,cursor:'pointer'}}>+ Vidéo</button>
+          </div>
+        )}
       </div>
-      {!readOnly&&<input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleFile}/>}
-      {photos.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'16px',fontStyle:'italic',background:'rgba(255,255,255,0.02)',borderRadius:12,border:'1px solid rgba(255,255,255,0.05)'}}>{readOnly?'Aucune photo partagée':'Ajoute ta première photo de progression'}</div>}
+      {canAdd&&<>
+        <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={e=>handleFile(e,false)}/>
+        <input ref={videoRef} type="file" accept="video/*" style={{display:'none'}} onChange={e=>handleFile(e,true)}/>
+      </>}
+
+      {photos.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'16px',fontStyle:'italic',background:'rgba(255,255,255,0.02)',borderRadius:12,border:'1px solid rgba(255,255,255,0.05)'}}>{readOnly&&!coachMode?'Aucun média partagé':'Ajoute ta première photo ou vidéo'}</div>}
       {photos.length>0&&(
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
           {photos.map(p=>(
-            <div key={p.id} onClick={()=>setSelected(p)} style={{aspectRatio:'1',borderRadius:10,overflow:'hidden',cursor:'pointer',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
-              <img src={p.url||p.dataUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            <div key={p.id} onClick={()=>setSelected(p)} style={{aspectRatio:'1',borderRadius:10,overflow:'hidden',cursor:'pointer',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',position:'relative'}}>
+              {p.isVideo?(
+                <>
+                  <video src={p.url||p.dataUrl} preload="metadata" muted playsInline style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                  <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.25)'}}>
+                    <Icon name="play" size={26} stroke="#fff"/>
+                  </div>
+                </>
+              ):(
+                <img src={p.url||p.dataUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+              )}
+              {p.addedByCoach&&<div style={{position:'absolute',bottom:4,left:4,background:'rgba(0,0,0,0.65)',borderRadius:4,padding:'1px 5px',fontSize:9,color:'rgba(191,160,96,0.9)',fontWeight:700,letterSpacing:0.3}}>COACH</div>}
             </div>
           ))}
         </div>
@@ -2206,12 +2234,16 @@ function PhotoGallery({readOnly,userId}){
       {/* Lightbox */}
       {selected&&(
         <div onClick={()=>setSelected(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:1000,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
-          <img src={selected.url||selected.dataUrl} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:'100%',maxHeight:'70vh',borderRadius:14,objectFit:'contain'}}/>
-          <div style={{marginTop:10,fontSize:12,color:'rgba(255,255,255,0.5)',textAlign:'center'}}>
-            {new Date(selected.date).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}
+          {selected.isVideo
+            ?<video src={selected.url||selected.dataUrl} controls autoPlay playsInline onClick={e=>e.stopPropagation()} style={{maxWidth:'100%',maxHeight:'70vh',borderRadius:14}}/>
+            :<img src={selected.url||selected.dataUrl} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:'100%',maxHeight:'70vh',borderRadius:14,objectFit:'contain'}}/>
+          }
+          <div style={{marginTop:10,fontSize:12,color:'rgba(255,255,255,0.5)',textAlign:'center',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',justifyContent:'center'}}>
+            {selected.addedByCoach&&<span style={{background:'rgba(191,160,96,0.2)',color:'rgba(191,160,96,0.9)',fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:4,letterSpacing:0.4}}>COACH</span>}
+            <span>{new Date(selected.date).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</span>
           </div>
           {selected.note&&<div style={{fontSize:13,color:'rgba(255,255,255,0.75)',textAlign:'center',marginTop:4,fontStyle:'italic'}}>"{selected.note}"</div>}
-          {!readOnly&&<button onClick={e=>{e.stopPropagation();del(selected.id);}} style={{marginTop:12,height:34,padding:'0 16px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:12,fontWeight:600,cursor:'pointer'}}>Supprimer</button>}
+          {canAdd&&<button onClick={e=>{e.stopPropagation();del(selected.id);}} style={{marginTop:12,height:34,padding:'0 16px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:12,fontWeight:600,cursor:'pointer'}}>Supprimer</button>}
         </div>
       )}
     </div>
@@ -8454,8 +8486,8 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 6 : Album ── */}
         {detailTab==='album'&&(
           <div style={{padding:'0 18px'}}>
-            <SectionHeader title="Album photos"/>
-            <PhotoGallery readOnly userId={a.id}/>
+            <SectionHeader title="Album photos & vidéos"/>
+            <PhotoGallery coachMode userId={a.id}/>
           </div>
         )}
         </div>
