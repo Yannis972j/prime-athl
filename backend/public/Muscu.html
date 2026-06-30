@@ -11557,6 +11557,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     const a=new URLSearchParams(window.location.search).get('action');
     return a==='session'?'session':null;
   });
+  React.useEffect(()=>{window.scrollTo(0,0);},[tab,screen,activeUniverse]);
   const[editingDayKey,setEditingDayKey]=React.useState(null);
   const[saveFlash,setSaveFlash]=React.useState(false);
   const flashTimer=React.useRef(null);
@@ -11796,7 +11797,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const inner=(
     <div style={{height:'100%',width:'100%',display:'flex',flexDirection:'column',position:'relative',paddingTop:isMobile?'env(safe-area-inset-top)':54}}>
-      {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
+      {showOnboarding&&<OnboardingModal user={authUser} onClose={()=>{window.scrollTo(0,0);setShowOnboarding(false);setUser(prev=>({...prev,onboardedAt:Date.now()}));}}/>}
       {showStripeSuccess&&(
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,left:'50%',transform:'translateX(-50%)',zIndex:99,padding:'8px 16px',borderRadius:999,background:'rgba(99,102,241,0.18)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',fontSize:12,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(99,102,241,0.2)',animation:'holoText 1s ease',pointerEvents:'none',whiteSpace:'nowrap'}}>
           🎉 Abonnement activé, bienvenue !
@@ -11959,7 +11960,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           🏋️ Séance en cours — Reprendre
         </button>
       )}
-      {(!screen||screen==='session')&&<BottomTabBar tab={tab} onTab={t=>{setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);if(screen==='session'){setScreen(null);}}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
+      {(!screen||screen==='session')&&<BottomTabBar tab={tab} onTab={t=>{window.scrollTo(0,0);setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);if(screen==='session'){setScreen(null);}}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
     </div>
   );
 
