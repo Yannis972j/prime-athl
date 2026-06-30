@@ -68,6 +68,7 @@ if (process.env.CLOUDINARY_URL) {
   cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL });
 }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+const uploadMedia = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
@@ -2106,29 +2107,32 @@ app.get('/api/coach/athletes/:id/weight', authRequired, coachOnly, (req, res) =>
 });
 
 // ── Upload fichier → Cloudinary (ou base64 fallback) ──
-const ALLOWED_UPLOAD_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-app.post('/api/upload', authRequired, upload.single('file'), async (req, res) => {
+const ALLOWED_UPLOAD_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+const VIDEO_MIMES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']);
+app.post('/api/upload', authRequired, uploadMedia.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'no_file' });
   if (!ALLOWED_UPLOAD_MIMES.includes(req.file.mimetype)) {
     return res.status(400).json({ error: 'invalid_file_type' });
   }
+  const isVideo = VIDEO_MIMES.has(req.file.mimetype);
   if (process.env.CLOUDINARY_URL) {
     try {
+      const opts = isVideo
+        ? { folder: 'prime-athl', resource_type: 'video' }
+        : { folder: 'prime-athl', resource_type: 'image', transformation: [{ width: 1200, crop: 'limit', quality: 'auto:good' }] };
       const result = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'prime-athl', transformation: [{ width: 1200, crop: 'limit', quality: 'auto:good' }] },
-          (err, r) => err ? reject(err) : resolve(r)
-        ).end(req.file.buffer);
+        cloudinary.uploader.upload_stream(opts, (err, r) => err ? reject(err) : resolve(r)).end(req.file.buffer);
       });
-      return res.json({ url: result.secure_url });
+      return res.json({ url: result.secure_url, isVideo });
     } catch(e) {
       return res.status(500).json({ error: 'upload_failed', detail: e.message });
     }
   }
-  // Fallback base64 si Cloudinary non configuré — limité à 500KB pour ne pas gonfler la DB
+  // Fallback base64 — vidéos non supportées sans Cloudinary
+  if (isVideo) return res.status(400).json({ error: 'upload_failed', detail: 'Cloudinary requis pour les vidéos.' });
   if (req.file.buffer.length > 500 * 1024) return res.status(400).json({ error: 'upload_failed', detail: 'Configure Cloudinary pour les photos > 500KB.' });
   const b64 = req.file.buffer.toString('base64');
-  res.json({ url: `data:${req.file.mimetype};base64,${b64}` });
+  res.json({ url: `data:${req.file.mimetype};base64,${b64}`, isVideo: false });
 });
 
 // ── Progress photos ──────────────────────────────────
@@ -2166,6 +2170,31 @@ app.get('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =>
   if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
   const photos = (DATA.progressPhotos[u.id] || []).slice().sort((a,b) => b.date - a.date);
   res.json({ photos });
+});
+
+app.post('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) => {
+  const u = DATA.users[req.params.id];
+  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  const { url, dataUrl, note, date, isVideo } = req.body || {};
+  const src = url || dataUrl;
+  if (!src) return res.status(400).json({ error: 'url_required' });
+  if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
+  if (!DATA.progressPhotos[u.id]) DATA.progressPhotos[u.id] = [];
+  if (DATA.progressPhotos[u.id].length >= MAX_PHOTOS_PER_USER) {
+    return res.status(400).json({ error: 'photo_limit_reached', detail: `Maximum ${MAX_PHOTOS_PER_USER} photos` });
+  }
+  const photo = { id: uid(), url: src, note: note || '', date: date || Date.now(), createdAt: Date.now(), isVideo: !!isVideo, addedByCoach: true };
+  DATA.progressPhotos[u.id].unshift(photo);
+  persist();
+  res.json({ ok: true, photo });
+});
+
+app.delete('/api/coach/athletes/:id/photos/:photoId', authRequired, coachOnly, (req, res) => {
+  const u = DATA.users[req.params.id];
+  if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  DATA.progressPhotos[u.id] = (DATA.progressPhotos[u.id] || []).filter(p => p.id !== req.params.photoId);
+  persist();
+  res.json({ ok: true });
 });
 
 // ── Messages ─────────────────────────────────────────
