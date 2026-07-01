@@ -6028,6 +6028,8 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[moveTarget,setMoveTarget]=React.useState('');
   const[moveBusy,setMoveBusy]=React.useState(false);
   const[moveErr,setMoveErr]=React.useState(null);
+  const movePickerRef=React.useRef(null);
+  React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
   const JS_TO_DAY=['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
   const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -6205,7 +6207,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   ):null
                 )}
                 {editable&&moveFrom===sel&&(
-                  <div style={{marginTop:10,padding:10,borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                  <div ref={movePickerRef} style={{marginTop:10,padding:10,borderRadius:10,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(191,160,96,0.25)'}}>
                     <div style={{fontSize:10,color:T.textDim,marginBottom:6}}>Nouvelle date :</div>
                     <div style={{display:'flex',gap:6}}>
                       <input type="date" value={moveTarget} onChange={e=>setMoveTarget(e.target.value)} style={{flex:1,height:32,borderRadius:8,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,padding:'0 8px',fontFamily:'inherit'}}/>
