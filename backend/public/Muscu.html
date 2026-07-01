@@ -3593,15 +3593,29 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                 <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
               )}
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                {(viewHistSession.exercises||[]).map((ex,ei)=>{
+                {groupExercisesByType(viewHistSession.exercises).map((g,gi)=>{
+                  const isComplex=g.type!=='classic';
+                  const ts=EX_GROUP_STYLE[g.type]||EX_GROUP_STYLE.classic;
+                  return(
+                    <div key={gi} style={{borderRadius:14,border:isComplex?`1px solid ${ts.color}45`:'1px solid rgba(255,255,255,0.07)',background:isComplex?`${ts.color}0d`:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
+                      {isComplex&&(
+                        <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:`${ts.color}18`,borderBottom:`1px solid ${ts.color}30`}}>
+                          <span style={{fontSize:9,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:ts.color}}>{ts.label}</span>
+                          <span style={{fontSize:9,color:T.textFaint}}>· {g.items.length} exercices</span>
+                        </div>
+                      )}
+                      {g.items.map((ex,itemIdx)=>{
                   const exVol=(ex.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0);
                   return(
-                    <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.025)',overflow:'hidden'}}>
+                    <div key={itemIdx} style={{borderTop:itemIdx>0?`1px solid ${ts.color}25`:'none'}}>
                       {/* Exercise header */}
                       <div style={{padding:'10px 14px 8px',borderBottom:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                          {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                        <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+                          {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+itemIdx)}</div>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                            {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                          </div>
                         </div>
                         {exVol>0&&<div style={{fontSize:11,fontWeight:700,color:T.textDim,flexShrink:0}}>{Math.round(exVol).toLocaleString('fr-FR')} kg</div>}
                       </div>
@@ -3637,6 +3651,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                         })}
                         {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
                       </div>
+                    </div>
+                  );
+                      })}
                     </div>
                   );
                 })}
@@ -6986,10 +7003,30 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
   );
 }
 
+// Style partagé pour mettre en évidence les groupes superset/triset dans les vues "Voir séance"
+const EX_GROUP_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'}};
+function groupExercisesByType(exercises){
+  const list=exercises||[];
+  const groups=[];
+  const byGroupId=new Map();
+  list.forEach(e=>{
+    const isComplex=e.groupId&&(e.groupType==='superset'||e.groupType==='triset');
+    if(isComplex&&byGroupId.has(e.groupId)){
+      byGroupId.get(e.groupId).items.push(e);
+    }else{
+      const g={type:isComplex?e.groupType:'classic',items:[e]};
+      if(isComplex)byGroupId.set(e.groupId,g);
+      groups.push(g);
+    }
+  });
+  return groups;
+}
+
 function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
+  const exGroups=React.useMemo(()=>groupExercisesByType(s.exercises),[s.exercises]);
 
   return(
     <div style={{position:'fixed',inset:0,zIndex:3000,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -7044,34 +7081,51 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
             <div style={{marginBottom:20}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:10}}>Exercices</div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                {(s.exercises||[]).map((e,ei)=>{
-                  const exVol=(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),0);
+                {exGroups.map((g,gi)=>{
+                  const isComplex=g.type!=='classic';
+                  const ts=EX_GROUP_STYLE[g.type]||EX_GROUP_STYLE.classic;
                   return(
-                    <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',overflow:'hidden'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:(e.sets||[]).length>0?'1px solid rgba(255,255,255,0.06)':'none'}}>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:700}}>{e.name}</div>
-                          {e.muscle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>}
-                        </div>
-                        {exVol>0&&<div style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(exVol).toLocaleString('fr-FR')} <span style={{fontSize:9,fontWeight:400,color:T.textFaint}}>kg</span></div>}
-                      </div>
-                      {(e.sets||[]).length>0&&(
-                        <div style={{padding:'8px 14px'}}>
-                          <div style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                            {['Série','Poids','Reps','Volume'].map(h=>(
-                              <div key={h} style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3}}>{h}</div>
-                            ))}
-                          </div>
-                          {(e.sets||[]).map((st,si)=>(
-                            <div key={si} style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
-                              <div style={{fontSize:12,color:T.textFaint}}>#{si+1}</div>
-                              <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.weight}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> kg</span></div>
-                              <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></div>
-                              <div style={{fontSize:12,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{Math.round((st.weight||0)*(st.reps||0))}</div>
-                            </div>
-                          ))}
+                    <div key={gi} style={{borderRadius:14,border:isComplex?`1px solid ${ts.color}45`:'1px solid rgba(255,255,255,0.08)',background:isComplex?`${ts.color}0d`:'rgba(255,255,255,0.03)',overflow:'hidden'}}>
+                      {isComplex&&(
+                        <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:`${ts.color}18`,borderBottom:`1px solid ${ts.color}30`}}>
+                          <span style={{fontSize:9,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:ts.color}}>{ts.label}</span>
+                          <span style={{fontSize:9,color:T.textFaint}}>· {g.items.length} exercices</span>
                         </div>
                       )}
+                      {g.items.map((e,itemIdx)=>{
+                        const exVol=(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),0);
+                        return(
+                          <div key={itemIdx} style={{borderTop:itemIdx>0?`1px solid ${ts.color}25`:'none'}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:(e.sets||[]).length>0?'1px solid rgba(255,255,255,0.06)':'none'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+itemIdx)}</div>}
+                                <div>
+                                  <div style={{fontSize:13,fontWeight:700}}>{e.name}</div>
+                                  {e.muscle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>}
+                                </div>
+                              </div>
+                              {exVol>0&&<div style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(exVol).toLocaleString('fr-FR')} <span style={{fontSize:9,fontWeight:400,color:T.textFaint}}>kg</span></div>}
+                            </div>
+                            {(e.sets||[]).length>0&&(
+                              <div style={{padding:'8px 14px'}}>
+                                <div style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
+                                  {['Série','Poids','Reps','Volume'].map(h=>(
+                                    <div key={h} style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3}}>{h}</div>
+                                  ))}
+                                </div>
+                                {(e.sets||[]).map((st,si)=>(
+                                  <div key={si} style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                                    <div style={{fontSize:12,color:T.textFaint}}>#{si+1}</div>
+                                    <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.weight}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> kg</span></div>
+                                    <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></div>
+                                    <div style={{fontSize:12,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{Math.round((st.weight||0)*(st.reps||0))}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
