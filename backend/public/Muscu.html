@@ -6019,7 +6019,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 }
 
 // ── Athlete Calendar Summary (coach view) ─────────────────
-function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,editable=false,onMovesChange,onSessionMoved}){
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,editable=false,onMovesChange,onSessionMoved,onDeleteSession}){
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
@@ -6215,7 +6215,14 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 )}
                 {editable&&(
                   sess?(
-                    <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer cette séance</button>
+                    <div style={{display:'flex',gap:6,marginTop:8}}>
+                      <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} style={{flex:1,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer cette séance</button>
+                      {onDeleteSession&&(
+                        <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                          <Icon name="trash" size={13} stroke={T.danger}/>
+                        </button>
+                      )}
+                    </div>
                   ):movedHere?(
                     <button onClick={()=>cancelMove(sel)} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',fontSize:11,fontWeight:700,cursor:'pointer'}}>↩ Annuler le déplacement</button>
                   ):hasProg?(
@@ -8260,6 +8267,7 @@ function CoachScreen({authToken,authUser}){
               editable={true}
               onMovesChange={sm=>setDetail(d=>d?{...d,scheduleMoves:sm}:d)}
               onSessionMoved={()=>reloadDetail(a.id)}
+              onDeleteSession={sid=>deleteSession(sid,a.id)}
             />
 
             {/* Programme journalier */}
@@ -12102,7 +12110,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 }
 
 // ── Bibliothèque de séances (partagée par le coach, sans calendrier) ──────────
-function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
+function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSession}){
   const IA='#6366f1',IA2='#8b5cf6';
   const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const[coachSessions,setCoachSessions]=React.useState(sessionLibrary?.sessions||[]);
@@ -12396,9 +12404,16 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history}){
               </div>
               {/* Séances réalisées */}
               {byDate[calSel]&&byDate[calSel].map((s,i)=>(
-                <div key={'done-'+i} style={{padding:'6px 0',borderTop:i?'1px solid rgba(255,255,255,0.05)':'none'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:'#BFA060'}}>✓</span><span style={{fontSize:13,fontWeight:700}}>{s.name||'Séance'}</span></div>
-                  <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{(s.exercises||[]).length} exercice{(s.exercises||[]).length>1?'s':''} · {Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+                <div key={'done-'+i} style={{padding:'6px 0',borderTop:i?'1px solid rgba(255,255,255,0.05)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:'#BFA060'}}>✓</span><span style={{fontSize:13,fontWeight:700}}>{s.name||'Séance'}</span></div>
+                    <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{(s.exercises||[]).length} exercice{(s.exercises||[]).length>1?'s':''} · {Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+                  </div>
+                  {onDeleteSession&&s.id&&(
+                    <button onClick={(e)=>{e.stopPropagation();if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(s.id,calSel);}} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Icon name="trash" size={12} stroke={T.danger}/>
+                    </button>
+                  )}
                 </div>
               ))}
               {/* Séances planifiées */}
@@ -12747,7 +12762,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
           onDeleteSession={onDeleteSession}
         />}
         {sub==='live'&&<LiveSessionsView sessions={liveSessions} onStartWorkout={onStartWorkout}/>}
-        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} />}
+        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} onDeleteSession={onDeleteSession} />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>
     </div>
