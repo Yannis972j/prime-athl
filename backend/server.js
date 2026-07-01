@@ -1551,6 +1551,9 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   persist();
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const fmtDate = ds => new Date(ds).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  pushToUser(athlete.id, { title: '🏋️ Nouvelle séance', body: `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`, url: '/Muscu.html' });
   res.json({ ok: true, id });
 });
 
