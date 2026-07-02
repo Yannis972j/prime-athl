@@ -18,16 +18,10 @@ services:
         generateValue: true
       - key: MAIN_COACH_EMAIL
         value: yannisgym972@gmail.com
-      # ⚠️ IMPORTANT si le service est déjà déployé : synchroniser ce blueprint fera générer
-      # par Render une NOUVELLE valeur aléatoire pour MAIN_COACH_PASSWORD et UNLOCK_SECRET,
-      # ce qui changera le mot de passe de connexion du compte coach principal. Après sync,
-      # va dans Render > le service > Environment pour récupérer la nouvelle valeur générée
-      # avant de te reconnecter (ou fixe `value:` toi-même ci-dessous avec le mot de passe
-      # que tu utilises déjà si tu préfères ne pas le changer).
-      - key: MAIN_COACH_PASSWORD
-        generateValue: true
-      - key: UNLOCK_SECRET
-        generateValue: true
+      # MAIN_COACH_PASSWORD et UNLOCK_SECRET sont déjà configurés manuellement dans
+      # Render > Environment (secrets réels, volontairement absents de ce fichier versionné).
+      # Le code (server.js) génère une valeur aléatoire temporaire uniquement si l'une de ces
+      # deux variables n'est pas définie — ne jamais leur donner de valeur par défaut ici.
       # DB_PATH stays default → /opt/render/project/src/backend/data.json
       # ⚠️ Free tier disk is EPHEMERAL — data resets at each redeploy.
       # For persistence : add a Render Disk (1GB ~ $0.25/mo) and set DB_PATH=/data/data.json
