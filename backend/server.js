@@ -7,6 +7,7 @@ import cors from 'cors';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
+import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
@@ -128,6 +129,19 @@ const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRON
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
 const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {} };
 
+// Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
+// de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
+// endpoint de restauration — évite les clés oubliées qui plantent au premier accès après
+// une restauration (voir historique : plannedSessions/trainingPrograms/userPurchasedPrograms
+// avaient été omis d'une recopie manuelle).
+function buildDataFromBackup(body) {
+  const restored = {};
+  for (const key of Object.keys(DEFAULT_DB)) {
+    restored[key] = body[key] || structuredClone(DEFAULT_DB[key]);
+  }
+  return restored;
+}
+
 // Boot : Postgres > fichier local
 let DATA = (() => {
   try {
@@ -162,8 +176,17 @@ if (USE_PG) {
 // Mot de passe par défaut si aucune variable d'env n'est définie.
 // Garantit que le compte coach principal a TOUJOURS un accès total, même après
 // un redéploiement sur disque éphémère (Render free tier).
-const DEFAULT_MAIN_COACH_PASSWORD = 'PrimeAthl2024!';
-const MAIN_COACH_PASSWORD = process.env.MAIN_COACH_PASSWORD || DEFAULT_MAIN_COACH_PASSWORD;
+// Pas de mot de passe par défaut connu publiquement : si MAIN_COACH_PASSWORD n'est pas
+// défini, on génère une valeur aléatoire à ce démarrage (affichée une seule fois dans les
+// logs) plutôt qu'un mot de passe fixe qui serait visible dans l'historique du dépôt.
+// Cette valeur aléatoire ne sert QUE si le compte n'existe pas encore en base (voir
+// ensureMainCoach ci-dessous) — elle ne remplace jamais un mot de passe déjà en place.
+const MAIN_COACH_PASSWORD = process.env.MAIN_COACH_PASSWORD
+  || ('temp-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+if (!process.env.MAIN_COACH_PASSWORD) {
+  console.warn(`[SECURITY] MAIN_COACH_PASSWORD non défini — mot de passe temporaire généré pour ce démarrage : ${MAIN_COACH_PASSWORD}`);
+  console.warn('[SECURITY] Ce mot de passe change à chaque redémarrage. Définis MAIN_COACH_PASSWORD dans les variables d\'environnement pour un accès stable et sécurisé.');
+}
 async function ensureMainCoach() {
   let main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
   if (!main) {
@@ -256,8 +279,8 @@ function persist() {
     saving = true;
     try {
       const tmp = DB_PATH + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(DATA));
-      fs.renameSync(tmp, DB_PATH);
+      await fs.promises.writeFile(tmp, JSON.stringify(DATA));
+      await fs.promises.rename(tmp, DB_PATH);
     } catch (e) { console.error('persist error:', e); } finally { saving = false; }
   }, 200);
   // Postgres : debounce 500ms (aligné proche du local pour réduire la fenêtre d'inconsistance)
@@ -601,13 +624,20 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'signup_failed' }); }
 });
 
-// Déblocage d'urgence du coach principal — accessible sans auth via token URL
-if (IS_PROD && !process.env.UNLOCK_SECRET) {
-  console.warn('[config] WARNING: UNLOCK_SECRET non défini en production — secret par défaut prévisible utilisé pour /api/auth/unlock-main-coach. Définis UNLOCK_SECRET dans les variables d\'environnement.');
+// Déblocage d'urgence du coach principal — accessible sans auth via token URL.
+// Pas de secret par défaut connu publiquement : génère une valeur aléatoire par
+// démarrage si UNLOCK_SECRET n'est pas défini (même logique que MAIN_COACH_PASSWORD).
+const UNLOCK_SECRET = process.env.UNLOCK_SECRET
+  || ('unlock-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+if (!process.env.UNLOCK_SECRET) {
+  console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET}`);
+  console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
-const UNLOCK_SECRET = process.env.UNLOCK_SECRET || 'primeathl-unlock-coach-2024';
-app.get('/api/auth/unlock-main-coach', (req, res) => {
-  if (req.query.secret !== UNLOCK_SECRET) return res.status(403).json({ error: 'forbidden' });
+app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
+  const provided = Buffer.from(String(req.query.secret || ''));
+  const expected = Buffer.from(UNLOCK_SECRET);
+  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  if (!match) return res.status(403).json({ error: 'forbidden' });
   const main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
   if (!main) return res.status(404).json({ error: 'main_coach_not_found' });
   main.loginFails = [];
@@ -664,7 +694,6 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // ── Reset password ──────────────────────────────────
-import crypto from 'crypto';
 const RESET_TTL_MS = 60 * 60 * 1000; // 1h
 const hashToken = t => crypto.createHash('sha256').update(t).digest('hex');
 
@@ -1596,28 +1625,7 @@ app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res
     if (!mainBackup) return res.status(400).json({ error: 'main_coach_missing_in_backup' });
 
     // Ensure DEFAULT_DB structure
-    DATA = {
-      users: body.users || {},
-      programs: body.programs || {},
-      sessions: body.sessions || {},
-      invites: body.invites || {},
-      nutritionPrograms: body.nutritionPrograms || {},
-      nutritionLogs: body.nutritionLogs || {},
-      weightLogs: body.weightLogs || {},
-      messages: body.messages || {},
-      progressPhotos: body.progressPhotos || {},
-      pushSubscriptions: body.pushSubscriptions || {},
-      savedPrograms: body.savedPrograms || {},
-      premiumCodes: body.premiumCodes || {},
-      freeFoodLogs: body.freeFoodLogs || {},
-      customFoods: body.customFoods || {},
-      sessionLibrary: body.sessionLibrary || {},
-      myLibrary: body.myLibrary || {},
-      plannedSessions: body.plannedSessions || {},
-      trainingPrograms: body.trainingPrograms || {},
-      userPurchasedPrograms: body.userPurchasedPrograms || {},
-      scheduleMoves: body.scheduleMoves || {},
-    };
+    DATA = buildDataFromBackup(body);
     persist();
     res.json({ ok: true, counts: {
       users: Object.keys(DATA.users).length,
@@ -1672,28 +1680,7 @@ app.post('/api/admin/pg-restore/:id', authRequired, coachOnly, mainCoachOnly, as
     if (!body || !body.users) return res.status(400).json({ error: 'invalid_backup_format' });
     const mainBackup = Object.values(body.users).find(u => u.email === MAIN_COACH_EMAIL);
     if (!mainBackup) return res.status(400).json({ error: 'main_coach_missing_in_backup' });
-    DATA = {
-      users: body.users || {},
-      programs: body.programs || {},
-      sessions: body.sessions || {},
-      invites: body.invites || {},
-      nutritionPrograms: body.nutritionPrograms || {},
-      nutritionLogs: body.nutritionLogs || {},
-      weightLogs: body.weightLogs || {},
-      messages: body.messages || {},
-      progressPhotos: body.progressPhotos || {},
-      pushSubscriptions: body.pushSubscriptions || {},
-      savedPrograms: body.savedPrograms || {},
-      premiumCodes: body.premiumCodes || {},
-      freeFoodLogs: body.freeFoodLogs || {},
-      customFoods: body.customFoods || {},
-      sessionLibrary: body.sessionLibrary || {},
-      myLibrary: body.myLibrary || {},
-      plannedSessions: body.plannedSessions || {},
-      trainingPrograms: body.trainingPrograms || {},
-      userPurchasedPrograms: body.userPurchasedPrograms || {},
-      scheduleMoves: body.scheduleMoves || {},
-    };
+    DATA = buildDataFromBackup(body);
     persist();
     res.json({ ok: true, restored_id: b.id, created_at: b.created_at });
   } catch (e) { res.status(500).json({ error: 'restore_failed', detail: e.message }); }

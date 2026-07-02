@@ -18,6 +18,10 @@ services:
         generateValue: true
       - key: MAIN_COACH_EMAIL
         value: yannisgym972@gmail.com
+      # MAIN_COACH_PASSWORD et UNLOCK_SECRET sont déjà configurés manuellement dans
+      # Render > Environment (secrets réels, volontairement absents de ce fichier versionné).
+      # Le code (server.js) génère une valeur aléatoire temporaire uniquement si l'une de ces
+      # deux variables n'est pas définie — ne jamais leur donner de valeur par défaut ici.
       # DB_PATH stays default → /opt/render/project/src/backend/data.json
       # ⚠️ Free tier disk is EPHEMERAL — data resets at each redeploy.
       # For persistence : add a Render Disk (1GB ~ $0.25/mo) and set DB_PATH=/data/data.json
