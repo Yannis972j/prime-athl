@@ -1407,6 +1407,24 @@ app.delete('/api/planned-sessions/:date/:index', authRequired, (req, res) => {
   res.json(DATA.plannedSessions[req.user.id]);
 });
 
+// Coach planifie une séance (copiée/éditée) pour un athlète à une date précise —
+// l'athlète la retrouve comme "planifiée" et la démarre lui-même quand il l'atteint.
+app.post('/api/coach/athletes/:athleteId/planned-sessions', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const { date, session } = req.body || {};
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !session) return res.status(400).json({ error: 'missing_fields' });
+  if (!DATA.plannedSessions[req.params.athleteId]) DATA.plannedSessions[req.params.athleteId] = {};
+  if (!DATA.plannedSessions[req.params.athleteId][date]) DATA.plannedSessions[req.params.athleteId][date] = [];
+  DATA.plannedSessions[req.params.athleteId][date].push(session);
+  persist();
+  io.to('user:' + req.params.athleteId).emit('planned-sessions-updated', { plannedSessions: DATA.plannedSessions[req.params.athleteId] });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const fmtDate = ds => new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  pushToUser(req.params.athleteId, { title: '📅 Nouvelle séance prévue', body: `${coachName} t'a planifié "${session.name || 'une séance'}" le ${fmtDate(date)}`, url: '/Muscu.html' });
+  res.json({ ok: true, plannedSessions: DATA.plannedSessions[req.params.athleteId] });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
