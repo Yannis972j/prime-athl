@@ -6071,7 +6071,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
 }
 
 // ── Athlete Calendar Summary (coach view) ─────────────────
-function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,athleteName,editable=false,onMovesChange,onLibraryUpdated,onDeleteSession}){
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,athleteName,editable=false,onMovesChange,onSessionPlanned,onDeleteSession}){
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
@@ -6080,7 +6080,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[moveTarget,setMoveTarget]=React.useState('');
   const[moveBusy,setMoveBusy]=React.useState(false);
   const[moveErr,setMoveErr]=React.useState(null);
-  const[copySession,setCopySession]=React.useState(null); // séance en cours de copie vers la bibliothèque
+  const[planSession,setPlanSession]=React.useState(null); // séance en cours de copie/planification
   const movePickerRef=React.useRef(null);
   React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
@@ -6149,9 +6149,9 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
 
   return(
     <div style={{marginBottom:18}}>
-      {copySession&&(
-        <CoachCopySessionModal athleteId={athleteId} athleteName={athleteName||'cet athlète'} sourceSession={copySession}
-          onClose={()=>setCopySession(null)} onDone={()=>onLibraryUpdated&&onLibraryUpdated()}/>
+      {planSession&&(
+        <CoachPlanSessionModal athleteId={athleteId} athleteName={athleteName||'cet athlète'} sourceSession={planSession}
+          onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {/* Legend */}
       <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
@@ -6235,7 +6235,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 {editable&&(
                   sess?(
                     <div style={{display:'flex',gap:6,marginTop:8}}>
-                      <button onClick={()=>setCopySession(sess)} style={{flex:1,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 Copier cette séance</button>
+                      <button onClick={()=>setPlanSession(sess)} style={{flex:1,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 Copier cette séance</button>
                       {onDeleteSession&&(
                         <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                           <Icon name="trash" size={13} stroke={T.danger}/>
@@ -6389,11 +6389,12 @@ function CoachImportSessionModal({athleteId,athleteName,dayName,dayData,onClose,
   );
 }
 
-// Copie une séance déjà réalisée (calendrier coach) vers la bibliothèque de l'athlète,
-// avec les exercices/poids/reps modifiables avant l'ajout — l'athlète la retrouve dans
-// son onglet Biblio et la démarre lui-même quand il veut (pas de date imposée).
-function CoachCopySessionModal({athleteId,athleteName,sourceSession,onClose,onDone}){
+// Copie une séance déjà réalisée (calendrier coach) vers un autre jour pour l'athlète,
+// avec les exercices/poids/reps modifiables avant l'envoi — l'athlète la retrouve comme
+// séance planifiée (Biblio) et la démarre lui-même quand il l'atteint.
+function CoachPlanSessionModal({athleteId,athleteName,sourceSession,onClose,onDone}){
   const[name,setName]=React.useState(sourceSession.name||'Séance');
+  const[date,setDate]=React.useState(()=>ymdKey());
   const[exos,setExos]=React.useState(()=>(sourceSession.exercises||[]).map(ex=>({
     name:ex.name,muscle:ex.muscle||'',
     sets:(ex.sets||[{weight:0,reps:0}]).map(s=>({weight:s.weight||0,reps:s.reps||0})),
@@ -6409,11 +6410,9 @@ function CoachCopySessionModal({athleteId,athleteName,sourceSession,onClose,onDo
   const send=async()=>{
     setSending(true);setMsg('');
     try{
-      const lib=await apiCall('/api/coach/session-library-for/'+athleteId);
-      const uid=()=>Math.random().toString(36).slice(2);
-      const newSession={id:uid(),name:name.trim()||'Séance',category:sourceSession.muscles||sourceSession.category||'',exercises:exos};
-      await apiCall('/api/coach/session-library/'+athleteId,{method:'PUT',body:{sessions:[...(lib.sessions||[]),newSession]}});
-      setMsg('✓ Ajoutée à la bibliothèque de '+athleteName+' !');
+      const newSession={name:name.trim()||'Séance',muscles:sourceSession.muscles||sourceSession.category||'',exercises:exos};
+      await apiCall('/api/coach/athletes/'+athleteId+'/planned-sessions',{method:'POST',body:{date,session:newSession}});
+      setMsg('✓ Planifiée pour '+athleteName+' !');
       setTimeout(()=>{onDone&&onDone();onClose();},1400);
     }catch(e){setMsg('✗ '+(e.message||'Erreur'));setSending(false);}
   };
@@ -6428,7 +6427,7 @@ function CoachCopySessionModal({athleteId,athleteName,sourceSession,onClose,onDo
         {/* Header */}
         <div style={{padding:'4px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexShrink:0}}>
           <div>
-            <div style={{fontSize:11,color:T.accent,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Copier vers la bibliothèque</div>
+            <div style={{fontSize:11,color:T.accent,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Copier vers un autre jour</div>
             <div style={{fontSize:19,fontWeight:700,letterSpacing:-0.3}}>{name}</div>
             <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>Pour {athleteName}</div>
           </div>
@@ -6436,6 +6435,12 @@ function CoachCopySessionModal({athleteId,athleteName,sourceSession,onClose,onDo
         </div>
         {/* Scrollable */}
         <div style={{overflowY:'auto',flex:1,padding:'14px 16px 8px'}}>
+          {/* Date */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5}}>Nouveau jour</div>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              style={{width:'100%',padding:'10px 12px',borderRadius:11,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,outline:'none',boxSizing:'border-box'}}/>
+          </div>
           {/* Nom */}
           <div style={{marginBottom:14}}>
             <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:5}}>Nom de la séance</div>
@@ -6484,8 +6489,8 @@ function CoachCopySessionModal({athleteId,athleteName,sourceSession,onClose,onDo
         {/* Footer */}
         <div style={{padding:'12px 16px max(16px,env(safe-area-inset-bottom))',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
           {msg&&<div style={{textAlign:'center',fontSize:13,fontWeight:700,color:msg.startsWith('✓')?T.good:T.danger,marginBottom:10}}>{msg}</div>}
-          <button onClick={send} disabled={sending} style={{width:'100%',height:52,borderRadius:15,border:'none',background:sending?'rgba(191,160,96,0.3)':'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:15,fontWeight:800,cursor:sending?'default':'pointer',letterSpacing:0.4,boxShadow:sending?'none':'0 8px 24px rgba(191,160,96,0.35)'}}>
-            {sending?'Envoi…':'📋 Ajouter à la bibliothèque de '+athleteName}
+          <button onClick={send} disabled={sending||!date} style={{width:'100%',height:52,borderRadius:15,border:'none',background:(sending||!date)?'rgba(191,160,96,0.3)':'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:15,fontWeight:800,cursor:(sending||!date)?'default':'pointer',letterSpacing:0.4,boxShadow:(sending||!date)?'none':'0 8px 24px rgba(191,160,96,0.35)'}}>
+            {sending?'Envoi…':'📅 Planifier pour '+athleteName}
           </button>
         </div>
       </div>
@@ -8428,7 +8433,7 @@ function CoachScreen({authToken,authUser}){
               moves={a.scheduleMoves}
               editable={true}
               onMovesChange={sm=>setDetail(d=>d?{...d,scheduleMoves:sm}:d)}
-              onLibraryUpdated={()=>reloadDetail(a.id)}
+              onSessionPlanned={()=>reloadDetail(a.id)}
               onDeleteSession={sid=>deleteSession(sid,a.id)}
             />
 
@@ -12561,14 +12566,21 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
               ))}
               {/* Séances planifiées */}
               {(planned[calSel]||[]).map((s,i)=>(
-                <div key={'plan-'+i} style={{padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div>
+                <div key={'plan-'+i} style={{padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <div style={{minWidth:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:'#5A8AE0'}}>📋</span><span style={{fontSize:13,fontWeight:700}}>{s.name}</span></div>
                     <div style={{fontSize:11,color:T.textDim,marginTop:2}}>{s.muscles||''} · {(s.exercises||[]).length} exos</div>
                   </div>
-                  <button onClick={(e)=>{e.stopPropagation();unplanSession(calSel,i);}} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <Icon name="trash" size={12} stroke={T.danger}/>
-                  </button>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    {(s.exercises||[]).length>0&&(
+                      <button onClick={(e)=>{e.stopPropagation();onStartWorkout({name:s.name,muscles:s.muscles||'',exercises:s.exercises});}} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.1)',color:T.good,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
+                        <Icon name="play" size={11} stroke={T.good}/> Démarrer
+                      </button>
+                    )}
+                    <button onClick={(e)=>{e.stopPropagation();unplanSession(calSel,i);}} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Icon name="trash" size={12} stroke={T.danger}/>
+                    </button>
+                  </div>
                 </div>
               ))}
               {/* Bouton ajouter une séance */}
