@@ -7341,6 +7341,7 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
           <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
           <div style={{display:'flex',gap:6,alignItems:'center',marginTop:1,flexWrap:'wrap'}}>
             <span style={{fontSize:11,color:T.textFaint}}>{new Date(s.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</span>
+            {s.createdByCoach&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(191,160,96,0.12)',color:T.accent,border:'1px solid rgba(191,160,96,0.3)'}}>⚡ Live</span>}
             {s.rpe&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(200,144,64,0.12)',color:'#C89040',border:'1px solid rgba(200,144,64,0.3)'}}>RPE {s.rpe}</span>}
             {s.coachFeedback&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:5,background:'rgba(90,138,224,0.12)',color:'#5A8AE0',border:'1px solid rgba(90,138,224,0.3)'}}>💬 Feedb.</span>}
           </div>
@@ -8428,49 +8429,44 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 2 : Séances / Programme ── */}
         {detailTab==='sport'&&(
           <div style={{padding:'0 18px'}}>
-            {/* Séance Live */}
-            <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',padding:'13px 16px',borderRadius:16,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.08),rgba(184,80,112,0.04))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',marginBottom:10}}>
-              <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(232,64,64,0.3),rgba(184,80,112,0.2))',border:'1px solid rgba(232,64,64,0.25)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
-                <span style={{fontSize:20}}>🔴</span>
-                <span style={{position:'absolute',top:4,right:4,width:7,height:7,borderRadius:4,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:700,letterSpacing:0.1}}>Séance Live</div>
-                <div style={{fontSize:11,color:T.textFaint,marginTop:1}}>Construire en temps réel à la salle</div>
-              </div>
-              <Icon name="chevronRight" size={16} stroke="rgba(232,64,64,0.6)"/>
+            {/* Séance Live — barre compacte, CTA principal */}
+            <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
+              <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
+              <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>Séance Live</span>
+              <span style={{fontSize:10,color:T.textFaint}}>Temps réel</span>
+              <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
             </button>
             {/* Import programme & bibliothèque — regroupés côte à côte pour limiter l'empilement */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <div style={{position:'relative'}}>
-                <button onClick={()=>fileRef.current.click()} style={{width:'100%',padding:'12px 10px',borderRadius:14,border:`1px solid ${programDays>0?T.border:'rgba(191,160,96,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,textAlign:'left'}}>
-                  <div style={{width:34,height:34,borderRadius:10,background:programDays>0?'rgba(191,160,96,0.12)':'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>
+                <button onClick={()=>fileRef.current.click()} style={{width:'100%',height:48,padding:'0 40px 0 10px',borderRadius:12,border:`1px solid ${programDays>0?T.border:'rgba(191,160,96,0.35)'}`,background:programDays>0?'rgba(255,255,255,0.025)':'linear-gradient(135deg,rgba(191,160,96,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:programDays>0?'rgba(191,160,96,0.12)':'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>
                     {programDays>0?'📋':'📥'}
                   </div>
-                  <div style={{minWidth:0,maxWidth:'100%'}}>
+                  <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?`${programMonths} mois · ${programDays}j`:'Programme'}</div>
-                    <div style={{fontSize:9,color:T.textFaint,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?(a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif'):'Importer un Excel'}</div>
+                    <div style={{fontSize:9,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?(a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif'):'Importer un Excel'}</div>
                   </div>
                 </button>
                 {programDays>0&&(
-                  <button onClick={()=>setConfirmAction({msg:`Supprimer le programme de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}catch(e){flash('✗ '+(e.message||e));}}})} title="Supprimer le programme" style={{position:'absolute',top:8,right:8,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <Icon name="trash" size={13} stroke={T.accent}/>
+                  <button onClick={()=>setConfirmAction({msg:`Supprimer le programme de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id,{method:'DELETE'});flash('✓ Programme supprimé');reloadDetail(a.id);load();}catch(e){flash('✗ '+(e.message||e));}}})} title="Supprimer le programme" style={{position:'absolute',top:9,right:9,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="trash" size={12} stroke={T.accent}/>
                   </button>
                 )}
               </div>
               <div style={{position:'relative'}}>
-                <button onClick={()=>libFileRef.current.click()} style={{width:'100%',padding:'12px 10px',borderRadius:14,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:8,textAlign:'left'}}>
-                  <div style={{width:34,height:34,borderRadius:10,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>
+                <button onClick={()=>libFileRef.current.click()} style={{width:'100%',height:48,padding:'0 40px 0 10px',borderRadius:12,border:`1px solid ${libCount>0?'rgba(90,138,224,0.35)':'rgba(90,138,224,0.25)'}`,background:libCount>0?'rgba(90,138,224,0.06)':'rgba(90,138,224,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left'}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:libCount>0?'rgba(90,138,224,0.18)':'linear-gradient(135deg,#5A8AE0,#9090c4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>
                     {libCount>0?'📚':'📂'}
                   </div>
-                  <div style={{minWidth:0,maxWidth:'100%'}}>
+                  <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{libCount>0?`${libCount} séance${libCount>1?'s':''}`:'Bibliothèque'}</div>
-                    <div style={{fontSize:9,color:T.textFaint,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{libCount>0?(libData?.assignedAt?`maj ${new Date(libData.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active'):'Séances à la carte'}</div>
+                    <div style={{fontSize:9,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{libCount>0?(libData?.assignedAt?`maj ${new Date(libData.assignedAt).toLocaleDateString('fr-FR')}`:'Bibliothèque active'):'Séances à la carte'}</div>
                   </div>
                 </button>
                 {libCount>0&&(
-                  <button onClick={()=>setConfirmAction({msg:`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} title="Vider la bibliothèque" style={{position:'absolute',top:8,right:8,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <Icon name="trash" size={13} stroke="#5A8AE0"/>
+                  <button onClick={()=>setConfirmAction({msg:`Vider la bibliothèque de ${a.firstName||a.email.split('@')[0]} ?`,onConfirm:async()=>{try{await apiCall('/api/coach/session-library/'+a.id,{method:'DELETE'});flash('✓ Bibliothèque vidée');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} title="Vider la bibliothèque" style={{position:'absolute',top:9,right:9,width:26,height:26,padding:0,borderRadius:8,border:'none',background:'rgba(20,18,15,0.55)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <Icon name="trash" size={12} stroke="#5A8AE0"/>
                   </button>
                 )}
               </div>
@@ -8564,14 +8560,6 @@ function CoachScreen({authToken,authUser}){
         {/* ── Tab 4 : Historique ── */}
         {detailTab==='historique'&&(
           <div style={{padding:'0 18px'}}>
-            {(()=>{const ls=sessions.filter(s=>s.createdByCoach);return ls.length>0&&(
-              <>
-                <SectionHeader title="⚡ Séances Live" right={<span style={{fontSize:10,color:'#BFA060'}}>{ls.length} séance{ls.length>1?'s':''}</span>}/>
-                <GlassCard padding={14} style={{marginBottom:16}}>
-                  <LiveSessionCalendar sessions={ls}/>
-                </GlassCard>
-              </>
-            );})()}
             <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
             {sessions.length===0?(
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
@@ -8858,7 +8846,7 @@ function CoachScreen({authToken,authUser}){
           <button onClick={()=>setCoachView('calendar')} style={{width:40,height:40,borderRadius:13,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} title="Calendrier">
             📅
           </button>
-          {isMain&&<button onClick={()=>setCoachView('programs')} style={{width:40,height:40,borderRadius:13,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} title="Gérer les programmes">
+          {isMain&&<button onClick={()=>setCoachView('programs')} style={{width:40,height:40,borderRadius:13,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}10`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} title="Gérer le catalogue">
             📋
           </button>}
           <button onClick={()=>setShowCreateAthlete(true)} style={{width:40,height:40,borderRadius:13,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 14px rgba(44,196,160,0.4)'}} title="Créer un athlète">
@@ -9830,8 +9818,8 @@ function TPCatalogScreen({onSelect,onShowMyPrograms,authUser}){
   return(
     <div style={{padding:'18px 18px 90px',color:T.text}}>
       <div style={{marginBottom:20}}>
-        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Programmes</div>
-        <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}><HoloText>Programmes d'entraînement</HoloText></div>
+        <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Catalogue</div>
+        <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5}}><HoloText>Catalogue de programmes</HoloText></div>
         <div style={{fontSize:13,color:T.textDim,marginTop:6}}>Des programmes complets pour atteindre tes objectifs</div>
       </div>
 
@@ -10280,7 +10268,7 @@ function TPAdminScreen(){
   return(
     <div style={{padding:'18px 18px 90px',color:T.text}}>
       <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Administration</div>
-      <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:16}}><HoloText>Programmes d'entraînement</HoloText></div>
+      <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:16}}><HoloText>Catalogue de programmes</HoloText></div>
 
       <button onClick={()=>setCreating(true)} style={{width:'100%',height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20}}>
         + Créer un programme
@@ -11074,7 +11062,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
      grad:'linear-gradient(135deg,#6366f1,#8b5cf6)',glow:'rgba(99,102,241,0.4)',border:'rgba(99,102,241,0.3)',bg:'rgba(99,102,241,0.07)',plan:'ia'},
     {id:'explorer',emoji:'🧭',title:'Explorer',desc:'Séances prêtes à démarrer, classées par groupe musculaire',
      grad:'linear-gradient(135deg,#0d9488,#06b6d4)',glow:'rgba(13,148,136,0.4)',border:'rgba(13,148,136,0.3)',bg:'rgba(13,148,136,0.07)',plan:'explorer'},
-    {id:'programmes',emoji:'📋',title:'Programmes',desc:'Programmes structurés multi-semaines à acheter et suivre',
+    {id:'programmes',emoji:'📋',title:'Catalogue',desc:'Programmes structurés multi-semaines à acheter et suivre',
      grad:'linear-gradient(135deg,#E07020,#D4883A)',glow:'rgba(224,112,32,0.4)',border:'rgba(224,112,32,0.3)',bg:'rgba(224,112,32,0.07)',plan:null},
   ];
   const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+7*24*3600*1000);
@@ -12230,7 +12218,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               </UniverseShell>
             )}
             {tab==='univers'&&activeUniverse==='programmes'&&(
-              <UniverseShell title="📋 Programmes" grad="linear-gradient(135deg,#E07020,#D4883A)" onBack={()=>setActiveUniverse(null)}>
+              <UniverseShell title="📋 Catalogue" grad="linear-gradient(135deg,#E07020,#D4883A)" onBack={()=>setActiveUniverse(null)}>
                 <TrainingProgramsScreen authUser={authUser} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/>
               </UniverseShell>
             )}
