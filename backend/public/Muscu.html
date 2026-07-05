@@ -7960,7 +7960,7 @@ function CoachProfileField({label,value,onCommit,suffix,type='text'}){
   );
 }
 
-function CoachScreen({authToken,authUser}){
+function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
   const[selected,setSelected]=React.useState(null);
@@ -7996,7 +7996,7 @@ function CoachScreen({authToken,authUser}){
   const[available,setAvailable]=React.useState([]);
   const[showAvailable,setShowAvailable]=React.useState(false);
   const[pending,setPending]=React.useState([]);
-  const[coachView,setCoachView]=React.useState('athletes'); // 'athletes'|'calendar'
+  const[coachView,setCoachView]=React.useState(initialCoachView||'athletes'); // 'athletes'|'calendar'|'programs'
   const isMain=authUser&&authUser.isMainCoach;
 
   const load=React.useCallback(async()=>{
@@ -8261,7 +8261,7 @@ function CoachScreen({authToken,authUser}){
   }
 
   if(coachView==='programs'){
-    return <div style={{height:'100%',overflow:'auto'}}><TPAdminScreen onBack={()=>setCoachView('athletes')}/></div>;
+    return <div style={{height:'100%',overflow:'auto'}}><TPAdminScreen onBack={()=>setCoachView('athletes')} initialEditId={initialProgramEditId} onConsumedInitialEdit={onConsumedInitialProgramEdit}/></div>;
   }
 
   // ── Detail view ─────────────────────────────────
@@ -10238,7 +10238,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   );
 }
 
-function TPAdminScreen(){
+function TPAdminScreen({initialEditId,onConsumedInitialEdit}){
   const[programs,setPrograms]=React.useState([]);
   const[loading,setLoading]=React.useState(true);
   const[editing,setEditing]=React.useState(null);
@@ -10246,7 +10246,15 @@ function TPAdminScreen(){
 
   const load=()=>{
     setLoading(true);
-    apiCall('/api/admin/training-programs').then(d=>{setPrograms(d);setLoading(false);}).catch(()=>setLoading(false));
+    apiCall('/api/admin/training-programs').then(d=>{
+      setPrograms(d);
+      setLoading(false);
+      if(initialEditId){
+        const found=d.find(p=>p.id===initialEditId);
+        if(found)setEditing(found);
+        onConsumedInitialEdit&&onConsumedInitialEdit();
+      }
+    }).catch(()=>setLoading(false));
   };
   React.useEffect(load,[]);
 
@@ -12090,6 +12098,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
+  const[pendingProgramEditId,setPendingProgramEditId]=React.useState(null);
   const startWorkout=w=>{setWorkout(w);setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');};
 
   const saveSession=async snapshot=>{
@@ -12224,7 +12233,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             )}
             {tab==='stats'&&<div style={{flex:1,overflow:'auto'}}><StatsScreen history={history} profile={profile}/></div>}
             {tab==='profile'&&<div style={{flex:1,overflow:'auto'}}><ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout}/></div>}
-            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser}/></div>}
+            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser} initialCoachView={pendingProgramEditId?'programs':undefined} initialProgramEditId={pendingProgramEditId} onConsumedInitialProgramEdit={()=>setPendingProgramEditId(null)}/></div>}
             {tab==='messages'&&<div style={{flex:1,overflow:'auto'}}><MessagesScreen authUser={authUser}/></div>}
           </div>
         )}
@@ -12281,7 +12290,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                 setShowAddToProgramme(false);
                 setLastFinishedSession(null);
                 setAddingToProgramme(false);
-                setTab('univers');setActiveUniverse('programmes');
+                setPendingProgramEditId(prog.id);
+                setTab('coach');
               }catch(e){
                 console.error('add to programme',e);
                 setAddingToProgramme(false);
