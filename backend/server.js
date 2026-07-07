@@ -1575,8 +1575,11 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
       name: e.name || '', muscle: e.muscle || '',
       brand: e.brand ? String(e.brand).slice(0, 60) : '',
       groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
-      groupType: ['classic','superset','triset'].includes(e.groupType) ? e.groupType : 'classic',
+      groupType: ['classic','superset','triset','cardio'].includes(e.groupType) ? e.groupType : 'classic',
       sets: (e.sets || []).map(st => ({ weight: +st.weight || 0, reps: +st.reps || 0, rest: +st.rest || 0 })),
+      cardio: e.groupType === 'cardio' && e.cardio ? {
+        vitesse: +e.cardio.vitesse || 0, inclinaison: +e.cardio.inclinaison || 0, duree: +e.cardio.duree || 0,
+      } : null,
     }));
     s.totalVolume = +req.body.totalVolume || 0;
   }
@@ -1602,8 +1605,11 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
       name: e.name || '', muscle: e.muscle || '',
       brand: e.brand ? String(e.brand).slice(0, 60) : '',
       groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
-      groupType: ['classic','superset','triset'].includes(e.groupType) ? e.groupType : 'classic',
+      groupType: ['classic','superset','triset','cardio'].includes(e.groupType) ? e.groupType : 'classic',
       sets: (e.sets || []).map(s => ({ weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0 })),
+      cardio: e.groupType === 'cardio' && e.cardio ? {
+        vitesse: +e.cardio.vitesse || 0, inclinaison: +e.cardio.inclinaison || 0, duree: +e.cardio.duree || 0,
+      } : null,
     })),
     totalVolume: +totalVolume || 0,
     duration: +duration || 0,

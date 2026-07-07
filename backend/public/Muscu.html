@@ -3609,35 +3609,45 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                       </div>
                       {/* Sets table */}
                       <div style={{padding:'8px 14px 10px'}}>
-                        {/* Header row */}
-                        <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,marginBottom:6}}>
-                          {['','Poids','Reps','Volume'].map((h,i)=>(
-                            <div key={i} style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',textAlign:i>0?'center':'left'}}>{h}</div>
-                          ))}
-                        </div>
-                        {(ex.sets||[]).map((s,si)=>{
-                          const vol=(s.weight||0)*(s.reps||0);
-                          return(
-                            <React.Fragment key={si}>
-                            <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.04)',alignItems:'center'}}>
-                              <div style={{width:22,height:22,borderRadius:7,background:'rgba(191,160,96,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent}}>{si+1}</div>
-                              <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
-                                {s.weight>0?<>{s.weight}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>—</span>}
-                              </div>
-                              <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
-                                {s.reps||'—'}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
-                              </div>
-                              <div style={{textAlign:'center',fontSize:11,fontWeight:600,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>
-                                {vol>0?<>{Math.round(vol)}<span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span></>:'—'}
-                              </div>
+                        {ex.groupType==='cardio'?(
+                          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                            {ex.cardio?.vitesse>0&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {ex.cardio.vitesse} km/h</div>}
+                            {ex.cardio?.inclinaison>0&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {ex.cardio.inclinaison}%</div>}
+                            {ex.cardio?.duree>0&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {ex.cardio.duree} min</div>}
+                          </div>
+                        ):(
+                          <>
+                            {/* Header row */}
+                            <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,marginBottom:6}}>
+                              {['','Poids','Reps','Volume'].map((h,i)=>(
+                                <div key={i} style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',textAlign:i>0?'center':'left'}}>{h}</div>
+                              ))}
                             </div>
-                            {s.note&&(
-                              <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic',padding:'0 0 4px 32px'}}>💬 {s.note}</div>
-                            )}
-                            </React.Fragment>
-                          );
-                        })}
-                        {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
+                            {(ex.sets||[]).map((s,si)=>{
+                              const vol=(s.weight||0)*(s.reps||0);
+                              return(
+                                <React.Fragment key={si}>
+                                <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.04)',alignItems:'center'}}>
+                                  <div style={{width:22,height:22,borderRadius:7,background:'rgba(191,160,96,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent}}>{si+1}</div>
+                                  <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
+                                    {s.weight>0?<>{s.weight}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>—</span>}
+                                  </div>
+                                  <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
+                                    {s.reps||'—'}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
+                                  </div>
+                                  <div style={{textAlign:'center',fontSize:11,fontWeight:600,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>
+                                    {vol>0?<>{Math.round(vol)}<span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span></>:'—'}
+                                  </div>
+                                </div>
+                                {s.note&&(
+                                  <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic',padding:'0 0 4px 32px'}}>💬 {s.note}</div>
+                                )}
+                                </React.Fragment>
+                              );
+                            })}
+                            {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -7172,13 +7182,13 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
 }
 
 // Style partagé pour mettre en évidence les groupes superset/triset dans les vues "Voir séance"
-const EX_GROUP_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'}};
+const EX_GROUP_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'},cardio:{label:'Tapis',color:'#C89040'}};
 function groupExercisesByType(exercises){
   const list=exercises||[];
   const groups=[];
   const byGroupId=new Map();
   list.forEach(e=>{
-    const isComplex=e.groupId&&(e.groupType==='superset'||e.groupType==='triset');
+    const isComplex=e.groupId&&(e.groupType==='superset'||e.groupType==='triset'||e.groupType==='cardio');
     if(isComplex&&byGroupId.has(e.groupId)){
       byGroupId.get(e.groupId).items.push(e);
     }else{
@@ -7274,7 +7284,13 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
                               </div>
                               {exVol>0&&<div style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(exVol).toLocaleString('fr-FR')} <span style={{fontSize:9,fontWeight:400,color:T.textFaint}}>kg</span></div>}
                             </div>
-                            {(e.sets||[]).length>0&&(
+                            {e.groupType==='cardio'?(
+                              <div style={{padding:'8px 14px',display:'flex',gap:8,flexWrap:'wrap'}}>
+                                {e.cardio?.vitesse>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {e.cardio.vitesse} km/h</div>}
+                                {e.cardio?.inclinaison>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {e.cardio.inclinaison}%</div>}
+                                {e.cardio?.duree>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {e.cardio.duree} min</div>}
+                              </div>
+                            ):(e.sets||[]).length>0&&(
                               <div style={{padding:'8px 14px'}}>
                                 <div style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
                                   {['Série','Poids','Reps','Volume'].map(h=>(
@@ -7372,7 +7388,11 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
                       <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
-                      {(e.sets||[]).map((st,si)=>(
+                      {e.groupType==='cardio'?(
+                        <div style={{fontSize:10,color:'#C89040',fontWeight:700}}>
+                          {[e.cardio?.vitesse>0&&`${e.cardio.vitesse} km/h`,e.cardio?.inclinaison>0&&`${e.cardio.inclinaison}%`,e.cardio?.duree>0&&`${e.cardio.duree} min`].filter(Boolean).join(' · ')}
+                        </div>
+                      ):(e.sets||[]).map((st,si)=>(
                         <div key={si} style={{fontSize:10,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{st.weight}kg×{st.reps}</div>
                       ))}
                     </div>
@@ -7550,7 +7570,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
 
   const[exercises,setExercises]=React.useState(()=>{
     if(resumeData)return(resumeData.exercises||[]).map(e=>({...e,id:e.id||uid()}));
-    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',cardio:e.cardio||null,sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
     return[];
   });
   const[elapsed,setElapsed]=React.useState(()=>{
@@ -7568,6 +7588,9 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
   const[setRest,setSetRest]=React.useState(90);
+  const[cardVitesse,setCardVitesse]=React.useState(0);
+  const[cardIncl,setCardIncl]=React.useState(0);
+  const[cardDuree,setCardDuree]=React.useState(0);
   const[saving,setSaving]=React.useState(false);
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
@@ -7612,7 +7635,9 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
       if(ex?.sets?.length){lastW=ex.sets[ex.sets.length-1]?.weight||0;lastRest=ex.sets[ex.sets.length-1]?.rest||90;break;}
     }
     setPendingEx({name,muscle:muscle||'',brand:brand||''});
-    setAddingTo(null);setSetW(lastW);setSetR(10);setSetRest(lastRest);setMode('add-set');
+    setAddingTo(null);setSetW(lastW);setSetR(10);setSetRest(lastRest);
+    setCardVitesse(0);setCardIncl(0);setCardDuree(0);
+    setMode('add-set');
   };
 
   const openAddSet=exIdx=>{
@@ -7623,13 +7648,36 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   };
 
   const openEditSet=(exIdx,setIdx)=>{
-    const s=exercises[exIdx]?.sets?.[setIdx];
+    const ex=exercises[exIdx];
+    if(!ex)return;
+    if(ex.groupType==='cardio'){
+      const c=ex.cardio||{};
+      setCardVitesse(c.vitesse||0);setCardIncl(c.inclinaison||0);setCardDuree(c.duree||0);
+      setAddingTo({exIdx});setEditingSet({exIdx,setIdx});setMode('add-set');
+      return;
+    }
+    const s=ex.sets?.[setIdx];
     if(!s)return;
     setSetW(s.weight||0);setSetR(s.reps||0);setSetRest(s.rest||90);
     setAddingTo({exIdx});setEditingSet({exIdx,setIdx});setMode('add-set');
   };
 
   const confirmSet=()=>{
+    const editingCardio=editingSet&&exercises[editingSet.exIdx]?.groupType==='cardio';
+    const creatingCardio=!editingSet&&addingTo===null&&pendingGroupType==='cardio';
+    if(editingCardio||creatingCardio){
+      if(cardVitesse<=0&&cardIncl<=0&&cardDuree<=0)return;
+      const cardioObj={vitesse:cardVitesse||0,inclinaison:cardIncl||0,duree:cardDuree||0};
+      if(editingCardio){
+        setExercises(prev=>prev.map((e,i)=>i!==editingSet.exIdx?e:{...e,cardio:cardioObj}));
+        setEditingSet(null);
+      }else{
+        setExercises(prev=>[...prev,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,brand:pendingEx.brand,cardio:cardioObj,sets:[{done:true}],groupId:uid(),groupType:'cardio'}]);
+        setPendingGroupId(null);
+      }
+      setMode('session');
+      return;
+    }
     if(setR<=0)return;
     if(editingSet){
       setExercises(prev=>prev.map((e,i)=>i!==editingSet.exIdx?e:{...e,sets:e.sets.map((st,j)=>j!==editingSet.setIdx?st:{...st,weight:setW,reps:setR,rest:setRest})}));
@@ -7658,7 +7706,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,sets:e.sets}));
+      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets}));
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
       }else{
@@ -7681,7 +7729,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     return[...map.values()];
   },[exercises]);
 
-  const TYPE_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'}};
+  const TYPE_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'},cardio:{label:'Tapis',color:'#C89040'}};
   const REST_PRESETS=[30,45,60,90,120,180];
 
   // ── Mode : choisir exercice ──────────────────────────────────────────────────
@@ -7727,53 +7775,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     const exName=isNew?pendingEx.name:exercises[addingTo.exIdx]?.name;
     const setNum=isNew?1:editingSet?editingSet.setIdx+1:(exercises[addingTo.exIdx]?.sets?.length||0)+1;
     const closeSheet=()=>{setEditingSet(null);setMode(isNew?'pick-exercise':'session');};
+    const editingCardioEx=editingSet&&exercises[editingSet.exIdx]?.groupType==='cardio';
+    const isCardioMode=editingCardioEx||(isNew&&pendingGroupType==='cardio');
+    const canConfirm=isCardioMode?(cardVitesse>0||cardIncl>0||cardDuree>0):setR>0;
     return(
       <div style={{position:'fixed',inset:0,zIndex:310,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'flex-end'}} onClick={closeSheet}>
         <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)',maxHeight:'92vh',overflowY:'auto'}}>
           <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{editingSet?`Modifier · Série ${setNum}`:`Série ${setNum}`}</div>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{editingSet?(isCardioMode?'Modifier · Tapis':`Modifier · Série ${setNum}`):(isCardioMode?'Tapis':`Série ${setNum}`)}</div>
           <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
 
-          {/* Charge × Reps */}
-          <div style={{display:'flex',alignItems:'stretch',gap:0,marginBottom:16,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
-            {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Reps',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min},idx)=>(
-              <React.Fragment key={label}>
-                {idx===1&&<div style={{width:1,background:T.border,flexShrink:0}}/>}
-                <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
-                  <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',paddingTop:10,marginBottom:4}}>{label}</div>
-                  <div style={{display:'flex',alignItems:'center',width:'100%',flex:1}}>
-                    <button onClick={()=>adj(set,-step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                      <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',border:'none',background:'transparent',color:T.text,fontSize:24,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
-                    </div>
-                    <button onClick={()=>adj(set,step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
-                  </div>
-                  <div style={{fontSize:10,color:T.textFaint,fontWeight:600,paddingBottom:10}}>{unit}</div>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-
-          <div style={{marginBottom:isNew&&!pendingGroupId?16:20}}>
-            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Repos</div>
-            <div style={{display:'flex',gap:5,marginBottom:8}}>
-              {REST_PRESETS.map(v=>(
-                <button key={v} onClick={()=>setSetRest(v)} style={{flex:1,height:30,borderRadius:9,border:`1px solid ${setRest===v?'rgba(90,138,224,0.5)':T.border}`,background:setRest===v?'rgba(90,138,224,0.15)':'rgba(255,255,255,0.04)',color:setRest===v?'#5A8AE0':T.textDim,fontSize:10,fontWeight:setRest===v?700:500,cursor:'pointer'}}>
-                  {fmtRest(v)}
-                </button>
-              ))}
-            </div>
-            <div style={{display:'flex',alignItems:'center',height:44,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
-              <button onClick={()=>adj(setSetRest,-15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-              <div style={{flex:1,textAlign:'center',fontSize:16,fontWeight:700,color:T.text}}>{fmtRest(setRest)}</div>
-              <button onClick={()=>adj(setSetRest,15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
-            </div>
-          </div>
-
           {isNew&&!pendingGroupId&&(
-            <div style={{marginBottom:20}}>
+            <div style={{marginBottom:16}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Type de série</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 {Object.entries(TYPE_STYLE).map(([v,{label,color}])=>(
                   <button key={v} onClick={()=>setPendingGroupType(v)} style={{height:40,borderRadius:12,border:`1px solid ${pendingGroupType===v?color+'80':'rgba(255,255,255,0.08)'}`,background:pendingGroupType===v?color+'18':'rgba(255,255,255,0.03)',color:pendingGroupType===v?color:T.textDim,fontSize:12,fontWeight:pendingGroupType===v?700:500,cursor:'pointer'}}>
                     {label}
@@ -7783,10 +7798,70 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
             </div>
           )}
 
-          <button onClick={confirmSet} disabled={setR<=0} style={{width:'100%',height:52,borderRadius:16,border:'none',background:setR>0?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:setR>0?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:setR>0?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
-            <Icon name="check" size={18} stroke={setR>0?'#fff':T.textFaint}/>{isNew?'Créer l\'exercice':editingSet?'Enregistrer les modifications':'Valider la série'}
+          {isCardioMode?(
+            /* Tapis : vitesse / inclinaison / durée */
+            <div style={{display:'flex',alignItems:'stretch',gap:0,marginBottom:20,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+              {[{label:'Vitesse',unit:'km/h',val:cardVitesse,set:setCardVitesse,step:0.5,min:0},{label:'Inclinaison',unit:'%',val:cardIncl,set:setCardIncl,step:0.5,min:0},{label:'Durée',unit:'min',val:cardDuree,set:setCardDuree,step:1,min:0}].map(({label,unit,val,set,step,min},idx)=>(
+                <React.Fragment key={label}>
+                  {idx>0&&<div style={{width:1,background:T.border,flexShrink:0}}/>}
+                  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                    <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',paddingTop:10,marginBottom:4,textAlign:'center'}}>{label}</div>
+                    <div style={{display:'flex',alignItems:'center',width:'100%',flex:1}}>
+                      <button onClick={()=>adj(set,-step,min)} style={{width:26,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:20,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                        <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',border:'none',background:'transparent',color:T.text,fontSize:17,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
+                      </div>
+                      <button onClick={()=>adj(set,step,min)} style={{width:26,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:20,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                    </div>
+                    <div style={{fontSize:9,color:T.textFaint,fontWeight:600,paddingBottom:10}}>{unit}</div>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          ):(
+            <>
+              {/* Charge × Reps */}
+              <div style={{display:'flex',alignItems:'stretch',gap:0,marginBottom:16,borderRadius:16,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+                {[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Reps',unit:'reps',val:setR,set:setSetR,step:1,min:1}].map(({label,unit,val,set,step,min},idx)=>(
+                  <React.Fragment key={label}>
+                    {idx===1&&<div style={{width:1,background:T.border,flexShrink:0}}/>}
+                    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                      <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',paddingTop:10,marginBottom:4}}>{label}</div>
+                      <div style={{display:'flex',alignItems:'center',width:'100%',flex:1}}>
+                        <button onClick={()=>adj(set,-step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                          <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',border:'none',background:'transparent',color:T.text,fontSize:24,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
+                        </div>
+                        <button onClick={()=>adj(set,step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                      </div>
+                      <div style={{fontSize:10,color:T.textFaint,fontWeight:600,paddingBottom:10}}>{unit}</div>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Repos</div>
+                <div style={{display:'flex',gap:5,marginBottom:8}}>
+                  {REST_PRESETS.map(v=>(
+                    <button key={v} onClick={()=>setSetRest(v)} style={{flex:1,height:30,borderRadius:9,border:`1px solid ${setRest===v?'rgba(90,138,224,0.5)':T.border}`,background:setRest===v?'rgba(90,138,224,0.15)':'rgba(255,255,255,0.04)',color:setRest===v?'#5A8AE0':T.textDim,fontSize:10,fontWeight:setRest===v?700:500,cursor:'pointer'}}>
+                      {fmtRest(v)}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:'flex',alignItems:'center',height:44,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',background:'rgba(255,255,255,0.04)'}}>
+                  <button onClick={()=>adj(setSetRest,-15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                  <div style={{flex:1,textAlign:'center',fontSize:16,fontWeight:700,color:T.text}}>{fmtRest(setRest)}</div>
+                  <button onClick={()=>adj(setSetRest,15,0)} style={{width:44,height:'100%',border:'none',background:'transparent',color:T.textDim,fontSize:22,fontWeight:300,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <button onClick={confirmSet} disabled={!canConfirm} style={{width:'100%',height:52,borderRadius:16,border:'none',background:canConfirm?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.05)',color:canConfirm?'#fff':T.textFaint,fontSize:15,fontWeight:800,cursor:canConfirm?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
+            <Icon name="check" size={18} stroke={canConfirm?'#fff':T.textFaint}/>{isNew?'Créer l\'exercice':editingSet?'Enregistrer les modifications':'Valider la série'}
           </button>
-          {editingSet&&(
+          {editingSet&&!isCardioMode&&(
             <button onClick={deleteSet} style={{width:'100%',height:46,marginTop:10,borderRadius:14,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
               <Icon name="trash" size={14} stroke={T.danger}/>Supprimer cette série
             </button>
@@ -7874,7 +7949,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
           const ts=TYPE_STYLE[g.type]||TYPE_STYLE.classic;
           const isComplex=g.type!=='classic';
           const maxInGroup=g.type==='triset'?3:2;
-          const canAddToGroup=isComplex&&g.items.length<maxInGroup;
+          const canAddToGroup=isComplex&&g.type!=='cardio'&&g.items.length<maxInGroup;
           return(
             <div key={gi} style={{marginBottom:10,borderRadius:16,border:`1px solid ${isComplex?ts.color+'45':T.border}`,background:isComplex?ts.color+'07':'rgba(255,255,255,0.025)',overflow:'hidden'}}>
               {isComplex&&(
@@ -7898,27 +7973,40 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
                       <Icon name="trash" size={12} stroke="#B85070"/>
                     </button>
                   </div>
-                  {ex.sets.length>0&&(
-                    <div style={{padding:'0 14px 4px',display:'flex',flexDirection:'column',gap:3}}>
-                      {ex.sets.map((s,si)=>(
-                        <div key={si} onClick={()=>openEditSet(ex.idx,si)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)',cursor:'pointer'}}>
-                          <div style={{width:20,height:20,borderRadius:5,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
-                          <div style={{flex:1,fontSize:12,fontWeight:600}}>
-                            {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint,fontSize:10}}>PDC</span>}
-                            <span style={{color:T.textFaint,margin:'0 5px'}}>×</span>
-                            <span>{s.reps}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
-                            {s.rest>0&&<span style={{fontSize:9,color:T.textFaint,marginLeft:8}}>⏱ {fmtRest(s.rest)}</span>}
-                          </div>
-                          <Icon name="edit" size={12} stroke={T.textFaint}/>
-                        </div>
-                      ))}
+                  {ex.groupType==='cardio'?(
+                    <div style={{padding:'0 14px 10px'}}>
+                      <div onClick={()=>openEditSet(ex.idx,0)} style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'8px 10px',borderRadius:10,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.22)',cursor:'pointer'}}>
+                        {ex.cardio?.vitesse>0&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>⚡ {ex.cardio.vitesse} km/h</span>}
+                        {ex.cardio?.inclinaison>0&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>📐 {ex.cardio.inclinaison}%</span>}
+                        {ex.cardio?.duree>0&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>⏱ {ex.cardio.duree} min</span>}
+                        <Icon name="edit" size={12} stroke="#C89040" style={{marginLeft:'auto'}}/>
+                      </div>
                     </div>
+                  ):(
+                    <>
+                      {ex.sets.length>0&&(
+                        <div style={{padding:'0 14px 4px',display:'flex',flexDirection:'column',gap:3}}>
+                          {ex.sets.map((s,si)=>(
+                            <div key={si} onClick={()=>openEditSet(ex.idx,si)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)',cursor:'pointer'}}>
+                              <div style={{width:20,height:20,borderRadius:5,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
+                              <div style={{flex:1,fontSize:12,fontWeight:600}}>
+                                {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint,fontSize:10}}>PDC</span>}
+                                <span style={{color:T.textFaint,margin:'0 5px'}}>×</span>
+                                <span>{s.reps}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>reps</span>
+                                {s.rest>0&&<span style={{fontSize:9,color:T.textFaint,marginLeft:8}}>⏱ {fmtRest(s.rest)}</span>}
+                              </div>
+                              <Icon name="edit" size={12} stroke={T.textFaint}/>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{padding:'4px 14px 10px'}}>
+                        <button onClick={()=>openAddSet(ex.idx)} style={{width:'100%',height:32,borderRadius:10,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.04)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+                          <Icon name="plus" size={13} stroke="#5A8AE0"/>+ Série
+                        </button>
+                      </div>
+                    </>
                   )}
-                  <div style={{padding:'4px 14px 10px'}}>
-                    <button onClick={()=>openAddSet(ex.idx)} style={{width:'100%',height:32,borderRadius:10,border:'1px dashed rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.04)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
-                      <Icon name="plus" size={13} stroke="#5A8AE0"/>+ Série
-                    </button>
-                  </div>
                 </div>
               ))}
               {canAddToGroup&&(
@@ -12800,10 +12888,12 @@ function LiveSessionsView({sessions,onStartWorkout}){
 
   const replaySession=s=>{
     if(!s||!s.exercises||s.exercises.length===0)return;
-    const exs=s.exercises.map(ex=>({
+    const exs=s.exercises.map(ex=>ex.groupType==='cardio'?{
+      ...ex,style:'CARDIO',cardio:ex.cardio,sets:[{weight:0,reps:0,done:false}]
+    }:{
       ...ex,
       sets:(ex.sets||[]).map(set=>({weight:set.weight||0,reps:set.reps||0,repsStr:String(set.reps||'?'),done:false}))
-    }));
+    });
     onStartWorkout({name:s.name||'Séance Live',muscles:'Live',exercises:exs});
     setDetail(null);
   };
@@ -12852,9 +12942,15 @@ function LiveSessionsView({sessions,onStartWorkout}){
                   <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle||''}</div>
                 </div>
-                <div style={{fontSize:11,fontWeight:700,color:'#BFA060',flexShrink:0}}>{(ex.sets||[]).length} séries</div>
+                <div style={{fontSize:11,fontWeight:700,color:ex.groupType==='cardio'?'#C89040':'#BFA060',flexShrink:0}}>{ex.groupType==='cardio'?'Tapis':`${(ex.sets||[]).length} séries`}</div>
               </div>
-              {(ex.sets||[]).length>0&&(
+              {ex.groupType==='cardio'?(
+                <div style={{display:'flex',flexWrap:'wrap',gap:4,paddingLeft:34}}>
+                  {ex.cardio?.vitesse>0&&<div style={{padding:'3px 8px',borderRadius:6,background:'rgba(200,144,64,0.1)',border:'1px solid rgba(200,144,64,0.2)',fontSize:10,fontWeight:600,color:'#C89040'}}>⚡ {ex.cardio.vitesse} km/h</div>}
+                  {ex.cardio?.inclinaison>0&&<div style={{padding:'3px 8px',borderRadius:6,background:'rgba(200,144,64,0.1)',border:'1px solid rgba(200,144,64,0.2)',fontSize:10,fontWeight:600,color:'#C89040'}}>📐 {ex.cardio.inclinaison}%</div>}
+                  {ex.cardio?.duree>0&&<div style={{padding:'3px 8px',borderRadius:6,background:'rgba(200,144,64,0.1)',border:'1px solid rgba(200,144,64,0.2)',fontSize:10,fontWeight:600,color:'#C89040'}}>⏱ {ex.cardio.duree} min</div>}
+                </div>
+              ):(ex.sets||[]).length>0&&(
                 <div style={{display:'flex',flexWrap:'wrap',gap:4,paddingLeft:34}}>
                   {(ex.sets||[]).map((set,si)=>(
                     <div key={si} style={{padding:'3px 8px',borderRadius:6,background:'rgba(191,160,96,0.08)',border:'1px solid rgba(191,160,96,0.15)',fontSize:10,fontWeight:600,color:T.textDim}}>
