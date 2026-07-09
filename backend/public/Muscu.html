@@ -482,6 +482,12 @@ function fixCardioVal(v) {
   return String(v||'');
 }
 
+// Échappe le HTML pour toute donnée utilisateur (nom de produit importé, nom de repas...) injectée
+// dans un template HTML généré côté client (export PDF via document.write dans une popup same-origin).
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
   const categoryFallback = !!(opts && opts.categoryFallback);
@@ -925,8 +931,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
           name:e.name,muscle:e.muscle,
-          sets:e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
-        })).filter(e=>e.sets.length>0),
+          ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
+          ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
+          sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
+        })).filter(e=>e.style==='CARDIO'||e.sets.length>0),
       };
       if(rpe!=null)snap.rpe=rpe;
       onSaveSession(snap);
@@ -3609,7 +3617,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                       </div>
                       {/* Sets table */}
                       <div style={{padding:'8px 14px 10px'}}>
-                        {ex.groupType==='cardio'?(
+                        {exType(ex)==='cardio'?(
                           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                             {ex.cardio?.vitesse>0&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {ex.cardio.vitesse} km/h</div>}
                             {ex.cardio?.inclinaison>0&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {ex.cardio.inclinaison}%</div>}
@@ -5071,13 +5079,13 @@ function exportNutritionPDF(plan,athleteName){
   const totalDays=weeksData.reduce((a,w)=>a+w.days.length,0);
   const shop=buildShoppingList(plan);
   const dateStr=new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
-  const name=athleteName||'Athlète';
+  const name=escapeHtml(athleteName||'Athlète');
 
   function renderMealRow(it,i){
     const nu=normalizeUnit(it.unit);
     const unitLabel=nu==='BOITE'?(it.qty>1?'boîtes':'boîte'):nu==='U'?(it.qty>1?'unités':'unité'):nu.toLowerCase();
     return`<tr${i%2===1?' class="alt"':''}>
-      <td>${it.name||'—'}</td>
+      <td>${escapeHtml(it.name)||'—'}</td>
       <td class="r">${it.qty||0}<span class="unit">${unitLabel}</span></td>
       <td class="r">${Math.round(it.kcal||0)}<span class="unit">kcal</span></td>
       <td class="r">${Math.round(it.p||0)}<span class="unit">g</span></td>
@@ -5196,7 +5204,7 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#BFA060;font-size:11px;b
         </div>
         <table class="shop-table"><tbody>
           ${grp.items.map((it,i)=>`<tr${i%2===1?' class="alt"':''}>
-            <td class="shop-prod">${it.name}</td>
+            <td class="shop-prod">${escapeHtml(it.name)}</td>
             <td class="shop-qty">${formatShopQty(it)}</td>
           </tr>`).join('')}
         </tbody></table>
@@ -5229,7 +5237,7 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#BFA060;font-size:11px;b
         return`<div class="meal">
           <div class="meal-head">
             <span class="meal-emoji">${m.emoji||'🍽️'}</span>
-            <span class="meal-name">${m.label}</span>
+            <span class="meal-name">${escapeHtml(m.label)}</span>
             <span class="meal-time">${m.timeStart}${m.timeEnd?' – '+m.timeEnd:''}</span>
             <span class="meal-kcal-badge">${Math.round(mm.kcal)} kcal</span>
           </div>
@@ -5239,7 +5247,7 @@ tr.subtotal td{background:#fff7f4;font-weight:700;color:#BFA060;font-size:11px;b
           </tr></thead><tbody>
             ${m.items.map((it,i)=>renderMealRow(it,i)).join('')}
             <tr class="subtotal">
-              <td colspan="2">Sous-total ${m.label}</td>
+              <td colspan="2">Sous-total ${escapeHtml(m.label)}</td>
               <td class="r">${Math.round(mm.kcal)} kcal</td>
               <td class="r">${Math.round(mm.p)} g</td>
               <td class="r">${Math.round(mm.c)} g</td>
@@ -7143,16 +7151,26 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
                     <div key={i} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                         <div style={{fontSize:12,fontWeight:600}}>{ex.name}</div>
-                        <div style={{fontSize:10,color:T.textFaint}}>{ex.sets?.length||0} séries</div>
+                        {exType(ex)!=='cardio'&&<div style={{fontSize:10,color:T.textFaint}}>{ex.sets?.length||0} séries</div>}
                       </div>
-                      <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
-                        {(ex.sets||[]).filter(s=>s.done).map((s,si)=>(
-                          <span key={si} style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(44,196,160,0.1)',color:'#2CC4A0',border:'1px solid rgba(44,196,160,0.2)'}}>{s.weight}kg×{s.reps}</span>
-                        ))}
-                      </div>
-                      {(ex.sets||[]).filter(s=>s.done&&s.note).map((s,si)=>(
-                        <div key={si} style={{fontSize:10,color:T.textFaint,fontStyle:'italic',marginTop:3}}>💬 {s.note}</div>
-                      ))}
+                      {exType(ex)==='cardio'?(
+                        <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                          {ex.cardio?.vitesse>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>⚡ {ex.cardio.vitesse} km/h</span>}
+                          {ex.cardio?.inclinaison>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>📐 {ex.cardio.inclinaison}%</span>}
+                          {ex.cardio?.duree>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>⏱ {ex.cardio.duree} min</span>}
+                        </div>
+                      ):(
+                        <>
+                          <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                            {(ex.sets||[]).map((s,si)=>(
+                              <span key={si} style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(44,196,160,0.1)',color:'#2CC4A0',border:'1px solid rgba(44,196,160,0.2)'}}>{s.weight}kg×{s.reps}</span>
+                            ))}
+                          </div>
+                          {(ex.sets||[]).filter(s=>s.note).map((s,si)=>(
+                            <div key={si} style={{fontSize:10,color:T.textFaint,fontStyle:'italic',marginTop:3}}>💬 {s.note}</div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -7182,20 +7200,36 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
 }
 
 // Style partagé pour mettre en évidence les groupes superset/triset dans les vues "Voir séance"
-const EX_GROUP_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'},cardio:{label:'Tapis',color:'#C89040'}};
+// Deux systèmes de tag coexistent selon l'origine de la séance : ex.groupType (séances live coach,
+// classic/superset/triset/cardio, groupées par groupId) et ex.style (séances importées Excel / propres
+// à l'athlète, CLASSIQUE/SUPERSET/TRISET/ABDOS/CARDIO, groupées par adjacence). exType() normalise les deux.
+const EX_GROUP_STYLE={classic:{label:'Classique',color:'#2CC4A0'},superset:{label:'Superset',color:'#5A8AE0'},triset:{label:'Triset',color:'#BFA060'},cardio:{label:'Tapis',color:'#C89040'},abdos:{label:'Abdos',color:'#2CC4A0'}};
+function exType(e){
+  if(e.groupType&&e.groupType!=='classic')return e.groupType;
+  const s=(e.style||'').toLowerCase();
+  return(s==='superset'||s==='triset'||s==='cardio'||s==='abdos')?s:'classic';
+}
 function groupExercisesByType(exercises){
   const list=exercises||[];
   const groups=[];
   const byGroupId=new Map();
+  const maxItems={superset:2,triset:3,abdos:Infinity};
   list.forEach(e=>{
-    const isComplex=e.groupId&&(e.groupType==='superset'||e.groupType==='triset'||e.groupType==='cardio');
-    if(isComplex&&byGroupId.has(e.groupId)){
+    const type=exType(e);
+    const isComplex=type!=='classic';
+    if(isComplex&&e.groupId&&byGroupId.has(e.groupId)){
       byGroupId.get(e.groupId).items.push(e);
-    }else{
-      const g={type:isComplex?e.groupType:'classic',items:[e]};
-      if(isComplex)byGroupId.set(e.groupId,g);
-      groups.push(g);
+      return;
     }
+    const prev=groups[groups.length-1];
+    const canAdjMerge=isComplex&&type!=='cardio'&&!e.groupId&&prev&&prev.type===type&&!prev.items[0].groupId&&prev.items.length<(maxItems[type]||Infinity);
+    if(canAdjMerge){
+      prev.items.push(e);
+      return;
+    }
+    const g={type:isComplex?type:'classic',items:[e]};
+    if(isComplex&&e.groupId)byGroupId.set(e.groupId,g);
+    groups.push(g);
   });
   return groups;
 }
@@ -7284,7 +7318,7 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
                               </div>
                               {exVol>0&&<div style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(exVol).toLocaleString('fr-FR')} <span style={{fontSize:9,fontWeight:400,color:T.textFaint}}>kg</span></div>}
                             </div>
-                            {e.groupType==='cardio'?(
+                            {exType(e)==='cardio'?(
                               <div style={{padding:'8px 14px',display:'flex',gap:8,flexWrap:'wrap'}}>
                                 {e.cardio?.vitesse>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {e.cardio.vitesse} km/h</div>}
                                 {e.cardio?.inclinaison>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {e.cardio.inclinaison}%</div>}
@@ -7388,7 +7422,7 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
                       <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
-                      {e.groupType==='cardio'?(
+                      {exType(e)==='cardio'?(
                         <div style={{fontSize:10,color:'#C89040',fontWeight:700}}>
                           {[e.cardio?.vitesse>0&&`${e.cardio.vitesse} km/h`,e.cardio?.inclinaison>0&&`${e.cardio.inclinaison}%`,e.cardio?.duree>0&&`${e.cardio.duree} min`].filter(Boolean).join(' · ')}
                         </div>
@@ -7606,11 +7640,16 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     if(exercises.length===0&&!sessionName){clearLiveStorage();return;}
     saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName});
   },[exercises,sessionName]);
+  // Filet de sécurité : re-sauvegarde périodiquement le chrono même sans modif d'exercice.
+  // Utilise une ref pour "elapsed" car il change chaque seconde — le mettre en dépendance
+  // relancerait l'intervalle à chaque tick et l'empêcherait de jamais se déclencher.
+  const elapsedRef=React.useRef(elapsed);
+  React.useEffect(()=>{elapsedRef.current=elapsed;},[elapsed]);
   React.useEffect(()=>{
     if(editSession||exercises.length===0)return;
-    const t=setTimeout(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName}),10000);
-    return()=>clearTimeout(t);
-  },[elapsed]);
+    const t=setInterval(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed:elapsedRef.current,sessionName}),10000);
+    return()=>clearInterval(t);
+  },[exercises,sessionName,editSession]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -11260,13 +11299,13 @@ function exportAINutritionPDF(plan, goalLabel){
     const mealsHtml=meals.map(meal=>{
       const mKcal=(meal.items||[]).reduce((s,it)=>s+(+it.kcal||0),0);
       const rows=(meal.items||[]).map((it,i)=>`<tr class="${i%2===1?'alt':''}">`+
-        `<td>${it.name}</td><td class="r">${it.qty}<span class="unit">${normalizeUnit(it.unit).toLowerCase()}</span></td>`+
+        `<td>${escapeHtml(it.name)}</td><td class="r">${it.qty}<span class="unit">${normalizeUnit(it.unit).toLowerCase()}</span></td>`+
         `<td class="r">${it.p}<span class="unit">g</span></td>`+
         `<td class="r">${it.c}<span class="unit">g</span></td>`+
         `<td class="r">${it.f}<span class="unit">g</span></td>`+
         `<td class="r">${it.kcal}<span class="unit">kcal</span></td></tr>`).join('');
       return`<div class="meal"><div class="meal-head"><span class="meal-emoji">${meal.emoji||'🍽️'}</span>`+
-        `<span class="meal-name">${meal.label}</span><span class="meal-time">${meal.timeStart||''}</span>`+
+        `<span class="meal-name">${escapeHtml(meal.label)}</span><span class="meal-time">${escapeHtml(meal.timeStart||'')}</span>`+
         `<span class="meal-kcal-badge">${Math.round(mKcal)} kcal</span></div>`+
         `<table><thead><tr><th>Aliment</th><th class="r">Qté</th><th class="r">Prot</th><th class="r">Gluc</th><th class="r">Lip</th><th class="r">Kcal</th></tr></thead>`+
         `<tbody>${rows}</tbody></table></div>`;
