@@ -33,9 +33,16 @@ if (IS_PROD && !process.env.JWT_SECRET) {
   process.exit(1);
 }
 const JWT_SECRET       = process.env.JWT_SECRET || 'dev-secret-' + Math.random().toString(36).slice(2);
-// Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev).
-const CORS_ORIGINS     = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+// Origines autorisées pour CORS (séparées par virgule). Wildcard si non défini (dev uniquement).
 const PUBLIC_URL       = process.env.PUBLIC_URL || 'https://prime-athl.onrender.com';
+let CORS_ORIGINS       = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+if (IS_PROD && CORS_ORIGINS.length === 0) {
+  // Pas de CORS_ORIGINS explicite en prod : on se limite à PUBLIC_URL plutôt que d'autoriser
+  // n'importe quelle origine (le middleware cors ci-dessous traiterait sinon CORS_ORIGINS.length===0
+  // comme "wildcard", ce qui n'est censé arriver qu'en dev).
+  CORS_ORIGINS = [PUBLIC_URL];
+  console.warn(`[config] CORS_ORIGINS non défini en production — restreint par défaut à ${PUBLIC_URL}. Définis CORS_ORIGINS (séparées par virgule) si d'autres domaines doivent appeler l'API.`);
+}
 if (IS_PROD && !PUBLIC_URL.startsWith('https://')) {
   console.error('[config] FATAL: PUBLIC_URL doit commencer par https:// en production — les liens emails seront cassés.');
   process.exit(1);
@@ -721,6 +728,9 @@ async function sendEmail({ to, subject, html }) {
   } catch(e) { console.error('[resend] error:', e.message); return { sent: false, reason: 'network' }; }
 }
 
+// Échappe le HTML pour toute donnée utilisateur interpolée dans un email (nom, email saisis à l'inscription)
+const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 const emailBase = (content) => `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a22;">
   <div style="margin-bottom:20px;"><span style="font-size:18px;font-weight:800;color:#d97757;">Prime Athl</span></div>
   ${content}
@@ -743,12 +753,14 @@ async function sendResetEmail(toEmail, link) {
 }
 
 async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
+  const safeName = escapeHtml(athleteName);
+  const safeEmail = escapeHtml(athleteEmail);
   return sendEmail({
     to: coachEmail,
     subject: `Prime Athl — Nouvelle demande d'inscription : ${athleteName}`,
     html: emailBase(`
       <h2 style="font-size:20px;margin:0 0 10px;">Nouvelle demande d'inscription 🏋️</h2>
-      <p><strong>${athleteName}</strong> (<a href="mailto:${athleteEmail}" style="color:#d97757;">${athleteEmail}</a>) vient de s'inscrire et attend ton approbation.</p>
+      <p><strong>${safeName}</strong> (<a href="mailto:${safeEmail}" style="color:#d97757;">${safeEmail}</a>) vient de s'inscrire et attend ton approbation.</p>
       ${btn(`${PUBLIC_URL}/Muscu.html`, 'Ouvrir Prime Athl')}
       <p style="font-size:12px;color:#666;">Connecte-toi et va dans l'onglet <strong>Coach</strong> pour approuver ou refuser sa demande.</p>
     `),
@@ -1290,11 +1302,12 @@ app.get('/api/session-library', authRequired, (req, res) => {
 });
 
 app.patch('/api/session-library/swap', authRequired, (req, res) => {
-  const { from, to } = req.body || {};
+  const from = parseInt(req.body?.from, 10);
+  const to = parseInt(req.body?.to, 10);
   const lib = DATA.sessionLibrary[req.user.id];
   if (!lib || !lib.sessions) return res.json({ ok: false });
   const arr = lib.sessions;
-  if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
   [arr[from], arr[to]] = [arr[to], arr[from]];
   persist();
   res.json({ ok: true });
@@ -1343,11 +1356,12 @@ app.delete('/api/my-library/sessions/:id', authRequired, (req, res) => {
 });
 
 app.patch('/api/my-library/sessions/swap', authRequired, (req, res) => {
-  const { from, to } = req.body || {};
+  const from = parseInt(req.body?.from, 10);
+  const to = parseInt(req.body?.to, 10);
   const lib = DATA.myLibrary[req.user.id];
   if (!lib || !lib.sessions) return res.json({ ok: false });
   const arr = lib.sessions;
-  if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return res.status(400).json({ error: 'out_of_range' });
   [arr[from], arr[to]] = [arr[to], arr[from]];
   persist();
   res.json({ ok: true });
@@ -1489,16 +1503,29 @@ app.post('/api/sessions', authRequired, (req, res) => {
   const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
   if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name_required' });
   const safeVolume = Math.max(0, Math.min(1e7, parseFloat(totalVolume) || 0));
-  const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => ({
-    name: String(ex.name || '').slice(0, 100),
-    muscle: String(ex.muscle || '').slice(0, 50),
-    sets: (Array.isArray(ex.sets) ? ex.sets : []).slice(0, 30).map(s => ({
-      weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
-      reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
-      done: !!s.done,
-      note: s.note ? String(s.note).slice(0, 200) : undefined,
-    })),
-  }));
+  const VALID_EX_STYLES = ['SUPERSET', 'TRISET', 'ABDOS', 'CARDIO'];
+  const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => {
+    const style = VALID_EX_STYLES.includes(ex.style) ? ex.style : undefined;
+    return {
+      name: String(ex.name || '').slice(0, 100),
+      muscle: String(ex.muscle || '').slice(0, 50),
+      ...(style ? { style } : {}),
+      ...(style === 'CARDIO' && ex.cardio ? {
+        cardio: {
+          vitesse: Math.max(0, Math.min(60, parseFloat(ex.cardio.vitesse) || 0)),
+          inclinaison: Math.max(0, Math.min(30, parseFloat(ex.cardio.inclinaison) || 0)),
+          duree: Math.max(0, Math.min(600, parseFloat(ex.cardio.duree) || 0)),
+          distance: Math.max(0, Math.min(200, parseFloat(ex.cardio.distance) || 0)),
+        },
+      } : {}),
+      sets: (Array.isArray(ex.sets) ? ex.sets : []).slice(0, 30).map(s => ({
+        weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
+        reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
+        done: !!s.done,
+        note: s.note ? String(s.note).slice(0, 200) : undefined,
+      })),
+    };
+  });
   const session = {
     id, userId: req.user.id,
     date: date || new Date().toISOString(),
@@ -3154,7 +3181,7 @@ process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 app.use((err, req, res, next) => {
   console.error('Express error:', err);
   if (res.headersSent) return next(err);
-  res.status(500).json({ error: 'server_error', detail: err.message });
+  res.status(500).json({ error: 'server_error', ...(IS_PROD ? {} : { detail: err.message }) });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
