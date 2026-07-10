@@ -955,7 +955,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:16}}>
           {[1,2,3,4,5,6,7,8,9,10].map(v=>{
             const colors=['','#5A8AE0','#5A8AE0','#2CC4A0','#2CC4A0','#2CC4A0','#C89040','#C89040','#BFA060','#B85070','#B85070'];
-            const labels=['','😴','😊','💪','💪','🔥','🔥','😤','😤','💀','💀'];
+            const labels=['','💩','🐣','👌🏾','💪🏽','🔥','🦾','⚔️','🥵','🤯','🦍'];
             return(
               <button key={v} onClick={()=>{setShowRpe(false);finishAndClose(v);}}
                 style={{height:56,borderRadius:14,border:`1px solid ${colors[v]}44`,background:`${colors[v]}18`,color:T.text,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,transition:'transform 0.1s'}}
@@ -3165,15 +3165,27 @@ const MOTIVATION_QUOTES=[
   "Les résultats appartiennent aux persévérants",
 ];
 
+// Chaque message est une fonction du prénom (avec repli si non renseigné) pour personnaliser
+// l'écran de félicitations affiché juste après avoir terminé une séance.
 const CONGRATS_MESSAGES=[
-  "Énorme séance, t'as tout donné !",
-  "Bravo champion, c'était du lourd !",
-  "Toujours plus fort, continue comme ça !",
-  "Le travail paie, ça se voit !",
-  "Une rep de plus que la dernière fois ✨",
-  "T'es une machine, respect !",
-  "Discipline > motivation, et tu l'as prouvé.",
-  "Force et honneur, séance complète !",
+  name=>`Énorme séance, ${name}, t'as tout donné !`,
+  name=>`Bravo ${name}, c'était du lourd !`,
+  name=>`Toujours plus fort ${name}, continue comme ça !`,
+  name=>`Le travail paie ${name}, ça se voit !`,
+  name=>`Une rep de plus que la dernière fois, ${name} ✨`,
+  name=>`T'es une machine, ${name}, respect !`,
+  name=>`Discipline > motivation, et tu l'as prouvé, ${name}.`,
+  name=>`Force et honneur, ${name}, séance complète !`,
+  name=>`${name}, cette version de toi n'existait pas hier.`,
+  name=>`Bien joué ${name}, encore une séance dans la légende.`,
+  name=>`${name} vs la flemme : ${name} 1 - 0 flemme.`,
+  name=>`Chaque séance te rapproche du but, ${name}.`,
+  name=>`Séance validée, ${name}. Ton futur toi te remercie.`,
+  name=>`${name}, t'as encore repoussé tes limites aujourd'hui.`,
+  name=>`GG ${name}, une de plus au compteur !`,
+  name=>`${name}, la régularité paie — et toi, tu la paies cash.`,
+  name=>`Respect ${name}, t'as montré jusqu'où tu peux aller.`,
+  name=>`${name}, ce n'est plus un hasard, c'est une habitude.`,
 ];
 
 function MotivationMarquee(){
@@ -12391,7 +12403,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             <img src="/logo.svg" alt="Prime Athl" style={{width:72,height:72,borderRadius:20,objectFit:'cover',marginBottom:18,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
             <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:8}}>Séance validée ✓</div>
             <div style={{fontSize:32,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:8,color:'#fff'}}>Félicitations !</div>
-            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)]}</div>
+            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](profile.firstName||'champion')}</div>
             <div style={{fontSize:11,color:'rgba(255,255,255,0.25)',fontWeight:600}}>Appuie n'importe où pour continuer</div>
           </div>
         </div>
