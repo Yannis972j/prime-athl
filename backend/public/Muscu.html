@@ -2432,6 +2432,8 @@ function ExerciseProgressChart({history}){
   if(points.length>1){
     const values=points.map(p=>p.value);
     const minV=Math.min(...values),maxV=Math.max(...values);
+    const maxIdx=values.indexOf(maxV),minIdx=values.lastIndexOf(minV);
+    const hasRange=maxV!==minV;
     const range=maxV-minV||1;
     const pts=points.map((p,i)=>{
       const x=pad+(i/(points.length-1))*(W-2*pad);
@@ -2453,6 +2455,9 @@ function ExerciseProgressChart({history}){
           {pts.map((p,i)=>(
             <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={color} stroke={T.bg} strokeWidth="1.5"/>
           ))}
+          {/* Anneaux mettant en évidence le point le plus haut (record) et le plus bas atteints */}
+          {hasRange&&<circle cx={pts[maxIdx].x} cy={pts[maxIdx].y} r="6" fill="none" stroke={T.accent} strokeWidth="2"/>}
+          {hasRange&&<circle cx={pts[minIdx].x} cy={pts[minIdx].y} r="6" fill="none" stroke={T.danger} strokeWidth="2"/>}
         </svg>
         <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
           <span>{points[0].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
@@ -2468,6 +2473,26 @@ function ExerciseProgressChart({history}){
             </div>
           ):null;
         })()}
+        {hasRange&&(
+          <div style={{display:'flex',gap:8,marginTop:10}}>
+            <div style={{flex:1,padding:'8px 10px',borderRadius:10,background:'rgba(191,160,96,0.08)',border:`1px solid rgba(191,160,96,0.3)`}}>
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                <span style={{fontSize:9,color:T.accent,fontWeight:700}}>▲</span>
+                <span style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3}}>Max</span>
+              </div>
+              <div style={{fontSize:15,fontWeight:800,color:T.accent,marginTop:2}}>{maxV} {unit}</div>
+              <div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{points[maxIdx].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
+            </div>
+            <div style={{flex:1,padding:'8px 10px',borderRadius:10,background:'rgba(184,80,112,0.08)',border:`1px solid rgba(184,80,112,0.3)`}}>
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                <span style={{fontSize:9,color:T.danger,fontWeight:700}}>▼</span>
+                <span style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3}}>Min</span>
+              </div>
+              <div style={{fontSize:15,fontWeight:800,color:T.danger,marginTop:2}}>{minV} {unit}</div>
+              <div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{points[minIdx].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }else if(points.length===1){
