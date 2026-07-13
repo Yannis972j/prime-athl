@@ -1073,6 +1073,78 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return map;
   },[history]);
 
+  // ── Remplacement d'exercice en cours de séance (ex: machine prise) ─────────
+  // Catalogue fusionné (Excel importé + historique + séance en cours), comme dans l'éditeur de séance.
+  const[showSwapPicker,setShowSwapPicker]=React.useState(false);
+  const[swapQuery,setSwapQuery]=React.useState('');
+  const exerciseCatalog=React.useMemo(()=>{
+    const map=new Map();
+    const add=(name,muscle)=>{
+      const k=(name||'').trim().toLowerCase();
+      if(!k)return;
+      if(!map.has(k))map.set(k,{name:name.trim(),muscle:muscle||''});
+      else if(muscle&&!map.get(k).muscle)map.get(k).muscle=muscle;
+    };
+    Object.values(importedPrograms||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle))));
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>add(e.name,e.muscle)));
+    (exercises||[]).forEach(e=>add(e.name,e.muscle));
+    return[...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  },[importedPrograms,history,exercises]);
+
+  // Substitue l'exercice ei par un autre : les séries déjà validées ne bougent pas, les séries
+  // restantes reprennent le poids suggéré par l'historique du NOUVEL exercice (0 si jamais fait),
+  // et les reps réalisées repartent à 0 puisque ce sera un 1er essai sur ce mouvement précis.
+  const swapExercise=(ei,newName,newMuscle)=>{
+    const hist=lastExData[newName];
+    setExercises(prev=>prev.map((e,i)=>{
+      if(i!==ei)return e;
+      return{
+        ...e,name:newName,muscle:newMuscle||e.muscle,
+        sets:e.sets.map((s,si)=>{
+          if(s.done)return s;
+          const hSet=hist?.allSets?.[si]||hist?.allSets?.[0]||null;
+          return{...s,weight:hSet?.weight||0,reps:0};
+        }),
+      };
+    }));
+    setShowSwapPicker(false);setSwapQuery('');
+  };
+  const curEx=exercises[currentEx];
+  const swapFiltered=swapQuery.trim()
+    ?exerciseCatalog.filter(e=>e.name.toLowerCase().includes(swapQuery.trim().toLowerCase())&&e.name!==curEx?.name)
+    :exerciseCatalog.filter(e=>e.name!==curEx?.name);
+  const sameMuscleAlts=curEx?.muscle?exerciseCatalog.filter(e=>e.muscle===curEx.muscle&&e.name!==curEx.name).slice(0,8):[];
+  const swapPickerModal=showSwapPicker&&(
+    <BottomSheet open={showSwapPicker} onClose={()=>{setShowSwapPicker(false);setSwapQuery('');}} maxHeight="82vh">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+        <div style={{fontSize:16,fontWeight:700}}>Remplacer l'exercice</div>
+        <button onClick={()=>{setShowSwapPicker(false);setSwapQuery('');}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+      </div>
+      <div style={{fontSize:12,color:T.textFaint,marginBottom:14}}>Ta charge et tes reps s'adapteront à l'historique du nouvel exercice choisi.</div>
+      <input autoFocus value={swapQuery} onChange={e=>setSwapQuery(e.target.value)} placeholder="Rechercher un exercice..." style={{width:'100%',height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,padding:'0 14px',outline:'none',boxSizing:'border-box',marginBottom:16,fontFamily:'inherit'}}/>
+      {!swapQuery.trim()&&sameMuscleAlts.length>0&&(
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Même groupe musculaire ({curEx.muscle})</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {sameMuscleAlts.map(e=>(
+              <button key={e.name} onClick={()=>swapExercise(currentEx,e.name,e.muscle)} style={{padding:'8px 14px',borderRadius:999,border:'1px solid rgba(44,196,160,0.3)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:13,fontWeight:600,cursor:'pointer'}}>{e.name}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{swapQuery.trim()?`Résultats (${swapFiltered.length})`:'Tous les exercices'}</div>
+      <div style={{display:'flex',flexDirection:'column',gap:2}}>
+        {swapFiltered.slice(0,60).map(e=>(
+          <button key={e.name} onClick={()=>swapExercise(currentEx,e.name,e.muscle)} style={{width:'100%',padding:'12px 14px',borderRadius:10,background:'transparent',border:'none',color:T.text,fontSize:14,fontWeight:400,cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column'}}>
+            <span>{e.name}</span>
+            {e.muscle&&<span style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle}</span>}
+          </button>
+        ))}
+        {swapFiltered.length===0&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun résultat</div>}
+      </div>
+    </BottomSheet>
+  );
+
   // Auto-fill weights from history for sets with weight=0
   const prefilled=React.useRef(false);
   React.useEffect(()=>{
@@ -1499,6 +1571,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         </div>
         {/* RPE Modal — partagée avec la vue liste (cf. rpeModal) : sans elle, "Valider"/"Terminer la séance" en mode focus n'ouvrait rien */}
         {rpeModal}
+        {swapPickerModal}
       </div>
     );
   }
@@ -1573,6 +1646,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               })()}
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
                 <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,flex:1,minWidth:0}}>{ex.name}</div>
+                {!restSeconds&&(
+                  <button onClick={()=>{setShowSwapPicker(true);setSwapQuery('');}} title="Remplacer cet exercice" style={{width:34,height:34,borderRadius:11,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <Icon name="refresh" size={15} stroke={T.textDim}/>
+                  </button>
+                )}
                 {restSeconds>0&&(
                   <button onClick={()=>setRestSeconds(0)} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:8,minHeight:44,padding:'0 14px 0 10px',borderRadius:999,border:'1px solid rgba(191,160,96,0.4)',background:'linear-gradient(135deg,rgba(191,160,96,0.22),rgba(184,80,112,0.12))',color:T.accent,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 14px rgba(191,160,96,0.25)',animation:'celebrationPop 0.35s ease'}}>
                     <svg width="22" height="22" viewBox="0 0 24 24" style={{transform:'rotate(-90deg)',flexShrink:0}}>
@@ -1868,6 +1946,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
       {/* ── RPE Modal ── */}
       {rpeModal}
+      {swapPickerModal}
     </div>
   );
 }
