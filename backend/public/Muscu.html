@@ -785,10 +785,35 @@ function RangeField({value,onCommit,placeholder,style}){
   );
 }
 
-function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
+function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,importedPrograms,history}){
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef = React.useRef(null);
   const [importMsg, setImportMsg] = React.useState(null);
+  const[pickerFor,setPickerFor]=React.useState(null); // index de l'exercice en cours de sélection, ou null
+  const[pickerQuery,setPickerQuery]=React.useState('');
+
+  // Catalogue d'exercices : fusionne automatiquement tout ce qui vient de tes programmes Excel importés
+  // (toutes les semaines/jours) + ton historique de séances + la séance en cours d'édition. Choisir une
+  // entrée déjà existante évite les doublons de nom (important pour que "Progression par exercice"
+  // regroupe bien les données) ; taper un nom inédit dans la recherche crée simplement un nouvel exercice.
+  const catalog=React.useMemo(()=>{
+    const map=new Map();
+    const add=(name,muscle)=>{
+      const k=(name||'').trim().toLowerCase();
+      if(!k)return;
+      if(!map.has(k))map.set(k,{name:name.trim(),muscle:muscle||''});
+      else if(muscle&&!map.get(k).muscle)map.get(k).muscle=muscle;
+    };
+    Object.values(importedPrograms||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle))));
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>add(e.name,e.muscle)));
+    (workout.exercises||[]).forEach(e=>add(e.name,e.muscle));
+    return[...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  },[importedPrograms,history,workout.exercises]);
+
+  const filteredCatalog=pickerQuery.trim()
+    ?catalog.filter(e=>e.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
+    :catalog;
+  const exactMatch=filteredCatalog.some(e=>e.name.toLowerCase()===pickerQuery.trim().toLowerCase());
 
   const updEx=(idx,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i===idx?{...e,...patch}:e)});
   const updSet=(ei,si,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})})});
@@ -861,7 +886,11 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
               {/* exercise header */}
               <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:12}}>
                 <div style={{flex:1}}>
-                  <input style={inpStyle('100%',15)} value={ex.name} onChange={e=>updEx(ei,{name:e.target.value})} placeholder="Nom de l'exercice"/>
+                  <div onClick={()=>{setPickerFor(ei);setPickerQuery('');}} style={{...inpStyle('100%',15),display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                    <Icon name="chart" size={13} stroke={T.textDim}/>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:ex.name?T.text:T.textFaint}}>{ex.name||"Choisir un exercice..."}</span>
+                    <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
+                  </div>
                   <input style={{...inpStyle('100%',12),marginTop:6,fontWeight:500,color:T.textDim}} value={ex.muscle} onChange={e=>updEx(ei,{muscle:e.target.value})} placeholder="Groupe musculaire"/>
                 </div>
                 <button onClick={()=>delEx(ei)} style={{width:34,height:34,borderRadius:10,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2}}>
@@ -913,13 +942,40 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms}){
           Ajouter un exercice
         </button>
       </div>
+
+      {/* Sélecteur d'exercice (menu déroulant plein écran) : recherche dans le catalogue fusionné
+          (Excel importé + historique), ou crée un nouvel exercice si le nom tapé n'existe pas encore */}
+      <BottomSheet open={pickerFor!==null} onClose={()=>{setPickerFor(null);setPickerQuery('');}} maxHeight="82vh">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{fontSize:16,fontWeight:700}}>Choisir un exercice</div>
+          <button onClick={()=>{setPickerFor(null);setPickerQuery('');}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        </div>
+        <input autoFocus value={pickerQuery} onChange={e=>setPickerQuery(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter'&&pickerQuery.trim()&&!exactMatch){updEx(pickerFor,{name:pickerQuery.trim()});setPickerFor(null);setPickerQuery('');}}}
+          placeholder="Rechercher ou créer un exercice..." style={{width:'100%',height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,padding:'0 14px',outline:'none',boxSizing:'border-box',marginBottom:14,fontFamily:'inherit'}}/>
+        {pickerQuery.trim()&&!exactMatch&&(
+          <button onClick={()=>{updEx(pickerFor,{name:pickerQuery.trim()});setPickerFor(null);setPickerQuery('');}} style={{width:'100%',padding:'12px 14px',borderRadius:12,border:'1px dashed rgba(191,160,96,0.45)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:14,fontWeight:700,cursor:'pointer',textAlign:'left',marginBottom:10,display:'flex',alignItems:'center',gap:10}}>
+            <Icon name="plus" size={16} stroke={T.accent}/><span>Créer <strong>"{pickerQuery.trim()}"</strong></span>
+          </button>
+        )}
+        <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{pickerQuery.trim()?`Résultats (${filteredCatalog.length})`:`Tous les exercices (${catalog.length})`}</div>
+        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+          {filteredCatalog.slice(0,60).map(e=>(
+            <button key={e.name} onClick={()=>{updEx(pickerFor,{name:e.name,...(e.muscle?{muscle:e.muscle}:{})});setPickerFor(null);setPickerQuery('');}} style={{width:'100%',padding:'12px 14px',borderRadius:10,background:'transparent',border:'none',color:T.text,fontSize:14,fontWeight:400,cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column'}}>
+              <span>{e.name}</span>
+              {e.muscle&&<span style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle}</span>}
+            </button>
+          ))}
+          {filteredCatalog.length===0&&!pickerQuery.trim()&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun exercice pour l'instant — importe un programme Excel ou tape un nom ci-dessus pour en créer un.</div>}
+        </div>
+      </BottomSheet>
     </div>
   );
 }
 
 // ── Session Screen ────────────────────────────────────────
 
-function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName}){
+function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,importedPrograms}){
   const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
 
@@ -1239,6 +1295,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         onChange={w=>{setExercises(w.exercises);onUpdateWorkout(w);}}
         onClose={()=>setEditMode(false)}
         onImportPrograms={onImportPrograms}
+        importedPrograms={importedPrograms}
+        history={history}
       />
     );
   }
@@ -4063,6 +4121,11 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                           <Icon name="play" size={16} stroke="#fff"/>
                           {isDone?'Refaire la séance':'Démarrer la séance'}
                         </button>
+                        {d&&onEditDay&&(
+                          <button onClick={()=>onEditDay(sheet,selectedDay.dayName)} title="Modifier les exercices de ce jour" style={{width:46,height:46,borderRadius:13,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                            <Icon name="edit" size={16} stroke={T.accent}/>
+                          </button>
+                        )}
                       </div>
                       {isDone&&histSession&&onDeleteSession&&(
                         <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(histSession.id,selectedDay.dateStr);}} style={{width:'100%',height:34,borderRadius:10,border:'1px solid rgba(184,80,112,0.25)',background:'transparent',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2}}>
@@ -12451,16 +12514,16 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName} importedPrograms={importedPrograms}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
-            <WorkoutEditorScreen workout={workout} onChange={setWorkout} onClose={()=>setScreen(null)} onImportPrograms={updateOwnProgram}/>
+            <WorkoutEditorScreen workout={workout} onChange={setWorkout} onClose={()=>setScreen(null)} onImportPrograms={updateOwnProgram} importedPrograms={importedPrograms} history={history}/>
           </div>
         )}
         {screen==='programDay'&&dayWorkout&&(
           <div style={{height:'100%',overflow:'auto'}}>
-            <WorkoutEditorScreen workout={dayWorkout} onChange={saveDayChanges} onClose={closeDayEdit} onImportPrograms={updateOwnProgram}/>
+            <WorkoutEditorScreen workout={dayWorkout} onChange={saveDayChanges} onClose={closeDayEdit} onImportPrograms={updateOwnProgram} importedPrograms={importedPrograms} history={history}/>
           </div>
         )}
         {!screen&&(
