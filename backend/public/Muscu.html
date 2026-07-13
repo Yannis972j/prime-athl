@@ -2387,6 +2387,13 @@ function ExerciseProgressChart({history}){
 
   const filtered=query.trim()?exerciseNames.filter(n=>n.toLowerCase().includes(query.toLowerCase())):exerciseNames;
 
+  // Exercices les plus pratiqués (par nombre de séances où ils apparaissent) — accès rapide sans recherche
+  const topExercises=React.useMemo(()=>{
+    const counts={};
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)counts[e.name]=(counts[e.name]||0)+1;}));
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+  },[history]);
+
   // Build data points: one par séance contenant l'exercice sélectionné.
   // Poids max pour un exercice classique ; vitesse (km/h) pour un exercice Tapis (aucune charge/reps à suivre).
   const dataPoints=React.useMemo(()=>{
@@ -2475,29 +2482,40 @@ function ExerciseProgressChart({history}){
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Progression par exercice</div>
         </div>
 
-        {/* Search / select */}
-        <div style={{position:'relative'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.05)',border:`1px solid ${selected?'rgba(44,196,160,0.4)':'rgba(255,255,255,0.1)'}`}} onClick={()=>setOpen(o=>!o)}>
-            <Icon name="chart" size={14} stroke={T.textDim}/>
-            <span style={{flex:1,fontSize:13,color:selected?T.text:T.textFaint,fontWeight:selected?600:400}}>{selected||'Choisir un exercice...'}</span>
-            <Icon name="chevronRight" size={12} stroke={T.textFaint} style={{transform:open?'rotate(90deg)':'none',transition:'transform 0.2s'}}/>
+        {/* Sélecteur : ouvre une bottom-sheet plein écran (au lieu d'un menu ancré que le clavier
+            recouvrait presque entièrement dès qu'on tapait dans la recherche) */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.05)',border:`1px solid ${selected?'rgba(44,196,160,0.4)':'rgba(255,255,255,0.1)'}`,cursor:'pointer'}} onClick={()=>setOpen(true)}>
+          <Icon name="chart" size={14} stroke={selected?T.good:T.textDim}/>
+          <span style={{flex:1,fontSize:13,color:selected?T.text:T.textFaint,fontWeight:selected?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected||'Choisir un exercice...'}</span>
+          {selected?<span style={{fontSize:11,color:T.textFaint,fontWeight:700,flexShrink:0}}>Changer</span>:<Icon name="chevronRight" size={12} stroke={T.textFaint}/>}
+        </div>
+
+        <BottomSheet open={open} onClose={()=>{setOpen(false);setQuery('');}} maxHeight="82vh">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <div style={{fontSize:16,fontWeight:700}}>Choisir un exercice</div>
+            <button onClick={()=>{setOpen(false);setQuery('');}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
           </div>
-          {open&&(
-            <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,background:'#13131e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:12,zIndex:50,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',maxHeight:220,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-              <div style={{padding:'8px 12px',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
-                <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher..." style={{width:'100%',background:'transparent',border:'none',color:T.text,fontSize:13,outline:'none'}}/>
-              </div>
-              <div style={{overflowY:'auto',flex:1}}>
-                {filtered.slice(0,30).map(n=>(
-                  <button key={n} onClick={()=>{setSelected(n);setOpen(false);setQuery('');}} style={{width:'100%',padding:'10px 14px',background:n===selected?'rgba(44,196,160,0.1)':'transparent',border:'none',borderBottom:'1px solid rgba(255,255,255,0.04)',color:n===selected?T.good:T.text,fontSize:13,fontWeight:n===selected?600:400,cursor:'pointer',textAlign:'left'}}>
-                    {n}
-                  </button>
+          <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un exercice..." style={{width:'100%',height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,padding:'0 14px',outline:'none',boxSizing:'border-box',marginBottom:16,fontFamily:'inherit'}}/>
+          {!query.trim()&&topExercises.length>0&&(
+            <div style={{marginBottom:18}}>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Les plus pratiqués</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {topExercises.map(n=>(
+                  <button key={n} onClick={()=>{setSelected(n);setOpen(false);setQuery('');}} style={{padding:'8px 14px',borderRadius:999,border:`1px solid ${n===selected?'rgba(44,196,160,0.5)':'rgba(255,255,255,0.12)'}`,background:n===selected?'rgba(44,196,160,0.12)':'rgba(255,255,255,0.05)',color:n===selected?T.good:T.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>{n}</button>
                 ))}
-                {filtered.length===0&&<div style={{padding:'12px 14px',fontSize:12,color:T.textFaint,textAlign:'center'}}>Aucun résultat</div>}
               </div>
             </div>
           )}
-        </div>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>{query.trim()?`Résultats (${filtered.length})`:'Tous les exercices'}</div>
+          <div style={{display:'flex',flexDirection:'column',gap:2}}>
+            {filtered.slice(0,60).map(n=>(
+              <button key={n} onClick={()=>{setSelected(n);setOpen(false);setQuery('');}} style={{width:'100%',padding:'12px 14px',borderRadius:10,background:n===selected?'rgba(44,196,160,0.1)':'transparent',border:'none',color:n===selected?T.good:T.text,fontSize:14,fontWeight:n===selected?600:400,cursor:'pointer',textAlign:'left'}}>
+                {n}
+              </button>
+            ))}
+            {filtered.length===0&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun résultat</div>}
+          </div>
+        </BottomSheet>
 
         {selected&&chart}
         {selected&&points.length===0&&<div style={{marginTop:12,fontSize:12,color:T.textFaint,textAlign:'center'}}>Pas encore de données pour cet exercice</div>}
