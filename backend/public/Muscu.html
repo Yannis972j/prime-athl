@@ -10431,9 +10431,13 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
                       <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
                         <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>{sess.name||`Séance ${si+1}`}</div>
                         <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                          {(sess.exercises||[]).slice(0,4).map((ex,ei)=>(
-                            <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {ex.sets}×{ex.reps} {ex.rest?`(repos ${ex.rest})`:''}</div>
-                          ))}
+                          {(sess.exercises||[]).slice(0,4).map((ex,ei)=>{
+                            const setsArr=Array.isArray(ex.sets)?ex.sets:[];
+                            const repsLabel=setsArr[0]?.target||setsArr[0]?.reps||'?';
+                            return(
+                              <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}</div>
+                            );
+                          })}
                           {(sess.exercises||[]).length>4&&<div style={{fontSize:10,color:T.textFaint}}>+{(sess.exercises||[]).length-4} exercices</div>}
                         </div>
                       </div>
