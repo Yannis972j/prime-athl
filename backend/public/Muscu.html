@@ -10433,7 +10433,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
                         <div style={{display:'flex',flexDirection:'column',gap:2}}>
                           {(sess.exercises||[]).slice(0,4).map((ex,ei)=>{
                             const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                            const repsLabel=setsArr[0]?.target||setsArr[0]?.reps||'?';
+                            const repsLabel=setsArr[0]?.targetStr||setsArr[0]?.target||setsArr[0]?.reps||'?';
                             return(
                               <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}</div>
                             );
@@ -10559,18 +10559,23 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
 
   const launchSession=(sess,wi,si)=>{
     if(!sess||!Array.isArray(sess.exercises)||sess.exercises.length===0)return;
-    const exercises=sess.exercises.map(ex=>({
-      id:Math.random().toString(36).slice(2),
-      name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
-      rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
-      weightStr:'',repsStr:String(ex.reps||''),cardio:null,
-      coachNotes:ex.coachNotes||'',
-      sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
-        weight:0,reps:0,done:false,
-        target:parseInt(String(ex.reps))||10,
-        targetStr:String(ex.reps||''),
-      })),
-    }));
+    const exercises=sess.exercises.map(ex=>{
+      const srcSets=Array.isArray(ex.sets)&&ex.sets.length?ex.sets:[{weight:0,target:10}];
+      return{
+        id:Math.random().toString(36).slice(2),
+        name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
+        cardio:null,
+        coachNotes:ex.coachNotes||'',
+        // Reprend le poids/objectif de reps (simple ou fourchette "8-12") configurés par le coach
+        // pour chaque série — l'ancien code ignorait entièrement ex.sets (le tableau réel des séries)
+        // et régénérait des séries génériques 3×10.
+        sets:srcSets.map(s=>({
+          weight:s.weight||0,reps:0,done:false,
+          target:s.target||10,
+          targetStr:s.targetStr||(s.target?String(s.target):''),
+        })),
+      };
+    });
     onStartWorkout({name:sess.name||`Module ${wi+1} — Séance ${si+1}`,muscles:'',exercises,fromTrainingProgram:true,tpMeta:{programId,weekIndex:wi,sessionIndex:si}});
   };
 
@@ -10645,11 +10650,15 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
                         </button>
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:2,paddingLeft:32}}>
-                        {(sess.exercises||[]).map((ex,ei)=>(
-                          <div key={ei} style={{fontSize:11,color:T.textDim}}>
-                            {ex.name} — {ex.sets}×{ex.reps} {ex.rest?`(${ex.rest})`:''}{ex.coachNotes?` 💡 ${ex.coachNotes}`:''}
-                          </div>
-                        ))}
+                        {(sess.exercises||[]).map((ex,ei)=>{
+                          const setsArr=Array.isArray(ex.sets)?ex.sets:[];
+                          const repsLabel=setsArr[0]?.targetStr||setsArr[0]?.target||setsArr[0]?.reps||'?';
+                          return(
+                            <div key={ei} style={{fontSize:11,color:T.textDim}}>
+                              {ex.name} — {setsArr.length}×{repsLabel}{ex.coachNotes?` 💡 ${ex.coachNotes}`:''}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -11146,8 +11155,8 @@ function TPAdminEditor({program,onBack}){
                   </select>
                 </div>
                 <div style={{flex:1}}>
-                  <label style={LBL}>Prix (centimes €)</label>
-                  <input type="number" value={form.price} onChange={e=>set('price',e.target.value)} style={INP} placeholder="Ex: 2990"/>
+                  <label style={LBL}>Prix (€)</label>
+                  <input type="number" step="0.01" min="0" value={form.price?+(form.price/100).toFixed(2):''} onChange={e=>set('price',Math.round((parseFloat(e.target.value)||0)*100))} style={INP} placeholder="Ex: 29.90"/>
                 </div>
               </div>
               <div style={{display:'flex',gap:10,marginBottom:14}}>
