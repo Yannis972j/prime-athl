@@ -7557,7 +7557,7 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
               <div style={{fontSize:15,fontWeight:700,color:T.accent}}>{Math.round(totalVol).toLocaleString('fr-FR')}</div>
               <div style={{fontSize:9,color:T.textFaint,marginTop:1,textTransform:'uppercase',letterSpacing:0.4}}>Volume kg</div>
             </div>
-            {s.duration&&<div style={{flex:1,minWidth:80,padding:'8px 12px',borderRadius:12,background:'rgba(44,196,160,0.08)',border:'1px solid rgba(44,196,160,0.2)',textAlign:'center'}}>
+            {s.duration>0&&<div style={{flex:1,minWidth:80,padding:'8px 12px',borderRadius:12,background:'rgba(44,196,160,0.08)',border:'1px solid rgba(44,196,160,0.2)',textAlign:'center'}}>
               <div style={{fontSize:15,fontWeight:700,color:T.good}}>{s.duration}</div>
               <div style={{fontSize:9,color:T.textFaint,marginTop:1,textTransform:'uppercase',letterSpacing:0.4}}>Minutes</div>
             </div>}
@@ -7708,7 +7708,7 @@ function CoachSessionCard({s,athleteId,athleteName,isDeleting,onStartDelete,onCa
         </div>
         <div style={{textAlign:'right',flexShrink:0}}>
           <div style={{fontSize:14,fontWeight:700}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')}<span style={{fontSize:10,color:T.textDim,fontWeight:500,marginLeft:2}}>kg</span></div>
-          {s.duration&&<div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{s.duration} min</div>}
+          {s.duration>0&&<div style={{fontSize:9,color:T.textFaint,marginTop:1}}>{s.duration} min</div>}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
           {s.createdByCoach&&onEdit&&<button onClick={e=>{e.stopPropagation();onEdit();}} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Modifier</button>}
@@ -13309,7 +13309,7 @@ function LiveSessionsView({sessions,onStartWorkout}){
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <Pill color="#BFA060">{(s.exercises||[]).length} exercices</Pill>
             <Pill color={T.accent}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg</Pill>
-            {s.duration&&<Pill color={T.textDim}>{Math.round(s.duration)} min</Pill>}
+            {s.duration>0&&<Pill color={T.textDim}>{Math.round(s.duration)} min</Pill>}
           </div>
         </div>
         {s.coachFeedback&&(
