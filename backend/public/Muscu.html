@@ -7665,10 +7665,26 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
   );
 }
 
-function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
+function CoachSessionCard({s,athleteId,athleteName,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
   const[expanded,setExpanded]=React.useState(false);
   const[showModal,setShowModal]=React.useState(false);
+  const[showCopyModal,setShowCopyModal]=React.useState(false);
+  const[showMovePicker,setShowMovePicker]=React.useState(false);
+  const[moveDate,setMoveDate]=React.useState(()=>ymdKey(new Date(s.date)));
+  const[moving,setMoving]=React.useState(false);
+  const[moveMsg,setMoveMsg]=React.useState('');
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+
+  const doMove=async()=>{
+    if(!moveDate)return;
+    setMoving(true);setMoveMsg('');
+    try{
+      await apiCall('/api/coach/sessions/'+s.id,{method:'PATCH',body:{date:new Date(moveDate+'T12:00:00').toISOString()}});
+      setShowMovePicker(false);
+      onFeedbackSaved&&onFeedbackSaved();
+    }catch(e){setMoveMsg('✗ '+(e.message||'Erreur'));}
+    setMoving(false);
+  };
 
   return(
     <div
@@ -7730,6 +7746,25 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
             </div>
           )}
 
+          {/* Déplacer / Copier vers une date précise */}
+          <div style={{marginBottom:12}}>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={e=>{e.stopPropagation();setMoveMsg('');setShowMovePicker(o=>!o);}} style={{flex:1,height:32,borderRadius:9,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer</button>
+              <button onClick={e=>{e.stopPropagation();setShowCopyModal(true);}} style={{flex:1,height:32,borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 Copier</button>
+            </div>
+            {showMovePicker&&(
+              <div onClick={e=>e.stopPropagation()} style={{marginTop:8,padding:10,borderRadius:11,background:'rgba(90,138,224,0.05)',border:'1px solid rgba(90,138,224,0.2)'}}>
+                <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Nouvelle date de la séance</div>
+                <div style={{display:'flex',gap:8}}>
+                  <input type="date" value={moveDate} onChange={e=>setMoveDate(e.target.value)}
+                    style={{flex:1,padding:'8px 10px',borderRadius:9,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+                  <button onClick={doMove} disabled={moving} style={{padding:'0 14px',borderRadius:9,border:'none',background:'#5A8AE0',color:'#fff',fontSize:12,fontWeight:700,cursor:moving?'default':'pointer',opacity:moving?0.6:1}}>{moving?'…':'Déplacer'}</button>
+                </div>
+                {moveMsg&&<div style={{marginTop:6,fontSize:11,color:T.danger}}>{moveMsg}</div>}
+              </div>
+            )}
+          </div>
+
           {/* Coach notes shown if present */}
           {s.notes&&(
             <div style={{marginBottom:10,padding:'8px 10px',borderRadius:10,background:'rgba(200,144,64,0.06)',border:'1px solid rgba(200,144,64,0.2)',fontSize:11,color:T.warn,lineHeight:1.4}}>
@@ -7762,6 +7797,11 @@ function CoachSessionCard({s,athleteId,isDeleting,onStartDelete,onCancelTouchDel
       )}
       {showModal&&ReactDOM.createPortal(
         <CoachSessionModal s={s} athleteId={athleteId} onClose={()=>setShowModal(false)} onFeedbackSaved={()=>{setShowModal(false);if(onFeedbackSaved)onFeedbackSaved();}}/>,
+        document.body
+      )}
+      {showCopyModal&&ReactDOM.createPortal(
+        <CoachPlanSessionModal athleteId={athleteId} athleteName={athleteName||'cet athlète'} sourceSession={s}
+          onClose={()=>setShowCopyModal(false)} onDone={()=>onFeedbackSaved&&onFeedbackSaved()}/>,
         document.body
       )}
     </div>
@@ -8987,7 +9027,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {sessions.slice(0,50).map(s=>(
-                  <CoachSessionCard key={s.id} s={s} athleteId={a.id}
+                  <CoachSessionCard key={s.id} s={s} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]}
                     isDeleting={deletingSessionId===s.id}
                     onStartDelete={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
                     onCancelTouchDelete={()=>clearTimeout(sessionPressTimer.current)}
