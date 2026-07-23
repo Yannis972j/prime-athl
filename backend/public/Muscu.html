@@ -1683,19 +1683,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                 return(
                   <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:8}}>
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                      {c.distance&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                      {c.distance>0&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Distance</div>
                         <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.distance)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
                       </div>}
-                      {c.vitesse&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                      {c.vitesse>0&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
                         <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.vitesse)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km/h</span></div>
                       </div>}
-                      {c.inclinaison&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                      {c.inclinaison>0&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Inclinaison</div>
                         <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.inclinaison)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>%</span></div>
                       </div>}
-                      {c.duree&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                      {c.duree>0&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
                         <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.duree)}</div>
                       </div>}
@@ -1908,10 +1908,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       <button key={e.id||i} onClick={()=>goToEx(i)} style={{width:'100%',textAlign:'left',padding:'8px 12px',background:isActive?`${color}10`:'transparent',cursor:'pointer',border:'none',borderTop:bi>0?`1px solid ${color}14`:'none'}}>
                         <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,marginBottom:4}}>{e.name}</div>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          {c.distance&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {fixCardioVal(c.distance)} km</span>}
-                          {c.vitesse&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {fixCardioVal(c.vitesse)} km/h</span>}
-                          {c.inclinaison&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {fixCardioVal(c.inclinaison)}%</span>}
-                          {c.duree&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {fixCardioVal(c.duree)}</span>}
+                          {c.distance>0&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {fixCardioVal(c.distance)} km</span>}
+                          {c.vitesse>0&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {fixCardioVal(c.vitesse)} km/h</span>}
+                          {c.inclinaison>0&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {fixCardioVal(c.inclinaison)}%</span>}
+                          {c.duree>0&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {fixCardioVal(c.duree)}</span>}
                         </div>
                         {isActive&&<Pill color={color} style={{marginTop:4}}>NOW</Pill>}
                       </button>
@@ -9081,15 +9081,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:11,fontWeight:700,color:sc2}}>{setsArr.length}×{repsDisplay}</div>
-                              {ex.restSeconds&&<div style={{fontSize:10,color:T.textFaint}}>{ex.restSeconds}s repos</div>}
+                              {ex.restSeconds>0&&<div style={{fontSize:10,color:T.textFaint}}>{ex.restSeconds}s repos</div>}
                             </div>
                           </div>
                           {isCardio&&(
                             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-                              {ex.cardio.vitesse&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
-                              {ex.cardio.inclinaison&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
-                              {ex.cardio.duree&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⏱ {ex.cardio.duree} min</div>}
-                              {ex.cardio.distance&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📏 {ex.cardio.distance} km</div>}
+                              {ex.cardio.vitesse>0&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
+                              {ex.cardio.inclinaison>0&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
+                              {ex.cardio.duree>0&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⏱ {ex.cardio.duree} min</div>}
+                              {ex.cardio.distance>0&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📏 {ex.cardio.distance} km</div>}
                             </div>
                           )}
                           {!isCardio&&setsArr.length>1&&(
