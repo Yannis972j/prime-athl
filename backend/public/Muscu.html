@@ -3447,18 +3447,25 @@ const CONGRATS_MESSAGES=[
 ];
 
 // Messages comparant le volume (kg) de la séance qui vient d'être terminée à celui
-// de la séance précédente — pour féliciter une vraie progression ou encourager
-// sans culpabiliser en cas de baisse.
+// de la séance précédente — pour féliciter une vraie progression, ou dire les choses
+// franchement en cas de baisse (d'autant plus direct que la baisse est importante).
 const VOLUME_UP_MESSAGES=[
   (name,kg)=>`+${kg}kg par rapport à ta dernière séance, ${name} — la progression est bien réelle !`,
   (name,kg)=>`${name}, ${kg}kg de plus qu'à ta dernière séance. Ça continue de grimper !`,
   (name,kg)=>`Encore plus lourd qu'à ta dernière séance (+${kg}kg), ${name}. Respect.`,
   (name,kg)=>`${name}, tu as soulevé ${kg}kg de plus que la dernière fois. Continue comme ça !`,
 ];
-const VOLUME_DOWN_MESSAGES=[
-  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name}, mais chaque séance compte. La prochaine sera la bonne !`,
-  (name,kg)=>`Séance un peu plus légère (-${kg}kg) qu'à ta dernière fois, ${name} — l'essentiel c'est d'être venu. Reviens plus fort !`,
-  (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Pas grave, la régularité paie plus que la perfection.`,
+// Baisse légère (<15%) : recadrage, pas de complaisance mais pas dramatique non plus.
+const VOLUME_DOWN_MILD_MESSAGES=[
+  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name}. Reste concentré, la prochaine doit être meilleure.`,
+  (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Fais plus d'effort la prochaine séance.`,
+  (name,kg)=>`Séance en retrait par rapport à la dernière (-${kg}kg), ${name}. Il va falloir hausser le niveau.`,
+];
+// Baisse significative (≥15%) : franc, sans détour.
+const VOLUME_DOWN_SEVERE_MESSAGES=[
+  (name,kg)=>`${name}, tu as été moins bon que la dernière fois (-${kg}kg). Si tu continues comme ça, tu n'atteindras pas tes objectifs.`,
+  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name} — c'est en dessous de ce dont tu es capable. Reprends-toi dès la prochaine séance.`,
+  (name,kg)=>`${name}, grosse baisse par rapport à la dernière fois (-${kg}kg). Fais plus d'effort, sinon tu stagneras.`,
 ];
 const VOLUME_SAME_MESSAGES=[
   name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
@@ -3469,7 +3476,12 @@ function congratsMessage(name,volumeVsPrev){
   if(volumeVsPrev){
     const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
     if(delta>0){const list=VOLUME_UP_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,delta);}
-    if(delta<0){const list=VOLUME_DOWN_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,Math.abs(delta));}
+    if(delta<0){
+      const kg=Math.abs(delta);
+      const pct=volumeVsPrev.previous>0?kg/volumeVsPrev.previous*100:0;
+      const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
+      return list[Math.floor(Math.random()*list.length)](name,kg);
+    }
     const list=VOLUME_SAME_MESSAGES;return list[Math.floor(Math.random()*list.length)](name);
   }
   return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
