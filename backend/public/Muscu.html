@@ -597,6 +597,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         let currentCategory = '';
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
+        let lastRestStr = '';
 
         rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
@@ -623,7 +624,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; }
 
           const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
           const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
@@ -644,7 +645,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // Pour les fourchettes "10-12", target numérique = borne basse, targetStr = "10-12"
           const repsMin = repsVal === null ? 10 : repsVal === 'MAX' ? 10 : (typeof repsVal === 'string' ? (parseInt(repsVal)||10) : repsVal);
           const repsTarget = repsMin;
-          const restStr = String(row[colRest]||'').trim();
+          // Repos : la cellule est souvent fusionnée sur tout un bloc SUPERSET/TRISET dans
+          // Excel, donc seule la 1ère ligne du bloc porte la valeur — on hérite de la
+          // dernière valeur explicite pour les lignes suivantes, comme pour STYLE et SERIES.
+          const restCell = cellText(colRest);
+          const restStr = restCell || lastRestStr;
+          if (restCell) lastRestStr = restCell;
           const restSecs = parseRest(restStr);
 
           // Cardio : champs spécifiques — on utilise .w (texte formaté) pour préserver
