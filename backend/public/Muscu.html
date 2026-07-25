@@ -493,7 +493,10 @@ function escapeHtml(s) {
 
 // Parse une durée de repos écrite en texte libre vers un nombre de secondes.
 // Formats supportés : "1'30" / "2'" (notation apostrophe), "1min30" / "2 min 30" / "1min"
-// (notation mot), "1:30" (minutes:secondes), "90" / "90s" (secondes brutes).
+// (notation mot), "1:30" (minutes:secondes), "90s" (secondes explicites),
+// "90" (nombre brut sans unité — traité comme des secondes s'il est ≥10, sinon comme
+// des minutes : un repos de "1" ou "2" tout seul veut dire 1 ou 2 minutes, jamais
+// 1 ou 2 secondes, ce qui n'aurait aucun sens en musculation).
 function parseRestDuration(str) {
   const s = String(str || '').trim();
   if (!s) return 90;
@@ -503,8 +506,10 @@ function parseRestDuration(str) {
   if (m) return parseInt(m[1]) * 60 + (m[2] ? parseInt(m[2]) : 0);
   m = s.match(/^(\d+):(\d{1,2})$/);
   if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
-  m = s.match(/^(\d+)\s*s(?:ec)?$/i) || s.match(/^(\d+)$/);
+  m = s.match(/^(\d+)\s*s(?:ec)?$/i);
   if (m) return parseInt(m[1]);
+  m = s.match(/^(\d+)$/);
+  if (m) { const n = parseInt(m[1]); return n < 10 ? n * 60 : n; }
   return 90;
 }
 
