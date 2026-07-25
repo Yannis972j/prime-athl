@@ -491,6 +491,23 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Parse une durée de repos écrite en texte libre vers un nombre de secondes.
+// Formats supportés : "1'30" / "2'" (notation apostrophe), "1min30" / "2 min 30" / "1min"
+// (notation mot), "1:30" (minutes:secondes), "90" / "90s" (secondes brutes).
+function parseRestDuration(str) {
+  const s = String(str || '').trim();
+  if (!s) return 90;
+  let m = s.match(/^(\d+)'(\d*)/);
+  if (m) return parseInt(m[1]) * 60 + (m[2] ? parseInt(m[2]) : 0);
+  m = s.match(/^(\d+)\s*min\s*(\d*)/i);
+  if (m) return parseInt(m[1]) * 60 + (m[2] ? parseInt(m[2]) : 0);
+  m = s.match(/^(\d+):(\d{1,2})$/);
+  if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
+  m = s.match(/^(\d+)\s*s(?:ec)?$/i) || s.match(/^(\d+)$/);
+  if (m) return parseInt(m[1]);
+  return 90;
+}
+
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
   const categoryFallback = !!(opts && opts.categoryFallback);
@@ -508,12 +525,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
       const norm = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 
-      const parseRest = str => {
-        const s = String(str||'').trim();
-        const m = s.match(/^(\d+)'(\d*)/);
-        if (!m) return 90;
-        return parseInt(m[1])*60 + (m[2] ? parseInt(m[2]) : 0);
-      };
+      const parseRest = parseRestDuration;
 
       const parseReps = val => {
         if (val === '' || val === null || val === undefined) return null;
@@ -10064,7 +10076,7 @@ function aiExercisesToWorkout(exercises){
   return (exercises||[]).map(ex=>({
     id:Math.random().toString(36).slice(2),
     name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
-    rest:ex.rest||'60s',restSeconds:parseInt(ex.rest)||60,
+    rest:ex.rest||'60s',restSeconds:parseRestDuration(ex.rest)||60,
     weightStr:'',repsStr:String(ex.reps||''),cardio:null,
     sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
       weight:0,reps:0,done:false,
@@ -11421,7 +11433,7 @@ function ExplorerScreen({profile,onStartWorkout}){
       muscle:ex.muscle||'',
       style:ex.style||'CLASSIQUE',
       rest:ex.rest||'60s',
-      restSeconds:parseInt(ex.rest)||60,
+      restSeconds:parseRestDuration(ex.rest)||60,
       weightStr:ex.weightHint||'',
       repsStr:String(ex.reps||''),
       cardio:null,
