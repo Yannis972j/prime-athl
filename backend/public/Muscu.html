@@ -3446,6 +3446,35 @@ const CONGRATS_MESSAGES=[
   name=>`${name}, ce n'est plus un hasard, c'est une habitude.`,
 ];
 
+// Messages comparant le volume (kg) de la séance qui vient d'être terminée à celui
+// de la séance précédente — pour féliciter une vraie progression ou encourager
+// sans culpabiliser en cas de baisse.
+const VOLUME_UP_MESSAGES=[
+  (name,kg)=>`+${kg}kg par rapport à ta dernière séance, ${name} — la progression est bien réelle !`,
+  (name,kg)=>`${name}, ${kg}kg de plus qu'à ta dernière séance. Ça continue de grimper !`,
+  (name,kg)=>`Encore plus lourd qu'à ta dernière séance (+${kg}kg), ${name}. Respect.`,
+  (name,kg)=>`${name}, tu as soulevé ${kg}kg de plus que la dernière fois. Continue comme ça !`,
+];
+const VOLUME_DOWN_MESSAGES=[
+  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name}, mais chaque séance compte. La prochaine sera la bonne !`,
+  (name,kg)=>`Séance un peu plus légère (-${kg}kg) qu'à ta dernière fois, ${name} — l'essentiel c'est d'être venu. Reviens plus fort !`,
+  (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Pas grave, la régularité paie plus que la perfection.`,
+];
+const VOLUME_SAME_MESSAGES=[
+  name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
+  name=>`${name}, même charge totale qu'à ta dernière séance. Reste sur ce rythme !`,
+];
+
+function congratsMessage(name,volumeVsPrev){
+  if(volumeVsPrev){
+    const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
+    if(delta>0){const list=VOLUME_UP_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,delta);}
+    if(delta<0){const list=VOLUME_DOWN_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,Math.abs(delta));}
+    const list=VOLUME_SAME_MESSAGES;return list[Math.floor(Math.random()*list.length)](name);
+  }
+  return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
+}
+
 function MotivationMarquee(){
   const items=[...MOTIVATION_QUOTES,...MOTIVATION_QUOTES];
   return(
@@ -12571,12 +12600,15 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showCongrats,setShowCongrats]=React.useState(false);
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
+  const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
   const[pendingProgramEditId,setPendingProgramEditId]=React.useState(null);
   const startWorkout=w=>{setWorkout(w);setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');};
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
+    const prevSession=history.find(s=>typeof s.totalVolume==='number');
+    setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
@@ -12719,7 +12751,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             <img src="/logo.svg" alt="Prime Athl" style={{width:72,height:72,borderRadius:20,objectFit:'cover',marginBottom:18,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
             <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:8}}>Séance validée ✓</div>
             <div style={{fontSize:32,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:8,color:'#fff'}}>Félicitations !</div>
-            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](profile.firstName||'champion')}</div>
+            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev)}</div>
             <div style={{fontSize:11,color:'rgba(255,255,255,0.25)',fontWeight:600}}>Appuie n'importe où pour continuer</div>
           </div>
         </div>
