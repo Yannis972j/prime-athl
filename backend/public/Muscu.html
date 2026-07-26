@@ -4716,49 +4716,6 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         </div>
       </div>
 
-      {/* ── Synthèse macros journalière ── */}
-      {isToday&&dayTargets.kcal>0&&(()=>{
-        // Couleur selon ratio : <50% rouge, 50-90% orange, 90-110% vert, >110% orange
-        const barColor=ratio=>{
-          if(ratio<0.5)return{c:'#B85070',bg:'rgba(184,80,112,0.15)'};
-          if(ratio<0.9)return{c:'#C89040',bg:'rgba(200,144,64,0.15)'};
-          if(ratio<=1.1)return{c:'#2CC4A0',bg:'rgba(44,196,160,0.15)'};
-          return{c:'#C89040',bg:'rgba(200,144,64,0.15)'};
-        };
-        const Bar=({label,cur,target,unit,ratio})=>{
-          const{c,bg}=barColor(ratio);
-          const pct=Math.round(ratio*100);
-          const widthPct=Math.min(100,ratio*100);
-          return(
-            <div style={{marginBottom:9}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
-                <span style={{fontSize:11,fontWeight:700,color:T.textDim,letterSpacing:0.3,textTransform:'uppercase'}}>{label}</span>
-                <span style={{fontSize:11,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>
-                  <span style={{color:c,fontWeight:700}}>{Math.round(cur)}</span>
-                  <span> / {Math.round(target)} {unit}</span>
-                  <span style={{marginLeft:6,fontWeight:700,color:c}}>{pct}%</span>
-                </span>
-              </div>
-              <div style={{height:8,borderRadius:4,background:bg,overflow:'hidden',position:'relative'}}>
-                <div style={{height:'100%',width:widthPct+'%',background:c,borderRadius:4,transition:'width 0.4s cubic-bezier(.16,1,.3,1)'}}/>
-              </div>
-            </div>
-          );
-        };
-        return(
-          <GlassCard padding={14} style={{marginBottom:14}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-              <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Aujourd'hui</div>
-              <div style={{fontSize:10,color:T.textFaint}}>{validatedCount}/{totalMeals} repas validés</div>
-            </div>
-            <Bar label="Calories"  cur={totals.kcal} target={dayTargets.kcal} unit="kcal" ratio={kcalRatio}/>
-            <Bar label="Protéines" cur={totals.p}    target={dayTargets.p}    unit="g"    ratio={pRatio}/>
-            <Bar label="Glucides"  cur={totals.c}    target={dayTargets.c}    unit="g"    ratio={cRatio}/>
-            <Bar label="Lipides"   cur={totals.f}    target={dayTargets.f}    unit="g"    ratio={fRatio} />
-          </GlassCard>
-        );
-      })()}
-
       {/* Calendar selector */}
       <div style={{marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
@@ -4909,46 +4866,6 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
           </GlassCard>
         ))}
       </div>
-
-      {/* Bilan journée : breakdown par repas avec totaux live */}
-      {meals.some(m=>(m.items||[]).length>0)&&(
-        <GlassCard padding={14} style={{marginBottom:14}}>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span>Bilan {isToday?'aujourd\'hui':viewDay}</span>
-            <span style={{fontSize:9,color:T.good,fontWeight:600}}>sync live</span>
-          </div>
-          {(()=>{
-            // Total du plan (tout ce qui est prévu)
-            const planTotal=meals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
-            const macros=[
-              {l:'kcal',planV:Math.round(planTotal.kcal),consoV:Math.round(totals.kcal),c:'#BFA060'},
-              {l:'Protéines',planV:Math.round(planTotal.p),consoV:Math.round(totals.p),c:'#B85070',unit:'g'},
-              {l:'Glucides',planV:Math.round(planTotal.c),consoV:Math.round(totals.c),c:'#5A8AE0',unit:'g'},
-              {l:'Lipides',planV:Math.round(planTotal.f),consoV:Math.round(totals.f),c:'#C89040',unit:'g'},
-            ];
-            return(
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {macros.map(m=>{
-                  const pct=m.planV>0?Math.min(100,(m.consoV/m.planV)*100):0;
-                  return(
-                    <div key={m.l}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}}>
-                        <span style={{fontSize:11,color:T.textDim,fontWeight:600}}>{m.l}</span>
-                        <span style={{fontSize:12,fontWeight:700,color:m.c,fontVariantNumeric:'tabular-nums'}}>
-                          {m.consoV}<span style={{color:T.textFaint,fontSize:10,fontWeight:500}}>/{m.planV}{m.unit||''}</span>
-                        </span>
-                      </div>
-                      <div style={{height:5,background:'rgba(255,255,255,0.05)',borderRadius:3,overflow:'hidden'}}>
-                        <div style={{height:'100%',width:`${pct}%`,background:m.c,borderRadius:3,transition:'width 0.6s cubic-bezier(.34,1.56,.64,1)',boxShadow:`0 0 6px ${m.c}66`}}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </GlassCard>
-      )}
 
       <SectionHeader title={isToday?'Mes repas du jour':`Plan ${viewDay}`} right={<span style={{fontSize:10,color:T.textFaint}}>{isToday?'tap pour valider':'aperçu seul'}</span>}/>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -6084,6 +6001,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
   const[notifyStatus,setNotifyStatus]=React.useState(null); // null|sending|done|error
   const[cycleDateSaved,setCycleDateSaved]=React.useState(false);
   const cycleDateSavedTimer=React.useRef(null);
+  const[showDayTools,setShowDayTools]=React.useState(false);
 
   const notifyAthlete=async()=>{
     setNotifyStatus('sending');
@@ -6302,35 +6220,6 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
         </div>
       )}
 
-      {/* Totaux auto-calculés depuis les aliments du jour actif */}
-      {(()=>{
-        const dayMeals=(activeDays&&activeDays[activeDay]&&activeDays[activeDay].meals)||[];
-        const t=dayMeals.reduce((acc,m)=>{const mm=mealMacros(m.items);return{kcal:acc.kcal+mm.kcal,p:acc.p+mm.p,c:acc.c+mm.c,f:acc.f+mm.f};},{kcal:0,p:0,c:0,f:0});
-        return(
-          <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(191,160,96,0.08),rgba(90,138,224,0.04))',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <span style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Total {activeDay} (somme des aliments)</span>
-              {saveStatus&&<span style={{fontSize:9,color:saveStatus==='saved'?T.good:saveStatus==='error'?T.danger:T.warn,fontWeight:700,letterSpacing:0.3,marginLeft:'auto'}}>
-                {saveStatus==='saving'?'…':saveStatus==='saved'?'✓ Sauvegardé':'✗ Erreur'}
-              </span>}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
-              {[
-                {l:'kcal',v:Math.round(t.kcal),c:'#BFA060'},
-                {l:'P g',v:Math.round(t.p),c:'#B85070'},
-                {l:'C g',v:Math.round(t.c),c:'#5A8AE0'},
-                {l:'L g',v:Math.round(t.f),c:'#C89040'},
-              ].map(f=>(
-                <div key={f.l} style={{textAlign:'center'}}>
-                  <div style={{fontSize:9,color:f.c,fontWeight:700,marginBottom:4,letterSpacing:0.4,textTransform:'uppercase'}}>{f.l}</div>
-                  <div style={{padding:'8px 4px',borderRadius:8,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',fontSize:17,fontWeight:700,color:f.c,fontVariantNumeric:'tabular-nums'}}>{f.v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Day selector — édite le contenu type d'un jour de la semaine (indépendant de la
           date cliquée dans le calendrier plus haut, qui sert seulement à consulter) */}
       <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>Modifier le contenu du :</div>
@@ -6349,49 +6238,56 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
         })}
       </div>
 
-      {/* Copy-from — visible uniquement si d'autres jours ont du contenu */}
+      {/* Copier/dupliquer un jour — replié par défaut : outil occasionnel, pas besoin
+          d'occuper 2 rangées de boutons en permanence sous le sélecteur de jour. */}
       {(()=>{
         const srcDays=DAYS_OF_WEEK.filter(d=>d!==activeDay&&(activeDays[d]&&activeDays[d].meals||[]).some(m=>(m.items||[]).length>0));
-        if(!srcDays.length)return null;
-        return(
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,padding:'8px 12px',borderRadius:11,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.15)'}}>
-            <span style={{fontSize:11,color:'#5A8AE0',fontWeight:600,flexShrink:0}}>📋 Copier depuis :</span>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-              {srcDays.map(d=>(
-                <button key={d} onClick={()=>copyFromDay(d)} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                  {d.slice(0,3)}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Dupliquer vers — visible si le jour actif a du contenu */}
-      {(()=>{
         const curMeals=(activeDays[activeDay]&&activeDays[activeDay].meals)||[];
         const hasCur=curMeals.some(m=>(m.items||[]).length>0);
-        if(!hasCur)return null;
-        const targets=DAYS_OF_WEEK.filter(d=>d!==activeDay);
+        if(!srcDays.length&&!hasCur)return null;
         return(
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,padding:'8px 12px',borderRadius:11,background:'rgba(191,160,96,0.06)',border:'1px solid rgba(191,160,96,0.15)'}}>
-            <span style={{fontSize:11,color:T.accent,fontWeight:600,flexShrink:0}}>📤 Dupliquer vers :</span>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-              {targets.map(d=>(
-                <button key={d} onClick={()=>{
-                  if(!confirm(`Dupliquer ${activeDay} → ${d} ? Le contenu de ${d} sera remplacé.`))return;
-                  const src=curMeals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))}));
-                  updMeals(d,src);
-                }} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                  {d.slice(0,3)}
-                </button>
-              ))}
-            </div>
+          <div style={{marginBottom:10}}>
+            <button onClick={()=>setShowDayTools(v=>!v)} style={{width:'100%',height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.02)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+              🔁 Copier / dupliquer ce jour {showDayTools?'▲':'▼'}
+            </button>
+            {showDayTools&&(
+              <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:8}}>
+                {srcDays.length>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:6,padding:'8px 12px',borderRadius:11,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.15)'}}>
+                    <span style={{fontSize:11,color:'#5A8AE0',fontWeight:600,flexShrink:0}}>📋 Copier depuis :</span>
+                    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                      {srcDays.map(d=>(
+                        <button key={d} onClick={()=>copyFromDay(d)} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                          {d.slice(0,3)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {hasCur&&(
+                  <div style={{display:'flex',alignItems:'center',gap:6,padding:'8px 12px',borderRadius:11,background:'rgba(191,160,96,0.06)',border:'1px solid rgba(191,160,96,0.15)'}}>
+                    <span style={{fontSize:11,color:T.accent,fontWeight:600,flexShrink:0}}>📤 Dupliquer vers :</span>
+                    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                      {DAYS_OF_WEEK.filter(d=>d!==activeDay).map(d=>(
+                        <button key={d} onClick={()=>{
+                          if(!confirm(`Dupliquer ${activeDay} → ${d} ? Le contenu de ${d} sera remplacé.`))return;
+                          const src=curMeals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))}));
+                          updMeals(d,src);
+                        }} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                          {d.slice(0,3)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })()}
 
-      {/* Real-time preview gauges: somme des aliments du jour actif vs objectifs */}
+      {/* Aperçu du jour actif : totaux vs objectifs (seul panneau de macros — plus de
+          doublon avec un 2e bloc de totaux bruts juste au-dessus) */}
       {(()=>{
         const dayMeals=activeDays[activeDay]&&activeDays[activeDay].meals||[];
         const totals=dayMeals.reduce((acc,m)=>{
@@ -6405,7 +6301,12 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
           <div style={{padding:12,borderRadius:14,background:'linear-gradient(160deg,rgba(191,160,96,0.06),rgba(90,138,224,0.04))',border:'1px solid rgba(255,255,255,0.08)',marginBottom:12}}>
             <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span>Aperçu {activeDay} · total des repas</span>
-              <span style={{fontSize:9,color:T.textFaint}}>{totalItems} aliments</span>
+              <span style={{display:'flex',alignItems:'center',gap:8}}>
+                {saveStatus&&<span style={{fontSize:9,color:saveStatus==='saved'?T.good:saveStatus==='error'?T.danger:T.warn,fontWeight:700,letterSpacing:0.3}}>
+                  {saveStatus==='saving'?'…':saveStatus==='saved'?'✓ Sauvegardé':'✗ Erreur'}
+                </span>}
+                <span style={{fontSize:9,color:T.textFaint}}>{totalItems} aliments</span>
+              </span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6}}>
               {[
