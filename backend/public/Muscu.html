@@ -6082,6 +6082,8 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
   const[openMeal,setOpenMeal]=React.useState(()=>findFirstFilledMeal(normalizePlan(initialPlan),todayDayName())||null);
   const[saveStatus,setSaveStatus]=React.useState(null);
   const[notifyStatus,setNotifyStatus]=React.useState(null); // null|sending|done|error
+  const[cycleDateSaved,setCycleDateSaved]=React.useState(false);
+  const cycleDateSavedTimer=React.useRef(null);
 
   const notifyAthlete=async()=>{
     setNotifyStatus('sending');
@@ -6270,11 +6272,21 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
 
       {/* Date de début du cycle : détermine quelle semaine (S1..S4) s'applique à quelle
           date réelle côté athlète — sans ça, le cycle démarre par défaut le jour de
-          l'import/de la 1ère sauvegarde. */}
+          l'import/de la 1ère sauvegarde. Confirmation affichée juste ici (pas seulement
+          plus bas près du total du jour) pour que l'enregistrement soit visible tout de
+          suite, à l'endroit même où on vient de changer la date. */}
       {data.weeks&&data.weeks.length>1&&(
         <div style={{marginBottom:10,padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Le cycle {data.weeks.map(w=>w.label).join('→')} commence le</div>
-          <input type="date" value={data.cycleStartDate||cycleStartFallback} onChange={e=>updField('cycleStartDate',e.target.value)}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Le cycle {data.weeks.map(w=>w.label).join('→')} commence le</div>
+            {cycleDateSaved&&<span style={{fontSize:10,color:T.good,fontWeight:700,marginLeft:'auto'}}>✓ Enregistré</span>}
+          </div>
+          <input type="date" value={data.cycleStartDate||cycleStartFallback} onChange={e=>{
+            updField('cycleStartDate',e.target.value);
+            setCycleDateSaved(true);
+            clearTimeout(cycleDateSavedTimer.current);
+            cycleDateSavedTimer.current=setTimeout(()=>setCycleDateSaved(false),3000);
+          }}
             style={{width:'100%',padding:'8px 10px',borderRadius:9,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
         </div>
       )}
