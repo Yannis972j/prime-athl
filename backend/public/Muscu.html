@@ -6605,14 +6605,16 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const nutriNormData=React.useMemo(()=>nutriPlan?.data?normalizePlan(nutriPlan.data):null,[nutriPlan]);
   const nutriNumWeeks=nutriNormData&&Array.isArray(nutriNormData.weeks)?nutriNormData.weeks.length:1;
   const nutriCycleStart=(nutriPlan?.data&&nutriPlan.data.cycleStartDate)||nutriPlan?.assignedAt;
-  // true si le plan a du contenu (≥1 aliment) pour cette date précise, en tenant compte
-  // de la semaine du cycle (S1..S4) qui s'applique réellement à cette date.
-  const nutriPlannedOn=React.useCallback(dateStr=>{
-    if(!nutriNormData)return false;
+  // Repas prévus pour une date précise, en tenant compte de la semaine du cycle (S1..S4)
+  // qui s'applique réellement à cette date — permet d'afficher le contenu du programme
+  // directement dans le calendrier, pas juste un statut "planifié/validé".
+  const nutriMealsOn=React.useCallback(dateStr=>{
+    if(!nutriNormData)return[];
     const dayName=JS_TO_DAY[new Date(dateStr+'T12:00:00').getDay()];
     const wi=computeCycleWeekIndex(nutriCycleStart,dateStr,nutriNumWeeks);
-    return getDayMeals(nutriNormData,dayName,wi).some(m=>(m.items||[]).length>0);
+    return getDayMeals(nutriNormData,dayName,wi);
   },[nutriNormData,nutriCycleStart,nutriNumWeeks]);
+  const nutriPlannedOn=React.useCallback(dateStr=>nutriMealsOn(dateStr).some(m=>(m.items||[]).length>0),[nutriMealsOn]);
 
   const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
   const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
@@ -6754,11 +6756,24 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
               </div>
             )}
             {mode!=='sport'&&hasNutriPlan&&(()=>{
-              const planned=!nutriOk&&nutriPlannedOn(sel);
+              const dayMeals=nutriMealsOn(sel).filter(m=>(m.items||[]).length>0);
+              const planned=!nutriOk&&dayMeals.length>0;
               return(
                 <div style={{padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(90,138,224,0.08)':planned?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(90,138,224,0.25)':planned?'rgba(191,160,96,0.18)':'rgba(255,255,255,0.06)'}`}}>
                   <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
-                  <div style={{fontSize:12,fontWeight:600,color:nutriOk?'#5A8AE0':planned?'#BFA060':T.textFaint}}>{nutriOk?'✓ Validée':planned?'📋 Planifiée — non validée':'Aucun repas prévu ce jour'}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:nutriOk?'#5A8AE0':planned?'#BFA060':T.textFaint,marginBottom:dayMeals.length>0?6:0}}>{nutriOk?'✓ Validée':planned?'📋 Planifiée — non validée':'Aucun repas prévu ce jour'}</div>
+                  {dayMeals.map(m=>{
+                    const mm=mealMacros(m.items);
+                    return(
+                      <div key={m.id} style={{padding:'5px 0',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                          <span style={{fontSize:11,fontWeight:700,color:T.text}}>{m.emoji} {m.label}</span>
+                          <span style={{fontSize:10,color:T.textFaint}}>{Math.round(mm.kcal)} kcal</span>
+                        </div>
+                        <div style={{fontSize:10,color:T.textDim,lineHeight:1.5}}>{m.items.map(it=>it.name).join(', ')}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })()}
