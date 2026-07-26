@@ -5271,19 +5271,13 @@ function useSessionFeedback(sessionId,initial,onSaved){
 const emptyDay=()=>({meals:NUTRI_MEAL_TEMPLATES.map(t=>({...t,items:[],note:''}))});
 const emptyWeek=()=>{const d={};for(const day of DAYS_OF_WEEK)d[day]=emptyDay();return d;};
 
-// Backward-compat: get meals for a specific day (weekIdx optional, defaults to 0)
 function getDayMeals(plan,dayName,weekIdx){
   if(plan&&plan.weeks&&plan.weeks.length>0){
     const w=plan.weeks[weekIdx||0]||plan.weeks[0];
     if(w&&w.days&&w.days[dayName])return w.days[dayName].meals||[];
   }
   if(plan&&plan.days&&plan.days[dayName])return plan.days[dayName].meals||[];
-  if(plan&&plan.meals)return plan.meals; // legacy single-day plan
   return emptyDay().meals;
-}
-function getDayNote(plan,dayName){
-  if(plan&&plan.days&&plan.days[dayName])return plan.days[dayName].note||'';
-  return '';
 }
 
 // Calcule automatiquement quelle semaine du cycle (S1..S4) s'applique à une date donnée,
@@ -5789,9 +5783,6 @@ function normalizePlan(p){
   if(!p)return DEFAULT_NUTRI_TEMPLATE;
   function ensureWeekDays(days){
     const out=days?{...days}:{};
-    if(!days&&p.meals){
-      for(const d of DAYS_OF_WEEK)out[d]={meals:p.meals.map(m=>({...m,items:(m.items||[]).map(it=>({...it}))})),note:''};
-    }
     for(const d of DAYS_OF_WEEK){
       if(!out[d])out[d]=emptyDay();
       if(!out[d].meals)out[d].meals=emptyDay().meals;
