@@ -4568,9 +4568,10 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   // changement de date ou de plan — pour que le cycle s'enchaîne tout seul, sans jamais
   // rester figé sur une semaine manuellement choisie une fois qu'on change de jour.
   const nutriNumWeeks=plan&&plan.data&&Array.isArray(plan.data.weeks)?plan.data.weeks.length:1;
+  const nutriCycleStart=(plan&&plan.data&&plan.data.cycleStartDate)||(plan&&plan.assignedAt);
   React.useEffect(()=>{
-    setActiveWeek(computeCycleWeekIndex(plan&&plan.assignedAt,selectedDate||todayStrN,nutriNumWeeks));
-  },[plan&&plan.assignedAt,selectedDate,nutriNumWeeks]);
+    setActiveWeek(computeCycleWeekIndex(nutriCycleStart,selectedDate||todayStrN,nutriNumWeeks));
+  },[nutriCycleStart,selectedDate,nutriNumWeeks]);
 
   const handleSelfImport=e=>{
     const file=e.target.files[0];
@@ -5286,13 +5287,16 @@ function getDayNote(plan,dayName){
 }
 
 // Calcule automatiquement quelle semaine du cycle (S1..S4) s'applique à une date donnée,
-// à partir de la date d'assignation du plan (assignedAt) : semaine 0 les 7 premiers jours,
-// semaine 1 les 7 suivants, etc., puis ça reboucle sur le nombre de semaines du plan.
-// Le cycle s'enchaîne ainsi de façon continue même quand le mois change, sans dépendre
-// d'une sélection manuelle d'onglet qui resterait figée sur l'ancienne semaine.
-function computeCycleWeekIndex(assignedAt,dateStr,numWeeks){
-  if(!assignedAt||!numWeeks||numWeeks<=1)return 0;
-  const start=new Date(assignedAt);start.setHours(0,0,0,0);
+// à partir du point de départ du cycle : semaine 0 les 7 premiers jours, semaine 1 les 7
+// suivants, etc., puis ça reboucle sur le nombre de semaines du plan. Le cycle s'enchaîne
+// ainsi de façon continue même quand le mois change, sans dépendre d'une sélection
+// manuelle d'onglet qui resterait figée sur l'ancienne semaine.
+// startRef accepte soit une date "YYYY-MM-DD" choisie explicitement par le coach
+// (plan.cycleStartDate), soit un timestamp ms de repli (plan.assignedAt).
+function computeCycleWeekIndex(startRef,dateStr,numWeeks){
+  if(!startRef||!numWeeks||numWeeks<=1)return 0;
+  const start=typeof startRef==='string'?new Date(startRef+'T00:00:00'):new Date(startRef);
+  start.setHours(0,0,0,0);
   const target=dateStr?new Date(dateStr+'T00:00:00'):new Date();target.setHours(0,0,0,0);
   const diffDays=Math.round((target-start)/86400000);
   if(diffDays<0)return 0;
@@ -5807,6 +5811,7 @@ function normalizePlan(p){
     dailyFat:p.dailyFat||0,
     days:weeks[0].days,
     weeks,
+    cycleStartDate:p.cycleStartDate||'',
   };
 }
 
@@ -6069,8 +6074,12 @@ function FoodSearch({onSelect,onClose}){
   );
 }
 
-function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported}){
+function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,onImported}){
   const[data,setData]=React.useState(()=>normalizePlan(initialPlan));
+  // Date affichée dans le sélecteur "début du cycle" quand le plan n'en a pas encore
+  // d'explicite : la date réelle d'assignation du plan (pas "aujourd'hui", qui changerait
+  // à chaque réouverture de l'éditeur et laisserait croire que le cycle recommence).
+  const cycleStartFallback=assignedAt?ymdKey(new Date(assignedAt)):ymdKey();
   const[activeWeek,setActiveWeek]=React.useState(0);
   const[activeDay,setActiveDay]=React.useState(()=>{
     const plan=normalizePlan(initialPlan);
@@ -6267,6 +6276,17 @@ function NutritionEditor({athleteId,athleteName,initialPlan,onSaved,onImported})
         {notifyStatus==='sending'?<span style={{fontSize:15}}>⏳</span>:notifyStatus==='done'?<span style={{fontSize:15}}>✅</span>:notifyStatus==='error'?<span style={{fontSize:15}}>✗</span>:<Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/>}
         {notifyStatus==='sending'?'Envoi en cours…':notifyStatus==='done'?'Notification envoyée !':notifyStatus==='error'?'Erreur — réessaie':"Valider & notifier l'athlète"}
       </button>
+
+      {/* Date de début du cycle : détermine quelle semaine (S1..S4) s'applique à quelle
+          date réelle côté athlète — sans ça, le cycle démarre par défaut le jour de
+          l'import/de la 1ère sauvegarde. */}
+      {data.weeks&&data.weeks.length>1&&(
+        <div style={{marginBottom:10,padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Le cycle {data.weeks.map(w=>w.label).join('→')} commence le</div>
+          <input type="date" value={data.cycleStartDate||cycleStartFallback} onChange={e=>updField('cycleStartDate',e.target.value)}
+            style={{width:'100%',padding:'8px 10px',borderRadius:9,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+      )}
 
       {/* Sélecteur semaine */}
       {data.weeks&&data.weeks.length>1&&(
@@ -6579,6 +6599,17 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
 
   // has nutrition plan
   const hasNutriPlan=!!(nutriPlan?.data);
+  const nutriNormData=React.useMemo(()=>nutriPlan?.data?normalizePlan(nutriPlan.data):null,[nutriPlan]);
+  const nutriNumWeeks=nutriNormData&&Array.isArray(nutriNormData.weeks)?nutriNormData.weeks.length:1;
+  const nutriCycleStart=(nutriPlan?.data&&nutriPlan.data.cycleStartDate)||nutriPlan?.assignedAt;
+  // true si le plan a du contenu (≥1 aliment) pour cette date précise, en tenant compte
+  // de la semaine du cycle (S1..S4) qui s'applique réellement à cette date.
+  const nutriPlannedOn=React.useCallback(dateStr=>{
+    if(!nutriNormData)return false;
+    const dayName=JS_TO_DAY[new Date(dateStr+'T12:00:00').getDay()];
+    const wi=computeCycleWeekIndex(nutriCycleStart,dateStr,nutriNumWeeks);
+    return getDayMeals(nutriNormData,dayName,wi).some(m=>(m.items||[]).length>0);
+  },[nutriNormData,nutriCycleStart,nutriNumWeeks]);
 
   const prevM=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);setSel(null);};
   const nextM=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);setSel(null);};
@@ -6596,6 +6627,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             <div style={{width:6,height:6,borderRadius:3,background:c}}/>{l}
           </div>
         ))}
+        {mode==='nutrition'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#BFA060'}}/>Planifié</div>}
         {mode!=='sport'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#5A8AE0'}}/>Nutrition validée</div>}
       </div>
 
@@ -6608,18 +6640,20 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           const hasProg=mode!=='nutrition'&&(movedHere?true:(programDayNames.has(dayName)&&!isMovedAway));
           const sessDone=mode!=='nutrition'&&sessionsByDate[dateStr];
           const nutriOk=mode!=='sport'&&nutriDone[dateStr];
+          const nutriPlanned=mode!=='sport'&&!nutriOk&&nutriPlannedOn(dateStr);
           const hasPlanned=mode==='sport'&&!sessDone&&!hasProg&&(plannedSessions?.[dateStr]||[]).length>0;
           let bg='rgba(255,255,255,0.03)',border='1px solid rgba(255,255,255,0.05)';
           if(mode==='nutrition'){
             if(nutriOk){bg='rgba(90,138,224,0.12)';border='1px solid rgba(90,138,224,0.35)';}
+            else if(nutriPlanned){bg='rgba(191,160,96,0.08)';border='1px solid rgba(191,160,96,0.22)';}
           }else{
             if(sessDone){bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';}
             else if(hasProg){bg=movedHere?'rgba(144,144,196,0.1)':'rgba(191,160,96,0.08)';border=movedHere?'1px solid rgba(144,144,196,0.35)':'1px solid rgba(191,160,96,0.22)';}
             else if(hasPlanned){bg='rgba(90,138,224,0.08)';border='1px solid rgba(90,138,224,0.25)';}
             if(mode==='all'&&nutriOk&&!sessDone)border='1px solid rgba(90,138,224,0.25)';
           }
-          const canClick=hasProg||sessDone||nutriOk||isMovedAway||hasPlanned;
-          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':T.textFaint):(sessDone?'#2CC4A0':movedHere?'#9090c4':hasProg?'#BFA060':hasPlanned?'#5A8AE0':T.textFaint);
+          const canClick=hasProg||sessDone||nutriOk||nutriPlanned||isMovedAway||hasPlanned;
+          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':nutriPlanned?'#BFA060':T.textFaint):(sessDone?'#2CC4A0':movedHere?'#9090c4':hasProg?'#BFA060':hasPlanned?'#5A8AE0':T.textFaint);
           return{
             selectable:canClick,
             bg,border,textColor:numColor,
@@ -6628,6 +6662,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
               ...(!sessDone&&hasProg?[movedHere?'#9090c4':'#BFA060']:[]),
               ...(hasPlanned?['#5A8AE0']:[]),
               ...(nutriOk&&mode!=='sport'?['#5A8AE0']:[]),
+              ...(nutriPlanned&&mode!=='sport'?['#BFA060']:[]),
             ],
           };
         }}/>
@@ -6715,12 +6750,15 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 )}
               </div>
             )}
-            {mode!=='sport'&&hasNutriPlan&&(
-              <div style={{padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(90,138,224,0.08)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(90,138,224,0.25)':'rgba(255,255,255,0.06)'}`}}>
-                <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
-                <div style={{fontSize:12,fontWeight:600,color:nutriOk?'#5A8AE0':T.textFaint}}>{nutriOk?'✓ Validée':'Non validée'}</div>
-              </div>
-            )}
+            {mode!=='sport'&&hasNutriPlan&&(()=>{
+              const planned=!nutriOk&&nutriPlannedOn(sel);
+              return(
+                <div style={{padding:'8px 10px',borderRadius:10,background:nutriOk?'rgba(90,138,224,0.08)':planned?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${nutriOk?'rgba(90,138,224,0.25)':planned?'rgba(191,160,96,0.18)':'rgba(255,255,255,0.06)'}`}}>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint,marginBottom:4}}>Nutrition</div>
+                  <div style={{fontSize:12,fontWeight:600,color:nutriOk?'#5A8AE0':planned?'#BFA060':T.textFaint}}>{nutriOk?'✓ Validée':planned?'📋 Planifiée — non validée':'Aucun repas prévu ce jour'}</div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -7025,9 +7063,10 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   // Auto-sélectionne la semaine du cycle (S1..S4) qui s'applique à aujourd'hui, à partir
   // de la date d'assignation du plan — même logique que côté athlète (NutritionScreen).
   const nutriNumWeeks=data&&data.plan&&data.plan.data&&Array.isArray(data.plan.data.weeks)?data.plan.data.weeks.length:1;
+  const nutriCycleStart=(data&&data.plan&&data.plan.data&&data.plan.data.cycleStartDate)||(data&&data.plan&&data.plan.assignedAt);
   React.useEffect(()=>{
-    setActiveWeek(computeCycleWeekIndex(data&&data.plan&&data.plan.assignedAt,null,nutriNumWeeks));
-  },[data&&data.plan&&data.plan.assignedAt,nutriNumWeeks]);
+    setActiveWeek(computeCycleWeekIndex(nutriCycleStart,null,nutriNumWeeks));
+  },[nutriCycleStart,nutriNumWeeks]);
 
   const load=React.useCallback(async()=>{
     try{const d=await apiCall('/api/coach/athletes/'+athleteId+'/nutrition');setData(d);}catch(e){console.error(e);}
@@ -9103,6 +9142,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   athleteId={a.id}
                   athleteName={(a.firstName||a.email.split('@')[0])+(a.lastName?' '+a.lastName:'')}
                   initialPlan={nutriDetail&&nutriDetail.plan?nutriDetail.plan.data:null}
+                  assignedAt={nutriDetail&&nutriDetail.plan?nutriDetail.plan.assignedAt:null}
                   onSaved={()=>reloadDetail(a.id)}
                   onImported={()=>reloadDetail(a.id)}
                 />
