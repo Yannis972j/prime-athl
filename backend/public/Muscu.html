@@ -4564,6 +4564,14 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const prevMonthN=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
   const nextMonthN=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
 
+  // Auto-sélectionne la bonne semaine du cycle (S1..S4) pour la date affichée, à chaque
+  // changement de date ou de plan — pour que le cycle s'enchaîne tout seul, sans jamais
+  // rester figé sur une semaine manuellement choisie une fois qu'on change de jour.
+  const nutriNumWeeks=plan&&plan.data&&Array.isArray(plan.data.weeks)?plan.data.weeks.length:1;
+  React.useEffect(()=>{
+    setActiveWeek(computeCycleWeekIndex(plan&&plan.assignedAt,selectedDate||todayStrN,nutriNumWeeks));
+  },[plan&&plan.assignedAt,selectedDate,nutriNumWeeks]);
+
   const handleSelfImport=e=>{
     const file=e.target.files[0];
     if(!file)return;
@@ -5275,6 +5283,20 @@ function getDayMeals(plan,dayName,weekIdx){
 function getDayNote(plan,dayName){
   if(plan&&plan.days&&plan.days[dayName])return plan.days[dayName].note||'';
   return '';
+}
+
+// Calcule automatiquement quelle semaine du cycle (S1..S4) s'applique à une date donnée,
+// à partir de la date d'assignation du plan (assignedAt) : semaine 0 les 7 premiers jours,
+// semaine 1 les 7 suivants, etc., puis ça reboucle sur le nombre de semaines du plan.
+// Le cycle s'enchaîne ainsi de façon continue même quand le mois change, sans dépendre
+// d'une sélection manuelle d'onglet qui resterait figée sur l'ancienne semaine.
+function computeCycleWeekIndex(assignedAt,dateStr,numWeeks){
+  if(!assignedAt||!numWeeks||numWeeks<=1)return 0;
+  const start=new Date(assignedAt);start.setHours(0,0,0,0);
+  const target=dateStr?new Date(dateStr+'T00:00:00'):new Date();target.setHours(0,0,0,0);
+  const diffDays=Math.round((target-start)/86400000);
+  if(diffDays<0)return 0;
+  return Math.floor(diffDays/7)%numWeeks;
 }
 
 // Parse "5H - 8H" / "14H-17H" / "5h-8h" → ["05:00","08:00"]
@@ -6999,6 +7021,13 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   const[expandedMeal,setExpandedMeal]=React.useState(null);
   const[loading,setLoading]=React.useState(true);
   const[justUpdated,setJustUpdated]=React.useState(false);
+
+  // Auto-sélectionne la semaine du cycle (S1..S4) qui s'applique à aujourd'hui, à partir
+  // de la date d'assignation du plan — même logique que côté athlète (NutritionScreen).
+  const nutriNumWeeks=data&&data.plan&&data.plan.data&&Array.isArray(data.plan.data.weeks)?data.plan.data.weeks.length:1;
+  React.useEffect(()=>{
+    setActiveWeek(computeCycleWeekIndex(data&&data.plan&&data.plan.assignedAt,null,nutriNumWeeks));
+  },[data&&data.plan&&data.plan.assignedAt,nutriNumWeeks]);
 
   const load=React.useCallback(async()=>{
     try{const d=await apiCall('/api/coach/athletes/'+athleteId+'/nutrition');setData(d);}catch(e){console.error(e);}
