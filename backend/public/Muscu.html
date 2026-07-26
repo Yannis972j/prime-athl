@@ -6331,7 +6331,9 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
         );
       })()}
 
-      {/* Day selector */}
+      {/* Day selector — édite le contenu type d'un jour de la semaine (indépendant de la
+          date cliquée dans le calendrier plus haut, qui sert seulement à consulter) */}
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>Modifier le contenu du :</div>
       <div style={{display:'flex',gap:4,marginBottom:10,overflowX:'auto',paddingBottom:4}}>
         {DAYS_OF_WEEK.map(d=>{
           const hasContent=(activeDays[d]&&activeDays[d].meals||[]).some(m=>(m.items||[]).length>0);
@@ -7218,7 +7220,9 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
         </div>
       )}
 
-      {/* Day selector */}
+      {/* Day selector — consulte le jour-type de cette semaine du cycle (indépendant de
+          la date cliquée dans le calendrier plus haut) */}
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:4}}>Consulter le jour-type :</div>
       <div style={{display:'flex',gap:4,marginBottom:10,overflowX:'auto',paddingBottom:4}}>
         {DAYS_OF_WEEK.map(d=>{
           const dayMeals=getDayMeals(plan,d,activeWeek);
