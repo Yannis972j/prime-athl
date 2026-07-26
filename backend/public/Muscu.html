@@ -4779,11 +4779,35 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             <div style={{fontSize:8,color:'rgba(255,255,255,0.9)',fontWeight:700,marginTop:1}}>COPIER</div>
           </div>
         )}
-        {selectedDate&&(
-          <div style={{marginTop:8,padding:'8px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',fontSize:12,color:T.textDim,textAlign:'center',textTransform:'capitalize'}}>
-            {new Date(selectedDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} · <span style={{color:T.accent,fontWeight:700}}>{viewDay}</span>
-          </div>
-        )}
+        {/* Récap du jour cliqué : repas + aliments d'un coup d'œil, sans avoir à
+            descendre jusqu'à la liste des repas plus bas (même vue que côté coach). */}
+        {selectedDate&&(()=>{
+          const dayMealsSel=getDayMeals(data,viewDay,activeWeek).filter(m=>(m.items||[]).length>0);
+          const histLogSel=history[selectedDate];
+          const isDoneSel=histLogSel&&Object.values(histLogSel.validated||{}).some(Boolean);
+          return(
+            <div style={{marginTop:8,padding:'10px 12px',borderRadius:11,background:isDoneSel?'rgba(44,196,160,0.06)':'rgba(255,255,255,0.03)',border:`1px solid ${isDoneSel?'rgba(44,196,160,0.2)':'rgba(255,255,255,0.07)'}`}}>
+              <div style={{fontSize:12,color:T.textDim,textAlign:'center',textTransform:'capitalize',marginBottom:dayMealsSel.length>0?8:0}}>
+                {new Date(selectedDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} · <span style={{color:T.accent,fontWeight:700}}>{viewDay}</span>
+                {isDoneSel&&<span style={{color:T.good,fontWeight:700}}> · ✓ validée</span>}
+              </div>
+              {dayMealsSel.length>0?dayMealsSel.map(m=>{
+                const mm=mealMacros(m.items);
+                return(
+                  <div key={m.id} style={{padding:'5px 0',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.text}}>{m.emoji} {m.label}</span>
+                      <span style={{fontSize:10,color:T.textFaint}}>{Math.round(mm.kcal)} kcal</span>
+                    </div>
+                    <div style={{fontSize:10,color:T.textDim,lineHeight:1.5}}>{m.items.map(it=>it.name).join(', ')}</div>
+                  </div>
+                );
+              }):(
+                <div style={{fontSize:11,color:T.textFaint,textAlign:'center'}}>Aucun repas prévu ce jour</div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Sélecteur semaine (si plan multi-semaines) ── */}
