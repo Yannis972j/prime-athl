@@ -311,6 +311,40 @@ function ConfirmBanner({msg,onConfirm,onCancel}){
     </div>
   );
 }
+// ── Aperçu d'import Excel (programme / bibliothèque / nutrition) ──────────
+// Affiché après le parsing, avant l'enregistrement réel : montre ce qui a été détecté et
+// les avertissements (lignes/aliments ignorés) pour que le coach puisse vérifier ou
+// annuler, plutôt que de découvrir un import incomplet après coup.
+function ImportPreviewModal({open,onClose,onConfirm,title,stats,warnings,confirmLabel,busy}){
+  return(
+    <BottomSheet open={open} onClose={busy?()=>{}:onClose} center>
+      <div style={{fontSize:17,fontWeight:800,marginBottom:4}}>{title}</div>
+      <div style={{fontSize:12,color:T.textDim,marginBottom:16}}>Vérifie que tout est correct avant de valider l'import.</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:16}}>
+        {(stats||[]).map(s=>(
+          <div key={s.label} style={{flex:'1 1 90px',padding:'10px 8px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',textAlign:'center'}}>
+            <div style={{fontSize:20,fontWeight:800,color:T.accent}}>{s.value}</div>
+            <div style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3,marginTop:2}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {warnings&&warnings.length>0&&(
+        <div style={{padding:'10px 12px',borderRadius:12,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.25)',marginBottom:16,maxHeight:180,overflowY:'auto'}}>
+          <div style={{fontSize:11,color:'#C89040',fontWeight:700,marginBottom:6}}>⚠ À vérifier ({warnings.length})</div>
+          {warnings.map((w,i)=>(
+            <div key={i} style={{fontSize:12,color:T.textDim,lineHeight:1.5,marginBottom:i<warnings.length-1?4:0}}>• {w}</div>
+          ))}
+        </div>
+      )}
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onClose} disabled={busy} style={{flex:1,height:46,borderRadius:13,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:700,cursor:busy?'default':'pointer',opacity:busy?0.5:1}}>Annuler</button>
+        <button onClick={onConfirm} disabled={busy} style={{flex:2,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:busy?'default':'pointer',opacity:busy?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          {busy?'Import…':(confirmLabel||"✓ Confirmer l'import")}
+        </button>
+      </div>
+    </BottomSheet>
+  );
+}
 // ── iOS frame ────────────────────────────────────────────
 function IOSStatusBar({dark=false}){
   const c=dark?'#fff':'#000';
@@ -554,6 +588,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
       const wb = XLSX.read(data, {type:'array', raw:true, cellDates:false});
       if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) { onError('Fichier Excel vide ou illisible'); return; }
       const programs = {};
+      const warnings = [];
       const DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
       const uid = () => Math.random().toString(36).slice(2);
 
@@ -724,10 +759,22 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         } else if (Object.keys(sheetData).length > 0) {
           programs[sheetName] = sheetData;
         }
+        // categoryData compte TOUTE ligne avec un nom d'exercice, même avant qu'un jour ne
+        // soit détecté ; sheetData ne garde que celles rattachées à un jour. L'écart entre
+        // les deux = des lignes silencieusement perdues (jour manquant/mal placé en 1ère
+        // ligne du bloc) — averti au lieu de disparaître sans explication.
+        if (!categoryFallback) {
+          const totalExRows = Object.values(categoryData).reduce((s,c)=>s+c.exercises.length,0);
+          const keptExRows = Object.values(sheetData).reduce((s,d)=>s+d.exercises.length,0);
+          if (totalExRows > keptExRows) {
+            const dropped = totalExRows - keptExRows;
+            warnings.push(`Feuille "${sheetName}" : ${dropped} ligne${dropped>1?'s':''} ignorée${dropped>1?'s':''} (aucun jour LUNDI…DIMANCHE détecté avant).`);
+          }
+        }
       });
 
       if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
-      onSuccess(programs);
+      onSuccess(programs, warnings);
     } catch(e) { onError('Excel invalide : ' + (e.message || e)); }
   };
   reader.readAsArrayBuffer(file);
@@ -755,18 +802,27 @@ function excelExport(workout) {
 }
 
 // ── Shared Excel import handler (programme) ───────────────
-function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg) {
+function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview) {
   return e => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
     parseYannisExcel(file,
-      programs => {
-        if (onImportPrograms) onImportPrograms(programs);
+      (programs, warnings) => {
         const nS = Object.keys(programs).length;
         const nD = Object.values(programs).reduce((s,d)=>s+Object.keys(d).length,0);
-        setMsg(`✓ ${nS} mois · ${nD} jours importés`);
-        setTimeout(() => setMsg(null), 4000);
+        const nEx = Object.values(programs).reduce((s,d)=>s+Object.values(d).reduce((s2,day)=>s2+(day.exercises||[]).length,0),0);
+        // Aperçu avant d'écraser quoi que ce soit : le coach voit ce qui a été détecté
+        // (et les lignes ignorées) avant de confirmer, plutôt qu'après coup.
+        setPreview({
+          stats:[{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}],
+          warnings: warnings||[],
+          onConfirm: () => {
+            if (onImportPrograms) onImportPrograms(programs);
+            setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+            setTimeout(() => setMsg(null), 4000);
+          },
+        });
       },
       err => alert('Erreur lecture Excel : ' + err)
     );
@@ -846,6 +902,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef = React.useRef(null);
   const [importMsg, setImportMsg] = React.useState(null);
+  const[importPreview,setImportPreview]=React.useState(null);
   const[pickerFor,setPickerFor]=React.useState(null); // index de l'exercice en cours de sélection, ou null
   const[pickerQuery,setPickerQuery]=React.useState('');
 
@@ -882,12 +939,14 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
   const inpStyle=(w='100%',fs=14)=>({width:w,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:fs,fontWeight:600,padding:'6px 10px',fontFamily:'inherit',boxSizing:'border-box',outline:'none'});
   const numStyle={width:60,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:15,fontWeight:700,padding:'6px 8px',fontFamily:'inherit',textAlign:'center',boxSizing:'border-box',outline:'none'};
 
-  const handleFile = makeHandleProgramExcel(fileRef, onImportPrograms, setImportMsg);
+  const handleFile = makeHandleProgramExcel(fileRef, onImportPrograms, setImportMsg, setImportPreview);
 
   return(
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
       {/* hidden file input */}
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
+      <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings}
+        onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
 
       {/* header */}
       <div style={{padding:'6px 18px 12px',background:`linear-gradient(180deg,${T.bg} 60%,transparent)`,zIndex:5,flexShrink:0}}>
@@ -3756,6 +3815,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef=React.useRef(null);
   const[importMsg,setImportMsg]=React.useState(null);
+  const[importPreview,setImportPreview]=React.useState(null);
 
   // Archives programme
   const[archives,setArchives]=React.useState([]);
@@ -3901,7 +3961,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const allDone=workout.exercises.length>0&&workout.exercises.every(e=>e.sets.every(s=>s.done));
   const inProgress=hasProgress&&!allDone;
 
-  const handleFile=makeHandleProgramExcel(fileRef,onImportPrograms,setImportMsg);
+  const handleFile=makeHandleProgramExcel(fileRef,onImportPrograms,setImportMsg,setImportPreview);
 
   const startDay=dayName=>{
     const d=days[dayName];
@@ -3915,6 +3975,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   return(
     <div style={{padding:'18px 18px 30px',color:T.text}}>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
+      <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings}
+        onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
 
       {/* BottomSheet : voir une archive */}
       <BottomSheet open={!!viewArchive} onClose={()=>{setViewArchive(null);setConfirmDel(null);}}>
@@ -4464,6 +4526,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
   const[activeWeek,setActiveWeek]=React.useState(0);
   const[importMsg,setImportMsg]=React.useState(null);
+  const[importPreview,setImportPreview]=React.useState(null);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
 
@@ -4659,21 +4722,26 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
     const file=e.target.files[0];
     if(!file)return;
     e.target.value='';
-    setImportMsg('⏳ Import en cours...');
-    parseNutritionExcel(file,async planParsed=>{
-      try{
-        if(!planParsed._itemsImported){
-          setImportMsg('✗ 0 aliment détecté');
-          setTimeout(()=>setImportMsg(null),5000);return;
-        }
-        const norm=normalizePlan(planParsed);
-        await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:norm}});
-        const unmatched=planParsed._unmatchedMealLabels||[];
-        const warn=unmatched.length?` — ⚠ libellé(s) non reconnu(s) : ${unmatched.slice(0,3).join(', ')}`:'';
-        setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`+warn);
-        await load();
-        setTimeout(()=>setImportMsg(null),unmatched.length?7000:3000);
-      }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),5000);}
+    parseNutritionExcel(file,planParsed=>{
+      if(!planParsed._itemsImported){
+        setImportMsg('✗ 0 aliment détecté');
+        setTimeout(()=>setImportMsg(null),5000);return;
+      }
+      const unmatched=planParsed._unmatchedMealLabels||[];
+      setImportPreview({
+        stats:[{label:'aliments',value:planParsed._itemsImported},{label:'semaines',value:(planParsed.weeks||[]).length||1}],
+        warnings:unmatched.map(l=>`Libellé de repas non reconnu : "${l}" — ses aliments ont été rattachés au repas précédent.`),
+        onConfirm: async()=>{
+          setImportMsg('⏳ Import en cours...');
+          try{
+            const norm=normalizePlan(planParsed);
+            await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:norm}});
+            setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`);
+            await load();
+            setTimeout(()=>setImportMsg(null),3000);
+          }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),5000);}
+        },
+      });
     },err=>{setImportMsg('✗ '+err);setTimeout(()=>setImportMsg(null),5000);});
   };
 
@@ -4697,6 +4765,8 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
+        <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
+          onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>Mon plan</HoloText></div>
@@ -4772,6 +4842,8 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
+      <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
+        onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
       {importMsg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div>
@@ -6131,6 +6203,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
     }catch(e){setNotifyStatus('error');setTimeout(()=>setNotifyStatus(null),3000);}
   };
   const[importMsg,setImportMsg]=React.useState(null);
+  const[importPreview,setImportPreview]=React.useState(null);
   const[foodSearchMeal,setFoodSearchMeal]=React.useState(null);
   const timerRef=React.useRef(null);
   const fileRef=React.useRef(null);
@@ -6181,35 +6254,39 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
     const file=e.target.files[0];
     if(!file)return;
     e.target.value='';
-    setImportMsg('⏳ Import en cours...');
-    parseNutritionExcel(file,async plan=>{
-      try{
-        if(!plan._itemsImported){
-          setImportMsg('✗ 0 aliment détecté. Vérifie le format Excel (7 feuilles LUNDI→DIMANCHE).');
-          setTimeout(()=>setImportMsg(null),6000);
-          return;
-        }
-        const norm=normalizePlan(plan);
-        setData(norm);
-        setActiveWeek(0);
-        const firstFilledDay=findFirstFilledDay(norm);
-        setActiveDay(firstFilledDay);
-        setOpenMeal(findFirstFilledMeal(norm,firstFilledDay));
-        lastSyncedRef.current=norm;
-        const ok=await saveImmediate(norm);
-        const wc=norm.weeks&&norm.weeks.length||1;
-        const unmatched=plan._unmatchedMealLabels||[];
-        // Un libellé de repas non reconnu (ex: "PETIT DEJEUNER" au lieu de "PETIT-DÉJ") fait
-        // que ses aliments sont rattachés au repas précédent au lieu d'être perdus en silence —
-        // mais le coach doit quand même le savoir pour corriger l'Excel si besoin.
-        const warn=unmatched.length?` — ⚠ libellé(s) non reconnu(s) : ${unmatched.slice(0,3).join(', ')}`:'';
-        setImportMsg((ok?`✓ ${plan._itemsImported} aliments · ${wc} semaine${wc>1?'s':''} importées`:'✗ Échec sauvegarde')+warn);
-        setTimeout(()=>setImportMsg(null),unmatched.length?7000:3500);
-      }catch(ex){
-        setImportMsg('✗ '+(ex.message||ex));
+    parseNutritionExcel(file,plan=>{
+      if(!plan._itemsImported){
+        setImportMsg('✗ 0 aliment détecté. Vérifie le format Excel (7 feuilles LUNDI→DIMANCHE).');
         setTimeout(()=>setImportMsg(null),6000);
-        console.error('handleExcelImport:',ex);
+        return;
       }
+      const wc=(plan.weeks&&plan.weeks.length)||1;
+      const unmatched=plan._unmatchedMealLabels||[];
+      // Aperçu avant d'écraser le plan actuellement affiché dans l'éditeur — action sensible,
+      // le coach doit voir ce qui va être importé (et les libellés non reconnus) avant de valider.
+      setImportPreview({
+        stats:[{label:'aliments',value:plan._itemsImported},{label:'semaines',value:wc}],
+        warnings:unmatched.map(l=>`Libellé de repas non reconnu : "${l}" — ses aliments ont été rattachés au repas précédent.`),
+        onConfirm: async()=>{
+          setImportMsg('⏳ Import en cours...');
+          try{
+            const norm=normalizePlan(plan);
+            setData(norm);
+            setActiveWeek(0);
+            const firstFilledDay=findFirstFilledDay(norm);
+            setActiveDay(firstFilledDay);
+            setOpenMeal(findFirstFilledMeal(norm,firstFilledDay));
+            lastSyncedRef.current=norm;
+            const ok=await saveImmediate(norm);
+            setImportMsg(ok?`✓ ${plan._itemsImported} aliments · ${wc} semaine${wc>1?'s':''} importées`:'✗ Échec sauvegarde');
+            setTimeout(()=>setImportMsg(null),3500);
+          }catch(ex){
+            setImportMsg('✗ '+(ex.message||ex));
+            setTimeout(()=>setImportMsg(null),6000);
+            console.error('handleExcelImport:',ex);
+          }
+        },
+      });
     },err=>{
       setImportMsg('✗ '+err);
       setTimeout(()=>setImportMsg(null),6000);
@@ -6278,6 +6355,8 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
   return(
     <div>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" style={{display:'none'}} onChange={handleExcelImport}/>
+      <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
+        onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
 
       {/* Excel I/O buttons */}
       <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
@@ -8613,6 +8692,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[detail,setDetail]=React.useState(null);
   const[loading,setLoading]=React.useState(true);
   const[msg,setMsg]=React.useState(null);
+  const[importPreview,setImportPreview]=React.useState(null);
   const[highlighted,setHighlighted]=React.useState(new Set());
   const prevCountsRef=React.useRef({});
   const highlightTimerRef=React.useRef(null);
@@ -8827,16 +8907,25 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     const file=e.target.files[0];
     if(!file||!selected)return;
     e.target.value='';
-    flash('⏳ Import en cours...');
-    parseYannisExcel(file,async data=>{
-      try{
-        const nD=Object.values(data).reduce((s,d)=>s+Object.keys(d).length,0);
-        if(nD===0){flash('✗ Aucun jour détecté');return;}
-        await apiCall('/api/coach/program/'+selected.id,{method:'PUT',body:{data}});
-        flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
-        reloadDetail(selected.id);
-        load();
-      }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleExcel:',ex);}
+    parseYannisExcel(file,(data,warnings)=>{
+      const nD=Object.values(data).reduce((s,d)=>s+Object.keys(d).length,0);
+      if(nD===0){flash('✗ Aucun jour détecté');return;}
+      const nEx=Object.values(data).reduce((s,d)=>s+Object.values(d).reduce((s2,day)=>s2+(day.exercises||[]).length,0),0);
+      // Aperçu avant d'écraser le programme actuel de l'athlète — action sensible,
+      // le coach doit voir ce qui va être assigné (et les lignes ignorées) avant de valider.
+      setImportPreview({
+        stats:[{label:'jours',value:nD},{label:'exercices',value:nEx}],
+        warnings:warnings||[],
+        onConfirm: async()=>{
+          flash('⏳ Import en cours...');
+          try{
+            await apiCall('/api/coach/program/'+selected.id,{method:'PUT',body:{data}});
+            flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
+            reloadDetail(selected.id);
+            load();
+          }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleExcel:',ex);}
+        },
+      });
     },err=>flash('✗ '+err));
   };
 
@@ -8844,21 +8933,27 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     const file=e.target.files[0];
     if(!file||!selected)return;
     e.target.value='';
-    flash('⏳ Import bibliothèque...');
-    parseYannisExcel(file,async data=>{
-      try{
-        const uid=()=>Math.random().toString(36).slice(2);
-        const sessions=[];
-        Object.entries(data).forEach(([sheetName,days])=>{
-          Object.entries(days).forEach(([dayName,dayData])=>{
-            sessions.push({id:uid(),name:dayName,sheetName,category:dayData.category||'',exercises:dayData.exercises||[]});
-          });
+    parseYannisExcel(file,(data,warnings)=>{
+      const uid=()=>Math.random().toString(36).slice(2);
+      const sessions=[];
+      Object.entries(data).forEach(([sheetName,days])=>{
+        Object.entries(days).forEach(([dayName,dayData])=>{
+          sessions.push({id:uid(),name:dayName,sheetName,category:dayData.category||'',exercises:dayData.exercises||[]});
         });
-        if(sessions.length===0){flash('✗ Aucune séance détectée');return;}
-        await apiCall('/api/coach/session-library/'+selected.id,{method:'PUT',body:{sessions}});
-        flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
-        reloadDetail(selected.id);
-      }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
+      });
+      if(sessions.length===0){flash('✗ Aucune séance détectée');return;}
+      setImportPreview({
+        stats:[{label:'séances',value:sessions.length}],
+        warnings:warnings||[],
+        onConfirm: async()=>{
+          flash('⏳ Import bibliothèque...');
+          try{
+            await apiCall('/api/coach/session-library/'+selected.id,{method:'PUT',body:{sessions}});
+            flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
+            reloadDetail(selected.id);
+          }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
+        },
+      });
     },err=>flash('✗ '+err),{categoryFallback:true});
   };
 
@@ -8948,6 +9043,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         )}
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
         <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
+        <ImportPreviewModal open={!!importPreview} title="Import Excel" stats={importPreview?.stats} warnings={importPreview?.warnings}
+          onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
