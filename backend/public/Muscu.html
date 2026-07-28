@@ -1341,7 +1341,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     // pour que la sonnerie de fin de repos puisse jouer plus tard.
     getAudioCtx();
     // Marquer la série comme faite et copier poids+reps vers la suivante
-    setExercises(prev=>prev.map((e,ei)=>{
+    const updatedExercises=exercises.map((e,ei)=>{
       if(ei!==currentEx)return e;
       const sets=e.sets.map((s,j)=>{
         if(j===si)return{...s,done:true};
@@ -1353,23 +1353,30 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         return s;
       });
       return{...e,sets};
-    }));
+    });
+    setExercises(updatedExercises);
 
     // SUPERSET / TRISET : enchaîner sans repos jusqu'au dernier exo du bloc
     if(ex.style==='SUPERSET'||ex.style==='TRISET'){
-      const group=groupExercises(exercises).find(g=>g.items.some(({idx})=>idx===currentEx));
+      const group=groupExercises(updatedExercises).find(g=>g.items.some(({idx})=>idx===currentEx));
       if(group){
+        // Un bloc à séries inégales (ex: A=4 séries, B=3) ne doit pas renvoyer vers un exo déjà
+        // terminé une fois épuisé — on cherche le prochain (ou, en repartant du début, le premier)
+        // qui a encore une série à faire, plutôt que le suivant par simple position.
+        const hasUndone=({ex:e})=>!e.sets.every(s=>s.done);
         const myPos=group.items.findIndex(({idx})=>idx===currentEx);
-        const nextPartner=group.items[myPos+1];
+        const nextPartner=group.items.slice(myPos+1).find(hasUndone);
         if(nextPartner){
-          // Pas le dernier → aller directement au suivant, SANS repos
+          // Pas le dernier avec des séries restantes → aller directement au suivant, SANS repos
           setCurrentEx(nextPartner.idx);
           return;
         }
-        // Dernier exo du bloc → lancer le repos puis revenir au premier pour le prochain round
-        const rest=ex.restSeconds||90;
+        // Plus personne après moi dans ce round → repos puis retour au 1er exo du bloc qui a
+        // encore une série (on reste sur place si le bloc entier est terminé, pas de cul-de-sac).
+        const rest=ex.restSeconds??90;
         setRestSeconds(rest);setRestTotal(rest);
-        setCurrentEx(group.items[0].idx);
+        const restart=group.items.find(hasUndone);
+        if(restart)setCurrentEx(restart.idx);
         return;
       }
     }
@@ -2753,13 +2760,18 @@ function StatTile({icon,iconColor,value,unit,label,sub}){
 function StatsScreen({history,profile}){
   const now=Date.now();
   const dayMs=24*60*60*1000;
+  // Différence en JOURS CALENDAIRES (minuit à minuit), pas en heures écoulées ÷ 24 —
+  // sinon une séance loggée tard le soir (ex: 23h50) apparaît dans le bucket "aujourd'hui"
+  // au lieu de son vrai jour dès qu'on consulte les stats le lendemain matin (< 24h plus tard).
+  const dayKeyOf=t=>{const dt=new Date(t);dt.setHours(0,0,0,0);return dt.getTime();};
+  const todayKey=dayKeyOf(now);
+  const calDayDiff=t=>Math.round((todayKey-dayKeyOf(t))/dayMs);
 
   // Last 7 days volume (Mon-Sun)
   const todayDow=(new Date().getDay()+6)%7;
   const weekData=[0,0,0,0,0,0,0];
   history.forEach(h=>{
-    const d=new Date(h.date);
-    const diff=Math.floor((now-d.getTime())/dayMs);
+    const diff=calDayDiff(new Date(h.date).getTime());
     if(diff>=0&&diff<7){
       const idx=(todayDow-diff+7)%7;
       weekData[idx]+=h.totalVolume||0;
@@ -2768,15 +2780,15 @@ function StatsScreen({history,profile}){
   const dayLabels=['L','M','M','J','V','S','D'];
 
   // Last 30 days totals + comparaison à la période précédente (30-60j)
-  const last30=history.filter(h=>now-new Date(h.date).getTime()<30*dayMs);
+  const last30=history.filter(h=>calDayDiff(new Date(h.date).getTime())<30);
   const totalVol30=last30.reduce((s,h)=>s+(h.totalVolume||0),0);
-  const prevVol30=history.filter(h=>{const diff=now-new Date(h.date).getTime();return diff>=30*dayMs&&diff<60*dayMs;}).reduce((s,h)=>s+(h.totalVolume||0),0);
+  const prevVol30=history.filter(h=>{const diff=calDayDiff(new Date(h.date).getTime());return diff>=30&&diff<60;}).reduce((s,h)=>s+(h.totalVolume||0),0);
   const volDeltaPct=prevVol30>0?Math.round(((totalVol30-prevVol30)/prevVol30)*100):null;
 
   // Volume curve (last 30 days, daily)
   const dailyVol=Array.from({length:30},()=>0);
   history.forEach(h=>{
-    const diff=Math.floor((now-new Date(h.date).getTime())/dayMs);
+    const diff=calDayDiff(new Date(h.date).getTime());
     if(diff>=0&&diff<30) dailyVol[29-diff]+=h.totalVolume||0;
   });
 
@@ -4601,9 +4613,11 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
         }
         const norm=normalizePlan(planParsed);
         await apiCall('/api/my-nutrition',{method:'PUT',body:{plan:norm}});
-        setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`);
+        const unmatched=planParsed._unmatchedMealLabels||[];
+        const warn=unmatched.length?` — ⚠ libellé(s) non reconnu(s) : ${unmatched.slice(0,3).join(', ')}`:'';
+        setImportMsg(`✓ ${planParsed._itemsImported} aliments importés`+warn);
         await load();
-        setTimeout(()=>setImportMsg(null),3000);
+        setTimeout(()=>setImportMsg(null),unmatched.length?7000:3000);
       }catch(ex){setImportMsg('✗ '+(ex.message||ex));setTimeout(()=>setImportMsg(null),5000);}
     },err=>{setImportMsg('✗ '+err);setTimeout(()=>setImportMsg(null),5000);});
   };
@@ -4756,9 +4770,13 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
             if(!d)return<div key={i}/>;
             const dow=new Date(calYear,calMonth,d).getDay();
             const dayName=JS_TO_DAY_N[dow];
-            const dayMeals=getDayMeals(data,dayName,activeWeek);
-            const hasPlan=dayMeals.some(m=>(m.items||[]).length>0);
             const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            // Semaine du cycle propre à CETTE date (pas activeWeek, qui ne suit que le jour
+            // sélectionné/aujourd'hui) — sinon un plan multi-semaines affiche le mauvais
+            // statut "planifié" sur les jours d'une autre semaine que celle actuellement vue.
+            const dayWeekIdx=computeCycleWeekIndex(nutriCycleStart,dateStr,nutriNumWeeks);
+            const dayMeals=getDayMeals(data,dayName,dayWeekIdx);
+            const hasPlan=dayMeals.some(m=>(m.items||[]).length>0);
             const histLog=history[dateStr];
             const isDone=histLog&&Object.values(histLog.validated||{}).some(Boolean);
             const cellRating=histLog?.rating||0;
@@ -5628,6 +5646,7 @@ function parseNutritionExcel(file,onSuccess,onError){
       };
       const upperSheetNames=wb.SheetNames.map(n=>({orig:n,norm:normLabel(n)}));
       const dayNamesNorm=DAYS_OF_WEEK.map(d=>({orig:d,norm:normLabel(d)}));
+      const unmatchedLabels=new Set();
 
       // Parse a single sheet into a day object
       function parseSheet(sheetOrig){
@@ -5671,6 +5690,11 @@ function parseNutritionExcel(file,onSuccess,onError){
                 if(parsed){ts=parsed[0];te=parsed[1];}
                 mealById[currentId]={id:t.id,label:t.label,emoji:t.emoji,timeStart:ts,timeEnd:te,items:[],note:''};
               }
+            } else {
+              // Libellé de repas non reconnu (ex: "PETIT DEJEUNER" au lieu de "PETIT-DÉJ") :
+              // on ne le fait pas disparaître en silence — signalé au coach en fin d'import
+              // pour qu'il corrige l'Excel, plutôt que de deviner et risquer un mauvais repas.
+              unmatchedLabels.add(label);
             }
           }
           if(name&&currentId&&mealById[currentId]){
@@ -5722,6 +5746,7 @@ function parseNutritionExcel(file,onSuccess,onError){
         weeks:parsedWeeks,
         _itemsImported:totalNbItems,
         _sheetsFound:upperSheetNames.map(s=>s.orig).join(', '),
+        _unmatchedMealLabels:[...unmatchedLabels],
       });
     }catch(e){onError('Excel invalide : '+(e.message||e));}
   };
@@ -6118,8 +6143,13 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
         lastSyncedRef.current=norm;
         const ok=await saveImmediate(norm);
         const wc=norm.weeks&&norm.weeks.length||1;
-        setImportMsg(ok?`✓ ${plan._itemsImported} aliments · ${wc} semaine${wc>1?'s':''} importées`:'✗ Échec sauvegarde');
-        setTimeout(()=>setImportMsg(null),3500);
+        const unmatched=plan._unmatchedMealLabels||[];
+        // Un libellé de repas non reconnu (ex: "PETIT DEJEUNER" au lieu de "PETIT-DÉJ") fait
+        // que ses aliments sont rattachés au repas précédent au lieu d'être perdus en silence —
+        // mais le coach doit quand même le savoir pour corriger l'Excel si besoin.
+        const warn=unmatched.length?` — ⚠ libellé(s) non reconnu(s) : ${unmatched.slice(0,3).join(', ')}`:'';
+        setImportMsg((ok?`✓ ${plan._itemsImported} aliments · ${wc} semaine${wc>1?'s':''} importées`:'✗ Échec sauvegarde')+warn);
+        setTimeout(()=>setImportMsg(null),unmatched.length?7000:3500);
       }catch(ex){
         setImportMsg('✗ '+(ex.message||ex));
         setTimeout(()=>setImportMsg(null),6000);
@@ -7034,15 +7064,21 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   },[athleteId]);
   React.useEffect(()=>{load();},[load]);
 
-  // Realtime: athlete validates → instantly reflect
+  // Realtime: reflète instantanément toute action de l'athlète sur son plan du jour
+  // (validation d'un repas, ajout/retrait d'un aliment libre, note de la journée) —
+  // sinon le "MIROIR LIVE" reste figé sur ces 3 actions tant que le coach ne recharge pas.
+  const onNutriUpdate=({athleteId:aid})=>{
+    if(aid===athleteId){
+      load();
+      setJustUpdated(true);
+      setTimeout(()=>setJustUpdated(false),2000);
+    }
+  };
   useSocket(authToken,{
-    'nutrition-meal-validated':({athleteId:aid})=>{
-      if(aid===athleteId){
-        load();
-        setJustUpdated(true);
-        setTimeout(()=>setJustUpdated(false),2000);
-      }
-    },
+    'nutrition-meal-validated':onNutriUpdate,
+    'nutrition-free-food-added':onNutriUpdate,
+    'nutrition-free-food-removed':onNutriUpdate,
+    'nutrition-rated':onNutriUpdate,
   });
 
   const[applying,setApplying]=React.useState(false);
@@ -8607,6 +8643,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     'athlete-profile-updated':()=>{load();},
     'pending-request':()=>{load();},
     'nutrition-meal-validated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
+    'nutrition-free-food-added':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
+    'nutrition-free-food-removed':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
+    'nutrition-rated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
   });
 
   const[nutriDetail,setNutriDetail]=React.useState(null);
@@ -10118,7 +10157,7 @@ function aiExercisesToWorkout(exercises){
   return (exercises||[]).map(ex=>({
     id:Math.random().toString(36).slice(2),
     name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
-    rest:ex.rest||'60s',restSeconds:parseRestDuration(ex.rest)||60,
+    rest:ex.rest||'60s',restSeconds:parseRestDuration(ex.rest),
     weightStr:'',repsStr:String(ex.reps||''),cardio:null,
     sets:Array.from({length:typeof ex.sets==='number'?ex.sets:3},()=>({
       weight:0,reps:0,done:false,
@@ -11475,7 +11514,7 @@ function ExplorerScreen({profile,onStartWorkout}){
       muscle:ex.muscle||'',
       style:ex.style||'CLASSIQUE',
       rest:ex.rest||'60s',
-      restSeconds:parseRestDuration(ex.rest)||60,
+      restSeconds:parseRestDuration(ex.rest),
       weightStr:ex.weightHint||'',
       repsStr:String(ex.reps||''),
       cardio:null,
@@ -12498,6 +12537,31 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const[history,setHistory]=React.useState([]);
   const[isMobile,setIsMobile]=React.useState(typeof window!=='undefined'&&window.innerWidth<768);
+
+  // File locale des séances qui n'ont pas pu être synchronisées côté serveur (réseau coupé,
+  // 500 ponctuel...) — sans ça, une séance validée pouvait disparaître silencieusement au
+  // rechargement suivant (elle n'existait qu'en state React le temps de la session).
+  const PENDING_SESSIONS_KEY='pa_pending_sessions_'+authUser.id;
+  const[pendingSyncCount,setPendingSyncCount]=React.useState(0);
+  const flushPendingSessions=React.useCallback(async()=>{
+    let queue=[];
+    try{queue=JSON.parse(localStorage.getItem(PENDING_SESSIONS_KEY)||'[]');}catch{}
+    if(!queue.length)return;
+    const remaining=[];
+    for(const snap of queue){
+      try{
+        const res=await apiCall('/api/sessions',{method:'POST',body:snap});
+        if(res?.id)setHistory(h=>h.map(s=>s.date===snap.date&&!s.id?{...s,id:res.id}:s));
+      }catch(e){remaining.push(snap);}
+    }
+    try{localStorage.setItem(PENDING_SESSIONS_KEY,JSON.stringify(remaining));}catch{}
+    setPendingSyncCount(remaining.length);
+  },[PENDING_SESSIONS_KEY]);
+  React.useEffect(()=>{
+    flushPendingSessions();
+    window.addEventListener('online',flushPendingSessions);
+    return()=>window.removeEventListener('online',flushPendingSessions);
+  },[flushPendingSessions]);
   const[nutriRefreshKey,setNutriRefreshKey]=React.useState(0);
 
   const[refreshing,setRefreshing]=React.useState(false);
@@ -12669,7 +12733,20 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
   const[pendingProgramEditId,setPendingProgramEditId]=React.useState(null);
-  const startWorkout=w=>{setWorkout(w);setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');};
+  // Choke point unique pour tous les "Démarrer une séance" (jour de programme, séance live
+  // rejouée, planifiée, IA, catalogue...) — garde ici plutôt que dans chaque appelant pour
+  // ne pas dépendre de chacun d'eux : sans exercice, SessionScreen déréférence ex.name et
+  // plante toute l'appli (un seul ErrorBoundary racine, pas de récupération par écran).
+  const STYLE_FROM_TYPE={superset:'SUPERSET',triset:'TRISET',cardio:'CARDIO',abdos:'ABDOS',classic:'CLASSIQUE'};
+  const startWorkout=w=>{
+    if(!w||!Array.isArray(w.exercises)||w.exercises.length===0){alert('Cette séance ne contient aucun exercice.');return;}
+    // L'écran de séance en cours (groupExercises, détection CARDIO) ne comprend que ex.style —
+    // les séances "Live" du coach utilisent ex.groupType/groupId à la place (2 schémas coexistent,
+    // cf. exType()). On normalise ici une bonne fois pour que superset/triset/cardio fonctionnent
+    // pendant l'entraînement quelle que soit l'origine (programme Excel, Live rejouée, planifiée...).
+    const exercises=w.exercises.map(ex=>ex.style?ex:{...ex,style:STYLE_FROM_TYPE[exType(ex)]||'CLASSIQUE'});
+    setWorkout({...w,exercises});setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');
+  };
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
@@ -12678,10 +12755,26 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
+    // Jusqu'à 3 tentatives (pauses courtes) avant d'abandonner — une séance que l'athlète
+    // vient de valider ne doit pas disparaître silencieusement au premier blip réseau/serveur.
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const res=await apiCall('/api/sessions',{method:'POST',body:snapshot});
+        if(res?.id)setHistory(h=>h.map(s=>s.date===snapshot.date&&!s.id?{...s,id:res.id}:s));
+        return;
+      }catch(e){
+        console.error('session sync attempt',attempt+1,e);
+        if(attempt<2)await new Promise(r=>setTimeout(r,1500*(attempt+1)));
+      }
+    }
+    // Toujours en échec après les 3 essais : on la garde en file locale pour la renvoyer
+    // automatiquement à la reconnexion ou au prochain lancement, plutôt que de la perdre.
     try{
-      const res=await apiCall('/api/sessions',{method:'POST',body:snapshot});
-      if(res?.id){setHistory(h=>h.map(s=>s.date===snapshot.date&&!s.id?{...s,id:res.id}:s));}
-    }catch(e){console.error('session sync',e);}
+      const queue=JSON.parse(localStorage.getItem(PENDING_SESSIONS_KEY)||'[]');
+      queue.push(snapshot);
+      localStorage.setItem(PENDING_SESSIONS_KEY,JSON.stringify(queue));
+      setPendingSyncCount(queue.length);
+    }catch{}
   };
   const deleteSession=async(sessionId,sessionDate)=>{
     setHistory(h=>h.filter(s=>s.id!==sessionId&&!((s.date?ymdKey(new Date(s.date)):null)===sessionDate&&!s.id)));
@@ -12735,6 +12828,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         <div style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(44,196,160,0.18)',border:'1px solid rgba(44,196,160,0.4)',color:T.good,fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(44,196,160,0.2)',animation:'holoText 1s ease',pointerEvents:'none'}}>
           ✓ Sync cloud
         </div>
+      )}
+      {pendingSyncCount>0&&(
+        <button onClick={flushPendingSessions} style={{position:'absolute',top:isMobile?'calc(env(safe-area-inset-top) + 10px)':10,right:14,zIndex:99,padding:'6px 11px',borderRadius:999,background:'rgba(200,144,64,0.18)',border:'1px solid rgba(200,144,64,0.4)',color:'#C89040',fontSize:11,fontWeight:700,letterSpacing:0.3,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',boxShadow:'0 4px 14px rgba(200,144,64,0.2)',cursor:'pointer'}}>
+          ⚠ {pendingSyncCount} séance{pendingSyncCount>1?'s':''} non synchronisée{pendingSyncCount>1?'s':''} · toucher pour réessayer
+        </button>
       )}
 
       {/* Pull-to-refresh indicator */}
