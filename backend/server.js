@@ -278,18 +278,23 @@ seedCreoleFoods();
 let saveTimer = null;
 let pgSaveTimer = null;
 let saving = false;
+async function flushLocal() {
+  // Une sauvegarde précédente est encore en cours (disque lent / DATA volumineux) : on
+  // réessaie bientôt au lieu d'abandonner l'écriture, sinon ce snapshot de DATA n'est
+  // jamais flushé sur disque si aucune requête ultérieure ne rappelle persist() avant
+  // un crash/redémarrage.
+  if (saving) { saveTimer = setTimeout(flushLocal, 50); return; }
+  saving = true;
+  try {
+    const tmp = DB_PATH + '.tmp';
+    await fs.promises.writeFile(tmp, JSON.stringify(DATA));
+    await fs.promises.rename(tmp, DB_PATH);
+  } catch (e) { console.error('persist error:', e); } finally { saving = false; }
+}
 function persist() {
   // Sauvegarde fichier local (rapide, sync-safe)
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    if (saving) return;
-    saving = true;
-    try {
-      const tmp = DB_PATH + '.tmp';
-      await fs.promises.writeFile(tmp, JSON.stringify(DATA));
-      await fs.promises.rename(tmp, DB_PATH);
-    } catch (e) { console.error('persist error:', e); } finally { saving = false; }
-  }, 200);
+  saveTimer = setTimeout(flushLocal, 200);
   // Postgres : debounce 500ms (aligné proche du local pour réduire la fenêtre d'inconsistance)
   if (USE_PG) {
     if (pgSaveTimer) clearTimeout(pgSaveTimer);
@@ -585,9 +590,8 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     if (isMain) userRole = 'coach';
 
     const id = uid();
-    const passwordHash = await bcrypt.hash(password, 12);
     const u = {
-      id, email: lowEmail, passwordHash, role: userRole, coachId,
+      id, email: lowEmail, passwordHash: null, role: userRole, coachId,
       firstName: '', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(),
@@ -596,7 +600,13 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
       requestedRole,
       tokenVersion: 0,
     };
+    // Réserve l'email tout de suite, AVANT l'await bcrypt.hash (~300ms) : sinon deux
+    // inscriptions concurrentes sur le même email (double soumission du formulaire,
+    // requêtes quasi simultanées) passent toutes les deux le check findUserByEmail
+    // ci-dessus avant que l'une n'ait fini d'écrire son utilisateur, créant 2 comptes
+    // avec le même email dont un devient inaccessible.
     DATA.users[id] = u;
+    u.passwordHash = await bcrypt.hash(password, 12);
     persist();
 
     // Notify main coach of new pending request
@@ -988,9 +998,8 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
 
     const me = DATA.users[req.user.id];
     const id = uid();
-    const passwordHash = await bcrypt.hash(password, 12);
     const u = {
-      id, email: lowEmail, passwordHash, role: 'athlete',
+      id, email: lowEmail, passwordHash: null, role: 'athlete',
       coachId: me.id,
       firstName: (firstName || '').trim(),
       lastName: (lastName || '').trim(),
@@ -1003,7 +1012,10 @@ app.post('/api/coach/create-athlete', authRequired, coachOnly, async (req, res) 
       requestedRole: 'athlete',
       tokenVersion: 0,
     };
+    // Réserve l'email avant l'await bcrypt.hash — même course possible qu'à l'inscription
+    // (voir /api/auth/signup) si le coach double-clique ou crée 2 athlètes au même email.
     DATA.users[id] = u;
+    u.passwordHash = await bcrypt.hash(password, 12);
     persist();
     res.json({ user: profileOf(u) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'create_athlete_failed' }); }
@@ -1400,7 +1412,7 @@ app.get('/api/planned-sessions', authRequired, (req, res) => {
 });
 
 app.post('/api/planned-sessions', authRequired, (req, res) => {
-  const { date, session } = req.body;
+  const { date, session } = req.body || {};
   if (!date || !session) return res.status(400).json({ error: 'missing_fields' });
   if (!DATA.plannedSessions[req.user.id]) DATA.plannedSessions[req.user.id] = {};
   if (!DATA.plannedSessions[req.user.id][date]) DATA.plannedSessions[req.user.id][date] = [];
@@ -2389,7 +2401,7 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   // Push notification to partner if subscribed
   const sub = DATA.pushSubscriptions[partner];
   console.log('[push-msg] partner=', partner, 'hasSub=', !!sub, 'hasVapid=', !!VAPID_PUBLIC_KEY);
-  if (sub && VAPID_PUBLIC_KEY) {
+  if (sub && !sub.invalidatedAt && VAPID_PUBLIC_KEY) {
     const sender = DATA.users[me];
     const name = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
     webpush.sendNotification(sub, JSON.stringify({
