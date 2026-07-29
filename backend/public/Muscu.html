@@ -12902,7 +12902,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
-    const prevSession=history.find(s=>typeof s.totalVolume==='number');
+    // Comparaison "vs la dernière fois" avec la même séance (même nom, ex: le mardi vs le
+    // mardi précédent), pas juste la toute dernière séance loggée — sinon un mardi juste
+    // après un lundi se compare au volume du lundi, deux séances totalement différentes.
+    const prevSession=history.find(s=>typeof s.totalVolume==='number'&&s.name===snapshot.name);
     setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
