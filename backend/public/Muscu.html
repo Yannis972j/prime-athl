@@ -1226,16 +1226,16 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     setShowSwapPicker(false);setSwapQuery('');
   };
   const curEx=exercises[currentEx];
-  // Remplacement en séance live : on cible STRICTEMENT le même groupe musculaire que l'exercice en
-  // cours (jambes → que des exos jambes) puisque le but est de trouver un équivalent biomécanique
-  // (machine prise, etc.), pas de changer complètement de mouvement. Si l'exercice en cours n'a pas
-  // de groupe musculaire renseigné, on retombe sur le catalogue complet faute de mieux.
-  const swapCandidates=curEx?.muscle
-    ?exerciseCatalog.filter(e=>e.muscle===curEx.muscle&&e.name!==curEx.name)
-    :exerciseCatalog.filter(e=>e.name!==curEx?.name);
-  const swapFiltered=swapQuery.trim()
-    ?swapCandidates.filter(e=>e.name.toLowerCase().includes(swapQuery.trim().toLowerCase()))
-    :swapCandidates;
+  // Remplacement en séance live : le même groupe musculaire que l'exercice en cours est
+  // proposé en premier (équivalent biomécanique le plus probable, ex: machine prise), mais
+  // le reste du catalogue reste accessible juste en dessous — l'athlète/coach peut aussi
+  // vouloir remplacer par un exercice d'un autre groupe (ex: Sissy Squat → Leg Curl Assis).
+  const swapOthers=exerciseCatalog.filter(e=>e.name!==curEx?.name);
+  const swapSameMuscle=curEx?.muscle?swapOthers.filter(e=>e.muscle===curEx.muscle):swapOthers;
+  const swapOtherMuscle=curEx?.muscle?swapOthers.filter(e=>e.muscle!==curEx.muscle):[];
+  const applySwapQuery=list=>swapQuery.trim()?list.filter(e=>e.name.toLowerCase().includes(swapQuery.trim().toLowerCase())):list;
+  const swapFilteredSame=applySwapQuery(swapSameMuscle);
+  const swapFilteredOther=applySwapQuery(swapOtherMuscle);
   const swapExactMatch=exerciseCatalog.some(e=>e.name.toLowerCase()===swapQuery.trim().toLowerCase());
   const swapPickerModal=showSwapPicker&&(
     <BottomSheet open={showSwapPicker} onClose={()=>{setShowSwapPicker(false);setSwapQuery('');}} maxHeight="82vh">
@@ -1244,9 +1244,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         <button onClick={()=>{setShowSwapPicker(false);setSwapQuery('');}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
       </div>
       <div style={{fontSize:12,color:T.textFaint,marginBottom:14}}>
-        {curEx?.muscle
-          ?`Uniquement des exercices "${curEx.muscle}" — ta charge et tes reps s'adapteront à l'historique du nouvel exercice choisi.`
-          :`Ta charge et tes reps s'adapteront à l'historique du nouvel exercice choisi.`}
+        Ta charge et tes reps s'adapteront à l'historique du nouvel exercice choisi.
       </div>
       <input autoFocus value={swapQuery} onChange={e=>setSwapQuery(e.target.value)}
         onKeyDown={e=>{if(e.key==='Enter'&&swapQuery.trim()&&!swapExactMatch)swapExercise(currentEx,swapQuery.trim(),curEx?.muscle);}}
@@ -1256,18 +1254,34 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           <Icon name="plus" size={16} stroke={T.accent}/><span>Créer <strong>"{swapQuery.trim()}"</strong>{curEx?.muscle?` (${curEx.muscle})`:''}</span>
         </button>
       )}
+      {/* Même groupe musculaire d'abord (équivalent biomécanique le plus probable) */}
       <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>
-        {curEx?.muscle?`${curEx.muscle} (${swapFiltered.length})`:`Tous les exercices (${swapFiltered.length})`}
+        {curEx?.muscle?`${curEx.muscle} (${swapFilteredSame.length})`:`Tous les exercices (${swapFilteredSame.length})`}
       </div>
-      <div style={{display:'flex',flexDirection:'column',gap:2}}>
-        {swapFiltered.slice(0,60).map(e=>(
+      <div style={{display:'flex',flexDirection:'column',gap:2,marginBottom:swapOtherMuscle.length?18:0}}>
+        {swapFilteredSame.slice(0,60).map(e=>(
           <button key={e.name} onClick={()=>swapExercise(currentEx,e.name,e.muscle)} style={{width:'100%',padding:'12px 14px',borderRadius:10,background:'transparent',border:'none',color:T.text,fontSize:14,fontWeight:400,cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column'}}>
             <span>{e.name}</span>
             {e.muscle&&<span style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle}</span>}
           </button>
         ))}
-        {swapFiltered.length===0&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun résultat{curEx?.muscle?` pour "${curEx.muscle}"`:''}</div>}
+        {swapFilteredSame.length===0&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun résultat{curEx?.muscle?` pour "${curEx.muscle}"`:''}</div>}
       </div>
+      {/* Autres groupes musculaires — accessible directement, sans avoir à taper une recherche */}
+      {swapOtherMuscle.length>0&&(<>
+        <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>
+          Autres groupes musculaires ({swapFilteredOther.length})
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+          {swapFilteredOther.slice(0,60).map(e=>(
+            <button key={e.name} onClick={()=>swapExercise(currentEx,e.name,e.muscle)} style={{width:'100%',padding:'12px 14px',borderRadius:10,background:'transparent',border:'none',color:T.text,fontSize:14,fontWeight:400,cursor:'pointer',textAlign:'left',display:'flex',flexDirection:'column'}}>
+              <span>{e.name}</span>
+              {e.muscle&&<span style={{fontSize:11,color:T.textFaint,marginTop:1}}>{e.muscle}</span>}
+            </button>
+          ))}
+          {swapFilteredOther.length===0&&<div style={{padding:'20px 0',fontSize:13,color:T.textFaint,textAlign:'center'}}>Aucun résultat</div>}
+        </div>
+      </>)}
     </BottomSheet>
   );
 
