@@ -54,6 +54,10 @@
   .state .big{font-size:40px; margin-bottom:14px;}
   .skel{background:linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.08),rgba(255,255,255,0.04)); background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:10px;}
   @keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+  .inapp-banner{background:rgba(200,144,64,0.08); border:1px solid rgba(200,144,64,0.25); border-radius:16px; padding:14px 16px; margin-bottom:16px;}
+  .inapp-banner .t{font-size:13px; font-weight:700; color:#C89040; margin-bottom:4px;}
+  .inapp-banner .d{font-size:12px; color:var(--textDim); line-height:1.5; margin-bottom:10px;}
+  .inapp-banner button{width:100%; height:38px; border-radius:10px; border:1px solid rgba(200,144,64,0.35); background:rgba(200,144,64,0.12); color:#C89040; font-size:12px; font-weight:700;}
 </style>
 </head>
 <body>
@@ -70,6 +74,22 @@
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 let shareToken=null;
+
+// Les navigateurs intégrés (Instagram, Facebook, TikTok, Snapchat, LINE...) bloquent
+// volontairement le téléchargement de fichiers par sécurité — aucun code JS ne peut contourner
+// ça. Le seul moyen fiable : prévenir l'utilisateur et l'inviter à ouvrir le lien dans son
+// vrai navigateur (bouton "⋮" / "..." en haut à droite de l'app, propose "Ouvrir dans...").
+function isInAppBrowser(){
+  return /Instagram|FBAN|FBAV|Line\/|MicroMessenger|TikTok|musical_ly|Snapchat/i.test(navigator.userAgent||'');
+}
+function inAppBannerHtml(){
+  if(!isInAppBrowser())return '';
+  return `<div class="inapp-banner">
+    <div class="t">⚠️ Navigateur intégré détecté</div>
+    <div class="d">Instagram (ou l'appli d'où tu viens) bloque le téléchargement de fichiers dans son navigateur intégré. Appuie sur <b>⋮</b> ou <b>•••</b> en haut à droite, puis <b>« Ouvrir dans le navigateur »</b> (Safari/Chrome) pour télécharger le PDF.</div>
+    <button id="copyLinkBtn">Copier le lien</button>
+  </div>`;
+}
 
 // Un champ cardio (vitesse/inclinaison/durée/distance) est du texte libre venant d'Excel
 // ("30'", "4-5", "8"...), pas forcément un nombre pur.
@@ -203,6 +223,7 @@ function renderSession(session){
   }).join('');
 
   document.getElementById('content').innerHTML = `
+    ${inAppBannerHtml()}
     <div class="card">
       <div class="date">${esc(fmtDate(session.date))}</div>
       <div class="name">${esc(session.name||'Séance')}</div>
@@ -219,6 +240,13 @@ function renderSession(session){
   `;
 
   document.getElementById('pdfBtn').addEventListener('click', ()=>downloadPDF(session));
+  const copyBtn=document.getElementById('copyLinkBtn');
+  if(copyBtn){
+    copyBtn.addEventListener('click', ()=>{
+      const done=()=>{copyBtn.textContent='✓ Copié';setTimeout(()=>{copyBtn.textContent='Copier le lien';},2000);};
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(location.href).then(done).catch(()=>{});}
+    });
+  }
 }
 
 // iOS Safari ignore souvent le téléchargement automatique déclenché par jsPDF (doc.save) — le
