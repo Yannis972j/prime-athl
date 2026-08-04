@@ -1108,6 +1108,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           name:e.name,muscle:e.muscle,
           ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
           ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
+          ...(e.style!=='CARDIO'&&e.restSeconds?{restSeconds:e.restSeconds}:{}),
           sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
         })).filter(e=>e.style==='CARDIO'||e.sets.length>0),
       };
@@ -3726,51 +3727,65 @@ function exportSessionPDF(session){
 
   rule();
 
-  // Exercices
-  (session.exercises||[]).forEach((ex,ei)=>{
-    if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-    // Nom exo
-    doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-    doc.text(`${ei+1}. ${ex.name}`,margin,y);
-    if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
-    y+=7;
-    // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée
-    if(ex.style==='CARDIO'&&ex.cardio){
-      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
-      doc.text('CARDIO',margin,y);y+=5.5;
-      const c=ex.cardio;
-      const parts=[];
-      if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
-      if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
-      if(cardioHasVal(c.duree))parts.push(`Durée : ${fixCardioDuree(c.duree)} min`);
-      if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
-      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-      doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
-      return;
+  // Exercices — regroupés par superset/tri-set/circuit abdos, comme en séance live
+  const STYLE_LABELS={SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'CIRCUIT ABDOS'};
+  const STYLE_RGB={SUPERSET:[90,138,224],TRISET:[160,96,208],ABDOS:[44,196,160]};
+  groupExercises(session.exercises||[]).forEach(group=>{
+    if(STYLE_LABELS[group.style]){
+      if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.style]);
+      doc.text(`⛓ ${STYLE_LABELS[group.style]} · enchaîné sans repos`,margin,y);y+=6;
     }
-    // En-tête tableau
-    const cols=[margin,margin+12,margin+38,margin+64,margin+95];
-    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
-    ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
-    doc.setDrawColor(40,40,55);doc.line(margin,y-1,W-margin,y-1);
-    // Séries
-    (ex.sets||[]).forEach((s,si)=>{
-      if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      const vol=(s.weight||0)*(s.reps||0);
-      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-      doc.text(String(si+1),cols[0],y);
-      doc.text(`${s.weight||0} kg`,cols[1],y);
-      doc.text(`${s.reps||0} reps`,cols[2],y);
-      doc.text(`${vol} kg`,cols[3],y);
-      y+=5.5;
-      if(s.note){
+    group.items.forEach(({ex,idx},gi)=>{
+      if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+      // Nom exo
+      doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
+      doc.text(`${gi>0?'↳ ':''}${idx+1}. ${ex.name}`,margin,y);
+      if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
+      y+=7;
+      // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée
+      if(ex.style==='CARDIO'&&ex.cardio){
+        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
+        doc.text('CARDIO',margin,y);y+=5.5;
+        const c=ex.cardio;
+        const parts=[];
+        if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
+        if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
+        if(cardioHasVal(c.duree))parts.push(`Durée : ${fixCardioDuree(c.duree)} min`);
+        if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
+        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+        doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
+        return;
+      }
+      // En-tête tableau
+      const cols=[margin,margin+12,margin+38,margin+64,margin+95];
+      doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
+      ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
+      doc.setDrawColor(40,40,55);doc.line(margin,y-1,W-margin,y-1);
+      // Séries
+      (ex.sets||[]).forEach((s,si)=>{
+        if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+        const vol=(s.weight||0)*(s.reps||0);
+        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+        doc.text(String(si+1),cols[0],y);
+        doc.text(`${s.weight||0} kg`,cols[1],y);
+        doc.text(`${s.reps||0} reps`,cols[2],y);
+        doc.text(`${vol} kg`,cols[3],y);
+        y+=5.5;
+        if(s.note){
+          if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+          doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
+          doc.text(`Note : ${s.note}`,cols[1],y);
+          y+=5;
+        }
+      });
+      if(ex.restSeconds>0){
         if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
         doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
-        doc.text(`Note : ${s.note}`,cols[1],y);
-        y+=5;
+        doc.text(`Repos : ${ex.restSeconds}s`,cols[0],y);y+=5;
       }
+      y+=4;
     });
-    y+=4;
   });
 
   // Notes / feedback
