@@ -1109,6 +1109,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
           ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
           ...(e.style!=='CARDIO'?{restSeconds:e.restSeconds||90}:{}),
+          ...(e.style!=='CARDIO'&&e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),
           sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
         })).filter(e=>e.style==='CARDIO'||e.sets.length>0),
       };
@@ -3757,6 +3758,20 @@ function exportSessionPDF(session){
         doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
         return;
       }
+      // Gainage/planche : pas de reps, une durée de tenue à la place
+      if(ex.holdSeconds>0){
+        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(90,138,224);
+        doc.text('GAINAGE',margin,y);y+=5.5;
+        const nSets=(ex.sets||[]).length||1;
+        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+        doc.text(`${nSets} série${nSets>1?'s':''} × ${fmtHoldDuration(ex.holdSeconds)} tenues`,margin,y);y+=7;
+        if(ex.restSeconds>0){
+          doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
+          doc.text(`Repos : ${ex.restSeconds}s`,margin,y);y+=5;
+        }
+        y+=3;
+        return;
+      }
       // En-tête tableau
       const cols=[margin,margin+12,margin+38,margin+64,margin+95];
       doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
@@ -4219,6 +4234,17 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             {cardioHasVal(ex.cardio?.vitesse)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
                             {cardioHasVal(ex.cardio?.inclinaison)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
                             {cardioHasVal(ex.cardio?.duree)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {fixCardioDuree(ex.cardio.duree)} min</div>}
+                          </div>
+                        ):ex.holdSeconds>0?(
+                          <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                            {(ex.sets||[]).map((s,si)=>(
+                              <div key={si} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                                <div style={{width:22,height:22,borderRadius:7,background:'rgba(90,138,224,0.14)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#5A8AE0',flexShrink:0}}>{si+1}</div>
+                                <div style={{fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} <span style={{fontSize:10,color:T.textFaint,fontWeight:600}}>tenues</span></div>
+                                {s.weight>0&&<div style={{fontSize:11,color:T.textFaint,fontWeight:600}}>· {s.weight} kg</div>}
+                              </div>
+                            ))}
+                            {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
                           </div>
                         ):(
                           <>
