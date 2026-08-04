@@ -315,7 +315,18 @@ function ConfirmBanner({msg,onConfirm,onCancel}){
 // Affiché après le parsing, avant l'enregistrement réel : montre ce qui a été détecté et
 // les avertissements (lignes/aliments ignorés) pour que le coach puisse vérifier ou
 // annuler, plutôt que de découvrir un import incomplet après coup.
-function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warnings,confirmLabel,busy}){
+function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warnings,confirmLabel,busy,allowSchedule}){
+  // Programmer un import pour une date future (ex: préparer le programme de septembre en août
+  // sans toucher au programme en cours) — uniquement proposé pour les imports qui le permettent.
+  const[scheduleMode,setScheduleMode]=React.useState('now'); // 'now' | 'later'
+  const defaultLaterDate=()=>{const d=new Date();d.setMonth(d.getMonth()+1,1);return d.toISOString().slice(0,10);};
+  const[scheduleDate,setScheduleDate]=React.useState(defaultLaterDate);
+  React.useEffect(()=>{if(open){setScheduleMode('now');setScheduleDate(defaultLaterDate());}},[open]);
+  const isLater=allowSchedule&&scheduleMode==='later';
+  const handleConfirm=()=>{
+    if(isLater&&!scheduleDate)return;
+    onConfirm(isLater?scheduleDate:null);
+  };
   return(
     <BottomSheet open={open} onClose={busy?()=>{}:onClose} center>
       <div style={{fontSize:17,fontWeight:800,marginBottom:4}}>{title}{subtitle?<span style={{color:T.accent}}> — {subtitle}</span>:null}</div>
@@ -336,10 +347,24 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
           ))}
         </div>
       )}
+      {allowSchedule&&(
+        <div style={{marginBottom:16}}>
+          <div style={{display:'flex',gap:8,marginBottom:isLater?10:0}}>
+            <button onClick={()=>setScheduleMode('now')} disabled={busy} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${scheduleMode==='now'?'rgba(191,160,96,0.5)':'rgba(255,255,255,0.12)'}`,background:scheduleMode==='now'?'rgba(191,160,96,0.12)':'transparent',color:scheduleMode==='now'?T.accent:T.textDim,fontSize:12,fontWeight:700,cursor:busy?'default':'pointer'}}>Maintenant</button>
+            <button onClick={()=>setScheduleMode('later')} disabled={busy} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${isLater?'rgba(90,138,224,0.5)':'rgba(255,255,255,0.12)'}`,background:isLater?'rgba(90,138,224,0.12)':'transparent',color:isLater?'#5A8AE0':T.textDim,fontSize:12,fontWeight:700,cursor:busy?'default':'pointer'}}>📅 Programmer</button>
+          </div>
+          {isLater&&(
+            <div>
+              <input type="date" value={scheduleDate} min={new Date(Date.now()+86400000).toISOString().slice(0,10)} onChange={e=>setScheduleDate(e.target.value)} disabled={busy} style={{width:'100%',height:42,borderRadius:10,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,padding:'0 12px',outline:'none',boxSizing:'border-box'}}/>
+              <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.4}}>Le programme actuel reste actif jusqu'à cette date — il sera remplacé automatiquement ce jour-là, sans rien changer d'ici là.</div>
+            </div>
+          )}
+        </div>
+      )}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} disabled={busy} style={{flex:1,height:46,borderRadius:13,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:700,cursor:busy?'default':'pointer',opacity:busy?0.5:1}}>Annuler</button>
-        <button onClick={onConfirm} disabled={busy} style={{flex:2,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:busy?'default':'pointer',opacity:busy?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-          {busy?'Import…':(confirmLabel||"✓ Confirmer l'import")}
+        <button onClick={handleConfirm} disabled={busy||(isLater&&!scheduleDate)} style={{flex:2,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:busy?'default':'pointer',opacity:busy?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          {busy?'Import…':isLater?'📅 Programmer l\'import':(confirmLabel||"✓ Confirmer l'import")}
         </button>
       </div>
     </BottomSheet>
@@ -9083,11 +9108,18 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         targetName:[target.firstName,target.lastName].filter(Boolean).join(' ')||target.email,
         stats:[{label:'jours',value:nD},{label:'exercices',value:nEx}],
         warnings:warnings||[],
-        onConfirm: async()=>{
-          flash('⏳ Import en cours...');
+        allowSchedule:true,
+        onConfirm: async(activateOn)=>{
+          flash(activateOn?'⏳ Programmation...':'⏳ Import en cours...');
           try{
-            await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data}});
-            flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
+            if(activateOn){
+              await apiCall('/api/coach/program/'+target.id+'/scheduled',{method:'PUT',body:{data,activateOn}});
+              const dateLabel=new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
+              flash(`✓ Programme programmé pour le ${dateLabel}`);
+            }else{
+              await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data}});
+              flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
+            }
             reloadDetail(target.id);
             load();
           }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleExcel:',ex);}
@@ -9213,8 +9245,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         )}
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
         <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
-        <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings}
-          onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
+        <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule}
+          onClose={()=>setImportPreview(null)} onConfirm={activateOn=>{importPreview.onConfirm(activateOn);setImportPreview(null);}}/>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
@@ -9387,6 +9419,19 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 )}
               </div>
             </div>
+
+            {/* Programme programmé à l'avance — s'appliquera automatiquement à la date choisie
+                sans toucher au programme actuel d'ici là */}
+            {a.scheduledProgram&&(
+              <div style={{padding:'10px 12px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:16,flexShrink:0}}>📅</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#5A8AE0'}}>Programme prévu</div>
+                  <div style={{fontSize:11,color:T.textDim,marginTop:1}}>S'appliquera automatiquement le {new Date(a.scheduledProgram.activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>
+                </div>
+                <button onClick={()=>setConfirmAction({msg:'Annuler le programme prévu ?',onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id+'/scheduled',{method:'DELETE'});flash('✓ Programme prévu annulé');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.3)',background:'transparent',color:'#5A8AE0',fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>Annuler</button>
+              </div>
+            )}
 
             {/* Calendrier sport */}
             <SectionHeader title="Calendrier"/>
