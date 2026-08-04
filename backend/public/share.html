@@ -85,6 +85,13 @@ function fixCardioVal(v){
 function cardioHasVal(v){const s=fixCardioVal(v).trim();return s!==''&&s!=='0';}
 function fixCardioDuree(v){return fixCardioVal(v).replace(/['’′ʼ]+\s*$/,'').trim();}
 
+function fmtHoldDuration(secs){
+  secs=Math.max(0,Math.round(secs||0));
+  if(secs%60===0)return `${secs/60}min`;
+  if(secs<60)return `${secs}s`;
+  return `${Math.floor(secs/60)}min${String(secs%60).padStart(2,'0')}`;
+}
+
 // Regroupe les exercices consécutifs de même style (superset/tri-set/circuit abdos),
 // même logique que l'appli : SUPERSET = 2 exos max, TRISET = 3 max, ABDOS = illimité.
 function groupExercises(exercises){
@@ -142,6 +149,18 @@ function renderSession(session){
         <div class="ex-head"><span class="ex-name">${idx+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
         <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#C89040;margin-bottom:8px;">CARDIO</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">${pills||'<span style="color:var(--textFaint);font-style:italic;font-size:12px;">Pas de détail</span>'}</div>
+      </div>`;
+    }
+    if(ex.holdSeconds>0){
+      const rows=(ex.sets||[]).map((s,si)=>
+        `<div class="set-row"><span class="set-idx">${si+1}</span><span>${esc(fmtHoldDuration(ex.holdSeconds))} tenues${s.weight>0?` · ${esc(s.weight)} kg`:''}</span></div>`
+      ).join('');
+      const restH=ex.restSeconds>0?`<div style="font-size:11px;color:var(--textFaint);margin-top:6px;">⏳ Repos : ${esc(ex.restSeconds)}s</div>`:'';
+      return `<div class="ex-card">
+        <div class="ex-head"><span class="ex-name">${idx+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#5A8AE0;margin-bottom:8px;">GAINAGE</div>
+        ${rows||'<div class="set-row" style="color:var(--textFaint);font-style:italic;">Pas de détail de série</div>'}
+        ${restH}
       </div>`;
     }
     const sets=(ex.sets||[]).map((s,si)=>
@@ -236,6 +255,19 @@ function downloadPDF(session){
       if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
       doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
       doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
+      return;
+    }
+    if(ex.holdSeconds>0){
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(90,138,224);
+      doc.text('GAINAGE',margin,y);y+=5.5;
+      const nSets=(ex.sets||[]).length||1;
+      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+      doc.text(`${nSets} série${nSets>1?'s':''} × ${fmtHoldDuration(ex.holdSeconds)} tenues`,margin,y);y+=7;
+      if(ex.restSeconds>0){
+        doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
+        doc.text(`Repos : ${ex.restSeconds}s`,margin,y);y+=5;
+      }
+      y+=3;
       return;
     }
     const cols=[margin,margin+12,margin+38,margin+64];
