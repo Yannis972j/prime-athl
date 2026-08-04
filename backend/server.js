@@ -979,6 +979,11 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   for (const sid of Object.keys(DATA.sessions || {})) {
     if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
   }
+  // Retirer les liens de partage public de ses séances — sinon un athlète "supprimé"
+  // reste consultable indéfiniment via un lien déjà distribué (Instagram, etc.).
+  for (const token of Object.keys(DATA.sharedSessions || {})) {
+    if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
+  }
   // Retirer des invites (DATA.invites est un objet keyé par code)
   for (const code of Object.keys(DATA.invites || {})) {
     if (DATA.invites[code].usedBy === u.id) delete DATA.invites[code];
@@ -1597,7 +1602,7 @@ app.post('/api/sessions/:id/share', authRequired, (req, res) => {
   const s = DATA.sessions[req.params.id];
   if (!s) return res.status(404).json({ error: 'not_found' });
   if (s.userId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
-  const token = uid() + uid();
+  const token = crypto.randomBytes(24).toString('hex');
   DATA.sharedSessions[token] = {
     token,
     ownerId: req.user.id,
@@ -1605,6 +1610,12 @@ app.post('/api/sessions/:id/share', authRequired, (req, res) => {
     snapshot: { name: s.name, date: s.date, totalVolume: s.totalVolume, duration: s.duration, exercises: s.exercises },
     createdAt: Date.now(),
   };
+  // Garder max 100 liens de partage par utilisateur (FIFO sur les plus vieux)
+  const userTokens = Object.keys(DATA.sharedSessions).filter(t => DATA.sharedSessions[t].ownerId === req.user.id);
+  if (userTokens.length > 100) {
+    const sorted = userTokens.sort((a, b) => DATA.sharedSessions[a].createdAt - DATA.sharedSessions[b].createdAt);
+    sorted.slice(0, userTokens.length - 100).forEach(t => delete DATA.sharedSessions[t]);
+  }
   persist();
   res.json({ token, url: '/share.html?t=' + token });
 });
@@ -1857,6 +1868,9 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   // Delete user and their data
   for (const sid of Object.keys(DATA.sessions)) {
     if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
+  }
+  for (const token of Object.keys(DATA.sharedSessions || {})) {
+    if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
   }
   delete DATA.programs[u.id];
   delete DATA.savedPrograms[u.id];
