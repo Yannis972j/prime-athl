@@ -3696,16 +3696,18 @@ function MotivationMarquee(){
 }
 
 // iOS Safari ignore souvent le téléchargement automatique déclenché par jsPDF (doc.save) — le
-// clic ne se produit jamais et rien ne se passe, sans message d'erreur. On ouvre le PDF dans un
-// nouvel onglet à la place : l'utilisateur peut ensuite l'enregistrer/partager depuis la
-// visionneuse PDF native de Safari (bouton de partage en haut à droite).
+// clic ne se produit jamais et rien ne se passe, sans message d'erreur. Ouvrir le blob dans un
+// NOUVEL onglet (window.open) échoue aussi sur iOS ("Impossible de charger la page") : Safari
+// refuse d'y résoudre un blob: créé par une autre page/contexte. La seule méthode fiable est de
+// naviguer dans le MÊME onglet vers le blob — Safari affiche alors le PDF dans sa visionneuse
+// intégrée, d'où l'utilisateur peut l'enregistrer/partager.
 function savePdfCompat(doc,filename){
   const isIOS=/iP(hone|od|ad)/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   if(isIOS){
-    try{window.open(doc.output('bloburl'),'_blank');return;}catch(e){/* on retente via save() ci-dessous */}
+    try{location.href=URL.createObjectURL(doc.output('blob'));return;}catch(e){/* on retente via save() ci-dessous */}
   }
   try{doc.save(filename);}catch(e){
-    try{window.open(doc.output('bloburl'),'_blank');}catch(e2){alert('Impossible de générer le PDF.');}
+    try{location.href=URL.createObjectURL(doc.output('blob'));}catch(e2){alert('Impossible de générer le PDF.');}
   }
 }
 
