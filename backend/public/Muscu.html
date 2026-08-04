@@ -3734,6 +3734,20 @@ function exportSessionPDF(session){
     doc.text(`${ei+1}. ${ex.name}`,margin,y);
     if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
     y+=7;
+    // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée
+    if(ex.style==='CARDIO'&&ex.cardio){
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
+      doc.text('CARDIO',margin,y);y+=5.5;
+      const c=ex.cardio;
+      const parts=[];
+      if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
+      if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
+      if(cardioHasVal(c.duree))parts.push(`Durée : ${fixCardioDuree(c.duree)} min`);
+      if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
+      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+      doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
+      return;
+    }
     // En-tête tableau
     const cols=[margin,margin+12,margin+38,margin+64,margin+95];
     doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);

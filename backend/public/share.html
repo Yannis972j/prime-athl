@@ -70,6 +70,20 @@
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
+// Un champ cardio (vitesse/inclinaison/durée/distance) est du texte libre venant d'Excel
+// ("30'", "4-5", "8"...), pas forcément un nombre pur.
+function fixCardioVal(v){
+  const n=parseFloat(v);
+  if(!isNaN(n)&&Number.isInteger(n)&&n>30000&&n<80000){
+    const adj=n>60?n-1:n;
+    const d=new Date(Date.UTC(1899,11,31)+adj*86400000);
+    return `${d.getUTCDate()}-${d.getUTCMonth()+1}`;
+  }
+  return String(v||'');
+}
+function cardioHasVal(v){const s=fixCardioVal(v).trim();return s!==''&&s!=='0';}
+function fixCardioDuree(v){return fixCardioVal(v).replace(/['’′ʼ]+\s*$/,'').trim();}
+
 function fmtDate(iso){
   try{
     return new Date(iso).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -88,6 +102,22 @@ function renderSession(session){
   ).join('');
 
   const exHtml=(session.exercises||[]).map((ex,i)=>{
+    if(ex.style==='CARDIO'&&ex.cardio){
+      const c=ex.cardio;
+      const pills=[
+        ['⚡','Vitesse',cardioHasVal(c.vitesse)?fixCardioVal(c.vitesse)+' km/h':null],
+        ['📐','Inclinaison',cardioHasVal(c.inclinaison)?fixCardioVal(c.inclinaison)+'%':null],
+        ['⏱','Durée',cardioHasVal(c.duree)?fixCardioDuree(c.duree)+' min':null],
+        ['📏','Distance',cardioHasVal(c.distance)?fixCardioVal(c.distance)+' km':null],
+      ].filter(([,,v])=>v).map(([icon,,v])=>
+        `<span style="font-size:11px;font-weight:700;color:#C89040;background:rgba(200,144,64,0.1);border:1px solid rgba(200,144,64,0.25);padding:3px 9px;border-radius:8px;">${icon} ${esc(v)}</span>`
+      ).join('');
+      return `<div class="ex-card">
+        <div class="ex-head"><span class="ex-name">${i+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#C89040;margin-bottom:8px;">CARDIO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${pills||'<span style="color:var(--textFaint);font-style:italic;font-size:12px;">Pas de détail</span>'}</div>
+      </div>`;
+    }
     const sets=(ex.sets||[]).map((s,si)=>
       `<div class="set-row"><span class="set-idx">${si+1}</span><span>${esc(s.weight||0)} kg × ${esc(s.reps||0)} reps</span></div>`
     ).join('');
@@ -147,6 +177,19 @@ function downloadPDF(session){
     doc.text(`${ei+1}. ${ex.name}`,margin,y);
     if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
     y+=7;
+    if(ex.style==='CARDIO'&&ex.cardio){
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
+      doc.text('CARDIO',margin,y);y+=5.5;
+      const c=ex.cardio;
+      const parts=[];
+      if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
+      if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
+      if(cardioHasVal(c.duree))parts.push(`Durée : ${fixCardioDuree(c.duree)} min`);
+      if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
+      doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
+      doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
+      return;
+    }
     const cols=[margin,margin+12,margin+38,margin+64];
     doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
     ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
