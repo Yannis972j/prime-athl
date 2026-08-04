@@ -92,30 +92,43 @@ function fmtHoldDuration(secs){
   return `${Math.floor(secs/60)}min${String(secs%60).padStart(2,'0')}`;
 }
 
-// Regroupe les exercices consécutifs de même style (superset/tri-set/circuit abdos),
-// même logique que l'appli : SUPERSET = 2 exos max, TRISET = 3 max, ABDOS = illimité.
-function groupExercises(exercises){
+// Deux systèmes de tag coexistent selon l'origine de la séance : ex.groupType+groupId (séances
+// live coach, classic/superset/triset/cardio) et ex.style (séances importées Excel / propres à
+// l'athlète, CLASSIQUE/SUPERSET/TRISET/ABDOS/CARDIO, groupées par adjacence). exType() les
+// unifie — mêmes helpers que le détail de séance in-app (Muscu.html), dupliqués ici car
+// share.html est une page statique indépendante.
+function exType(e){
+  if(e.groupType&&e.groupType!=='classic')return e.groupType;
+  const s=(e.style||'').toLowerCase();
+  return(s==='superset'||s==='triset'||s==='cardio'||s==='abdos')?s:'classic';
+}
+function groupExercisesByType(exercises){
+  const list=exercises||[];
   const groups=[];
-  let i=0;
-  while(i<exercises.length){
-    const ex=exercises[i];
-    const s=ex.style||'CLASSIQUE';
-    if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
-      const maxItems=s==='SUPERSET'?2:s==='TRISET'?3:Infinity;
-      const items=[{ex,idx:i}];i++;
-      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems){
-        items.push({ex:exercises[i],idx:i});i++;
-      }
-      groups.push({style:s,items});
-    }else{
-      groups.push({style:s,items:[{ex,idx:i}]});i++;
+  const byGroupId=new Map();
+  const maxItems={superset:2,triset:3,abdos:Infinity};
+  list.forEach(e=>{
+    const type=exType(e);
+    const isComplex=type!=='classic';
+    if(isComplex&&e.groupId&&byGroupId.has(e.groupId)){
+      byGroupId.get(e.groupId).items.push(e);
+      return;
     }
-  }
+    const prev=groups[groups.length-1];
+    const canAdjMerge=isComplex&&type!=='cardio'&&!e.groupId&&prev&&prev.type===type&&!prev.items[0].groupId&&prev.items.length<(maxItems[type]||Infinity);
+    if(canAdjMerge){
+      prev.items.push(e);
+      return;
+    }
+    const g={type:isComplex?type:'classic',items:[e]};
+    if(isComplex&&e.groupId)byGroupId.set(e.groupId,g);
+    groups.push(g);
+  });
   return groups;
 }
-const STYLE_LABELS={SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'CIRCUIT ABDOS'};
-const STYLE_COLORS={SUPERSET:'#5A8AE0',TRISET:'#A060D0',ABDOS:'#2CC4A0'};
-const STYLE_RGB={SUPERSET:[90,138,224],TRISET:[160,96,208],ABDOS:[44,196,160]};
+const STYLE_LABELS={superset:'SUPERSET',triset:'TRI-SET',abdos:'CIRCUIT ABDOS'};
+const STYLE_COLORS={superset:'#5A8AE0',triset:'#A060D0',abdos:'#2CC4A0'};
+const STYLE_RGB={superset:[90,138,224],triset:[160,96,208],abdos:[44,196,160]};
 
 function fmtDate(iso){
   try{
@@ -134,8 +147,8 @@ function renderSession(session){
     `<div><div class="stat-label">${esc(label)}</div><div class="stat-val ${cls}">${esc(val)}</div></div>`
   ).join('');
 
-  const exCardHtml=(ex,idx)=>{
-    if(ex.style==='CARDIO'&&ex.cardio){
+  const exCardHtml=(ex,num)=>{
+    if(exType(ex)==='cardio'&&ex.cardio){
       const c=ex.cardio;
       const pills=[
         ['⚡','Vitesse',cardioHasVal(c.vitesse)?fixCardioVal(c.vitesse)+' km/h':null],
@@ -146,7 +159,7 @@ function renderSession(session){
         `<span style="font-size:11px;font-weight:700;color:#C89040;background:rgba(200,144,64,0.1);border:1px solid rgba(200,144,64,0.25);padding:3px 9px;border-radius:8px;">${icon} ${esc(v)}</span>`
       ).join('');
       return `<div class="ex-card">
-        <div class="ex-head"><span class="ex-name">${idx+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
+        <div class="ex-head"><span class="ex-name">${num}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
         <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#C89040;margin-bottom:8px;">CARDIO</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">${pills||'<span style="color:var(--textFaint);font-style:italic;font-size:12px;">Pas de détail</span>'}</div>
       </div>`;
@@ -157,7 +170,7 @@ function renderSession(session){
       ).join('');
       const restH=ex.restSeconds>0?`<div style="font-size:11px;color:var(--textFaint);margin-top:6px;">⏳ Repos : ${esc(ex.restSeconds)}s</div>`:'';
       return `<div class="ex-card">
-        <div class="ex-head"><span class="ex-name">${idx+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
+        <div class="ex-head"><span class="ex-name">${num}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
         <div style="font-size:10px;font-weight:700;letter-spacing:0.4px;color:#5A8AE0;margin-bottom:8px;">GAINAGE</div>
         ${rows||'<div class="set-row" style="color:var(--textFaint);font-style:italic;">Pas de détail de série</div>'}
         ${restH}
@@ -168,20 +181,23 @@ function renderSession(session){
     ).join('');
     const rest=ex.restSeconds>0?`<div style="font-size:11px;color:var(--textFaint);margin-top:6px;">⏳ Repos : ${esc(ex.restSeconds)}s</div>`:'';
     return `<div class="ex-card">
-      <div class="ex-head"><span class="ex-name">${idx+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
+      <div class="ex-head"><span class="ex-name">${num}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
       ${sets||'<div class="set-row" style="color:var(--textFaint);font-style:italic;">Pas de détail de série</div>'}
       ${rest}
     </div>`;
   };
 
-  const exHtml=groupExercises(session.exercises||[]).map(group=>{
-    const label=STYLE_LABELS[group.style];
-    const cards=group.items.map(({ex,idx},gi)=>
-      gi>0?`<div style="display:flex;gap:6px;align-items:flex-start;"><span style="color:${STYLE_COLORS[group.style]};font-size:13px;flex-shrink:0;margin-top:14px;">↳</span><div style="flex:1;">${exCardHtml(ex,idx)}</div></div>`:exCardHtml(ex,idx)
-    ).join('');
+  let exHtmlNum=0;
+  const exHtml=groupExercisesByType(session.exercises||[]).map(group=>{
+    const label=STYLE_LABELS[group.type];
+    const cards=group.items.map((ex,gi)=>{
+      exHtmlNum++;
+      const card=exCardHtml(ex,exHtmlNum);
+      return gi>0?`<div style="display:flex;gap:6px;align-items:flex-start;"><span style="color:${STYLE_COLORS[group.type]};font-size:13px;flex-shrink:0;margin-top:14px;">↳</span><div style="flex:1;">${card}</div></div>`:card;
+    }).join('');
     if(!label)return cards;
-    return `<div style="border-left:2px solid ${STYLE_COLORS[group.style]}55;padding-left:10px;margin-bottom:2px;">
-      <div style="font-size:10px;font-weight:800;letter-spacing:0.5px;color:${STYLE_COLORS[group.style]};margin-bottom:6px;">${esc(label)} · enchaîné sans repos</div>
+    return `<div style="border-left:2px solid ${STYLE_COLORS[group.type]}55;padding-left:10px;margin-bottom:2px;">
+      <div style="font-size:10px;font-weight:800;letter-spacing:0.5px;color:${STYLE_COLORS[group.type]};margin-bottom:6px;">${esc(label)} · enchaîné sans repos</div>
       <div style="display:flex;flex-direction:column;gap:10px;">${cards}</div>
     </div>`;
   }).join('');
@@ -249,19 +265,21 @@ function downloadPDF(session){
   if(stats.length){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(180,180,200);doc.text(stats.join('   ·   '),margin,y);y+=8;}
   rule();
 
-  groupExercises(session.exercises||[]).forEach(group=>{
-    if(STYLE_LABELS[group.style]){
+  let pdfExNum=0;
+  groupExercisesByType(session.exercises||[]).forEach(group=>{
+    if(STYLE_LABELS[group.type]){
       if(y>265) newPage();
-      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.style]);
-      doc.text(`⛓ ${STYLE_LABELS[group.style]} · enchaîné sans repos`,margin,y);y+=6;
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.type]);
+      doc.text(`⛓ ${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
     }
-    group.items.forEach(({ex,idx},gi)=>{
+    group.items.forEach((ex,gi)=>{
+    pdfExNum++;
     if(y>265) newPage();
     doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-    doc.text(`${gi>0?'↳ ':''}${idx+1}. ${ex.name}`,margin,y);
+    doc.text(`${gi>0?'↳ ':''}${pdfExNum}. ${ex.name}`,margin,y);
     if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
     y+=7;
-    if(ex.style==='CARDIO'&&ex.cardio){
+    if(exType(ex)==='cardio'&&ex.cardio){
       doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
       doc.text('CARDIO',margin,y);y+=5.5;
       const c=ex.cardio;
