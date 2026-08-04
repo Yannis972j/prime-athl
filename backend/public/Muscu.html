@@ -3839,6 +3839,17 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[viewHistSession,setViewHistSession]=React.useState(null);
   const[showSaveModal,setShowSaveModal]=React.useState(false);
   const[saveName,setSaveName]=React.useState('');
+  const[shareState,setShareState]=React.useState(null); // null | 'loading' | {url} | 'error'
+  const[shareCopied,setShareCopied]=React.useState(false);
+  const shareSession=async session=>{
+    if(!session?.id){setShareState('error');return;}
+    setShareState('loading');setShareCopied(false);
+    try{
+      const r=await apiCall('/api/sessions/'+session.id+'/share',{method:'POST'});
+      setShareState({url:location.origin+r.url});
+    }catch(e){setShareState('error');}
+  };
+  React.useEffect(()=>{setShareState(null);setShareCopied(false);},[viewHistSession?.id]);
 
   // Séances planifiées (via Biblio/Live ou par le coach) — affichées sur ce calendrier
   const[planned,setPlanned]=React.useState({});
@@ -4066,9 +4077,27 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     PDF
                   </button>
+                  <button onClick={()=>shareSession(viewHistSession)} disabled={shareState==='loading'} style={{height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:shareState==='loading'?'wait':'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap',opacity:shareState==='loading'?0.6:1}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+                    Partager
+                  </button>
                   <button onClick={()=>setViewHistSession(null)} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
                 </div>
               </div>
+              {/* Lien de partage public — généré à la demande, révélé une fois créé */}
+              {shareState&&shareState!=='loading'&&(
+                <div style={{marginTop:12,padding:'10px 12px',borderRadius:12,background:shareState==='error'?'rgba(184,80,112,0.08)':'rgba(90,138,224,0.06)',border:`1px solid ${shareState==='error'?'rgba(184,80,112,0.25)':'rgba(90,138,224,0.2)'}`}}>
+                  {shareState==='error'?(
+                    <div style={{fontSize:12,color:'#B85070',fontWeight:600}}>✗ Impossible de créer le lien. Réessaie.</div>
+                  ):(<>
+                    <div style={{fontSize:10,color:'#8AADEE',fontWeight:700,textTransform:'uppercase',letterSpacing:0.3,marginBottom:6}}>Lien public — n'importe qui peut l'ouvrir et télécharger le PDF</div>
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      <div style={{flex:1,minWidth:0,fontSize:12,color:T.text,padding:'8px 10px',borderRadius:9,background:'rgba(255,255,255,0.05)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{shareState.url}</div>
+                      <button onClick={()=>{navigator.clipboard?.writeText(shareState.url);setShareCopied(true);setTimeout(()=>setShareCopied(false),2000);}} style={{height:34,padding:'0 12px',borderRadius:9,border:'none',background:shareCopied?'#2CC4A0':'#5A8AE0',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{shareCopied?'✓ Copié':'Copier'}</button>
+                    </div>
+                  </>)}
+                </div>
+              )}
               {/* Stats row */}
               <div style={{display:'flex',gap:16,marginTop:12}}>
                 <div>
