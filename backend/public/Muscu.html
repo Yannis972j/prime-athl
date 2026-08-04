@@ -1108,7 +1108,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           name:e.name,muscle:e.muscle,
           ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
           ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
-          ...(e.style!=='CARDIO'&&e.restSeconds?{restSeconds:e.restSeconds}:{}),
+          ...(e.style!=='CARDIO'?{restSeconds:e.restSeconds||90}:{}),
           sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
         })).filter(e=>e.style==='CARDIO'||e.sets.length>0),
       };
