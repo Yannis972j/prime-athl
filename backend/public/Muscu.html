@@ -3744,24 +3744,29 @@ function exportSessionPDF(session){
 
   rule();
 
-  // Exercices — regroupés par superset/tri-set/circuit abdos, comme en séance live
-  const STYLE_LABELS={SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'CIRCUIT ABDOS'};
-  const STYLE_RGB={SUPERSET:[90,138,224],TRISET:[160,96,208],ABDOS:[44,196,160]};
-  groupExercises(session.exercises||[]).forEach(group=>{
-    if(STYLE_LABELS[group.style]){
+  // Exercices — regroupés par superset/tri-set/circuit abdos, comme en séance live. Deux
+  // systèmes de tag coexistent selon l'origine de la séance (ex.groupType+groupId pour les
+  // séances live coach, ex.style pour les séances importées Excel / propres à l'athlète) —
+  // exType()/groupExercisesByType() les unifient (mêmes helpers que le détail de séance in-app).
+  const STYLE_LABELS={superset:'SUPERSET',triset:'TRI-SET',abdos:'CIRCUIT ABDOS'};
+  const STYLE_RGB={superset:[90,138,224],triset:[160,96,208],abdos:[44,196,160]};
+  let exNum=0;
+  groupExercisesByType(session.exercises||[]).forEach(group=>{
+    if(STYLE_LABELS[group.type]){
       if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.style]);
-      doc.text(`⛓ ${STYLE_LABELS[group.style]} · enchaîné sans repos`,margin,y);y+=6;
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.type]);
+      doc.text(`⛓ ${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
     }
-    group.items.forEach(({ex,idx},gi)=>{
+    group.items.forEach((ex,gi)=>{
+      exNum++;
       if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
       // Nom exo
       doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-      doc.text(`${gi>0?'↳ ':''}${idx+1}. ${ex.name}`,margin,y);
+      doc.text(`${gi>0?'↳ ':''}${exNum}. ${ex.name}`,margin,y);
       if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
       y+=7;
       // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée
-      if(ex.style==='CARDIO'&&ex.cardio){
+      if(exType(ex)==='cardio'&&ex.cardio){
         doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
         doc.text('CARDIO',margin,y);y+=5.5;
         const c=ex.cardio;
