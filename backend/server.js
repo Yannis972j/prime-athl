@@ -134,7 +134,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -344,10 +344,16 @@ setInterval(() => {
       delete DATA.programs[u.id];
       delete DATA.savedPrograms[u.id];
       delete DATA.myLibrary[u.id];
+      delete DATA.scheduledPrograms[u.id];
       removedPending++;
     }
   }
   if (removedPending > 0) console.log(`[cleanup] ${removedPending} compte(s) pending expirés supprimés`);
+
+  // Active les programmes programmés à l'avance dont la date est atteinte (ex: programme de
+  // septembre préparé en août — s'active tout seul le jour venu sans action du coach)
+  const activatedPrograms = activateScheduledPrograms();
+  if (activatedPrograms > 0) console.log(`[schedule] ${activatedPrograms} programme(s) programmé(s) activé(s)`);
 
   // Purge les push subscriptions expirées (endpoint invalide depuis > 7 jours)
   // Elles sont marquées .invalidatedAt lors d'une erreur 410/404 webpush
@@ -363,6 +369,12 @@ setInterval(() => {
 
   if (removedPending > 0 || removedPush > 0 || removedNutrition > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
+// Vérifie aussi une fois au démarrage — sinon un programme dont la date d'activation est
+// passée pendant que le serveur était éteint attendrait jusqu'à 1h avant de s'activer
+setTimeout(() => {
+  const n = activateScheduledPrograms();
+  if (n > 0) console.log(`[schedule] ${n} programme(s) programmé(s) activé(s) au démarrage`);
+}, 3000);
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
@@ -935,11 +947,13 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
   const total = all.length;
   const athletes = all.slice((page - 1) * limit, page * limit).map(u => {
     const p = DATA.programs[u.id];
+    const sched = DATA.scheduledPrograms[u.id];
     const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
     const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
     return {
       ...profileOf(u),
       program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+      scheduledProgram: sched ? { activateOn: sched.activateOn } : null,
       sessionCount: userSessions.length,
       lastSessionAt: lastSession ? lastSession.date : null,
     };
@@ -951,6 +965,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   const u = DATA.users[req.params.id];
   if (!u || u.coachId !== req.user.id) return res.status(404).json({ error: 'not_found' });
   const p = DATA.programs[u.id];
+  const sched = DATA.scheduledPrograms[u.id];
   const sessions = Object.values(DATA.sessions)
     .filter(s => s.userId === u.id)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -958,6 +973,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   res.json({
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+    scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
     sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
@@ -970,6 +986,7 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   // Suppression complète du compte et toutes ses données
   delete DATA.users[u.id];
   delete DATA.programs[u.id];
+  delete DATA.scheduledPrograms[u.id];
   delete DATA.nutritionLogs[u.id];
   delete DATA.nutritionPrograms[u.id];
   delete DATA.weightLogs[u.id];
@@ -1206,28 +1223,85 @@ app.delete('/api/my-nutrition', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Assigne effectivement un programme à un athlète (auto-archive l'ancien, notifie).
+// Partagé entre l'assignation immédiate (PUT ci-dessous) et l'activation automatique
+// d'un programme programmé à l'avance (cf. activateScheduledPrograms plus bas).
+function applyProgramToAthlete(athleteId, data, assignedBy) {
+  const ts = Date.now();
+  const prev = DATA.programs[athleteId];
+  if (prev && prev.data && Object.keys(prev.data).length > 0) {
+    if (!DATA.savedPrograms[athleteId]) DATA.savedPrograms[athleteId] = [];
+    const already = DATA.savedPrograms[athleteId];
+    const autoName = 'Programme du ' + new Date(prev.assignedAt || ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    already.unshift({ id: Date.now().toString(36) + 'a', name: autoName, savedAt: Date.now(), data: prev.data });
+    if (already.length > 5) DATA.savedPrograms[athleteId] = already.slice(0, 5);
+  }
+  DATA.programs[athleteId] = { data, assignedBy, assignedAt: ts };
+  delete DATA.scheduleMoves[athleteId];
+  io.to('user:' + athleteId).emit('program-updated', { data, assignedAt: ts });
+  io.to('user:' + athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
+  const coachName = DATA.users[assignedBy]?.firstName || 'Ton coach';
+  pushToUser(athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
+  return ts;
+}
+
+// Active tout programme programmé à l'avance dont la date d'activation est atteinte —
+// appelé au démarrage et périodiquement (cf. setInterval de nettoyage plus haut), pas de
+// précision à la minute près nécessaire (c'est une date, pas une heure).
+function activateScheduledPrograms() {
+  let activated = 0;
+  const todayStr = ymd(Date.now());
+  for (const athleteId of Object.keys(DATA.scheduledPrograms || {})) {
+    const sched = DATA.scheduledPrograms[athleteId];
+    if (!sched || !sched.activateOn || sched.activateOn > todayStr) continue;
+    applyProgramToAthlete(athleteId, sched.data, sched.assignedBy);
+    delete DATA.scheduledPrograms[athleteId];
+    activated++;
+  }
+  if (activated > 0) persist();
+  return activated;
+}
+
 app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   const data = req.body?.data || {};
-  const ts = Date.now();
-  // Auto-archiver l'ancien programme avant de l'écraser
-  const prev = DATA.programs[req.params.athleteId];
-  if (prev && prev.data && Object.keys(prev.data).length > 0) {
-    if (!DATA.savedPrograms[req.params.athleteId]) DATA.savedPrograms[req.params.athleteId] = [];
-    const already = DATA.savedPrograms[req.params.athleteId];
-    const autoName = 'Programme du ' + new Date(prev.assignedAt || ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-    already.unshift({ id: Date.now().toString(36) + 'a', name: autoName, savedAt: Date.now(), data: prev.data });
-    if (already.length > 5) DATA.savedPrograms[req.params.athleteId] = already.slice(0, 5);
-  }
-  DATA.programs[req.params.athleteId] = { data, assignedBy: req.user.id, assignedAt: ts };
-  delete DATA.scheduleMoves[req.params.athleteId];
+  const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id);
   persist();
-  io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: ts });
-  io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
-  pushToUser(req.params.athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts });
+});
+
+// Programme un import Excel pour qu'il s'applique automatiquement à une date future (ex:
+// préparer le programme de septembre à l'avance sans toucher à celui d'août en cours). Un seul
+// programme en attente à la fois par athlète — un nouvel appel remplace le précédent.
+app.put('/api/coach/program/:athleteId/scheduled', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const data = req.body?.data || {};
+  const activateOn = String(req.body?.activateOn || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(activateOn)) return res.status(400).json({ error: 'invalid_date' });
+  // Si la date choisie est déjà passée ou aujourd'hui, applique immédiatement — pas besoin
+  // d'attendre un cycle de vérification pour un programme censé être déjà actif.
+  if (activateOn <= ymd(Date.now())) {
+    const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id);
+    persist();
+    return res.json({ ok: true, assignedAt: ts, scheduled: false });
+  }
+  DATA.scheduledPrograms[req.params.athleteId] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now() };
+  persist();
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const dateLabel = new Date(ymdToLocal(activateOn)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  pushToUser(req.params.athleteId, { title: '📅 Programme prévu', body: `${coachName} a programmé un nouveau programme pour le ${dateLabel}`, url: '/Muscu.html' });
+  res.json({ ok: true, scheduled: true, activateOn });
+});
+
+// Annule un programme programmé à l'avance avant qu'il ne s'active
+app.delete('/api/coach/program/:athleteId/scheduled', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  delete DATA.scheduledPrograms[req.params.athleteId];
+  persist();
+  res.json({ ok: true });
 });
 
 // ── Déplacement ponctuel d'une séance (occurrence unique, pas le programme récurrent) ──
@@ -1887,6 +1961,7 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
     if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
   }
   delete DATA.programs[u.id];
+  delete DATA.scheduledPrograms[u.id];
   delete DATA.savedPrograms[u.id];
   delete DATA.myLibrary[u.id];
   delete DATA.users[u.id];
