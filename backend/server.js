@@ -134,7 +134,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -1587,6 +1587,49 @@ app.delete('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res)
   persist();
   io.to('user:' + s.userId).emit('session-deleted', { sessionId: req.params.sessionId });
   res.json({ ok: true });
+});
+
+// ── Partage public d'une séance (lien à partager, ex: en story/bio Instagram) ──────
+// Le lien pointe vers un instantané de la séance pris au moment du partage (pas la
+// séance en direct) : si l'utilisateur modifie ou supprime la séance ensuite, le lien
+// déjà partagé continue de fonctionner tel qu'il était au moment du partage.
+app.post('/api/sessions/:id/share', authRequired, (req, res) => {
+  const s = DATA.sessions[req.params.id];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  if (s.userId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  const token = uid() + uid();
+  DATA.sharedSessions[token] = {
+    token,
+    ownerId: req.user.id,
+    sessionId: s.id,
+    snapshot: { name: s.name, date: s.date, totalVolume: s.totalVolume, duration: s.duration, exercises: s.exercises },
+    createdAt: Date.now(),
+  };
+  persist();
+  res.json({ token, url: '/share.html?t=' + token });
+});
+
+// Liste des liens de partage déjà créés pour une séance (pour afficher/révoquer sans en recréer un nouveau)
+app.get('/api/sessions/:id/shares', authRequired, (req, res) => {
+  const s = DATA.sessions[req.params.id];
+  if (!s || s.userId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  const links = Object.values(DATA.sharedSessions).filter(sh => sh.sessionId === req.params.id && sh.ownerId === req.user.id);
+  res.json({ links: links.map(l => ({ token: l.token, createdAt: l.createdAt })) });
+});
+
+app.delete('/api/sessions/share/:token', authRequired, (req, res) => {
+  const sh = DATA.sharedSessions[req.params.token];
+  if (!sh || sh.ownerId !== req.user.id) return res.status(404).json({ error: 'not_found' });
+  delete DATA.sharedSessions[req.params.token];
+  persist();
+  res.json({ ok: true });
+});
+
+// Public — pas d'auth : c'est le but du lien (consultable par n'importe qui, ex: depuis Instagram)
+app.get('/api/share/:token', (req, res) => {
+  const sh = DATA.sharedSessions[req.params.token];
+  if (!sh) return res.status(404).json({ error: 'not_found' });
+  res.json({ session: sh.snapshot, createdAt: sh.createdAt });
 });
 
 // Coach feedback on athlete session
