@@ -1535,6 +1535,7 @@ app.post('/api/sessions', authRequired, (req, res) => {
           distance: Math.max(0, Math.min(200, parseFloat(ex.cardio.distance) || 0)),
         },
       } : {}),
+      ...(style !== 'CARDIO' && ex.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(ex.restSeconds) || 0)) } : {}),
       sets: (Array.isArray(ex.sets) ? ex.sets : []).slice(0, 30).map(s => ({
         weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
         reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
