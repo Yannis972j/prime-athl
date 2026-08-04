@@ -315,10 +315,10 @@ function ConfirmBanner({msg,onConfirm,onCancel}){
 // Affiché après le parsing, avant l'enregistrement réel : montre ce qui a été détecté et
 // les avertissements (lignes/aliments ignorés) pour que le coach puisse vérifier ou
 // annuler, plutôt que de découvrir un import incomplet après coup.
-function ImportPreviewModal({open,onClose,onConfirm,title,stats,warnings,confirmLabel,busy}){
+function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warnings,confirmLabel,busy}){
   return(
     <BottomSheet open={open} onClose={busy?()=>{}:onClose} center>
-      <div style={{fontSize:17,fontWeight:800,marginBottom:4}}>{title}</div>
+      <div style={{fontSize:17,fontWeight:800,marginBottom:4}}>{title}{subtitle?<span style={{color:T.accent}}> — {subtitle}</span>:null}</div>
       <div style={{fontSize:12,color:T.textDim,marginBottom:16}}>Vérifie que tout est correct avant de valider l'import.</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:16}}>
         {(stats||[]).map(s=>(
@@ -1195,15 +1195,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const[swapQuery,setSwapQuery]=React.useState('');
   const exerciseCatalog=React.useMemo(()=>{
     const map=new Map();
-    const add=(name,muscle)=>{
+    const add=(name,muscle,holdSeconds)=>{
       const k=(name||'').trim().toLowerCase();
       if(!k)return;
-      if(!map.has(k))map.set(k,{name:name.trim(),muscle:muscle||''});
-      else if(muscle&&!map.get(k).muscle)map.get(k).muscle=muscle;
+      if(!map.has(k))map.set(k,{name:name.trim(),muscle:muscle||'',holdSeconds:holdSeconds||0});
+      else{
+        const cur=map.get(k);
+        if(muscle&&!cur.muscle)cur.muscle=muscle;
+        if(holdSeconds&&!cur.holdSeconds)cur.holdSeconds=holdSeconds;
+      }
     };
-    Object.values(importedPrograms||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle))));
-    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>add(e.name,e.muscle)));
-    (exercises||[]).forEach(e=>add(e.name,e.muscle));
+    Object.values(importedPrograms||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day.exercises||[]).forEach(e=>add(e.name,e.muscle,e.holdSeconds))));
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>add(e.name,e.muscle,e.holdSeconds)));
+    (exercises||[]).forEach(e=>add(e.name,e.muscle,e.holdSeconds));
     return[...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
   },[importedPrograms,history,exercises]);
 
@@ -1212,10 +1216,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // et les reps réalisées repartent à 0 puisque ce sera un 1er essai sur ce mouvement précis.
   const swapExercise=(ei,newName,newMuscle)=>{
     const hist=lastExData[newName];
+    const catalogEntry=exerciseCatalog.find(c=>c.name.toLowerCase()===newName.trim().toLowerCase());
+    const newHoldSeconds=catalogEntry?.holdSeconds||(isHoldExercise(newName)?60:0);
     setExercises(prev=>prev.map((e,i)=>{
       if(i!==ei)return e;
       return{
-        ...e,name:newName,muscle:newMuscle||e.muscle,
+        ...e,name:newName,muscle:newMuscle||e.muscle,holdSeconds:newHoldSeconds,
         sets:e.sets.map((s,si)=>{
           if(s.done)return s;
           const hSet=hist?.allSets?.[si]||hist?.allSets?.[0]||null;
@@ -1364,6 +1370,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const exercisesRef=React.useRef(exercises);
   const currentExRef=React.useRef(currentEx);
   const validateSetRef=React.useRef(null);
+  const holdTimerExRef=React.useRef(null);
   exercisesRef.current=exercises;
   currentExRef.current=currentEx;
   React.useEffect(()=>{
@@ -1373,6 +1380,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       playBeep(660,0.8,0.4);
       setTimeout(()=>playBeep(880,0.8,0.35),300);
       setTimeout(()=>{
+        // Si l'athlète a changé d'exercice pendant les 350ms d'attente, ne pas valider
+        // une série sur le mauvais exercice.
+        if(currentExRef.current!==holdTimerExRef.current)return;
         const si=(exercisesRef.current[currentExRef.current]?.sets??[]).findIndex(s=>!s.done);
         if(si>=0&&validateSetRef.current)validateSetRef.current(si);
       },350);
@@ -1382,6 +1392,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const startSetTimer=React.useCallback((secs)=>{
     getAudioCtx();
     setTimerActiveRef.current=true;
+    holdTimerExRef.current=currentExRef.current;
     setSetTimerTotal(secs);
     setSetTimerSecs(secs);
   },[getAudioCtx]);
@@ -1686,9 +1697,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             </div>
           )}
 
-          {/* Timer de série — boutons de durée prédéfinie (masqué pour un gainage : la
-              durée cible est déjà connue et proposée via le bouton "▶ Démarrer" ci-dessus) */}
-          {!allExDone&&setTimerSecs===0&&!(ex.holdSeconds>0)&&(
+          {/* Timer de série — boutons de durée prédéfinie (utile même pour un gainage : la
+              durée cible proposée via "▶ Démarrer" peut être fausse/par défaut, l'athlète
+              doit pouvoir la corriger manuellement) */}
+          {!allExDone&&setTimerSecs===0&&(
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',textAlign:'center',marginBottom:8}}>⏱ Timer de série</div>
               <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap'}}>
@@ -3842,6 +3854,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[shareState,setShareState]=React.useState(null); // null | 'loading' | {url} | 'error'
   const[shareCopied,setShareCopied]=React.useState(false);
   const shareSession=async session=>{
+    if(shareState==='loading')return;
     if(!session?.id){setShareState('error');return;}
     setShareState('loading');setShareCopied(false);
     try{
@@ -8936,7 +8949,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   };
 
   const openDetail=a=>{setSelected(a);reloadDetail(a.id);};
-  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);setEditingSession(null);};
+  const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);setEditingSession(null);setImportPreview(null);};
+  const selectedRef=React.useRef(selected);
+  selectedRef.current=selected;
 
   // Swipe pour naviguer entre les onglets de la fiche athlète (profil ↔ séances ↔ nutrition ↔ historique ↔ album)
   // + swipe depuis le bord gauche pour revenir à la liste des athlètes
@@ -8949,22 +8964,27 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const handleExcel=e=>{
     const file=e.target.files[0];
     if(!file||!selected)return;
+    const target=selected;
     e.target.value='';
     parseYannisExcel(file,(data,warnings)=>{
+      // Le coach a pu changer d'athlète pendant le parsing (async) — on annule plutôt
+      // que d'afficher un aperçu qui viserait le mauvais athlète.
+      if(selectedRef.current?.id!==target.id){flash('✗ Import annulé (athlète changé)');return;}
       const nD=Object.values(data).reduce((s,d)=>s+Object.keys(d).length,0);
       if(nD===0){flash('✗ Aucun jour détecté');return;}
       const nEx=Object.values(data).reduce((s,d)=>s+Object.values(d).reduce((s2,day)=>s2+(day.exercises||[]).length,0),0);
       // Aperçu avant d'écraser le programme actuel de l'athlète — action sensible,
       // le coach doit voir ce qui va être assigné (et les lignes ignorées) avant de valider.
       setImportPreview({
+        targetName:[target.firstName,target.lastName].filter(Boolean).join(' ')||target.email,
         stats:[{label:'jours',value:nD},{label:'exercices',value:nEx}],
         warnings:warnings||[],
         onConfirm: async()=>{
           flash('⏳ Import en cours...');
           try{
-            await apiCall('/api/coach/program/'+selected.id,{method:'PUT',body:{data}});
+            await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data}});
             flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
-            reloadDetail(selected.id);
+            reloadDetail(target.id);
             load();
           }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleExcel:',ex);}
         },
@@ -8975,8 +8995,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const handleLibExcel=e=>{
     const file=e.target.files[0];
     if(!file||!selected)return;
+    const target=selected;
     e.target.value='';
     parseYannisExcel(file,(data,warnings)=>{
+      if(selectedRef.current?.id!==target.id){flash('✗ Import annulé (athlète changé)');return;}
       const uid=()=>Math.random().toString(36).slice(2);
       const sessions=[];
       Object.entries(data).forEach(([sheetName,days])=>{
@@ -8986,14 +9008,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       });
       if(sessions.length===0){flash('✗ Aucune séance détectée');return;}
       setImportPreview({
+        targetName:[target.firstName,target.lastName].filter(Boolean).join(' ')||target.email,
         stats:[{label:'séances',value:sessions.length}],
         warnings:warnings||[],
         onConfirm: async()=>{
           flash('⏳ Import bibliothèque...');
           try{
-            await apiCall('/api/coach/session-library/'+selected.id,{method:'PUT',body:{sessions}});
+            await apiCall('/api/coach/session-library/'+target.id,{method:'PUT',body:{sessions}});
             flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
-            reloadDetail(selected.id);
+            reloadDetail(target.id);
           }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
         },
       });
@@ -9086,7 +9109,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         )}
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
         <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
-        <ImportPreviewModal open={!!importPreview} title="Import Excel" stats={importPreview?.stats} warnings={importPreview?.warnings}
+        <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings}
           onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
 
         {/* Header */}
@@ -12948,7 +12971,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // Comparaison "vs la dernière fois" avec la même séance (même nom, ex: le mardi vs le
     // mardi précédent), pas juste la toute dernière séance loggée — sinon un mardi juste
     // après un lundi se compare au volume du lundi, deux séances totalement différentes.
-    const prevSession=history.find(s=>typeof s.totalVolume==='number'&&s.name===snapshot.name);
+    const prevSession=history.find(s=>typeof s.totalVolume==='number'&&snapshot.name&&s.name===snapshot.name);
     setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));

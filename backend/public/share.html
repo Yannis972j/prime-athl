@@ -89,7 +89,7 @@ function renderSession(session){
 
   const exHtml=(session.exercises||[]).map((ex,i)=>{
     const sets=(ex.sets||[]).map((s,si)=>
-      `<div class="set-row"><span class="set-idx">${si+1}</span><span>${s.weight||0} kg × ${s.reps||0} reps</span></div>`
+      `<div class="set-row"><span class="set-idx">${si+1}</span><span>${esc(s.weight||0)} kg × ${esc(s.reps||0)} reps</span></div>`
     ).join('');
     return `<div class="ex-card">
       <div class="ex-head"><span class="ex-name">${i+1}. ${esc(ex.name)}</span>${ex.muscle?`<span class="ex-muscle">${esc(ex.muscle)}</span>`:''}</div>
