@@ -1610,6 +1610,7 @@ app.post('/api/sessions/:id/share', authRequired, (req, res) => {
     sessionId: s.id,
     snapshot: { name: s.name, date: s.date, totalVolume: s.totalVolume, duration: s.duration, exercises: s.exercises },
     createdAt: Date.now(),
+    pdfDownloads: 0,
   };
   // Garder max 100 liens de partage par utilisateur (FIFO sur les plus vieux)
   const userTokens = Object.keys(DATA.sharedSessions).filter(t => DATA.sharedSessions[t].ownerId === req.user.id);
@@ -1626,7 +1627,7 @@ app.get('/api/sessions/:id/shares', authRequired, (req, res) => {
   const s = DATA.sessions[req.params.id];
   if (!s || s.userId !== req.user.id) return res.status(404).json({ error: 'not_found' });
   const links = Object.values(DATA.sharedSessions).filter(sh => sh.sessionId === req.params.id && sh.ownerId === req.user.id);
-  res.json({ links: links.map(l => ({ token: l.token, createdAt: l.createdAt })) });
+  res.json({ links: links.map(l => ({ token: l.token, createdAt: l.createdAt, pdfDownloads: l.pdfDownloads || 0 })) });
 });
 
 app.delete('/api/sessions/share/:token', authRequired, (req, res) => {
@@ -1642,6 +1643,17 @@ app.get('/api/share/:token', (req, res) => {
   const sh = DATA.sharedSessions[req.params.token];
   if (!sh) return res.status(404).json({ error: 'not_found' });
   res.json({ session: sh.snapshot, createdAt: sh.createdAt });
+});
+
+// Public — compteur de téléchargements PDF sur un lien partagé (best-effort, pas d'auth :
+// share.html l'appelle depuis n'importe quel visiteur anonyme). Compte les clics, pas des
+// personnes uniques — un même visiteur qui retélécharge sera compté plusieurs fois.
+app.post('/api/share/:token/pdf-download', (req, res) => {
+  const sh = DATA.sharedSessions[req.params.token];
+  if (!sh) return res.status(404).json({ error: 'not_found' });
+  sh.pdfDownloads = (sh.pdfDownloads || 0) + 1;
+  persist();
+  res.json({ pdfDownloads: sh.pdfDownloads });
 });
 
 // Coach feedback on athlete session

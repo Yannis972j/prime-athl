@@ -3880,18 +3880,27 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[viewHistSession,setViewHistSession]=React.useState(null);
   const[showSaveModal,setShowSaveModal]=React.useState(false);
   const[saveName,setSaveName]=React.useState('');
-  const[shareState,setShareState]=React.useState(null); // null | 'loading' | {url} | 'error'
+  const[shareState,setShareState]=React.useState(null); // null | 'loading' | {url,token} | 'error'
   const[shareCopied,setShareCopied]=React.useState(false);
+  const[pdfDownloads,setPdfDownloads]=React.useState(null);
+  const refreshPdfDownloads=React.useCallback(async(sessionId,token)=>{
+    try{
+      const r=await apiCall('/api/sessions/'+sessionId+'/shares');
+      const link=(r.links||[]).find(l=>l.token===token);
+      setPdfDownloads(link?link.pdfDownloads:0);
+    }catch(e){/* best-effort, on n'affiche juste rien si ça échoue */}
+  },[]);
   const shareSession=async session=>{
     if(shareState==='loading')return;
     if(!session?.id){setShareState('error');return;}
-    setShareState('loading');setShareCopied(false);
+    setShareState('loading');setShareCopied(false);setPdfDownloads(null);
     try{
       const r=await apiCall('/api/sessions/'+session.id+'/share',{method:'POST'});
-      setShareState({url:location.origin+r.url});
+      setShareState({url:location.origin+r.url,token:r.token});
+      refreshPdfDownloads(session.id,r.token);
     }catch(e){setShareState('error');}
   };
-  React.useEffect(()=>{setShareState(null);setShareCopied(false);},[viewHistSession?.id]);
+  React.useEffect(()=>{setShareState(null);setShareCopied(false);setPdfDownloads(null);},[viewHistSession?.id]);
 
   // Séances planifiées (via Biblio/Live ou par le coach) — affichées sur ce calendrier
   const[planned,setPlanned]=React.useState({});
@@ -4136,6 +4145,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                     <div style={{display:'flex',gap:6,alignItems:'center'}}>
                       <div style={{flex:1,minWidth:0,fontSize:12,color:T.text,padding:'8px 10px',borderRadius:9,background:'rgba(255,255,255,0.05)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{shareState.url}</div>
                       <button onClick={()=>{navigator.clipboard?.writeText(shareState.url);setShareCopied(true);setTimeout(()=>setShareCopied(false),2000);}} style={{height:34,padding:'0 12px',borderRadius:9,border:'none',background:shareCopied?'#2CC4A0':'#5A8AE0',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{shareCopied?'✓ Copié':'Copier'}</button>
+                    </div>
+                    {/* Compteur de téléchargements PDF — nombre de clics, pas de personnes uniques
+                        (le lien est public/anonyme, impossible de dédupliquer un même visiteur) */}
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8,fontSize:11,color:T.textDim}}>
+                      <span>📥 {pdfDownloads==null?'…':`${pdfDownloads} téléchargement${pdfDownloads>1?'s':''} PDF`}</span>
+                      <button onClick={()=>refreshPdfDownloads(viewHistSession.id,shareState.token)} title="Actualiser" style={{width:22,height:22,borderRadius:11,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textFaint,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>🔄</button>
                     </div>
                   </>)}
                 </div>

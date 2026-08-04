@@ -69,6 +69,7 @@
 </div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let shareToken=null;
 
 // Un champ cardio (vitesse/inclinaison/durée/distance) est du texte libre venant d'Excel
 // ("30'", "4-5", "8"...), pas forcément un nombre pur.
@@ -188,6 +189,8 @@ function renderSession(session){
 function downloadPDF(session){
   const {jsPDF}=window.jspdf||{};
   if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
+  // Best-effort : compte le téléchargement côté serveur, ne bloque jamais la génération du PDF si ça échoue
+  if(shareToken){try{fetch('/api/share/'+encodeURIComponent(shareToken)+'/pdf-download',{method:'POST'}).catch(()=>{});}catch(e){}}
   const doc=new jsPDF({unit:'mm',format:'a4'});
   const W=210,margin=16;
   let y=20;
@@ -277,6 +280,7 @@ function renderError(msg){
 (function init(){
   const token=new URLSearchParams(location.search).get('t');
   if(!token){renderError('Lien invalide');return;}
+  shareToken=token;
   fetch('/api/share/'+encodeURIComponent(token))
     .then(r=>{if(!r.ok)throw new Error('not_found');return r.json();})
     .then(data=>{
