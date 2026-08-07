@@ -319,12 +319,20 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
   // Programmer un import pour une date future (ex: préparer le programme de septembre en août
   // sans toucher au programme en cours) — uniquement proposé pour les imports qui le permettent.
   const[scheduleMode,setScheduleMode]=React.useState('now'); // 'now' | 'later'
-  const defaultLaterDate=()=>{const d=new Date();d.setMonth(d.getMonth()+1,1);return d.toISOString().slice(0,10);};
+  // ymdKey() (pas toISOString(), qui convertit en UTC et décale le résultat entre minuit et
+  // l'heure du décalage local — ex: en France, 1h du matin donnerait la veille) pour rester
+  // cohérent avec la date locale que le coach voit et choisit dans le sélecteur.
+  const defaultLaterDate=()=>{const d=new Date();d.setMonth(d.getMonth()+1,1);return ymdKey(d);};
   const[scheduleDate,setScheduleDate]=React.useState(defaultLaterDate);
   React.useEffect(()=>{if(open){setScheduleMode('now');setScheduleDate(defaultLaterDate());}},[open]);
   const isLater=allowSchedule&&scheduleMode==='later';
+  const minScheduleDate=ymdKey(new Date(Date.now()+86400000));
   const handleConfirm=()=>{
-    if(isLater&&!scheduleDate)return;
+    // Filet de sécurité en plus du min du <input> (purement indicatif, une saisie manuelle
+    // peut le contourner) : une date passée/aujourd'hui appliquerait le programme
+    // IMMÉDIATEMENT côté serveur, en écrasant le programme actuel — jamais ce que "Programmer"
+    // est censé faire silencieusement.
+    if(isLater&&(!scheduleDate||scheduleDate<minScheduleDate))return;
     onConfirm(isLater?scheduleDate:null);
   };
   return(
@@ -355,7 +363,10 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
           </div>
           {isLater&&(
             <div>
-              <input type="date" value={scheduleDate} min={new Date(Date.now()+86400000).toISOString().slice(0,10)} onChange={e=>setScheduleDate(e.target.value)} disabled={busy} style={{width:'100%',height:42,borderRadius:10,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,padding:'0 12px',outline:'none',boxSizing:'border-box'}}/>
+              <input type="date" value={scheduleDate} min={minScheduleDate} onChange={e=>setScheduleDate(e.target.value)} disabled={busy} style={{width:'100%',height:42,borderRadius:10,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:13,padding:'0 12px',outline:'none',boxSizing:'border-box'}}/>
+              {scheduleDate&&scheduleDate<minScheduleDate&&(
+                <div style={{fontSize:11,color:'#B85070',fontWeight:600,marginTop:6}}>⚠ Date déjà passée — choisis demain ou plus tard.</div>
+              )}
               <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.4}}>Le programme actuel reste actif jusqu'à cette date — il sera remplacé automatiquement ce jour-là, sans rien changer d'ici là.</div>
             </div>
           )}
@@ -363,7 +374,7 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
       )}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} disabled={busy} style={{flex:1,height:46,borderRadius:13,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:700,cursor:busy?'default':'pointer',opacity:busy?0.5:1}}>Annuler</button>
-        <button onClick={handleConfirm} disabled={busy||(isLater&&!scheduleDate)} style={{flex:2,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:busy?'default':'pointer',opacity:busy?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        <button onClick={handleConfirm} disabled={busy||(isLater&&(!scheduleDate||scheduleDate<minScheduleDate))} style={{flex:2,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:busy?'default':'pointer',opacity:busy?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
           {busy?'Import…':isLater?'📅 Programmer l\'import':(confirmLabel||"✓ Confirmer l'import")}
         </button>
       </div>
@@ -3778,23 +3789,30 @@ function exportSessionPDF(session){
   let exNum=0;
   groupExercisesByType(session.exercises||[]).forEach(group=>{
     if(STYLE_LABELS[group.type]){
-      if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+      // Seuil abaissé (250 au lieu de 265) pour réserver la place du 1er exercice du groupe —
+      // sinon le libellé "SUPERSET"/etc. peut se retrouver seul en bas d'une page.
+      if(y>250){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
       doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.type]);
-      doc.text(`⛓ ${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
+      // Pas d'emoji ici : la police standard de jsPDF (WinAnsi) ne les encode pas et les
+      // affiche en blanc/garbage dans le PDF final.
+      doc.text(`${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
     }
     group.items.forEach((ex,gi)=>{
       exNum++;
       if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
       // Nom exo
       doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-      doc.text(`${gi>0?'↳ ':''}${exNum}. ${ex.name}`,margin,y);
+      doc.text(`${gi>0?'- ':''}${exNum}. ${ex.name}`,margin,y);
       if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
       y+=7;
-      // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée
-      if(exType(ex)==='cardio'&&ex.cardio){
+      // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée.
+      // Testé sur exType() seul (pas ex.cardio) : un exercice tagué CARDIO mais sans mesure
+      // saisie doit quand même afficher le badge CARDIO + "—", pas retomber sur le tableau
+      // poids/reps classique (qui afficherait "0 kg × 0 reps", trompeur pour du cardio).
+      if(exType(ex)==='cardio'){
         doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
         doc.text('CARDIO',margin,y);y+=5.5;
-        const c=ex.cardio;
+        const c=ex.cardio||{};
         const parts=[];
         if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
         if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
@@ -3818,7 +3836,9 @@ function exportSessionPDF(session){
         y+=3;
         return;
       }
-      // En-tête tableau
+      // En-tête tableau — vérif de débordement manquante ici auparavant : l'en-tête pouvait
+      // s'imprimer seul en bas de page pendant que les séries partaient sur la page suivante.
+      if(y>260){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
       const cols=[margin,margin+12,margin+38,margin+64,margin+95];
       doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
       ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
@@ -3849,9 +3869,20 @@ function exportSessionPDF(session){
     });
   });
 
-  // Notes / feedback
-  if(session.notes){y+=2;line('Mon ressenti',9,true,[160,130,80]);line(session.notes,9,false,[200,200,220]);y+=2;}
-  if(session.coachFeedback){y+=2;line('Feedback coach',9,true,[90,138,224]);line(session.coachFeedback,9,false,[200,200,220]);}
+  // Notes / feedback — texte replié (pas de débordement horizontal) et vérif de page avant
+  // chaque ligne (le texte pouvait sinon être écrit hors de la page et silencieusement perdu)
+  const wrappedBlock=(label,text,color)=>{
+    if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+    y+=2;line(label,9,true,color);
+    const wrapped=doc.splitTextToSize(String(text),W-margin*2);
+    wrapped.forEach(l=>{
+      if(y>290){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
+      line(l,9,false,[200,200,220]);
+    });
+    y+=2;
+  };
+  if(session.notes)wrappedBlock('Mon ressenti',session.notes,[160,130,80]);
+  if(session.coachFeedback)wrappedBlock('Feedback coach',session.coachFeedback,[90,138,224]);
 
   // Footer
   doc.setFontSize(8);doc.setTextColor(60,60,80);doc.text('Prime Athl',W/2,290,{align:'center'});
@@ -8387,7 +8418,10 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
 
   const[exercises,setExercises]=React.useState(()=>{
     if(resumeData)return(resumeData.exercises||[]).map(e=>({...e,id:e.id||uid()}));
-    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',cardio:e.cardio||null,sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||'classic'}));
+    // On préserve style/holdSeconds/restSeconds (système de tag des séances importées Excel /
+    // propres à l'athlète) et la note par série — sinon éditer une séance qui les portait les
+    // efface silencieusement et définitivement à la sauvegarde (superset/gainage/cardio perdus).
+    if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',cardio:e.cardio||null,sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true,...(s.note?{note:s.note}:{})})),groupId:e.groupId||uid(),groupType:e.groupType||(e.style?exType(e):'classic'),...(e.style?{style:e.style}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
     return[];
   });
   const[elapsed,setElapsed]=React.useState(()=>{
@@ -8528,7 +8562,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets}));
+      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
       }else{
@@ -8992,6 +9026,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         apiCall('/api/coach/session-library-for/'+id).catch(()=>({sessions:[],assignedAt:null})),
         apiCall('/api/coach/athletes/'+id+'/my-library').catch(()=>({sessions:[],nutrition:[]})),
       ]);
+      // Le coach a pu changer/fermer la fiche pendant ces 4 requêtes — sinon les données du
+      // MAUVAIS athlète (y compris le bandeau "Programme prévu" et son bouton Annuler) peuvent
+      // s'afficher sous le nom de l'athlète actuellement ouvert.
+      if(selectedRef.current?.id!==id)return;
       setDetail({...d,sessionLibrary:lib});
       setNutriDetail(n);
       setAthleteLibrary(myLib||{sessions:[],nutrition:[]});
@@ -9113,9 +9151,18 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
           flash(activateOn?'⏳ Programmation...':'⏳ Import en cours...');
           try{
             if(activateOn){
-              await apiCall('/api/coach/program/'+target.id+'/scheduled',{method:'PUT',body:{data,activateOn}});
-              const dateLabel=new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
-              flash(`✓ Programme programmé pour le ${dateLabel}`);
+              // Le serveur peut renvoyer scheduled:false s'il juge la date déjà passée/atteinte
+              // et applique alors immédiatement — on se base sur SA réponse, pas sur notre
+              // propre variable locale, pour ne jamais afficher "programmé" quand le programme
+              // actuel vient en fait d'être écrasé (ex: horloge serveur/client légèrement
+              // désynchronisées autour de minuit).
+              const r=await apiCall('/api/coach/program/'+target.id+'/scheduled',{method:'PUT',body:{data,activateOn}});
+              if(r?.scheduled===false){
+                flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
+              }else{
+                const dateLabel=new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
+                flash(`✓ Programme programmé pour le ${dateLabel}`);
+              }
             }else{
               await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data}});
               flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
@@ -9429,7 +9476,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   <div style={{fontSize:12,fontWeight:700,color:'#5A8AE0'}}>Programme prévu</div>
                   <div style={{fontSize:11,color:T.textDim,marginTop:1}}>S'appliquera automatiquement le {new Date(a.scheduledProgram.activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>
                 </div>
-                <button onClick={()=>setConfirmAction({msg:'Annuler le programme prévu ?',onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id+'/scheduled',{method:'DELETE'});flash('✓ Programme prévu annulé');reloadDetail(a.id);}catch(e){flash('✗ '+(e.message||e));}}})} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.3)',background:'transparent',color:'#5A8AE0',fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>Annuler</button>
+                <button onClick={()=>setConfirmAction({msg:'Annuler le programme prévu ?',onConfirm:async()=>{try{await apiCall('/api/coach/program/'+a.id+'/scheduled',{method:'DELETE'});flash('✓ Programme prévu annulé');reloadDetail(a.id);load();}catch(e){flash('✗ '+(e.message||e));}}})} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.3)',background:'transparent',color:'#5A8AE0',fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>Annuler</button>
               </div>
             )}
 
@@ -10023,7 +10070,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(90,138,224,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={17} stroke="#5A8AE0"/></div>
               Voir la fiche
             </button>
-            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);setSelected(a);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
+            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);setSelected(a);reloadDetail(a.id);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(44,196,160,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="edit" size={17} stroke="#2CC4A0"/></div>
               Modifier
             </button>

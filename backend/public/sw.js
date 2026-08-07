@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v8';
+const CACHE = 'prime-athl-v9';
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -11,8 +11,13 @@ function schedulePing() {
     schedulePing();
   }, PING_INTERVAL);
 }
-// Ne jamais mettre Muscu.html en cache : il change à chaque deploy
+// Ne jamais mettre Muscu.html/share.html en cache : ils changent à chaque deploy — sans ça,
+// un utilisateur qui a l'app installée (PWA) et rouvre un ancien lien de partage reste bloqué
+// sur la version de share.html mise en cache à sa première visite, indéfiniment (le cache-first
+// ci-dessous ne revalide jamais, et la clé de cache inclut même le ?t=token donc chaque lien
+// distinct se met en cache séparément).
 const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const NEVER_CACHE_SUFFIXES = ['/Muscu.html', '/share.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting()));
@@ -26,8 +31,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   // API calls : réseau d'abord, pas de cache
   if (e.request.url.includes('/api/')) return;
-  // Muscu.html : toujours réseau (jamais cache) pour avoir la dernière version
-  if (e.request.url.endsWith('/Muscu.html') || e.request.url.endsWith('/Muscu.html?')) {
+  // Muscu.html / share.html : toujours réseau (jamais cache) pour avoir la dernière version.
+  // On compare le pathname seul (pas l'URL complète) pour ignorer le ?t=token de share.html.
+  const path = new URL(e.request.url).pathname;
+  if (NEVER_CACHE_SUFFIXES.some(s => path === s)) {
     e.respondWith(fetch(e.request));
     return;
   }
