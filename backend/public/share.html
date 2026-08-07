@@ -80,7 +80,10 @@ let shareToken=null;
 // ça. Le seul moyen fiable : prévenir l'utilisateur et l'inviter à ouvrir le lien dans son
 // vrai navigateur (bouton "⋮" / "..." en haut à droite de l'app, propose "Ouvrir dans...").
 function isInAppBrowser(){
-  return /Instagram|FBAN|FBAV|Line\/|MicroMessenger|TikTok|musical_ly|Snapchat/i.test(navigator.userAgent||'');
+  // BytedanceWebview couvre TikTok iOS (dont l'UA récente ne contient plus "TikTok"/"musical_ly").
+  // Twitter for iPhone/TwitterAndroid, LinkedInApp et Barcelona (Threads) sont d'autres WebView
+  // maison connues pour bloquer les téléchargements, au même titre qu'Instagram/Facebook/LINE.
+  return /Instagram|FBAN|FBAV|Line\/|MicroMessenger|TikTok|musical_ly|BytedanceWebview|Snapchat|Twitter|LinkedInApp|Barcelona/i.test(navigator.userAgent||'');
 }
 function inAppBannerHtml(){
   if(!isInAppBrowser())return '';
@@ -147,12 +150,20 @@ function groupExercisesByType(exercises){
   return groups;
 }
 const STYLE_LABELS={superset:'SUPERSET',triset:'TRI-SET',abdos:'CIRCUIT ABDOS'};
-const STYLE_COLORS={superset:'#5A8AE0',triset:'#A060D0',abdos:'#2CC4A0'};
-const STYLE_RGB={superset:[90,138,224],triset:[160,96,208],abdos:[44,196,160]};
+// classic/cardio ajoutés comme repli — un groupe cardio à 2+ items (le regroupement par
+// groupId n'exclut pas cardio, seul le rapprochement par adjacence le fait) lisait sinon
+// STYLE_COLORS[group.type] à `undefined` et cassait la couleur de la flèche "↳".
+const STYLE_COLORS={classic:'#C8C8DC',superset:'#5A8AE0',triset:'#A060D0',cardio:'#C89040',abdos:'#2CC4A0'};
+const STYLE_RGB={classic:[200,200,220],superset:[90,138,224],triset:[160,96,208],cardio:[200,144,64],abdos:[44,196,160]};
 
 function fmtDate(iso){
   try{
-    return new Date(iso).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const d=new Date(iso);
+    // toLocaleDateString ne lève pas d'exception sur une date invalide (contrairement à
+    // Intl.DateTimeFormat.format) — elle renvoie littéralement la chaîne "Invalid Date", qui
+    // s'affichait donc telle quelle sur la page et dans le PDF.
+    if(isNaN(d))return '';
+    return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   }catch(e){return '';}
 }
 
@@ -168,8 +179,11 @@ function renderSession(session){
   ).join('');
 
   const exCardHtml=(ex,num)=>{
-    if(exType(ex)==='cardio'&&ex.cardio){
-      const c=ex.cardio;
+    // Testé sur exType() seul : un exercice tagué CARDIO côté serveur mais sans mesure jamais
+    // saisie (ex.cardio absent) doit quand même afficher le badge CARDIO, pas retomber sur la
+    // liste de séries poids/reps qui l'affichait à tort comme un exercice raté "0 kg × 0 reps".
+    if(exType(ex)==='cardio'){
+      const c=ex.cardio||{};
       const pills=[
         ['⚡','Vitesse',cardioHasVal(c.vitesse)?fixCardioVal(c.vitesse)+' km/h':null],
         ['📐','Inclinaison',cardioHasVal(c.inclinaison)?fixCardioVal(c.inclinaison)+'%':null],
@@ -244,9 +258,32 @@ function renderSession(session){
   if(copyBtn){
     copyBtn.addEventListener('click', ()=>{
       const done=()=>{copyBtn.textContent='✓ Copié';setTimeout(()=>{copyBtn.textContent='Copier le lien';},2000);};
-      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(location.href).then(done).catch(()=>{});}
+      const fail=()=>{copyBtn.textContent='✗ Échec — sélectionne le lien manuellement';setTimeout(()=>{copyBtn.textContent='Copier le lien';},3000);};
+      // navigator.clipboard est absent de certains navigateurs intégrés, et writeText() peut
+      // être rejeté (ex: document non focus sur WKWebView) — dans les deux cas le bouton ne
+      // changeait jamais de texte, donnant l'impression qu'il ne s'était rien passé. Repli sur
+      // execCommand('copy') via un textarea temporaire, avec un état d'échec visible en dernier
+      // recours (l'utilisateur peut alors sélectionner l'URL dans la barre d'adresse à la main).
+      if(navigator.clipboard?.writeText){
+        navigator.clipboard.writeText(location.href).then(done).catch(()=>copyViaExecCommand(done,fail));
+      }else{
+        copyViaExecCommand(done,fail);
+      }
     });
   }
+}
+
+function copyViaExecCommand(done,fail){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=location.href;
+    ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.focus();ta.select();
+    const ok=document.execCommand('copy');
+    document.body.removeChild(ta);
+    ok?done():fail();
+  }catch(e){fail();}
 }
 
 // iOS Safari ignore souvent le téléchargement automatique déclenché par jsPDF (doc.save) — le
@@ -271,6 +308,19 @@ function downloadPDF(session){
   if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
   // Best-effort : compte le téléchargement côté serveur, ne bloque jamais la génération du PDF si ça échoue
   if(shareToken){try{fetch('/api/share/'+encodeURIComponent(shareToken)+'/pdf-download',{method:'POST'}).catch(()=>{});}catch(e){}}
+  // Tout le corps de la génération (composition du PDF) n'était protégé par aucun try/catch —
+  // une donnée inattendue (ex: ex.muscle non-string) faisait planter jsPDF sans le moindre
+  // retour utilisateur : le bouton "ne faisait rien". Le filet de sécurité ci-dessous garantit
+  // qu'un échec de génération affiche toujours un message plutôt qu'un clic mort.
+  try{
+    downloadPDFInner(session,jsPDF);
+  }catch(e){
+    console.error('downloadPDF:',e);
+    alert('Impossible de générer le PDF.');
+  }
+}
+
+function downloadPDFInner(session,jsPDF){
   const doc=new jsPDF({unit:'mm',format:'a4'});
   const W=210,margin=16;
   let y=20;
@@ -296,21 +346,25 @@ function downloadPDF(session){
   let pdfExNum=0;
   groupExercisesByType(session.exercises||[]).forEach(group=>{
     if(STYLE_LABELS[group.type]){
-      if(y>265) newPage();
+      // Seuil abaissé (250 au lieu de 265) pour réserver la place du 1er exercice du groupe —
+      // sinon le libellé "SUPERSET"/etc. peut se retrouver seul en bas d'une page.
+      if(y>250) newPage();
       doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.type]);
-      doc.text(`⛓ ${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
+      // Pas d'emoji : la police standard de jsPDF (WinAnsi) ne les encode pas.
+      doc.text(`${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
     }
     group.items.forEach((ex,gi)=>{
     pdfExNum++;
     if(y>265) newPage();
     doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-    doc.text(`${gi>0?'↳ ':''}${pdfExNum}. ${ex.name}`,margin,y);
-    if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
+    doc.text(`${gi>0?'- ':''}${pdfExNum}. ${String(ex.name||'')}`,margin,y);
+    if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(String(ex.muscle),W-margin,y,{align:'right'});}
     y+=7;
-    if(exType(ex)==='cardio'&&ex.cardio){
+    // Testé sur exType() seul (pas ex.cardio) : cf. exCardHtml plus haut, même raison.
+    if(exType(ex)==='cardio'){
       doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
       doc.text('CARDIO',margin,y);y+=5.5;
-      const c=ex.cardio;
+      const c=ex.cardio||{};
       const parts=[];
       if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
       if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
@@ -333,6 +387,9 @@ function downloadPDF(session){
       y+=3;
       return;
     }
+    // Vérif de débordement manquante ici auparavant : l'en-tête pouvait s'imprimer seul en bas
+    // de page pendant que les séries partaient sur la page suivante.
+    if(y>260) newPage();
     const cols=[margin,margin+12,margin+38,margin+64];
     doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
     ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
