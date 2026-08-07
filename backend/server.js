@@ -345,6 +345,19 @@ setInterval(() => {
       delete DATA.savedPrograms[u.id];
       delete DATA.myLibrary[u.id];
       delete DATA.scheduledPrograms[u.id];
+      // Un compte pending peut avoir accumulé des données via des routes coach qui ne
+      // vérifient que coachId (pas le statut pending) — les purger aussi, sinon elles restent
+      // orphelines indéfiniment une fois l'utilisateur supprimé (aucune autre route ne
+      // les nettoie après coup).
+      delete DATA.plannedSessions[u.id];
+      delete DATA.nutritionPrograms[u.id];
+      delete DATA.scheduleMoves[u.id];
+      for (const sid of Object.keys(DATA.sessions || {})) {
+        if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
+      }
+      for (const token of Object.keys(DATA.sharedSessions || {})) {
+        if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
+      }
       removedPending++;
     }
   }
@@ -497,6 +510,16 @@ const forgotLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests', detail: 'Trop de demandes de réinitialisation. Réessaie dans 1h.' },
 });
+// Le compteur de téléchargements PDF est public/anonyme (le lien est fait pour être posté sur
+// Instagram) et écrit sur disque + Postgres à chaque appel (persist()) — sans limite dédiée, le
+// global de 600/5min/IP laisse largement le temps de maintenir le process occupé à sérialiser
+// toute la base en continu. Un humain qui télécharge ne dépasse jamais ça.
+const pdfDownloadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests' },
+});
 // Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
 const aiLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -520,6 +543,33 @@ app.get('/Muscu.html', (req, res, next) => {
   fs.access(MUSCU_APP_BUILT, fs.constants.F_OK, (err) => {
     if (err) return next();
     res.sendFile(MUSCU_APP_BUILT);
+  });
+});
+
+// share.html sert les balises Open Graph EN DUR (title/description génériques) — les crawlers
+// de Facebook/Instagram/WhatsApp/X qui génèrent l'aperçu d'un lien partagé ne chargent jamais le
+// JS, donc l'interpolation client-side dans init() (voir share.html) ne les atteint jamais : tout
+// lien partagé prévisualisait la même carte générique, jamais le nom/volume de la vraie séance.
+// On interpole donc ces balises côté serveur avant d'envoyer le HTML.
+app.get('/share.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const filePath = path.join(FRONTEND, 'share.html');
+  fs.readFile(filePath, 'utf8', (err, html) => {
+    if (err) return res.status(500).send('Erreur serveur');
+    const sh = req.query.t && DATA.sharedSessions[req.query.t];
+    if (!sh) return res.send(html); // pas de token / lien inconnu : le JS client affiche l'état d'erreur
+    const session = sh.snapshot || {};
+    const name = session.name || 'Séance';
+    const nEx = (session.exercises || []).length;
+    const volPart = session.totalVolume ? ` · ${Math.round(session.totalVolume).toLocaleString('fr-FR')} kg` : '';
+    const title = `${name} — Prime Athl`;
+    const desc = `${nEx} exercice${nEx > 1 ? 's' : ''}${volPart} — séance suivie sur Prime Athl.`;
+    const escAttr = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    let out = html
+      .replace(/<title id="pageTitle">[^<]*<\/title>/, `<title id="pageTitle">${escAttr(title)}</title>`)
+      .replace(/(<meta id="ogTitle" property="og:title" content=")[^"]*(")/, `$1${escAttr(title)}$2`)
+      .replace(/(<meta id="ogDesc" property="og:description" content=")[^"]*(")/, `$1${escAttr(desc)}$2`);
+    res.send(out);
   });
 });
 
@@ -1127,6 +1177,9 @@ app.post('/api/coach/athletes/:id/reset', authRequired, coachOnly, (req, res) =>
   if (opts.program) {
     delete DATA.programs[u.id];
     delete DATA.scheduleMoves[u.id];
+    // Sinon un programme programmé à l'avance (cf. scheduledPrograms) survit au reset et
+    // "ressuscite" tout seul à sa date d'activation, contredisant l'action du coach.
+    delete DATA.scheduledPrograms[u.id];
     io.to('user:' + u.id).emit('program-updated', { data: {}, assignedAt: null });
     io.to('user:' + u.id).emit('schedule-moves-updated', { scheduleMoves: {} });
   }
@@ -1142,6 +1195,7 @@ app.delete('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) 
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   delete DATA.programs[req.params.athleteId];
   delete DATA.scheduleMoves[req.params.athleteId];
+  delete DATA.scheduledPrograms[req.params.athleteId];
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data: {}, assignedAt: null });
   io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
@@ -1589,24 +1643,60 @@ app.get('/api/sessions', authRequired, (req, res) => {
   res.json(list);
 });
 
+// Styles d'exercice valides (système de tag ex.style — séances importées Excel / propres à
+// l'athlète). Partagé avec les endpoints de séance créée/éditée par le coach ci-dessous.
+const VALID_EX_STYLES = ['SUPERSET', 'TRISET', 'ABDOS', 'CARDIO'];
+
+// Sanitize un exercice pour les séances créées/éditées par le coach (POST .../sessions et PATCH
+// .../sessions/:id) — factorisé pour que les deux endpoints restent en phase. Accepte les DEUX
+// systèmes de tag qui coexistent selon l'origine de l'exercice : groupType+groupId (créé en
+// direct par le coach) et style (hérité d'un import Excel/programme athlète, ex: un exercice
+// d'une séance importée que le coach corrige ensuite) — sans ça, éditer une séance qui portait
+// style/holdSeconds/restSeconds/cardio les effaçait silencieusement et définitivement.
+function sanitizeCoachExercise(e) {
+  const style = VALID_EX_STYLES.includes(e.style) ? e.style : undefined;
+  const isCardio = e.groupType === 'cardio' || style === 'CARDIO';
+  return {
+    name: e.name || '', muscle: e.muscle || '',
+    brand: e.brand ? String(e.brand).slice(0, 60) : '',
+    groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
+    groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',
+    ...(style ? { style } : {}),
+    ...(!isCardio && e.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(e.restSeconds) || 0)) } : {}),
+    ...(!isCardio && e.holdSeconds ? { holdSeconds: Math.max(0, Math.min(600, parseInt(e.holdSeconds) || 0)) } : {}),
+    sets: (e.sets || []).map(s => ({
+      weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
+      ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
+    })),
+    cardio: isCardio && e.cardio ? {
+      vitesse: String(e.cardio.vitesse ?? '').slice(0, 20),
+      inclinaison: String(e.cardio.inclinaison ?? '').slice(0, 20),
+      duree: String(e.cardio.duree ?? '').slice(0, 20),
+      distance: String(e.cardio.distance ?? '').slice(0, 20),
+    } : null,
+  };
+}
+
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
   const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
   if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name_required' });
   const safeVolume = Math.max(0, Math.min(1e7, parseFloat(totalVolume) || 0));
-  const VALID_EX_STYLES = ['SUPERSET', 'TRISET', 'ABDOS', 'CARDIO'];
   const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => {
     const style = VALID_EX_STYLES.includes(ex.style) ? ex.style : undefined;
     return {
       name: String(ex.name || '').slice(0, 100),
       muscle: String(ex.muscle || '').slice(0, 50),
       ...(style ? { style } : {}),
+      // Champs cardio conservés en texte libre (pas coercés en nombre) : une plage Excel type
+      // "4-5" ou "1h15" serait sinon tronquée en un simple nombre (voire réduite à 0 et donc
+      // masquée par cardioHasVal). fixCardioVal/cardioHasVal les traitent déjà comme du texte.
       ...(style === 'CARDIO' && ex.cardio ? {
         cardio: {
-          vitesse: Math.max(0, Math.min(60, parseFloat(ex.cardio.vitesse) || 0)),
-          inclinaison: Math.max(0, Math.min(30, parseFloat(ex.cardio.inclinaison) || 0)),
-          duree: Math.max(0, Math.min(600, parseFloat(ex.cardio.duree) || 0)),
-          distance: Math.max(0, Math.min(200, parseFloat(ex.cardio.distance) || 0)),
+          vitesse: String(ex.cardio.vitesse ?? '').slice(0, 20),
+          inclinaison: String(ex.cardio.inclinaison ?? '').slice(0, 20),
+          duree: String(ex.cardio.duree ?? '').slice(0, 20),
+          distance: String(ex.cardio.distance ?? '').slice(0, 20),
         },
       } : {}),
       ...(style !== 'CARDIO' && ex.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(ex.restSeconds) || 0)) } : {}),
@@ -1723,7 +1813,7 @@ app.get('/api/share/:token', (req, res) => {
 // Public — compteur de téléchargements PDF sur un lien partagé (best-effort, pas d'auth :
 // share.html l'appelle depuis n'importe quel visiteur anonyme). Compte les clics, pas des
 // personnes uniques — un même visiteur qui retélécharge sera compté plusieurs fois.
-app.post('/api/share/:token/pdf-download', (req, res) => {
+app.post('/api/share/:token/pdf-download', pdfDownloadLimiter, (req, res) => {
   const sh = DATA.sharedSessions[req.params.token];
   if (!sh) return res.status(404).json({ error: 'not_found' });
   sh.pdfDownloads = (sh.pdfDownloads || 0) + 1;
@@ -1749,19 +1839,16 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   if (!s) return res.status(404).json({ error: 'not_found' });
   const a = DATA.users[s.userId];
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
-  if (req.body.date) s.date = req.body.date;
+  if (req.body.date) {
+    // Valide le format avant d'écraser — sinon une date malformée se propage telle quelle
+    // jusqu'au lien de partage public (affiche "Invalid Date").
+    const d = new Date(req.body.date);
+    if (!isNaN(d)) s.date = req.body.date;
+  }
   if (req.body.name) s.name = String(req.body.name).slice(0, 120);
+  if (typeof req.body.notes === 'string') s.notes = req.body.notes.slice(0, 500);
   if (Array.isArray(req.body.exercises)) {
-    s.exercises = req.body.exercises.map(e => ({
-      name: e.name || '', muscle: e.muscle || '',
-      brand: e.brand ? String(e.brand).slice(0, 60) : '',
-      groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
-      groupType: ['classic','superset','triset','cardio'].includes(e.groupType) ? e.groupType : 'classic',
-      sets: (e.sets || []).map(st => ({ weight: +st.weight || 0, reps: +st.reps || 0, rest: +st.rest || 0 })),
-      cardio: e.groupType === 'cardio' && e.cardio ? {
-        vitesse: +e.cardio.vitesse || 0, inclinaison: +e.cardio.inclinaison || 0, duree: +e.cardio.duree || 0,
-      } : null,
-    }));
+    s.exercises = req.body.exercises.map(sanitizeCoachExercise);
     s.totalVolume = +req.body.totalVolume || 0;
   }
   if (req.body.duration != null) s.duration = +req.body.duration || 0;
@@ -1778,20 +1865,12 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   const { name, date, exercises, totalVolume, duration, notes } = req.body || {};
   if (!name || !Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
   const id = 'cs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const safeDate = date && !isNaN(new Date(date)) ? date : new Date().toISOString();
   const session = {
     id, userId: athlete.id,
     name: name.slice(0, 120),
-    date: date || new Date().toISOString(),
-    exercises: exercises.map(e => ({
-      name: e.name || '', muscle: e.muscle || '',
-      brand: e.brand ? String(e.brand).slice(0, 60) : '',
-      groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
-      groupType: ['classic','superset','triset','cardio'].includes(e.groupType) ? e.groupType : 'classic',
-      sets: (e.sets || []).map(s => ({ weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0 })),
-      cardio: e.groupType === 'cardio' && e.cardio ? {
-        vitesse: +e.cardio.vitesse || 0, inclinaison: +e.cardio.inclinaison || 0, duree: +e.cardio.duree || 0,
-      } : null,
-    })),
+    date: safeDate,
+    exercises: exercises.map(sanitizeCoachExercise),
     totalVolume: +totalVolume || 0,
     duration: +duration || 0,
     notes: notes ? String(notes).slice(0, 500) : '',
