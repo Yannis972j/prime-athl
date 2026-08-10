@@ -134,7 +134,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -2591,6 +2591,50 @@ function canChat(userA, userB) {
   return false;
 }
 
+// Liste des partenaires de chat possibles pour un user (coach → ses athlètes actifs, athlète → son coach)
+function chatPartnersOf(user) {
+  if (!user) return [];
+  if (user.role === 'coach') {
+    return Object.values(DATA.users).filter(u => u.coachId === user.id && u.status === 'active');
+  }
+  if (user.coachId) {
+    const coach = DATA.users[user.coachId];
+    return coach ? [coach] : [];
+  }
+  return [];
+}
+
+// Résumé pour la liste des conversations : dernier message + nb de messages non lus par partenaire,
+// pour éviter d'avoir à charger l'historique complet de chaque conversation juste pour afficher la liste.
+app.get('/api/messages/summary', authRequired, (req, res) => {
+  const meUser = DATA.users[req.user.id];
+  const partners = chatPartnersOf(meUser);
+  const lastReads = DATA.messageReads[req.user.id] || {};
+  const summary = {};
+  for (const p of partners) {
+    const key = chatId(req.user.id, p.id);
+    const msgs = DATA.messages[key] || [];
+    if (!msgs.length) { summary[p.id] = { lastMessage: null, unreadCount: 0 }; continue; }
+    const last = msgs.reduce((m, x) => (!m || x.createdAt > m.createdAt) ? x : m, null);
+    const lastRead = lastReads[p.id] || 0;
+    const unreadCount = msgs.filter(m => m.senderId === p.id && m.createdAt > lastRead).length;
+    summary[p.id] = { lastMessage: { text: last.text, senderId: last.senderId, createdAt: last.createdAt }, unreadCount };
+  }
+  res.json({ summary });
+});
+
+// Marque une conversation comme lue jusqu'à maintenant (appelé à l'ouverture et à la réception
+// en temps réel d'un message pendant que la conversation est déjà affichée).
+app.post('/api/messages/:partnerId/read', authRequired, (req, res) => {
+  const me = req.user.id;
+  const partner = req.params.partnerId;
+  if (!DATA.users[partner]) return res.status(404).json({ error: 'not_found' });
+  if (!DATA.messageReads[me]) DATA.messageReads[me] = {};
+  DATA.messageReads[me][partner] = Date.now();
+  persist();
+  res.json({ ok: true });
+});
+
 app.get('/api/messages/:partnerId', authRequired, (req, res) => {
   const me = req.user.id;
   const partner = req.params.partnerId;
@@ -2600,6 +2644,9 @@ app.get('/api/messages/:partnerId', authRequired, (req, res) => {
   if (!canChat(meUser, partnerUser)) return res.status(403).json({ error: 'forbidden' });
   const key = chatId(me, partner);
   const msgs = (DATA.messages[key] || []).slice().sort((a,b) => a.createdAt - b.createdAt);
+  if (!DATA.messageReads[me]) DATA.messageReads[me] = {};
+  DATA.messageReads[me][partner] = Date.now();
+  persist();
   res.json({ messages: msgs });
 });
 
