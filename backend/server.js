@@ -392,6 +392,16 @@ setTimeout(() => {
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
+
+// Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
+// objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
+// Sans ce filtre, une clé comme "__proto__" ou "constructor" permet d'écrire directement sur
+// Object.prototype (ex: {mealId:"fullAccess"} rend TOUT utilisateur fullAccess) voire de
+// planter le process entier (ex: {mealId:"toString"} casse String(x) pour tout le monde).
+const DANGEROUS_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+function isSafeObjectKey(k) {
+  return typeof k === 'string' && k.length > 0 && k.length <= 60 && !DANGEROUS_OBJECT_KEYS.has(k);
+}
 const sign       = p => jwt.sign(p, JWT_SECRET, { expiresIn: '60d' });
 const verify     = t => jwt.verify(t, JWT_SECRET);
 // Signe un token incluant la version du token (pour invalidation à la déconnexion)
@@ -454,8 +464,35 @@ const app = express();
 app.set('trust proxy', 1); // Render / proxies → req.ip vrai
 
 // Helmet : en-têtes de sécurité (XSS, clickjacking, etc.)
+// Le CSP ne peut pas interdire les scripts inline (script-src 'unsafe-inline') : l'app est une
+// SPA mono-fichier dont le JS est injecté inline dans la page (même une fois Babel retiré par
+// build.js — voir Muscu.app.html), pas chargé depuis un fichier .js externe. Ça reste donc
+// perméable à une XSS qui parviendrait à injecter un <script> inline. Mais toutes les autres
+// directives, elles, sont efficaces et réduisent nettement la surface : object-src bloque les
+// plugins, base-uri/form-action empêchent le détournement de formulaires ou de chemins relatifs,
+// frame-ancestors bloque le clickjacking, et surtout connect-src/img-src en liste blanche
+// empêchent une XSS d'exfiltrer des données (JWT, etc.) vers un domaine tiers arbitraire — le
+// scénario concret qui motivait ce correctif.
 app.use(helmet({
-  contentSecurityPolicy: false, // Inline scripts (Babel standalone) – on désactive le CSP pour l'instant
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.sheetjs.com', 'https://cdn.socket.io', 'https://cdnjs.cloudflare.com', 'https://unpkg.com'],
+      // Le fallback unpkg de React/ReactDOM (si /vendor/ est absent après un déploiement cassé)
+      // utilise un attribut onerror="..." inline — script-src n'autorise déjà que de l'inline de
+      // toute façon (cf. commentaire au-dessus), donc l'ouvrir ici aussi n'affaiblit rien de plus.
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -493,8 +530,10 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // ne pénalise pas les login réussis
-  // Le coach principal n'est jamais rate-limité au login
-  skip: (req) => ((req.body?.email || '').toLowerCase() === MAIN_COACH_EMAIL),
+  // Le coach principal n'est plus exempté : c'est le compte le plus privilégié (accès admin,
+  // restauration de backup), donc celui qui a le plus besoin d'être protégé du brute-force.
+  // En cas de verrouillage légitime, l'échappatoire /api/auth/unlock-main-coach (protégée par
+  // UNLOCK_SECRET, comparaison en temps constant) permet de débloquer le compte sans attendre.
   message: { error: 'too_many_auth_attempts', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
 });
 // Rate-limit strict pour signup/forgot-password (toutes requêtes comptent, succès inclus)
@@ -601,8 +640,9 @@ const LOCK_THRESHOLD = 5;
 const LOCK_WINDOW_MS = 15 * 60 * 1000;
 function recordLoginFailure(user) {
   if (!user) return;
-  // Le coach principal n'est jamais verrouillé
-  if ((user.email || '').toLowerCase() === MAIN_COACH_EMAIL) return;
+  // Le coach principal est désormais soumis au même verrouillage que tout le monde : c'est le
+  // compte le plus privilégié, donc celui qui a le plus besoin d'être protégé du brute-force.
+  // Échappatoire : /api/auth/unlock-main-coach (protégée par UNLOCK_SECRET).
   const now = Date.now();
   user.loginFails = (user.loginFails || []).filter(t => now - t < LOCK_WINDOW_MS);
   user.loginFails.push(now);
@@ -611,8 +651,6 @@ function recordLoginFailure(user) {
   }
 }
 function isLocked(user) {
-  // Le coach principal n'est jamais considéré comme verrouillé
-  if (user && (user.email || '').toLowerCase() === MAIN_COACH_EMAIL) return false;
   return user && user.lockedUntil && user.lockedUntil > Date.now();
 }
 function clearLoginFailures(user) {
@@ -1546,7 +1584,7 @@ app.get('/api/planned-sessions', authRequired, (req, res) => {
 
 app.post('/api/planned-sessions', authRequired, (req, res) => {
   const { date, session } = req.body || {};
-  if (!date || !session) return res.status(400).json({ error: 'missing_fields' });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !session) return res.status(400).json({ error: 'missing_fields' });
   if (!DATA.plannedSessions[req.user.id]) DATA.plannedSessions[req.user.id] = {};
   if (!DATA.plannedSessions[req.user.id][date]) DATA.plannedSessions[req.user.id][date] = [];
   DATA.plannedSessions[req.user.id][date].push(session);
@@ -2089,8 +2127,10 @@ app.post('/api/nutrition/free-food', authRequired, (req, res) => {
   if (!u) return res.status(404).json({ error: 'not_found' });
   const { mealId, name, kcal, p, c, f, date } = req.body || {};
   if (!mealId || !name) return res.status(400).json({ error: 'meal_and_name_required' });
+  if (!isSafeObjectKey(mealId)) return res.status(400).json({ error: 'invalid_meal_id' });
   if (String(name).length > 80) return res.status(400).json({ error: 'name_too_long' });
   const dateStr = date || ymd(Date.now());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ error: 'invalid_date' });
   if (!DATA.freeFoodLogs[u.id]) DATA.freeFoodLogs[u.id] = {};
   if (!DATA.freeFoodLogs[u.id][dateStr]) DATA.freeFoodLogs[u.id][dateStr] = {};
   if (!DATA.freeFoodLogs[u.id][dateStr][mealId]) DATA.freeFoodLogs[u.id][dateStr][mealId] = [];
@@ -3107,7 +3147,11 @@ app.get('/api/training-programs/my-programs', authRequired, (req, res) => {
   res.json(result);
 });
 
-app.get('/api/training-programs/:id', (req, res) => {
+// authRequired : le contenu complet d'un programme (semaines/séances/exercices) est un bien
+// payant — avant ce correctif, n'importe qui pouvait le récupérer intégralement sans compte ni
+// achat (seul le paywall côté affichage empêchait l'accès, pas l'API). L'app ne rend cet écran
+// qu'une fois connecté, donc exiger un token ici ne change rien au parcours normal.
+app.get('/api/training-programs/:id', authRequired, (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
   res.json(prog);
