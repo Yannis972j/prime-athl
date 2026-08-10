@@ -2615,10 +2615,20 @@ function MessagesScreen({authUser}){
   const[selected,setSelected]=React.useState(null);
   const[messages,setMessages]=React.useState([]);
   const[text,setText]=React.useState('');
-  const[unread,setUnread]=React.useState({});
+  const[summary,setSummary]=React.useState({}); // {partnerId:{lastMessage,unreadCount}}
+  const[loadingMessages,setLoadingMessages]=React.useState(false);
+  const[showJump,setShowJump]=React.useState(false);
+  const[connected,setConnected]=React.useState(true);
   const bottomRef=React.useRef(null);
+  const listRef=React.useRef(null);
+  const taRef=React.useRef(null);
   const selectedRef=React.useRef(null);
+  const stickToBottomRef=React.useRef(true);
   selectedRef.current=selected;
+
+  const loadSummary=React.useCallback(()=>{
+    apiCall('/api/messages/summary').then(r=>setSummary(r.summary||{})).catch(()=>{});
+  },[]);
 
   // Own socket connection for real-time messages
   React.useEffect(()=>{
@@ -2626,18 +2636,31 @@ function MessagesScreen({authUser}){
     const token=localStorage.getItem('pa_token');
     if(!token)return;
     const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    s.on('connect',()=>setConnected(true));
+    s.on('disconnect',()=>setConnected(false));
     s.on('new-message',({from,msg})=>{
       const sel=selectedRef.current;
-      if(sel&&(from===sel.id||msg.senderId===authUser.id)){
-        setMessages(m=>[...m.filter(x=>x.id!==msg.id),msg].sort((a,b)=>a.createdAt-b.createdAt));
+      const forOpenThread=sel&&(from===sel.id||msg.senderId===authUser.id);
+      if(forOpenThread){
+        setMessages(m=>{
+          // Remplace le message optimiste en attente (même expéditeur+texte) si présent
+          const pendingIdx=msg.senderId===authUser.id?m.findIndex(x=>x.pending&&x.senderId===authUser.id&&x.text===msg.text):-1;
+          if(pendingIdx!==-1){const copy=m.slice();copy[pendingIdx]=msg;return copy.sort((a,b)=>a.createdAt-b.createdAt);}
+          return[...m.filter(x=>x.id!==msg.id),msg].sort((a,b)=>a.createdAt-b.createdAt);
+        });
+        if(msg.senderId!==authUser.id){
+          apiCall('/api/messages/'+from+'/read',{method:'POST'}).catch(()=>{});
+        }
+        setSummary(su=>({...su,[sel.id]:{lastMessage:{text:msg.text,senderId:msg.senderId,createdAt:msg.createdAt},unreadCount:0}}));
       }else{
-        setUnread(u=>({...u,[from]:(u[from]||0)+1}));
+        setSummary(su=>({...su,[from]:{lastMessage:{text:msg.text,senderId:msg.senderId,createdAt:msg.createdAt},unreadCount:(su[from]?.unreadCount||0)+1}}));
       }
     });
     return()=>s.disconnect();
   },[authUser.id]);
 
-  // Build partner list
+  // Build partner list + résumé (dernier message / non-lus), avec rafraîchissement périodique léger
+  // en filet de sécurité (le temps réel via socket est la source principale).
   React.useEffect(()=>{
     const load=async()=>{
       try{
@@ -2651,37 +2674,90 @@ function MessagesScreen({authUser}){
       }catch{}
     };
     load();
-  },[authUser.id,authUser.role]);
+    loadSummary();
+    const interval=setInterval(loadSummary,20000);
+    return()=>clearInterval(interval);
+  },[authUser.id,authUser.role,loadSummary]);
 
-  // Load + poll messages when partner selected
+  // Charge l'historique une seule fois à l'ouverture d'une conversation (le temps réel prend le relais ensuite)
   React.useEffect(()=>{
     if(!selected)return;
-    const load=()=>apiCall('/api/messages/'+selected.id).then(r=>setMessages(r.messages||[])).catch(()=>{});
-    load();
-    setUnread(u=>({...u,[selected.id]:0}));
-    const interval=setInterval(load,3000);
-    return()=>clearInterval(interval);
+    setLoadingMessages(true);
+    stickToBottomRef.current=true;
+    setShowJump(false);
+    apiCall('/api/messages/'+selected.id).then(r=>setMessages(r.messages||[])).catch(()=>setMessages([])).finally(()=>setLoadingMessages(false));
+    setSummary(su=>({...su,[selected.id]:{...su[selected.id],unreadCount:0}}));
   },[selected?.id]);
 
-  // Scroll to bottom
-  React.useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
+  // Scroll : ne suit automatiquement le bas que si l'utilisateur y était déjà (ou vient d'envoyer un message)
+  React.useEffect(()=>{
+    if(stickToBottomRef.current){
+      bottomRef.current?.scrollIntoView({behavior:'smooth'});
+      setShowJump(false);
+    }else if(messages.length){
+      setShowJump(true);
+    }
+  },[messages]);
 
-  const send=async()=>{
-    if(!text.trim()||!selected)return;
-    const t=text.trim();
-    setText('');
+  const onListScroll=()=>{
+    const el=listRef.current;
+    if(!el)return;
+    const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
+    stickToBottomRef.current=nearBottom;
+    if(nearBottom)setShowJump(false);
+  };
+
+  const jumpToBottom=()=>{
+    stickToBottomRef.current=true;
+    bottomRef.current?.scrollIntoView({behavior:'smooth'});
+    setShowJump(false);
+  };
+
+  const autoGrow=el=>{if(!el)return;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';};
+  React.useEffect(()=>{autoGrow(taRef.current);},[text]);
+
+  const doSend=async(tempId,t)=>{
     try{
       const r=await apiCall('/api/messages/'+selected.id,{method:'POST',body:{text:t}});
-      // Optimistic update in case socket is slow
-      if(r.msg)setMessages(m=>[...m.filter(x=>x.id!==r.msg.id),r.msg].sort((a,b)=>a.createdAt-b.createdAt));
-    }catch(e){setText(t);alert(e.message);}
+      if(r.msg)setMessages(m=>m.map(x=>x.id===tempId?r.msg:x));
+      setSummary(su=>({...su,[selected.id]:{lastMessage:{text:t,senderId:authUser.id,createdAt:Date.now()},unreadCount:0}}));
+    }catch(e){
+      setMessages(m=>m.map(x=>x.id===tempId?{...x,pending:false,failed:true}:x));
+    }
+  };
+
+  const send=()=>{
+    const t=text.trim();
+    if(!t||!selected)return;
+    if(t.length>2000)return;
+    const tempId='tmp-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    stickToBottomRef.current=true;
+    setMessages(m=>[...m,{id:tempId,senderId:authUser.id,text:t,createdAt:Date.now(),pending:true}]);
+    setText('');
+    doSend(tempId,t);
+  };
+
+  const retry=(msg)=>{
+    stickToBottomRef.current=true;
+    setMessages(m=>m.map(x=>x.id===msg.id?{...x,pending:true,failed:false}:x));
+    doSend(msg.id,msg.text);
   };
 
   const fmtTime=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   const fmtDate=ts=>new Date(ts).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+  const fmtListTime=ts=>{
+    if(!ts)return '';
+    const d=new Date(ts),now=new Date();
+    if(d.toDateString()===now.toDateString())return d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const yest=new Date(now);yest.setDate(now.getDate()-1);
+    if(d.toDateString()===yest.toDateString())return 'Hier';
+    return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+  };
+
+  const sortedPartners=React.useMemo(()=>partners.slice().sort((a,b)=>(summary[b.id]?.lastMessage?.createdAt||0)-(summary[a.id]?.lastMessage?.createdAt||0)),[partners,summary]);
 
   return(
-    <div style={{height:'100%',display:'flex',flexDirection:'column',color:T.text}}>
+    <div style={{height:'100%',display:'flex',flexDirection:'column',color:T.text,position:'relative'}}>
       {selected?(
         <>
           {/* Header */}
@@ -2690,32 +2766,45 @@ function MessagesScreen({authUser}){
             <div style={{width:32,height:32,borderRadius:16,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>{selected.avatarUrl?<img src={selected.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:(selected.firstName?.[0]||selected.email?.[0]||'?').toUpperCase()}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:600}}>{selected.firstName||selected.email.split('@')[0]}</div>
-              <div style={{fontSize:10,color:T.textFaint}}>{selected.role==='coach'?'Coach':'Athlète'}</div>
+              <div style={{fontSize:10,color:T.textFaint}}>{selected.role==='coach'?'Coach':'Athlète'}{!connected?' · reconnexion…':''}</div>
             </div>
           </div>
           {/* Messages */}
-          <div style={{flex:1,overflow:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
-            {messages.length===0&&<div style={{textAlign:'center',fontSize:12,color:T.textFaint,marginTop:40,fontStyle:'italic'}}>Aucun message — dis bonjour 👋</div>}
-            {messages.map((m,i)=>{
-              const isMe=m.senderId===authUser.id;
-              const showDate=i===0||fmtDate(messages[i-1].createdAt)!==fmtDate(m.createdAt);
-              return(
-                <React.Fragment key={m.id}>
-                  {showDate&&<div style={{textAlign:'center',fontSize:10,color:T.textFaint,margin:'4px 0'}}>{fmtDate(m.createdAt)}</div>}
-                  <div style={{display:'flex',flexDirection:'column',alignItems:isMe?'flex-end':'flex-start'}}>
-                    <div style={{maxWidth:'80%',padding:'8px 12px',borderRadius:isMe?'14px 14px 4px 14px':'14px 14px 14px 4px',background:isMe?T.accentSoft:'rgba(255,255,255,0.06)',border:isMe?`1px solid rgba(191,160,96,0.3)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,lineHeight:1.4,color:isMe?T.accent:T.text}}>
-                      {m.text}
-                    </div>
-                    <span style={{fontSize:9,color:T.textFaint,marginTop:2,marginLeft:4,marginRight:4}}>{fmtTime(m.createdAt)}</span>
-                  </div>
-                </React.Fragment>
-              );
-            })}
-            <div ref={bottomRef}/>
+          <div ref={listRef} onScroll={onListScroll} style={{flex:1,overflow:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,position:'relative'}}>
+            {loadingMessages?(
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {[1,2,3].map(i=><div key={i} style={{alignSelf:i%2?'flex-start':'flex-end',width:i===2?'55%':'40%',height:34,borderRadius:14,background:'rgba(255,255,255,0.05)'}}/>)}
+              </div>
+            ):(
+              <>
+                {messages.length===0&&<div style={{textAlign:'center',fontSize:12,color:T.textFaint,marginTop:40,fontStyle:'italic'}}>Aucun message — dis bonjour 👋</div>}
+                {messages.map((m,i)=>{
+                  const isMe=m.senderId===authUser.id;
+                  const showDate=i===0||fmtDate(messages[i-1].createdAt)!==fmtDate(m.createdAt);
+                  return(
+                    <React.Fragment key={m.id}>
+                      {showDate&&<div style={{textAlign:'center',fontSize:10,color:T.textFaint,margin:'4px 0'}}>{fmtDate(m.createdAt)}</div>}
+                      <div style={{display:'flex',flexDirection:'column',alignItems:isMe?'flex-end':'flex-start'}}>
+                        <div style={{maxWidth:'80%',padding:'8px 12px',borderRadius:isMe?'14px 14px 4px 14px':'14px 14px 14px 4px',background:isMe?T.accentSoft:'rgba(255,255,255,0.06)',border:m.failed?`1px solid ${T.danger}`:isMe?`1px solid rgba(191,160,96,0.3)`:'1px solid rgba(255,255,255,0.08)',fontSize:13,lineHeight:1.4,color:isMe?T.accent:T.text,opacity:m.pending?0.6:1,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+                          {m.text}
+                        </div>
+                        {m.failed?(
+                          <button onClick={()=>retry(m)} style={{fontSize:9,color:T.danger,marginTop:2,marginLeft:4,marginRight:4,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>Échec — Réessayer</button>
+                        ):(
+                          <span style={{fontSize:9,color:T.textFaint,marginTop:2,marginLeft:4,marginRight:4}}>{m.pending?'Envoi…':fmtTime(m.createdAt)}</span>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+                <div ref={bottomRef}/>
+              </>
+            )}
           </div>
+          {showJump&&<button onClick={jumpToBottom} style={{position:'absolute',bottom:76,left:'50%',transform:'translateX(-50%)',padding:'6px 14px',borderRadius:999,border:'1px solid '+T.border,background:T.bg||'#1a1a1a',color:T.text,fontSize:11,fontWeight:600,cursor:'pointer',boxShadow:'0 4px 12px rgba(0,0,0,0.3)',zIndex:5}}>↓ Nouveaux messages</button>}
           {/* Input */}
-          <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0,paddingBottom:'max(10px,env(safe-area-inset-bottom))'}}>
-            <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()} placeholder="Message..." style={{flex:1,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:20,color:T.text,fontSize:13,padding:'8px 14px',fontFamily:'inherit',outline:'none'}}/>
+          <div style={{display:'flex',gap:8,padding:'10px 14px',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0,paddingBottom:'max(10px,env(safe-area-inset-bottom))',alignItems:'flex-end'}}>
+            <textarea ref={taRef} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Message..." rows={1} maxLength={2000} style={{flex:1,resize:'none',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:18,color:T.text,fontSize:13,padding:'8px 14px',fontFamily:'inherit',outline:'none',lineHeight:1.4,maxHeight:120}}/>
             <button onClick={send} disabled={!text.trim()} style={{width:36,height:36,borderRadius:18,border:'none',background:text.trim()?T.accent:'rgba(255,255,255,0.08)',color:'#fff',cursor:text.trim()?'pointer':'default',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background 0.2s'}}>↑</button>
           </div>
         </>
@@ -2723,17 +2812,23 @@ function MessagesScreen({authUser}){
         <div style={{flex:1,overflow:'auto',padding:'14px 16px 90px'}}>
           <div style={{fontSize:22,fontWeight:700,letterSpacing:-0.5,marginBottom:16}}>Messages</div>
           {partners.length===0&&<div style={{textAlign:'center',fontSize:13,color:T.textFaint,marginTop:60,fontStyle:'italic'}}>{authUser.role==='coach'?'Aucun athlète actif pour l\'instant':'Aucun coach assigné'}</div>}
-          {partners.map(p=>(
+          {sortedPartners.map(p=>{
+            const s=summary[p.id]||{};
+            const preview=s.lastMessage?(s.lastMessage.senderId===authUser.id?'Vous : ':'')+s.lastMessage.text:'Aucun message — dis bonjour 👋';
+            return(
             <button key={p.id} onClick={()=>setSelected(p)} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px',borderRadius:14,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',cursor:'pointer',marginBottom:8,textAlign:'left',position:'relative'}}>
               <div style={{width:40,height:40,borderRadius:20,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{p.avatarUrl?<img src={p.avatarUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>:(p.firstName?.[0]||p.email?.[0]||'?').toUpperCase()}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.firstName||p.email.split('@')[0]}</div>
-                <div style={{fontSize:11,color:T.textFaint}}>{p.role==='coach'?'Coach':'Athlète'}</div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.firstName||p.email.split('@')[0]}</div>
+                  {s.lastMessage&&<div style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{fmtListTime(s.lastMessage.createdAt)}</div>}
+                </div>
+                <div style={{fontSize:11,color:(s.unreadCount||0)>0?T.text:T.textFaint,fontWeight:(s.unreadCount||0)>0?600:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:2}}>{preview}</div>
               </div>
-              {(unread[p.id]||0)>0&&<div style={{width:18,height:18,borderRadius:9,background:T.accent,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{unread[p.id]}</div>}
-              <span style={{color:T.textFaint,fontSize:16}}>›</span>
+              {(s.unreadCount||0)>0&&<div style={{width:18,height:18,borderRadius:9,background:T.accent,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{s.unreadCount}</div>}
+              <span style={{color:T.textFaint,fontSize:16,flexShrink:0}}>›</span>
             </button>
-          ))}
+          );})}
         </div>
       )}
     </div>
