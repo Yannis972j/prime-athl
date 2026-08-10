@@ -10275,9 +10275,22 @@ function AuthScreen({onLogin,onSignup}){
   const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
   const resetTokenFromUrl=params.get('reset');
   const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
-  const savedCreds=(()=>{try{return JSON.parse(localStorage.getItem('pa_remember')||'null');}catch{return null;}})();
+  // "Se souvenir de moi" ne mémorise que l'email : le mot de passe est laissé au gestionnaire
+  // natif du navigateur (autoComplete="current-password" sur le champ ci-dessous), qui le stocke
+  // de façon sécurisée — jamais en clair dans localStorage, lisible par n'importe quel script.
+  const savedCreds=(()=>{
+    try{
+      const raw=JSON.parse(localStorage.getItem('pa_remember')||'null');
+      if(raw&&raw.password){
+        // Nettoyage d'un ancien stockage (versions précédentes de l'app) qui contenait le mot
+        // de passe en clair : on le retire immédiatement du disque, sans jamais le réutiliser.
+        try{localStorage.setItem('pa_remember',JSON.stringify({email:raw.email||''}));}catch{}
+      }
+      return raw;
+    }catch{return null;}
+  })();
   const[email,setEmail]=React.useState(savedCreds?.email||'');
-  const[password,setPassword]=React.useState(savedCreds?.password||'');
+  const[password,setPassword]=React.useState('');
   const[rememberMe,setRememberMe]=React.useState(!!savedCreds);
   const[role,setRole]=React.useState('athlete');
   const[code,setCode]=React.useState('');
@@ -10317,7 +10330,7 @@ function AuthScreen({onLogin,onSignup}){
     setErr(null);setPendingMsg(null);setLoading(true);
     try{
       if(mode==='login'){
-        if(rememberMe){try{localStorage.setItem('pa_remember',JSON.stringify({email:email.trim(),password}));}catch{}}
+        if(rememberMe){try{localStorage.setItem('pa_remember',JSON.stringify({email:email.trim()}));}catch{}}
         else{try{localStorage.removeItem('pa_remember');}catch{}}
         await onLogin(email.trim(),password);
       }else await onSignup(email.trim(),password,role,code.trim().toUpperCase()||undefined);
