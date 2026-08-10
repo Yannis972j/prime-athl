@@ -76,7 +76,21 @@ if (process.env.CLOUDINARY_URL) {
   cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL });
 }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
-const uploadMedia = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+// Liste blanche déclarée ici (pas au niveau de la route /api/upload) pour pouvoir l'utiliser dans
+// le fileFilter ci-dessous : rejeter un mauvais type de fichier PENDANT le stream multer, avant
+// que le fichier entier ait été buffériser en mémoire — plutôt qu'après coup dans le handler.
+const ALLOWED_UPLOAD_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+const VIDEO_MIMES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']);
+// 200 Mo entièrement bufférisés en RAM (memoryStorage) par upload, sans aucune limite de
+// concurrence, était un vecteur de crash mémoire (OOM) trivial sur l'offre Render gratuite
+// (512 Mo de RAM, DATA déjà chargée en mémoire en plus). 50 Mo laisse largement la place à
+// quelques minutes de vidéo mobile compressée (le cas d'usage réel : vidéos de suivi de
+// progression) tout en réduisant nettement l'exposition.
+const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, ALLOWED_UPLOAD_MIMES.includes(file.mimetype)),
+});
 
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
@@ -291,16 +305,27 @@ async function flushLocal() {
     await fs.promises.rename(tmp, DB_PATH);
   } catch (e) { console.error('persist error:', e); } finally { saving = false; }
 }
+// Sous forte activité continue (plusieurs athlètes actifs en même temps, ex: séance de groupe),
+// chaque appel à persist() réarme le timer avant qu'il ait pu se déclencher — un debounce classique
+// repousse alors l'écriture indéfiniment. firstDirtyAt mémorise depuis quand des données sont en
+// attente, pour forcer un flush au bout de MAX_DEBOUNCE_MS même si persist() ne s'arrête jamais.
+let firstDirtyAt = null;
+const LOCAL_DEBOUNCE_MS = 200;
+const PG_DEBOUNCE_MS = 500;
+const MAX_DEBOUNCE_MS = 2000;
 function persist() {
+  const now = Date.now();
+  if (firstDirtyAt === null) firstDirtyAt = now;
+  const elapsed = now - firstDirtyAt;
   // Sauvegarde fichier local (rapide, sync-safe)
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushLocal, 200);
+  saveTimer = setTimeout(() => { firstDirtyAt = null; flushLocal(); }, Math.max(0, Math.min(LOCAL_DEBOUNCE_MS, MAX_DEBOUNCE_MS - elapsed)));
   // Postgres : debounce 500ms (aligné proche du local pour réduire la fenêtre d'inconsistance)
   if (USE_PG) {
     if (pgSaveTimer) clearTimeout(pgSaveTimer);
     pgSaveTimer = setTimeout(() => {
       pgSave(DATA).catch(e => console.error('[pg] save error:', e.message));
-    }, 500);
+    }, Math.max(0, Math.min(PG_DEBOUNCE_MS, MAX_DEBOUNCE_MS - elapsed)));
   }
 }
 
@@ -509,6 +534,13 @@ app.use(cors({
 
 app.use((req, res, next) => {
   if (req.path === '/api/stripe/webhook') return next();
+  // La restauration de backup a besoin d'une limite bien plus haute que le reste de l'API : les
+  // photos de progression en base64 (jusqu'à 3 Mo pièce, jusqu'à 50 par athlète) font grimper un
+  // export généré par GET /api/admin/backup (non limité en taille) bien au-delà de 5 Mo dès que
+  // quelques athlètes en ont ajouté — sans quoi la seule fonctionnalité de secours censée
+  // protéger contre la perte de données sur Render (stockage éphémère) est inutilisable en
+  // pratique : le coach télécharge un backup qu'il ne peut ensuite jamais réimporter.
+  if (req.path === '/api/admin/restore') return express.json({ limit: '50mb' })(req, res, next);
   express.json({ limit: '5mb' })(req, res, next);
 });
 app.use(cookieParser());
@@ -558,6 +590,16 @@ const pdfDownloadLimiter = rateLimit({
   max: 20,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests' },
+});
+// Restauration de backup : requêtes lourdes (jusqu'à 50 Mo, cf. limite dédiée ci-dessus) et
+// destructrices (remplace TOUTE la base). Le body est déjà parsé (donc en mémoire) avant que
+// authRequired ne rejette une requête non authentifiée — un rate-limit dédié, strict, limite le
+// risque qu'une IP sans compte sature la RAM du process en enchaînant de gros payloads.
+const restoreLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives de restauration. Réessaie dans 15 minutes.' },
 });
 // Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
 const aiLimiter = rateLimit({
@@ -1953,7 +1995,7 @@ app.get('/api/admin/backup', authRequired, coachOnly, mainCoachOnly, (req, res) 
   }
 });
 
-app.post('/api/admin/restore', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+app.post('/api/admin/restore', restoreLimiter, authRequired, coachOnly, mainCoachOnly, (req, res) => {
   try {
     const body = req.body;
     if (!body || !body.users || !body.programs) {
@@ -2529,13 +2571,13 @@ app.get('/api/coach/athletes/:id/weight', authRequired, coachOnly, (req, res) =>
 });
 
 // ── Upload fichier → Cloudinary (ou base64 fallback) ──
-const ALLOWED_UPLOAD_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
-const VIDEO_MIMES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']);
+// ALLOWED_UPLOAD_MIMES / VIDEO_MIMES et le fileFilter associé sont déclarés plus haut avec
+// uploadMedia, pour rejeter un mauvais type de fichier pendant le stream (avant tout buffering).
 app.post('/api/upload', authRequired, uploadMedia.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'no_file' });
-  if (!ALLOWED_UPLOAD_MIMES.includes(req.file.mimetype)) {
-    return res.status(400).json({ error: 'invalid_file_type' });
-  }
+  // Un fichier au mauvais type est silencieusement écarté par fileFilter (req.file reste
+  // undefined) : on ne peut plus distinguer "aucun fichier envoyé" de "type refusé" ici, mais
+  // les deux sont des erreurs client équivalentes pour l'appelant (rien à uploader).
+  if (!req.file) return res.status(400).json({ error: 'no_file_or_invalid_type' });
   const isVideo = VIDEO_MIMES.has(req.file.mimetype);
   if (process.env.CLOUDINARY_URL) {
     try {
@@ -3480,27 +3522,43 @@ process.on('unhandledRejection', (reason, p) => {
   console.error('unhandledRejection:', reason);
 });
 
-// Graceful shutdown : flush DB avant de mourir (évite la corruption de data.json)
-function gracefulShutdown(signal) {
+// Graceful shutdown : flush DB (locale ET Postgres) avant de mourir. Corrige deux pièges qui
+// faisaient qu'un redéploiement Render (SIGTERM) perdait des données en silence :
+// 1) server.close() seul n'invoque son callback qu'une fois TOUTES les connexions fermées, y
+//    compris les websockets Socket.IO persistantes — qu'on ne fermait jamais. Dès qu'un seul
+//    client était connecté (quasi toujours en pratique), le callback ne se déclenchait donc
+//    jamais et on tombait systématiquement sur la sortie forcée à 10s ci-dessous, sans le
+//    moindre flush. io.close() résout ça : il déconnecte proprement tous les sockets AVANT de
+//    fermer le serveur HTTP sous-jacent (qui lui a été passé à `new SocketIOServer(server,...)`).
+// 2) pgSave() n'était jamais appelé ici — seul le fichier local (éphémère sur Render en offre
+//    gratuite) était flushé. En production, Postgres est la source de vérité : sans ce flush,
+//    la dernière modification (jusqu'à 500ms de debounce, voir persist()) pouvait être perdue.
+async function gracefulShutdown(signal) {
   console.log(`[shutdown] ${signal} reçu — arrêt propre en cours`);
-  server.close(() => {
-    console.log('[shutdown] Serveur HTTP fermé');
-    // Annuler les timers de sauvegarde différée et sauvegarder immédiatement
-    if (saveTimer) clearTimeout(saveTimer);
-    if (pgSaveTimer) clearTimeout(pgSaveTimer);
-    try {
-      const tmp = DB_PATH + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(DATA));
-      fs.renameSync(tmp, DB_PATH);
-      console.log('[shutdown] DB vidée sur disque');
-    } catch (e) { console.error('[shutdown] Erreur flush DB:', e.message); }
-    process.exit(0);
-  });
-  // Forcer la sortie après 10s si des connexions restent ouvertes
+  // Forcer la sortie après 10s si le flush ci-dessous ne termine pas (disque/DB trop lent)
   setTimeout(() => {
     console.error('[shutdown] Sortie forcée après timeout');
     process.exit(1);
   }, 10_000).unref();
+  try {
+    await io.close();
+    console.log('[shutdown] Serveur HTTP fermé');
+  } catch (e) { console.error('[shutdown] Erreur io.close():', e.message); }
+  if (saveTimer) clearTimeout(saveTimer);
+  if (pgSaveTimer) clearTimeout(pgSaveTimer);
+  try {
+    const tmp = DB_PATH + '.tmp';
+    await fs.promises.writeFile(tmp, JSON.stringify(DATA));
+    await fs.promises.rename(tmp, DB_PATH);
+    console.log('[shutdown] DB locale vidée sur disque');
+  } catch (e) { console.error('[shutdown] Erreur flush DB locale:', e.message); }
+  if (USE_PG) {
+    try {
+      await pgSave(DATA);
+      console.log('[shutdown] DB Postgres synchronisée');
+    } catch (e) { console.error('[shutdown] Erreur flush Postgres:', e.message); }
+  }
+  process.exit(0);
 }
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
@@ -3509,7 +3567,14 @@ process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 app.use((err, req, res, next) => {
   console.error('Express error:', err);
   if (res.headersSent) return next(err);
-  res.status(500).json({ error: 'server_error', ...(IS_PROD ? {} : { detail: err.message }) });
+  // Respecter le code fourni par l'erreur (ex: 413 payload-too-large levé par express.json()
+  // quand un body dépasse la limite — jusqu'ici toujours masqué en 500 générique, ce qui rendait
+  // le dépassement de la limite de /api/admin/restore illisible côté client). MulterError (ex:
+  // LIMIT_FILE_SIZE sur /api/upload) ne porte pas de status HTTP, on la mappe explicitement.
+  const isPayloadTooLarge = err.name === 'MulterError' && err.code === 'LIMIT_FILE_SIZE';
+  const status = isPayloadTooLarge ? 413 : (err.status || err.statusCode);
+  const code = (status && status >= 400 && status < 600) ? status : 500;
+  res.status(code).json({ error: code === 413 ? 'payload_too_large' : 'server_error', ...(IS_PROD ? {} : { detail: err.message }) });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
