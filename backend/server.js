@@ -1507,18 +1507,39 @@ app.delete('/api/coach/athletes/:athleteId/schedule-moves/:date', authRequired, 
 // Le coach importe le même Excel mais les jours deviennent des séances
 // indépendantes dans une bibliothèque — sans calendrier.
 
+// Fusionne un nouveau lot de séances (ex: réimport Excel) dans la bibliothèque existante :
+// une séance du nouveau lot dont le nom correspond (insensible à la casse/espaces) à une séance
+// déjà présente remplace son contenu (exercices/sheetName/category) en conservant son id d'origine
+// — les autres séances déjà présentes restent inchangées. Les séances sans correspondance sont
+// ajoutées à la suite.
+function mergeLibrarySessions(existing, incoming) {
+  const normName = s => String(s || '').trim().toLowerCase();
+  const byName = new Map((existing || []).map(s => [normName(s.name), s]));
+  for (const s of incoming) {
+    const key = normName(s.name);
+    const old = byName.get(key);
+    byName.set(key, old ? { ...old, name: s.name, sheetName: s.sheetName, category: s.category, exercises: s.exercises } : s);
+  }
+  return [...byName.values()];
+}
+
 app.put('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
-  const sessions = req.body?.sessions;
-  if (!Array.isArray(sessions)) return res.status(400).json({ error: 'sessions_required' });
+  const incoming = req.body?.sessions;
+  if (!Array.isArray(incoming)) return res.status(400).json({ error: 'sessions_required' });
+  const merge = req.body?.mode === 'merge';
+  const existing = DATA.sessionLibrary[req.params.athleteId]?.sessions || [];
+  // 200 séances est déjà très généreux pour une bibliothèque à la carte — évite une croissance
+  // non bornée si la fusion est utilisée en boucle sur des fichiers aux noms toujours différents.
+  const sessions = (merge ? mergeLibrarySessions(existing, incoming) : incoming).slice(0, 200);
   const ts = Date.now();
   DATA.sessionLibrary[req.params.athleteId] = { sessions, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + req.params.athleteId).emit('session-library-updated', { sessions, assignedAt: ts });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   pushToUser(req.params.athleteId, { title: '📚 Bibliothèque mise à jour', body: `${coachName} t'a partagé ${sessions.length} séance${sessions.length > 1 ? 's' : ''} dans ta bibliothèque`, url: '/Muscu.html' });
-  res.json({ ok: true, assignedAt: ts });
+  res.json({ ok: true, assignedAt: ts, count: sessions.length });
 });
 
 app.get('/api/session-library', authRequired, (req, res) => {

@@ -315,7 +315,7 @@ function ConfirmBanner({msg,onConfirm,onCancel}){
 // Affiché après le parsing, avant l'enregistrement réel : montre ce qui a été détecté et
 // les avertissements (lignes/aliments ignorés) pour que le coach puisse vérifier ou
 // annuler, plutôt que de découvrir un import incomplet après coup.
-function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warnings,confirmLabel,busy,allowSchedule}){
+function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warnings,confirmLabel,busy,allowSchedule,allowMerge}){
   // Programmer un import pour une date future (ex: préparer le programme de septembre en août
   // sans toucher au programme en cours) — uniquement proposé pour les imports qui le permettent.
   const[scheduleMode,setScheduleMode]=React.useState('now'); // 'now' | 'later'
@@ -325,6 +325,11 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
   const defaultLaterDate=()=>{const d=new Date();d.setMonth(d.getMonth()+1,1);return ymdKey(d);};
   const[scheduleDate,setScheduleDate]=React.useState(defaultLaterDate);
   React.useEffect(()=>{if(open){setScheduleMode('now');setScheduleDate(defaultLaterDate());}},[open]);
+  // Import bibliothèque : par défaut on met à jour (les séances du fichier remplacent celles du
+  // même nom, le reste de la bibliothèque n'est pas touché) plutôt que de tout écraser — c'était
+  // le comportement précédent, et un piège silencieux (aucun avertissement affiché ici avant).
+  const[mergeMode,setMergeMode]=React.useState('merge'); // 'merge' | 'replace'
+  React.useEffect(()=>{if(open)setMergeMode('merge');},[open]);
   const isLater=allowSchedule&&scheduleMode==='later';
   const minScheduleDate=ymdKey(new Date(Date.now()+86400000));
   const handleConfirm=()=>{
@@ -333,7 +338,7 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
     // IMMÉDIATEMENT côté serveur, en écrasant le programme actuel — jamais ce que "Programmer"
     // est censé faire silencieusement.
     if(isLater&&(!scheduleDate||scheduleDate<minScheduleDate))return;
-    onConfirm(isLater?scheduleDate:null);
+    onConfirm(isLater?scheduleDate:null,allowMerge?mergeMode:undefined);
   };
   return(
     <BottomSheet open={open} onClose={busy?()=>{}:onClose} center>
@@ -370,6 +375,19 @@ function ImportPreviewModal({open,onClose,onConfirm,title,subtitle,stats,warning
               <div style={{fontSize:11,color:T.textFaint,marginTop:6,lineHeight:1.4}}>Le programme actuel reste actif jusqu'à cette date — il sera remplacé automatiquement ce jour-là, sans rien changer d'ici là.</div>
             </div>
           )}
+        </div>
+      )}
+      {allowMerge&&(
+        <div style={{marginBottom:16}}>
+          <div style={{display:'flex',gap:8,marginBottom:10}}>
+            <button onClick={()=>setMergeMode('merge')} disabled={busy} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${mergeMode==='merge'?'rgba(44,196,160,0.5)':'rgba(255,255,255,0.12)'}`,background:mergeMode==='merge'?'rgba(44,196,160,0.12)':'transparent',color:mergeMode==='merge'?T.good:T.textDim,fontSize:12,fontWeight:700,cursor:busy?'default':'pointer'}}>🔄 Mettre à jour</button>
+            <button onClick={()=>setMergeMode('replace')} disabled={busy} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${mergeMode==='replace'?'rgba(184,80,112,0.5)':'rgba(255,255,255,0.12)'}`,background:mergeMode==='replace'?'rgba(184,80,112,0.12)':'transparent',color:mergeMode==='replace'?T.danger:T.textDim,fontSize:12,fontWeight:700,cursor:busy?'default':'pointer'}}>🗑 Remplacer tout</button>
+          </div>
+          <div style={{fontSize:11,color:T.textFaint,lineHeight:1.4}}>
+            {mergeMode==='merge'
+              ?'Les séances du fichier remplacent celles portant le même nom dans la bibliothèque — le reste n\'est pas touché.'
+              :'⚠ Toute la bibliothèque actuelle sera effacée et remplacée uniquement par les séances de ce fichier.'}
+          </div>
         </div>
       )}
       <div style={{display:'flex',gap:8}}>
@@ -9313,11 +9331,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         targetName:[target.firstName,target.lastName].filter(Boolean).join(' ')||target.email,
         stats:[{label:'séances',value:sessions.length}],
         warnings:warnings||[],
-        onConfirm: async()=>{
-          flash('⏳ Import bibliothèque...');
+        allowMerge:true,
+        onConfirm: async(_activateOn,mergeMode)=>{
+          const merging=mergeMode!=='replace';
+          flash(merging?'⏳ Mise à jour de la bibliothèque...':'⏳ Import bibliothèque...');
           try{
-            await apiCall('/api/coach/session-library/'+target.id,{method:'PUT',body:{sessions}});
-            flash(`✓ Bibliothèque assignée · ${sessions.length} séance${sessions.length>1?'s':''}`);
+            await apiCall('/api/coach/session-library/'+target.id,{method:'PUT',body:{sessions,mode:merging?'merge':'replace'}});
+            flash(merging?`✓ Bibliothèque mise à jour · ${sessions.length} séance${sessions.length>1?'s':''}`:`✓ Bibliothèque remplacée · ${sessions.length} séance${sessions.length>1?'s':''}`);
             reloadDetail(target.id);
           }catch(ex){flash('✗ '+(ex.message||ex));console.error('handleLibExcel:',ex);}
         },
@@ -9411,8 +9431,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         )}
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleExcel}/>
         <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
-        <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule}
-          onClose={()=>setImportPreview(null)} onConfirm={activateOn=>{importPreview.onConfirm(activateOn);setImportPreview(null);}}/>
+        <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule} allowMerge={importPreview?.allowMerge}
+          onClose={()=>setImportPreview(null)} onConfirm={(activateOn,mergeMode)=>{importPreview.onConfirm(activateOn,mergeMode);setImportPreview(null);}}/>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
