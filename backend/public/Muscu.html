@@ -1515,8 +1515,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     });
     setExercises(updatedExercises);
 
-    // SUPERSET / TRISET : enchaîner sans repos jusqu'au dernier exo du bloc
-    if(ex.style==='SUPERSET'||ex.style==='TRISET'){
+    // SUPERSET / TRISET / ABDOS : enchaîner sans repos jusqu'au dernier exo du bloc — un bloc
+    // ABDOS (circuit de gainage/abdos illimité) est un circuit au même titre qu'un superset/triset,
+    // il doit donc lui aussi passer à l'exercice suivant du bloc plutôt que de proposer un repos
+    // et rester sur place (ce qui n'a pas de sens pour un circuit).
+    if(ex.style==='SUPERSET'||ex.style==='TRISET'||ex.style==='ABDOS'){
       const group=groupExercises(updatedExercises).find(g=>g.items.some(({idx})=>idx===currentEx));
       if(group){
         // Un bloc à séries inégales (ex: A=4 séries, B=3) ne doit pas renvoyer vers un exo déjà
@@ -1587,6 +1590,34 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     );
   }
 
+  // Overlay compte à rebours de série — plein écran. Auparavant défini uniquement dans le
+  // rendu du mode focus : hors focus (vue liste), démarrer un gainage/planche n'affichait qu'un
+  // texte statique "⏱ en cours…", sans le moindre décompte visible. Factorisé ici (comme
+  // rpeModal/swapPickerModal) pour être rendu dans les deux modes.
+  const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&(
+    <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
+      <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
+      <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
+      <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
+        <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
+          <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10"/>
+          <circle cx="120" cy="120" r="108" fill="none" stroke="#5A8AE0" strokeWidth="10" strokeLinecap="round"
+            strokeDasharray={2*Math.PI*108}
+            strokeDashoffset={2*Math.PI*108*(setTimerSecs/setTimerTotal)}
+            style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 12px rgba(90,138,224,0.7))'}}/>
+        </svg>
+        <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+          <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{setTimerSecs}</div>
+          <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
+        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
+        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);validateSet(ex.sets.findIndex(s=>!s.done));}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
+      </div>
+    </div>
+  );
+
   // ── FOCUS MODE : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono plein écran ──
   if(focusMode){
     const nextSetIdx=ex.sets.findIndex(s=>!s.done);
@@ -1625,30 +1656,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           </div>
         )}
 
-        {/* Overlay compte à rebours de série — plein écran */}
-        {setTimerSecs>0&&setTimerTotal>0&&(
-          <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
-            <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
-            <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
-            <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
-              <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
-                <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10"/>
-                <circle cx="120" cy="120" r="108" fill="none" stroke="#5A8AE0" strokeWidth="10" strokeLinecap="round"
-                  strokeDasharray={2*Math.PI*108}
-                  strokeDashoffset={2*Math.PI*108*(setTimerSecs/setTimerTotal)}
-                  style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 12px rgba(90,138,224,0.7))'}}/>
-              </svg>
-              <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{setTimerSecs}</div>
-                <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
-              </div>
-            </div>
-            <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
-              <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
-              <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);validateSet(ex.sets.findIndex(s=>!s.done));}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
-            </div>
-          </div>
-        )}
+        {/* Overlay compte à rebours de série — plein écran (factorisé, voir setTimerOverlay) */}
+        {setTimerOverlay}
 
         {/* Header minimal */}
         <div style={{padding:'8px 18px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1809,6 +1818,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   return(
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
+      {/* Overlay compte à rebours de série — plein écran, aussi visible hors mode focus */}
+      {setTimerOverlay}
       {/* Image illustrative — bandeau borné en haut (s'adapte à la taille du téléphone, plus jamais trop gros) */}
       {(()=>{const u=exerciseImageURL(ex.name);return u?(
         <div key={ex.id||ex.name} style={{position:'absolute',top:0,left:0,right:0,height:'clamp(140px, 22vh, 200px)',zIndex:0,overflow:'hidden',pointerEvents:'none'}}>
