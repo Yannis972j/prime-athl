@@ -7351,8 +7351,12 @@ function CoachPlanSessionModal({athleteId,athleteName,sourceSession,onClose,onDo
   const validateSession=async()=>{
     setSending(true);setMsg('');
     try{
+      // session.date est ensuite ré-affiché ailleurs via new Date(s.date) — une simple date
+      // "AAAA-MM-JJ" y serait interprétée comme minuit UTC, donc décalée d'un jour en arrière
+      // pour un fuseau négatif (ex: Martinique, UTC-4). On l'ancre à midi pour l'éviter, comme
+      // pour "Déplacer une séance" (voir doMove).
       await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{
-        name:name.trim()||'Séance',date,exercises:exos,totalVolume:totalVol,
+        name:name.trim()||'Séance',date:new Date(date+'T12:00:00').toISOString(),exercises:exos,totalVolume:totalVol,
       }});
       setMsg('✓ Séance validée pour '+athleteName+' !');
       setTimeout(()=>{onDone&&onDone();onClose();},1400);
