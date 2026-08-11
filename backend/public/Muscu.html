@@ -1594,6 +1594,15 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // rendu du mode focus : hors focus (vue liste), démarrer un gainage/planche n'affichait qu'un
   // texte statique "⏱ en cours…", sans le moindre décompte visible. Factorisé ici (comme
   // rpeModal/swapPickerModal) pour être rendu dans les deux modes.
+  // Ajuste le temps restant du chrono de série pendant qu'il tourne (ex: le gainage prévu dans
+  // le fichier Excel était trop long/court pour cet athlète ce jour-là). setTimerTotal suit vers
+  // le haut pour que le cercle de progression ne dépasse jamais 100% si on rallonge ; il ne
+  // redescend pas si on raccourcit, pour continuer à refléter la durée de départ.
+  const adjustSetTimer=delta=>setSetTimerSecs(s=>{
+    const next=Math.max(1,s+delta);
+    setSetTimerTotal(t=>Math.max(t,next));
+    return next;
+  });
   const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&(
     <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
       <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
@@ -1610,6 +1619,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{setTimerSecs}</div>
           <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
         </div>
+      </div>
+      {/* Ajuster le temps restant à la volée */}
+      <div style={{display:'flex',gap:10,width:'100%',maxWidth:340,marginBottom:14}}>
+        <button onClick={()=>adjustSetTimer(-15)} disabled={setTimerSecs<=1} style={{flex:1,minHeight:44,padding:'0 12px',borderRadius:12,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:setTimerSecs<=1?T.textFaint:T.text,fontSize:13,fontWeight:700,cursor:setTimerSecs<=1?'default':'pointer',opacity:setTimerSecs<=1?0.4:1}}>−15s</button>
+        <button onClick={()=>adjustSetTimer(15)} style={{flex:1,minHeight:44,padding:'0 12px',borderRadius:12,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#8AADEE',fontSize:13,fontWeight:700,cursor:'pointer'}}>+15s</button>
       </div>
       <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
         <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
