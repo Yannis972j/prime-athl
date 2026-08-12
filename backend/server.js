@@ -1059,7 +1059,9 @@ app.get('/api/program', authRequired, (req, res) => {
   res.json({
     ...(p || { data: {}, assignedAt: null, assignedBy: null }),
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
-    scheduledProgram: sched ? { activateOn: sched.activateOn } : null,
+    // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
+    // séances du programme en attente sur les jours à venir, avant même son activation.
+    scheduledProgram: sched ? { activateOn: sched.activateOn, data: sched.data } : null,
   });
 });
 
