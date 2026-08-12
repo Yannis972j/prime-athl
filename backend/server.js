@@ -1055,7 +1055,12 @@ app.patch('/api/me', authRequired, (req, res) => {
 // ── Program ─────────────────────────────────────────
 app.get('/api/program', authRequired, (req, res) => {
   const p = DATA.programs[req.user.id];
-  res.json({ ...(p || { data: {}, assignedAt: null, assignedBy: null }), scheduleMoves: DATA.scheduleMoves[req.user.id] || {} });
+  const sched = DATA.scheduledPrograms[req.user.id];
+  res.json({
+    ...(p || { data: {}, assignedAt: null, assignedBy: null }),
+    scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
+    scheduledProgram: sched ? { activateOn: sched.activateOn } : null,
+  });
 });
 
 // Athlete uploads their own program (Excel import or manual)
@@ -1065,6 +1070,34 @@ app.put('/api/my-program', authRequired, (req, res) => {
   DATA.programs[req.user.id] = { data, assignedBy: req.user.id, assignedAt: ts };
   persist();
   res.json({ ok: true, assignedAt: ts });
+});
+
+// Programme un import Excel pour soi-même, à appliquer automatiquement à une date future — même
+// logique que la version coach (PUT /api/coach/program/:athleteId/scheduled) : préparer par
+// avance le programme d'un mois différent (ex: septembre) sans toucher au programme du mois en
+// cours (août) avant la date choisie. Un seul programme en attente à la fois — un nouvel appel
+// remplace le précédent.
+app.put('/api/my-program/scheduled', authRequired, (req, res) => {
+  const data = req.body?.data || {};
+  const activateOn = String(req.body?.activateOn || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(activateOn)) return res.status(400).json({ error: 'invalid_date' });
+  // Si la date choisie est déjà passée ou aujourd'hui, applique immédiatement — pas besoin
+  // d'attendre un cycle de vérification pour un programme censé être déjà actif.
+  if (activateOn <= ymd(Date.now())) {
+    const ts = applyProgramToAthlete(req.user.id, data, req.user.id);
+    persist();
+    return res.json({ ok: true, assignedAt: ts, scheduled: false });
+  }
+  DATA.scheduledPrograms[req.user.id] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now() };
+  persist();
+  res.json({ ok: true, scheduled: true, activateOn });
+});
+
+// Annule son propre programme programmé à l'avance avant qu'il ne s'active
+app.delete('/api/my-program/scheduled', authRequired, (req, res) => {
+  delete DATA.scheduledPrograms[req.user.id];
+  persist();
+  res.json({ ok: true });
 });
 
 // ── Coach ───────────────────────────────────────────
@@ -1374,8 +1407,12 @@ function applyProgramToAthlete(athleteId, data, assignedBy) {
   delete DATA.scheduleMoves[athleteId];
   io.to('user:' + athleteId).emit('program-updated', { data, assignedAt: ts });
   io.to('user:' + athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
-  const coachName = DATA.users[assignedBy]?.firstName || 'Ton coach';
-  pushToUser(athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
+  // Auto-import (l'utilisateur importe son propre programme, cf. /api/my-program/scheduled) :
+  // pas de notif "ton coach t'a assigné..." puisque c'est la même personne, ça n'aurait aucun sens.
+  if (assignedBy !== athleteId) {
+    const coachName = DATA.users[assignedBy]?.firstName || 'Ton coach';
+    pushToUser(athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
+  }
   return ts;
 }
 
