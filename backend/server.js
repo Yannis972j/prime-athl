@@ -1103,6 +1103,19 @@ app.delete('/api/my-program/scheduled', authRequired, (req, res) => {
 });
 
 // ── Coach ───────────────────────────────────────────
+// Regroupe DATA.sessions par userId en un seul passage. Sans ça, une vue qui affiche N athlètes
+// devait faire N × Object.values(DATA.sessions).filter(...) — un balayage complet de TOUTES les
+// séances de TOUTE l'app, répété pour chaque athlète affiché. Avec des données réelles
+// accumulées (des milliers de séances tous utilisateurs confondus), ça rendait "Mes athlètes"
+// et le calendrier coach très lents, voire bloqués sur "Chargement...".
+function sessionsByUserId() {
+  const map = {};
+  for (const s of Object.values(DATA.sessions)) {
+    (map[s.userId] || (map[s.userId] = [])).push(s);
+  }
+  return map;
+}
+
 app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
   const page  = Math.max(1, parseInt(req.query.page)  || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -1110,10 +1123,11 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
     .filter(u => u.coachId === req.user.id)
     .sort((a, b) => b.createdAt - a.createdAt);
   const total = all.length;
+  const byUser = sessionsByUserId();
   const athletes = all.slice((page - 1) * limit, page * limit).map(u => {
     const p = DATA.programs[u.id];
     const sched = DATA.scheduledPrograms[u.id];
-    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const userSessions = byUser[u.id] || [];
     const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
     return {
       ...profileOf(u),
@@ -2470,13 +2484,14 @@ app.get('/api/coach/calendar', authRequired, coachOnly, (req, res) => {
   const athletes = Object.values(DATA.users)
     .filter(u => u.coachId === req.user.id && u.role === 'athlete');
 
+  const byUser = sessionsByUserId();
   const result = athletes.map((u, idx) => {
     // Sessions du mois
     // On renvoie les timestamps ISO bruts (et non une date UTC pré-découpée) :
     // seul le frontend connaît le fuseau horaire local du coach et peut donc
     // regrouper correctement les séances par "jour local" via ymdKey().
-    const sessionDates = Object.values(DATA.sessions)
-      .filter(s => s.userId === u.id && new Date(s.date).getTime() >= start && new Date(s.date).getTime() < end)
+    const sessionDates = (byUser[u.id] || [])
+      .filter(s => new Date(s.date).getTime() >= start && new Date(s.date).getTime() < end)
       .map(s => s.date);
 
     // Nutrition validée du mois (nutritionLogs)
