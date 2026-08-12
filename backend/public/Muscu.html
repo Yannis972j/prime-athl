@@ -856,7 +856,11 @@ function excelExport(workout) {
 }
 
 // ── Shared Excel import handler (programme) ───────────────
-function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview) {
+// allowSchedule/onScheduled (optionnels) : n'activés que pour l'import "mon programme" côté
+// athlète (HomeScreen) — permet de préparer par avance le programme d'un mois futur (ex:
+// septembre en étant encore en août) sans toucher au programme en cours avant la date choisie.
+// Non utilisé pour l'import dans l'éditeur de séance (WorkoutEditorScreen), qui reste immédiat.
+function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, allowSchedule, onScheduled) {
   return e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -871,7 +875,26 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview) {
         setPreview({
           stats:[{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}],
           warnings: warnings||[],
-          onConfirm: () => {
+          allowSchedule: !!allowSchedule,
+          onConfirm: (activateOn) => {
+            if (allowSchedule && activateOn) {
+              setMsg('⏳ Programmation...');
+              apiCall('/api/my-program/scheduled', {method:'PUT', body:{data:programs, activateOn}}).then(r => {
+                if (r?.scheduled === false) {
+                  // Le serveur a jugé la date déjà atteinte et a appliqué immédiatement — on se
+                  // base sur SA réponse, pas sur notre variable locale (horloge client/serveur
+                  // potentiellement désynchronisée autour de minuit).
+                  if (onImportPrograms) onImportPrograms(programs);
+                  setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+                } else {
+                  const dateLabel = new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
+                  setMsg(`✓ Programme programmé pour le ${dateLabel}`);
+                }
+                if (onScheduled) onScheduled();
+                setTimeout(() => setMsg(null), 4000);
+              }).catch(ex => { setMsg('✗ '+(ex.message||'Erreur')); setTimeout(() => setMsg(null), 4000); });
+              return;
+            }
             if (onImportPrograms) onImportPrograms(programs);
             setMsg(`✓ ${nS} mois · ${nD} jours importés`);
             setTimeout(() => setMsg(null), 4000);
@@ -4085,7 +4108,7 @@ function exportAIProgramPDF(program){
   savePdfCompat(doc,fname);
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
@@ -4101,6 +4124,13 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const fileRef=React.useRef(null);
   const[importMsg,setImportMsg]=React.useState(null);
   const[importPreview,setImportPreview]=React.useState(null);
+  const[cancellingSchedule,setCancellingSchedule]=React.useState(false);
+  const cancelScheduledProgram=async()=>{
+    setCancellingSchedule(true);
+    try{await apiCall('/api/my-program/scheduled',{method:'DELETE'});onRefresh&&onRefresh();}
+    catch(e){setImportMsg('✗ '+(e.message||'Erreur'));setTimeout(()=>setImportMsg(null),4000);}
+    setCancellingSchedule(false);
+  };
 
   // Archives programme
   const[archives,setArchives]=React.useState([]);
@@ -4280,7 +4310,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const allDone=workout.exercises.length>0&&workout.exercises.every(e=>e.sets.every(s=>s.done));
   const inProgress=hasProgress&&!allDone;
 
-  const handleFile=makeHandleProgramExcel(fileRef,onImportPrograms,setImportMsg,setImportPreview);
+  const handleFile=makeHandleProgramExcel(fileRef,onImportPrograms,setImportMsg,setImportPreview,true,onRefresh);
 
   const startDay=dayName=>{
     const d=days[dayName];
@@ -4294,8 +4324,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   return(
     <div style={{padding:'18px 18px 30px',color:T.text}}>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
-      <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings}
-        onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
+      <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule}
+        onClose={()=>setImportPreview(null)} onConfirm={activateOn=>{importPreview.onConfirm(activateOn);setImportPreview(null);}}/>
 
       {/* BottomSheet : voir une archive */}
       <BottomSheet open={!!viewArchive} onClose={()=>{setViewArchive(null);setConfirmDel(null);}}>
@@ -4568,6 +4598,19 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
       )}
       {saveMsg&&(
         <div style={{marginBottom:14,padding:'10px 14px',borderRadius:12,background:saveMsg.startsWith('✓')?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${saveMsg.startsWith('✓')?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,color:saveMsg.startsWith('✓')?T.good:'#B85070',fontSize:13,fontWeight:600,textAlign:'center'}}>{saveMsg}</div>
+      )}
+
+      {/* Programme programmé à l'avance (import "plus tard") — s'appliquera automatiquement à
+          la date choisie, sans toucher au programme actuel d'ici là */}
+      {programMeta?.scheduledProgram&&(
+        <div style={{padding:'10px 12px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:16,flexShrink:0}}>📅</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#5A8AE0'}}>Programme prévu</div>
+            <div style={{fontSize:11,color:T.textDim,marginTop:1}}>S'appliquera automatiquement le {new Date(programMeta.scheduledProgram.activateOn+'T00:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>
+          </div>
+          <button onClick={cancelScheduledProgram} disabled={cancellingSchedule} style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(90,138,224,0.3)',background:'transparent',color:'#5A8AE0',fontSize:10,fontWeight:700,cursor:cancellingSchedule?'default':'pointer',flexShrink:0,opacity:cancellingSchedule?0.6:1}}>Annuler</button>
+        </div>
       )}
 
       {/* Resume in-progress workout (compact) */}
@@ -13124,7 +13167,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});
-  const[programMeta,setProgramMeta]=React.useState({assignedAt:null,assignedBy:null});
+  const[programMeta,setProgramMeta]=React.useState({assignedAt:null,assignedBy:null,scheduledProgram:null});
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -13176,7 +13219,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       ]);
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
-      setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy});
+      setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy,scheduledProgram:prog.scheduledProgram||null});
       setScheduleMoves(prog.scheduleMoves||{});
       setHistory(sess);
       setSessionLibrary(lib||{sessions:[],assignedAt:null});
@@ -13190,7 +13233,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   React.useEffect(()=>{
     apiCall('/api/program').then(p=>{
       setImportedPrograms(p.data||{});
-      setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy});
+      setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy,scheduledProgram:p.scheduledProgram||null});
       setScheduleMoves(p.scheduleMoves||{});
     }).catch(()=>{});
     apiCall('/api/sessions').then(setHistory).catch(()=>{});
