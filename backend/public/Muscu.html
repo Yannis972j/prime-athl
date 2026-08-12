@@ -9171,6 +9171,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
   const[athleteLibrary,setAthleteLibrary]=React.useState({sessions:[],nutrition:[]});
   const[coachBiblioPreview,setCoachBiblioPreview]=React.useState(null);
+  const[planFromBiblio,setPlanFromBiblio]=React.useState(null); // séance de bibliothèque à planifier pour l'athlète courant
   const sessionPressTimer=React.useRef(null);
 
   const deleteSession=async(sid,athleteId)=>{
@@ -9458,6 +9459,11 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         <input ref={libFileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleLibExcel}/>
         <ImportPreviewModal open={!!importPreview} title="Import Excel" subtitle={importPreview?.targetName} stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule} allowMerge={importPreview?.allowMerge}
           onClose={()=>setImportPreview(null)} onConfirm={(activateOn,mergeMode)=>{importPreview.onConfirm(activateOn,mergeMode);setImportPreview(null);}}/>
+        {/* Planifier une séance depuis la bibliothèque (ou tout autre onglet "Biblio") de l'athlète */}
+        {planFromBiblio&&(
+          <CoachPlanSessionModal athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} sourceSession={planFromBiblio}
+            onClose={()=>setPlanFromBiblio(null)} onDone={()=>{reloadDetail(a.id);load();}}/>
+        )}
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
@@ -9817,6 +9823,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                       );
                     })}
                   </div>
+                  <button onClick={()=>setPlanFromBiblio(s)} style={{width:'100%',height:50,borderRadius:15,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,boxShadow:'0 8px 22px rgba(191,160,96,0.3)'}}>
+                    📅 Planifier cette séance pour {a.firstName||a.email.split('@')[0]}
+                  </button>
                 </div>
               );
             })():(()=>{
