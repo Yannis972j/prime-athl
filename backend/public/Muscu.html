@@ -9256,7 +9256,11 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       setDetail({...d,sessionLibrary:lib});
       setNutriDetail(n);
       setAthleteLibrary(myLib||{sessions:[],nutrition:[]});
-    }catch(e){}
+    }catch(e){
+      // Avant, une erreur ici était avalée en silence : la fiche restait vide (ou pire, sur
+      // l'ancien athlète avant le correctif ci-dessus) sans que le coach comprenne pourquoi.
+      if(selectedRef.current?.id===id)flash('✗ Chargement impossible, réessaie');
+    }
   };
 
   const flash=t=>{setMsg(t);setTimeout(()=>setMsg(null),2500);};
@@ -9338,7 +9342,16 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     setEditing(false);
   };
 
-  const openDetail=a=>{setSelected(a);reloadDetail(a.id);};
+  const openDetail=a=>{
+    // Si on ouvre un AUTRE athlète que celui déjà chargé, on vide tout de suite les données
+    // détail au lieu d'attendre le fetch : sinon "const a=detail||selected" (plus bas) continue
+    // d'afficher le nom ET les stats (séances, volume total...) de l'ANCIEN athlète pendant le
+    // temps du chargement — voire indéfiniment si le fetch échoue silencieusement (reloadDetail
+    // avale ses erreurs). Ça donnait l'impression de "mauvaises stats" sur l'athlète cliqué.
+    if(selected?.id!==a.id){setDetail(null);setNutriDetail(null);setAthleteLibrary({sessions:[],nutrition:[]});setCoachBiblioPreview(null);}
+    setSelected(a);
+    reloadDetail(a.id);
+  };
   const closeDetail=()=>{setSelected(null);setDetail(null);setNutriDetail(null);setNutriMode('mirror');setShowDangerZone(false);setShowLiveSession(false);setEditingSession(null);setImportPreview(null);};
   const selectedRef=React.useRef(selected);
   selectedRef.current=selected;
@@ -10303,7 +10316,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(90,138,224,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={17} stroke="#5A8AE0"/></div>
               Voir la fiche
             </button>
-            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);setSelected(a);reloadDetail(a.id);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
+            <button onClick={()=>{const a=longPressMenu;setLongPressMenu(null);openDetail(a);openEditAthlete(a);}} style={{width:'100%',height:52,borderRadius:13,border:'none',background:'transparent',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:14,padding:'0 12px'}}>
               <div style={{width:36,height:36,borderRadius:10,background:'rgba(44,196,160,0.12)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="edit" size={17} stroke="#2CC4A0"/></div>
               Modifier
             </button>
