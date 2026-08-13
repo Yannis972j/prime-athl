@@ -1911,6 +1911,9 @@ app.delete('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res)
   delete DATA.sessions[req.params.sessionId];
   persist();
   io.to('user:' + s.userId).emit('session-deleted', { sessionId: req.params.sessionId });
+  // Même raison que sur le PATCH ci-dessus : sans cet écho au coach, sessionCount reste
+  // périmé dans "Mes athlètes" après une suppression tant que la page n'est pas rechargée.
+  io.to('user:' + req.user.id).emit('session-deleted', { sessionId: req.params.sessionId, athleteId: s.userId });
   res.json({ ok: true });
 });
 
@@ -2008,6 +2011,11 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   if (req.body.duration != null) s.duration = +req.body.duration || 0;
   persist();
   io.to('user:' + s.userId).emit('session-updated', { session: s });
+  // Prévient aussi le coach lui-même (pas juste l'athlète) : sinon "Mes athlètes" garde un
+  // sessionCount/lastSessionAt périmé (ex: date d'une séance déplacée) tant que le coach ne
+  // recharge pas complètement la page — voir aussi POST .../sessions plus bas qui émet déjà
+  // aux deux côtés pour la même raison.
+  io.to('user:' + req.user.id).emit('session-updated', { session: s });
   res.json({ ok: true, session: s });
 });
 

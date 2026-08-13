@@ -9211,6 +9211,11 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
     'session-added':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    // Idem pour une séance déplacée/modifiée ou supprimée : sans ça, "Mes athlètes" garde un
+    // sessionCount/lastSessionAt périmé après une action du coach lui-même (le serveur émet
+    // désormais aussi ces events vers le coach, pas seulement vers l'athlète concerné).
+    'session-updated':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'session-deleted':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
     'athlete-profile-updated':()=>{load();},
     'pending-request':()=>{load();},
     'nutrition-meal-validated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
