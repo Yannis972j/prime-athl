@@ -1230,9 +1230,15 @@ app.get('/api/coach/available-athletes', authRequired, coachOnly, (req, res) => 
     .filter(u => u.role === 'athlete' && !u.coachId)
     .sort((a, b) => b.createdAt - a.createdAt);
   const total = all.length;
+  // Même correctif que /api/coach/athletes (voir sessionsByUserId ci-dessus) : un seul passage
+  // sur DATA.sessions au lieu d'un Object.values(DATA.sessions).filter(...) par athlète affiché.
+  // Cet endpoint est appelé en parallèle de /api/coach/athletes par le "Mes athlètes" du coach —
+  // resté sur l'ancien pattern, il continuait à bloquer toute la page sur "Chargement..." même
+  // après le correctif de l'autre endpoint.
+  const byUser = sessionsByUserId();
   const list = all.slice((page - 1) * limit, page * limit).map(u => {
     const p = DATA.programs[u.id];
-    const userSessions = Object.values(DATA.sessions).filter(s => s.userId === u.id);
+    const userSessions = byUser[u.id] || [];
     const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
     return {
       ...profileOf(u),
