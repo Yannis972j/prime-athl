@@ -7047,6 +7047,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[moveBusy,setMoveBusy]=React.useState(false);
   const[moveErr,setMoveErr]=React.useState(null);
   const[planSession,setPlanSession]=React.useState(null); // séance en cours de copie/planification
+  const[viewSession,setViewSession]=React.useState(null); // séance en cours de consultation (détail exercices)
   const movePickerRef=React.useRef(null);
   React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
@@ -7140,6 +7141,10 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
         <CoachPlanSessionModal athleteId={athleteId} athleteName={athleteName||'cet athlète'} sourceSession={planSession}
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
+      {viewSession&&ReactDOM.createPortal(
+        <CoachSessionModal s={viewSession} athleteId={athleteId} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        document.body
+      )}
       {/* Legend */}
       <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
         {mode!=='nutrition'&&[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])].map(([c,l])=>(
@@ -7210,10 +7215,10 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
                 </div>
                 {sess?(
-                  <>
+                  <div onClick={()=>setViewSession(sess)} style={{cursor:'pointer'}} title="Voir le détail de la séance">
                     <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}</div>
                     <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg</div>
-                  </>
+                  </div>
                 ):hasProg&&progData?(
                   <>
                     <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName} — non effectué</div>
