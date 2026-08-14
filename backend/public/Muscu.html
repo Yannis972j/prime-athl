@@ -7215,9 +7215,15 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
                 </div>
                 {sess?(
-                  <div onClick={()=>setViewSession(sess)} style={{cursor:'pointer'}} title="Voir le détail de la séance">
-                    <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}</div>
-                    <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg</div>
+                  <div onClick={()=>setViewSession(sess)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}</div>
+                      <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg · {(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0,padding:'4px 8px',borderRadius:7,background:'rgba(44,196,160,0.12)'}}>
+                      <span style={{fontSize:10,fontWeight:700,color:T.good}}>Voir</span>
+                      <Icon name="chevronRight" size={11} stroke={T.good}/>
+                    </div>
                   </div>
                 ):hasProg&&progData?(
                   <>
