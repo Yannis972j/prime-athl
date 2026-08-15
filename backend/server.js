@@ -92,6 +92,22 @@ const uploadMedia = multer({
   fileFilter: (req, file, cb) => cb(null, ALLOWED_UPLOAD_MIMES.includes(file.mimetype)),
 });
 
+// Documents partageables (PowerPoint / PDF / Word) attachés au plan nutrition d'un athlète —
+// visionnés dans l'app via un <iframe> (rendu natif pour le PDF, visionneuse Office en ligne
+// pour ppt/pptx/doc/docx). 20 Mo couvre largement un support de coaching avec quelques images.
+const ALLOWED_DOC_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.ms-powerpoint', // .ppt
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword', // .doc
+];
+const uploadDoc = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, ALLOWED_DOC_MIMES.includes(file.mimetype)),
+});
+
 // VAPID keys pour Web Push. Génère-les une fois avec: node -e "const wp=await import('web-push'); console.log(JSON.stringify(wp.generateVAPIDKeys()))"
 // Puis mets VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY en env vars sur Render.
 const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.com').toLowerCase();
@@ -2467,11 +2483,65 @@ app.put('/api/coach/nutrition/:athleteId', authRequired, coachOnly, (req, res) =
   const plan = req.body && req.body.plan ? req.body.plan : null;
   if (!plan) return res.status(400).json({ error: 'plan_required' });
   const ts = Date.now();
-  DATA.nutritionPrograms[a.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts };
+  // On préserve le document (PPT/PDF/Word) éventuellement déjà attaché — sinon chaque
+  // sauvegarde du plan structuré (auto-save à chaque modif) l'effacerait silencieusement.
+  const prevDoc = DATA.nutritionPrograms[a.id]?.document;
+  DATA.nutritionPrograms[a.id] = { data: plan, assignedBy: req.user.id, assignedAt: ts, ...(prevDoc ? { document: prevDoc } : {}) };
   persist();
   io.to('user:' + a.id).emit('nutrition-updated', { plan, assignedAt: ts });
   // No push here — push is sent only on explicit validation via POST .../notify
   res.json({ ok: true, assignedAt: ts });
+});
+
+// Coach attache un document (PPT/PDF/Word) au plan nutrition d'un athlète — visionné dans
+// l'app comme un PDF (iframe natif pour le PDF, visionneuse Office en ligne pour ppt/doc).
+app.post('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, uploadDoc.single('file'), async (req, res) => {
+  const a = DATA.users[req.params.id];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  if (!req.file) return res.status(400).json({ error: 'no_file_or_invalid_type', detail: 'Formats acceptés : PDF, PPT/PPTX, DOC/DOCX (20 Mo max)' });
+  if (!process.env.CLOUDINARY_URL) return res.status(500).json({ error: 'cloudinary_not_configured', detail: 'Le stockage de documents nécessite Cloudinary (CLOUDINARY_URL manquant).' });
+  try {
+    // resource_type 'raw' : Cloudinary ne traite le fichier ni comme image ni comme vidéo — il
+    // le stocke et le sert tel quel, nécessaire pour ppt/pptx/doc/docx/pdf.
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        { folder: 'prime-athl/documents', resource_type: 'raw', public_id: uid() },
+        (err, r) => err ? reject(err) : resolve(r)
+      ).end(req.file.buffer);
+    });
+    const doc = {
+      url: result.secure_url,
+      publicId: result.public_id,
+      filename: req.file.originalname || 'document',
+      mime: req.file.mimetype,
+      size: req.file.size,
+      uploadedAt: Date.now(),
+    };
+    const existing = DATA.nutritionPrograms[a.id];
+    DATA.nutritionPrograms[a.id] = existing ? { ...existing, document: doc } : { data: null, assignedBy: req.user.id, assignedAt: Date.now(), document: doc };
+    persist();
+    io.to('user:' + a.id).emit('nutrition-updated', { plan: DATA.nutritionPrograms[a.id], assignedAt: DATA.nutritionPrograms[a.id].assignedAt });
+    res.json({ ok: true, document: doc });
+  } catch (e) {
+    res.status(500).json({ error: 'upload_failed', detail: e.message });
+  }
+});
+
+// Coach retire le document attaché (sans toucher au reste du plan)
+app.delete('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, async (req, res) => {
+  const a = DATA.users[req.params.id];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const existing = DATA.nutritionPrograms[a.id];
+  const doc = existing?.document;
+  if (doc) {
+    delete existing.document;
+    persist();
+    io.to('user:' + a.id).emit('nutrition-updated', { plan: existing, assignedAt: existing.assignedAt });
+    if (process.env.CLOUDINARY_URL && doc.publicId) {
+      cloudinary.uploader.destroy(doc.publicId, { resource_type: 'raw' }).catch(() => {});
+    }
+  }
+  res.json({ ok: true });
 });
 
 // Coach validates and notifies athlete of nutrition plan
