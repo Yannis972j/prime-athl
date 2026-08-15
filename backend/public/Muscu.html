@@ -4936,6 +4936,7 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const[activeWeek,setActiveWeek]=React.useState(0);
   const[importMsg,setImportMsg]=React.useState(null);
   const[importPreview,setImportPreview]=React.useState(null);
+  const[showDocViewer,setShowDocViewer]=React.useState(false);
   const fileRef=React.useRef(null);
   const isCoach=profile&&profile.role==='coach';
 
@@ -5253,11 +5254,21 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
       <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
         onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
+      {showDocViewer&&plan&&plan.document&&ReactDOM.createPortal(
+        <DocumentViewerModal doc={plan.document} onClose={()=>setShowDocViewer(false)}/>,
+        document.body
+      )}
       {importMsg&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:11,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{importMsg}</div>}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
         <div>
           <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Nutrition · Aujourd'hui</div>
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}><HoloText>{profile&&profile.firstName?profile.firstName:'Mon plan'}</HoloText></div>
+          {plan&&plan.document&&(
+            <button onClick={()=>setShowDocViewer(true)} style={{display:'inline-flex',alignItems:'center',gap:6,marginTop:8,padding:'6px 12px',borderRadius:999,background:'rgba(90,138,224,0.12)',border:'1px solid rgba(90,138,224,0.3)',color:'#5A8AE0',fontSize:11,fontWeight:700,cursor:'pointer',maxWidth:'100%',overflow:'hidden'}}>
+              <span style={{fontSize:13,flexShrink:0}}>📎</span>
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Voir {plan.document.filename}</span>
+            </button>
+          )}
           {isCoach&&(
             <div style={{display:'flex',gap:6,marginTop:8}}>
               <button onClick={()=>fileRef.current.click()} style={{padding:'6px 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:0.3}}>↻ Réimporter</button>
@@ -6582,7 +6593,27 @@ function FoodSearch({onSelect,onClose}){
   );
 }
 
-function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,onImported}){
+// Visionneuse générique pour un document attaché (PDF/PPT/PPTX/DOC/DOCX) : rendu natif du
+// navigateur pour le PDF, visionneuse Office en ligne (Microsoft) pour les formats Office —
+// le fichier doit être accessible via une URL publique (Cloudinary) pour que ce service externe
+// puisse le charger. Utilisé côté coach (édition) et côté athlète (lecture seule).
+function DocumentViewerModal({doc,onClose}){
+  const ext=(doc.filename||'').split('.').pop().toLowerCase();
+  const isPdf=ext==='pdf'||doc.mime==='application/pdf';
+  const viewerUrl=isPdf?doc.url:`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(doc.url)}`;
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:3000,display:'flex',flexDirection:'column',background:'rgba(8,8,12,0.97)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:'1px solid rgba(255,255,255,0.1)',flexShrink:0}}>
+        <div style={{flex:1,minWidth:0,color:'#fff',fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{doc.filename}</div>
+        <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#BFA060',textDecoration:'none',padding:'7px 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.35)',whiteSpace:'nowrap'}}>⬇ Télécharger</a>
+        <button onClick={onClose} style={{width:34,height:34,borderRadius:10,border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.08)',color:'#fff',fontSize:18,cursor:'pointer',flexShrink:0}}>×</button>
+      </div>
+      <iframe src={viewerUrl} title={doc.filename} style={{flex:1,border:'none',width:'100%',background:'#fff'}}/>
+    </div>
+  );
+}
+
+function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,attachedDocument,onSaved,onImported}){
   const[data,setData]=React.useState(()=>normalizePlan(initialPlan));
   // Date affichée dans le sélecteur "début du cycle" quand le plan n'en a pas encore
   // d'explicite : la date réelle d'assignation du plan (pas "aujourd'hui", qui changerait
@@ -6616,6 +6647,35 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
   const[foodSearchMeal,setFoodSearchMeal]=React.useState(null);
   const timerRef=React.useRef(null);
   const fileRef=React.useRef(null);
+  const docFileRef=React.useRef(null);
+  const[docBusy,setDocBusy]=React.useState(false);
+  const[showDocViewer,setShowDocViewer]=React.useState(false);
+
+  const handleDocUpload=async e=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    e.target.value='';
+    setDocBusy(true);
+    try{
+      const fd=new FormData();fd.append('file',file);
+      await apiCall('/api/coach/athletes/'+athleteId+'/nutrition/document',{method:'POST',body:fd});
+      setImportMsg('✓ Document ajouté');setTimeout(()=>setImportMsg(null),3000);
+      if(onSaved)onSaved();
+    }catch(err){
+      const msgs={cloudinary_not_configured:'Stockage de documents non configuré côté serveur.'};
+      setImportMsg('✗ '+(msgs[err.message]||err.data?.detail||err.message||'Erreur'));
+      setTimeout(()=>setImportMsg(null),6000);
+    }
+    setDocBusy(false);
+  };
+  const handleDocDelete=async()=>{
+    if(!confirm('Retirer le document attaché ?'))return;
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/nutrition/document',{method:'DELETE'});
+      setImportMsg('✓ Document retiré');setTimeout(()=>setImportMsg(null),3000);
+      if(onSaved)onSaved();
+    }catch(err){setImportMsg('✗ '+(err.message||err));setTimeout(()=>setImportMsg(null),5000);}
+  };
 
   // Re-sync data quand on change d'athlète (toujours)
   React.useEffect(()=>{
@@ -6764,8 +6824,13 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
   return(
     <div>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" style={{display:'none'}} onChange={handleExcelImport}/>
+      <input ref={docFileRef} type="file" accept=".pdf,.ppt,.pptx,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" style={{display:'none'}} onChange={handleDocUpload}/>
       <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
         onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
+      {showDocViewer&&attachedDocument&&ReactDOM.createPortal(
+        <DocumentViewerModal doc={attachedDocument} onClose={()=>setShowDocViewer(false)}/>,
+        document.body
+      )}
 
       {/* Excel I/O buttons */}
       <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
@@ -6778,6 +6843,20 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
         <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(44,196,160,0.3)',background:'rgba(44,196,160,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📄</span> PDF
         </button>
+        {attachedDocument?(
+          <>
+            <button onClick={()=>setShowDocViewer(true)} title={attachedDocument.filename} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2,overflow:'hidden'}}>
+              <span style={{fontSize:13}}>📎</span> <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Voir le doc</span>
+            </button>
+            <button onClick={handleDocDelete} title="Retirer le document" style={{width:42,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="trash" size={15} stroke="#5A8AE0"/>
+            </button>
+          </>
+        ):(
+          <button onClick={()=>docFileRef.current.click()} disabled={docBusy} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:12,fontWeight:600,cursor:docBusy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2,opacity:docBusy?0.6:1}}>
+            <span style={{fontSize:13}}>{docBusy?'⏳':'📎'}</span> {docBusy?'Envoi...':'Document'}
+          </button>
+        )}
         <button onClick={async()=>{
           if(!confirm(`Supprimer le plan nutrition de ${athleteName} ?`))return;
           try{
@@ -9812,6 +9891,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   athleteName={(a.firstName||a.email.split('@')[0])+(a.lastName?' '+a.lastName:'')}
                   initialPlan={nutriDetail&&nutriDetail.plan?nutriDetail.plan.data:null}
                   assignedAt={nutriDetail&&nutriDetail.plan?nutriDetail.plan.assignedAt:null}
+                  attachedDocument={nutriDetail&&nutriDetail.plan?nutriDetail.plan.document:null}
                   onSaved={()=>reloadDetail(a.id)}
                   onImported={()=>reloadDetail(a.id)}
                 />
