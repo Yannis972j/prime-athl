@@ -436,13 +436,16 @@ const API_BASE=(()=>{
 })();
 
 function apiCall(path,opts={}){
-  const token=localStorage.getItem('pa_token');
   const isJson=opts.body&&typeof opts.body==='object'&&!(opts.body instanceof FormData);
   return fetch(API_BASE+path,{
     method:opts.method||'GET',
+    // La session vit dans le cookie httpOnly pa_token posé par le serveur au login — on ne
+    // manipule plus le JWT en JS (localStorage était lisible par un éventuel XSS et exposait
+    // un token valide 60 jours). `credentials:'include'` garantit que le cookie part même
+    // si API_BASE pointe vers une autre origine (dev cross-port).
+    credentials:'include',
     headers:{
       ...(isJson?{'Content-Type':'application/json'}:{}),
-      ...(token?{'Authorization':'Bearer '+token}:{}),
     },
     body:isJson?JSON.stringify(opts.body):opts.body,
   }).then(async r=>{
@@ -454,28 +457,20 @@ function apiCall(path,opts={}){
 }
 
 function useAuth(){
-  const[state,setState]=React.useState(()=>({
-    token:localStorage.getItem('pa_token'),
-    user:null,
-    loading:!!localStorage.getItem('pa_token'),
-    error:null,
-  }));
+  const[state,setState]=React.useState({user:null,loading:true,error:null});
 
   React.useEffect(()=>{
-    if(!state.token){setState(s=>({...s,loading:false}));return;}
+    // Le JWT ne vit plus que dans le cookie httpOnly : on ne peut pas savoir côté JS si une
+    // session existe déjà, donc on vérifie systématiquement au chargement (le navigateur
+    // renvoie le cookie automatiquement s'il est présent et valide).
     apiCall('/api/me')
-      .then(user=>setState({token:state.token,user,loading:false,error:null}))
-      .catch(()=>{
-        localStorage.removeItem('pa_token');
-        setState({token:null,user:null,loading:false,error:null});
-      });
-    // eslint-disable-next-line
+      .then(user=>setState({user,loading:false,error:null}))
+      .catch(()=>setState({user:null,loading:false,error:null}));
   },[]);
 
   const login=async(email,password)=>{
-    const{token,user}=await apiCall('/api/auth/login',{method:'POST',body:{email,password}});
-    localStorage.setItem('pa_token',token);
-    setState({token,user,loading:false,error:null});
+    const{user}=await apiCall('/api/auth/login',{method:'POST',body:{email,password}});
+    setState({user,loading:false,error:null});
   };
 
   const signup=async(email,password,role,inviteCode)=>{
@@ -489,13 +484,14 @@ function useAuth(){
       err.coachName=res.coachName;
       throw err;
     }
-    localStorage.setItem('pa_token',res.token);
-    setState({token:res.token,user:res.user,loading:false,error:null});
+    setState({user:res.user,loading:false,error:null});
   };
 
   const logout=()=>{
-    localStorage.removeItem('pa_token');
-    setState({token:null,user:null,loading:false,error:null});
+    // Révoque le token côté serveur (tokenVersion++) ET efface le cookie httpOnly — sinon la
+    // session restait valide 60 jours après un "déconnecte-toi" sur un poste partagé.
+    apiCall('/api/auth/logout',{method:'POST'}).catch(()=>{});
+    setState({user:null,loading:false,error:null});
   };
 
   const setUser=u=>setState(s=>({...s,user:typeof u==='function'?u(s.user):u}));
@@ -503,19 +499,21 @@ function useAuth(){
   return{...state,login,signup,logout,setUser};
 }
 
-function useSocket(token,handlers){
+function useSocket(authKey,handlers){
   const handlersRef=React.useRef(handlers);
   handlersRef.current=handlers;
   React.useEffect(()=>{
-    if(!token||typeof io==='undefined')return;
-    const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    // authKey n'est plus un JWT (le cookie httpOnly pa_token porte l'authentification via
+    // withCredentials) : c'est juste un identifiant pour savoir quand (re)connecter le socket.
+    if(!authKey||typeof io==='undefined')return;
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
     const wrap={};
     Object.keys(handlersRef.current||{}).forEach(ev=>{
       wrap[ev]=(...a)=>handlersRef.current[ev]&&handlersRef.current[ev](...a);
       s.on(ev,wrap[ev]);
     });
     return()=>{s.disconnect();};
-  },[token]);
+  },[authKey]);
 }
 
 function useLocalState(key,defaultValue,onSave){
@@ -2698,10 +2696,8 @@ function MessagesScreen({authUser}){
 
   // Own socket connection for real-time messages
   React.useEffect(()=>{
-    if(typeof io==='undefined')return;
-    const token=localStorage.getItem('pa_token');
-    if(!token)return;
-    const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    if(typeof io==='undefined'||!authUser)return;
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
     s.on('connect',()=>setConnected(true));
     s.on('disconnect',()=>setConnected(false));
     s.on('new-message',({from,msg})=>{
@@ -3336,8 +3332,7 @@ function BackupRestoreCard(){
   const download=async()=>{
     setBusy(true);setMsg(null);
     try{
-      const token=localStorage.getItem('pa_token');
-      const r=await fetch(API_BASE+'/api/admin/backup',{headers:{Authorization:'Bearer '+token}});
+      const r=await fetch(API_BASE+'/api/admin/backup',{credentials:'include'});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const blob=await r.blob();
       const url=URL.createObjectURL(blob);
@@ -10509,9 +10504,8 @@ function AuthScreen({onLogin,onSignup}){
     setErr(null);setLoading(true);
     try{
       if(password.length<8){setErr('Mot de passe trop court (8 minimum)');setLoading(false);return;}
-      const r=await apiCall('/api/auth/reset-password',{method:'POST',body:{token:resetTokenFromUrl,password},noAuth:true});
-      // Token valide → on est reconnecté
-      localStorage.setItem('pa_token',r.token);
+      await apiCall('/api/auth/reset-password',{method:'POST',body:{token:resetTokenFromUrl,password},noAuth:true});
+      // Token valide → le serveur a posé le cookie httpOnly de session, on est reconnecté
       window.history.replaceState({},'',window.location.pathname);
       window.location.reload();
     }catch(ex){setErr(AUTH_ERR_FR[ex.message]||ex.message||'Lien invalide ou expiré');}
@@ -10585,7 +10579,7 @@ function AuthScreen({onLogin,onSignup}){
             <button onClick={async()=>{
               try{
                 const r=await apiCall('/api/auth/login',{method:'POST',body:{email:pendingMsg.email,password}});
-                if(r.token){localStorage.setItem('pa_token',r.token);window.location.reload();}
+                if(r.user){window.location.reload();}
               }catch(e){
                 if(e.message==='pending_approval'){alert('Ton compte est toujours en attente. Patiente un peu...');}
                 else{setPendingMsg(null);setMode('login');setErr(AUTH_ERR_FR[e.message]||e.message);}
@@ -10822,7 +10816,7 @@ function App(){
   const auth=useAuth();
   if(auth.loading)return<Splash/>;
   if(!auth.user)return<AuthScreen onLogin={auth.login} onSignup={auth.signup}/>;
-  return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.token}/>;
+  return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.user.id}/>;
 }
 
 // Onboarding modal pour la 1re connexion (apparait si user n'a pas encore d'onboardedAt)
