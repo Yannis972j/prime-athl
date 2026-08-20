@@ -9198,9 +9198,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[coachView,setCoachView]=React.useState(initialCoachView||'athletes'); // 'athletes'|'calendar'|'programs'
   const isMain=authUser&&authUser.isMainCoach;
 
-  const load=React.useCallback(async()=>{
+  // silent=true : rafraîchit les données sans repasser par l'écran "Chargement..." plein écran —
+  // utilisé pour les refresh déclenchés par un événement temps réel (un athlète, pas le coach,
+  // vient d'agir) pour ne pas faire disparaître la liste déjà affichée à chaque séance loguée
+  // par n'importe quel athlète.
+  const load=React.useCallback(async(silent=false)=>{
     try{
-      setLoading(true);
+      if(!silent)setLoading(true);
       const baseReqs=[
         apiCall('/api/coach/athletes'),
         apiCall('/api/coach/invites'),
@@ -9211,7 +9215,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       setAthletes(Array.isArray(results[0])?results[0]:(results[0].athletes||[]));setInvites(results[1]);setAvailable(Array.isArray(results[2])?results[2]:(results[2].athletes||[]));
       if(isMain)setPending(results[3]);
     }catch(e){console.error(e);}
-    setLoading(false);
+    if(!silent)setLoading(false);
   },[isMain]);
   React.useEffect(()=>{load();},[load]);
 
@@ -9247,14 +9251,14 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
-    'session-added':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'session-added':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
     // Idem pour une séance déplacée/modifiée ou supprimée : sans ça, "Mes athlètes" garde un
     // sessionCount/lastSessionAt périmé après une action du coach lui-même (le serveur émet
     // désormais aussi ces events vers le coach, pas seulement vers l'athlète concerné).
-    'session-updated':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
-    'session-deleted':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
-    'athlete-profile-updated':()=>{load();},
-    'pending-request':()=>{load();},
+    'session-updated':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'session-deleted':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'athlete-profile-updated':()=>{load(true);},
+    'pending-request':()=>{load(true);},
     'nutrition-meal-validated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
     'nutrition-free-food-added':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
     'nutrition-free-food-removed':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
