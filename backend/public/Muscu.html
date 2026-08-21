@@ -9880,9 +9880,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             {/* Filigrane discret — logo en watermark très faible opacité, purement décoratif
                 (pointer-events:none pour ne jamais gêner un clic dessous, zIndex négatif +
                 contexte d'empilement posé sur le conteneur pour rester bien derrière le contenu,
-                pas juste au-dessus grâce à l'opacité). Test sur cet écran avant extension à
-                d'autres endroits clé de l'app. */}
-            <img src="/logo-mark.svg" alt="" aria-hidden="true" style={{position:'absolute',bottom:-10,right:-20,width:180,height:180,opacity:0.035,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
+                pas juste au-dessus grâce à l'opacité). Centré à l'écran plutôt que dans un coin.
+                Test sur cet écran avant extension à d'autres endroits clé de l'app. */}
+            <img src="/logo-mark.svg" alt="" aria-hidden="true" style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:280,height:280,opacity:0.045,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
               const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
