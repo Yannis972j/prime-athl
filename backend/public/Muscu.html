@@ -9876,7 +9876,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {/* ── Tab 5 : Biblio (vue consolidée de tout ce que l'athlète possède) ── */}
         {detailTab==='biblio'&&(
-          <div style={{padding:'0 18px'}}>
+          <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
+            {/* Filigrane discret — logo en watermark très faible opacité, purement décoratif
+                (pointer-events:none pour ne jamais gêner un clic dessous, zIndex négatif +
+                contexte d'empilement posé sur le conteneur pour rester bien derrière le contenu,
+                pas juste au-dessus grâce à l'opacité). Test sur cet écran avant extension à
+                d'autres endroits clé de l'app. */}
+            <img src="/logo-mark.svg" alt="" aria-hidden="true" style={{position:'absolute',bottom:-10,right:-20,width:180,height:180,opacity:0.035,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
               const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
@@ -10002,13 +10008,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                     </div>
                   )}
 
-                  {/* Bibliothèque du coach (séances à la carte) */}
+                  {/* Bibliothèque de l'athlète (séances à la carte assignées par le coach) */}
                   {coachLibSessions.length>0&&(
                     <div>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                         <div style={{width:28,height:28,borderRadius:9,background:'rgba(90,138,224,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>📚</div>
                         <div>
-                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Bibliothèque du coach</div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Bibliothèque de l'athlète</div>
                           <div style={{fontSize:10,color:T.textFaint}}>{coachLibSessions.length} séance{coachLibSessions.length>1?'s':''} à la carte{libData?.assignedAt?' · maj '+new Date(libData.assignedAt).toLocaleDateString('fr-FR'):''}</div>
                         </div>
                       </div>
