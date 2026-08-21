@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v9';
+const CACHE = 'prime-athl-v10'; // v10 : nouveau logo (icônes + manifest) — invalide l'ancien cache
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;

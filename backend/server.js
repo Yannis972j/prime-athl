@@ -9,6 +9,7 @@ import http from 'http';
 import fs from 'fs';
 import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
+import cookie from 'cookie';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
@@ -3183,10 +3184,32 @@ app.delete('/api/push/subscribe', authRequired, (req, res) => {
 
 // ── Server + Socket.IO ──────────────────────────────
 const server = http.createServer(app);
-const io = new SocketIOServer(server, { cors: { origin: '*' } });
+// Même liste blanche que le CORS REST (origin:'*' + credentials est de toute façon interdit par
+// les navigateurs) : le client passe désormais par le cookie httpOnly, donc `credentials: true`
+// est indispensable ici pour que ce cookie soit transmis lors du handshake cross-origin (dev).
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (CORS_ORIGINS.length === 0) return cb(null, true); // dev
+      if (CORS_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(new Error('CORS blocked'), false);
+    },
+    credentials: true,
+  },
+});
 
 io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
+  // Le token vit dans le cookie httpOnly pa_token (posé au login) et est transmis
+  // automatiquement au handshake via `withCredentials`. On garde `auth.token` en repli pour
+  // rétro-compatibilité (anciens clients / usage non-navigateur).
+  let token = socket.handshake.auth?.token;
+  if (!token) {
+    const rawCookie = socket.handshake.headers?.cookie;
+    if (rawCookie) {
+      try { token = cookie.parse(rawCookie).pa_token; } catch {}
+    }
+  }
   if (!token) return next(new Error('no_token'));
   try {
     socket.user = verify(token);

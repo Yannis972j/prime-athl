@@ -436,13 +436,16 @@ const API_BASE=(()=>{
 })();
 
 function apiCall(path,opts={}){
-  const token=localStorage.getItem('pa_token');
   const isJson=opts.body&&typeof opts.body==='object'&&!(opts.body instanceof FormData);
   return fetch(API_BASE+path,{
     method:opts.method||'GET',
+    // La session vit dans le cookie httpOnly pa_token posé par le serveur au login — on ne
+    // manipule plus le JWT en JS (localStorage était lisible par un éventuel XSS et exposait
+    // un token valide 60 jours). `credentials:'include'` garantit que le cookie part même
+    // si API_BASE pointe vers une autre origine (dev cross-port).
+    credentials:'include',
     headers:{
       ...(isJson?{'Content-Type':'application/json'}:{}),
-      ...(token?{'Authorization':'Bearer '+token}:{}),
     },
     body:isJson?JSON.stringify(opts.body):opts.body,
   }).then(async r=>{
@@ -454,28 +457,20 @@ function apiCall(path,opts={}){
 }
 
 function useAuth(){
-  const[state,setState]=React.useState(()=>({
-    token:localStorage.getItem('pa_token'),
-    user:null,
-    loading:!!localStorage.getItem('pa_token'),
-    error:null,
-  }));
+  const[state,setState]=React.useState({user:null,loading:true,error:null});
 
   React.useEffect(()=>{
-    if(!state.token){setState(s=>({...s,loading:false}));return;}
+    // Le JWT ne vit plus que dans le cookie httpOnly : on ne peut pas savoir côté JS si une
+    // session existe déjà, donc on vérifie systématiquement au chargement (le navigateur
+    // renvoie le cookie automatiquement s'il est présent et valide).
     apiCall('/api/me')
-      .then(user=>setState({token:state.token,user,loading:false,error:null}))
-      .catch(()=>{
-        localStorage.removeItem('pa_token');
-        setState({token:null,user:null,loading:false,error:null});
-      });
-    // eslint-disable-next-line
+      .then(user=>setState({user,loading:false,error:null}))
+      .catch(()=>setState({user:null,loading:false,error:null}));
   },[]);
 
   const login=async(email,password)=>{
-    const{token,user}=await apiCall('/api/auth/login',{method:'POST',body:{email,password}});
-    localStorage.setItem('pa_token',token);
-    setState({token,user,loading:false,error:null});
+    const{user}=await apiCall('/api/auth/login',{method:'POST',body:{email,password}});
+    setState({user,loading:false,error:null});
   };
 
   const signup=async(email,password,role,inviteCode)=>{
@@ -489,13 +484,14 @@ function useAuth(){
       err.coachName=res.coachName;
       throw err;
     }
-    localStorage.setItem('pa_token',res.token);
-    setState({token:res.token,user:res.user,loading:false,error:null});
+    setState({user:res.user,loading:false,error:null});
   };
 
   const logout=()=>{
-    localStorage.removeItem('pa_token');
-    setState({token:null,user:null,loading:false,error:null});
+    // Révoque le token côté serveur (tokenVersion++) ET efface le cookie httpOnly — sinon la
+    // session restait valide 60 jours après un "déconnecte-toi" sur un poste partagé.
+    apiCall('/api/auth/logout',{method:'POST'}).catch(()=>{});
+    setState({user:null,loading:false,error:null});
   };
 
   const setUser=u=>setState(s=>({...s,user:typeof u==='function'?u(s.user):u}));
@@ -503,19 +499,33 @@ function useAuth(){
   return{...state,login,signup,logout,setUser};
 }
 
-function useSocket(token,handlers){
+function useSocket(authKey,handlers){
   const handlersRef=React.useRef(handlers);
   handlersRef.current=handlers;
   React.useEffect(()=>{
-    if(!token||typeof io==='undefined')return;
-    const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    // authKey n'est plus un JWT (le cookie httpOnly pa_token porte l'authentification via
+    // withCredentials) : c'est juste un identifiant pour savoir quand (re)connecter le socket.
+    if(!authKey||typeof io==='undefined')return;
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
     const wrap={};
     Object.keys(handlersRef.current||{}).forEach(ev=>{
       wrap[ev]=(...a)=>handlersRef.current[ev]&&handlersRef.current[ev](...a);
       s.on(ev,wrap[ev]);
     });
     return()=>{s.disconnect();};
-  },[token]);
+  },[authKey]);
+}
+
+// Filigrane discret du logo Prime Athl — purement décoratif, centré sur l'écran qui l'utilise.
+// Le parent doit avoir position:'relative',zIndex:0 (pour que le zIndex négatif ci-dessous reste
+// bien CONTENU derrière le contenu du parent, plutôt que de risquer de passer derrière tout
+// l'arrière-plan de l'app faute de contexte d'empilement local).
+function LogoWatermark({size=320}={}){
+  const h=Math.round(size*(132/320)); // conserve le ratio du logo détouré (776×321)
+  return(
+    <img src="/logo-watermark.png" alt="" aria-hidden="true"
+      style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:size,height:h,opacity:0.06,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
+  );
 }
 
 function useLocalState(key,defaultValue,onSave){
@@ -2698,10 +2708,8 @@ function MessagesScreen({authUser}){
 
   // Own socket connection for real-time messages
   React.useEffect(()=>{
-    if(typeof io==='undefined')return;
-    const token=localStorage.getItem('pa_token');
-    if(!token)return;
-    const s=io(API_BASE||undefined,{auth:{token},transports:['websocket','polling']});
+    if(typeof io==='undefined'||!authUser)return;
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
     s.on('connect',()=>setConnected(true));
     s.on('disconnect',()=>setConnected(false));
     s.on('new-message',({from,msg})=>{
@@ -3336,8 +3344,7 @@ function BackupRestoreCard(){
   const download=async()=>{
     setBusy(true);setMsg(null);
     try{
-      const token=localStorage.getItem('pa_token');
-      const r=await fetch(API_BASE+'/api/admin/backup',{headers:{Authorization:'Bearer '+token}});
+      const r=await fetch(API_BASE+'/api/admin/backup',{credentials:'include'});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const blob=await r.blob();
       const url=URL.createObjectURL(blob);
@@ -4330,7 +4337,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   };
 
   return(
-    <div style={{padding:'18px 18px 30px',color:T.text}}>
+    <div style={{padding:'18px 18px 30px',color:T.text,position:'relative',zIndex:0}}>
+      <LogoWatermark/>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
       <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule}
         onClose={()=>setImportPreview(null)} onConfirm={activateOn=>{importPreview.onConfirm(activateOn);setImportPreview(null);}}/>
@@ -5250,7 +5258,8 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const score=Math.round((kcalRatio+pRatio+cRatio+fRatio)/4*100);
 
   return(
-    <div style={{padding:'18px 18px 100px',color:T.text}}>
+    <div style={{padding:'18px 18px 100px',color:T.text,position:'relative',zIndex:0}}>
+      <LogoWatermark/>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
       <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
         onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
@@ -6613,7 +6622,7 @@ function DocumentViewerModal({doc,onClose}){
   );
 }
 
-function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,attachedDocument,onSaved,onImported}){
+function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,onImported}){
   const[data,setData]=React.useState(()=>normalizePlan(initialPlan));
   // Date affichée dans le sélecteur "début du cycle" quand le plan n'en a pas encore
   // d'explicite : la date réelle d'assignation du plan (pas "aujourd'hui", qui changerait
@@ -6647,35 +6656,6 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,attachedD
   const[foodSearchMeal,setFoodSearchMeal]=React.useState(null);
   const timerRef=React.useRef(null);
   const fileRef=React.useRef(null);
-  const docFileRef=React.useRef(null);
-  const[docBusy,setDocBusy]=React.useState(false);
-  const[showDocViewer,setShowDocViewer]=React.useState(false);
-
-  const handleDocUpload=async e=>{
-    const file=e.target.files[0];
-    if(!file)return;
-    e.target.value='';
-    setDocBusy(true);
-    try{
-      const fd=new FormData();fd.append('file',file);
-      await apiCall('/api/coach/athletes/'+athleteId+'/nutrition/document',{method:'POST',body:fd});
-      setImportMsg('✓ Document ajouté');setTimeout(()=>setImportMsg(null),3000);
-      if(onSaved)onSaved();
-    }catch(err){
-      const msgs={cloudinary_not_configured:'Stockage de documents non configuré côté serveur.'};
-      setImportMsg('✗ '+(msgs[err.message]||err.data?.detail||err.message||'Erreur'));
-      setTimeout(()=>setImportMsg(null),6000);
-    }
-    setDocBusy(false);
-  };
-  const handleDocDelete=async()=>{
-    if(!confirm('Retirer le document attaché ?'))return;
-    try{
-      await apiCall('/api/coach/athletes/'+athleteId+'/nutrition/document',{method:'DELETE'});
-      setImportMsg('✓ Document retiré');setTimeout(()=>setImportMsg(null),3000);
-      if(onSaved)onSaved();
-    }catch(err){setImportMsg('✗ '+(err.message||err));setTimeout(()=>setImportMsg(null),5000);}
-  };
 
   // Re-sync data quand on change d'athlète (toujours)
   React.useEffect(()=>{
@@ -6824,13 +6804,8 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,attachedD
   return(
     <div>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" style={{display:'none'}} onChange={handleExcelImport}/>
-      <input ref={docFileRef} type="file" accept=".pdf,.ppt,.pptx,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" style={{display:'none'}} onChange={handleDocUpload}/>
       <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
         onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
-      {showDocViewer&&attachedDocument&&ReactDOM.createPortal(
-        <DocumentViewerModal doc={attachedDocument} onClose={()=>setShowDocViewer(false)}/>,
-        document.body
-      )}
 
       {/* Excel I/O buttons */}
       <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
@@ -6843,20 +6818,6 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,attachedD
         <button onClick={()=>exportNutritionPDF(data,athleteName)} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(44,196,160,0.3)',background:'rgba(44,196,160,0.06)',color:T.good,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2}}>
           <span style={{fontSize:13}}>📄</span> PDF
         </button>
-        {attachedDocument?(
-          <>
-            <button onClick={()=>setShowDocViewer(true)} title={attachedDocument.filename} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2,overflow:'hidden'}}>
-              <span style={{fontSize:13}}>📎</span> <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Voir le doc</span>
-            </button>
-            <button onClick={handleDocDelete} title="Retirer le document" style={{width:42,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <Icon name="trash" size={15} stroke="#5A8AE0"/>
-            </button>
-          </>
-        ):(
-          <button onClick={()=>docFileRef.current.click()} disabled={docBusy} style={{flex:'1 1 80px',height:40,borderRadius:11,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:12,fontWeight:600,cursor:docBusy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.2,opacity:docBusy?0.6:1}}>
-            <span style={{fontSize:13}}>{docBusy?'⏳':'📎'}</span> {docBusy?'Envoi...':'Document'}
-          </button>
-        )}
         <button onClick={async()=>{
           if(!confirm(`Supprimer le plan nutrition de ${athleteName} ?`))return;
           try{
@@ -9251,9 +9212,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[coachView,setCoachView]=React.useState(initialCoachView||'athletes'); // 'athletes'|'calendar'|'programs'
   const isMain=authUser&&authUser.isMainCoach;
 
-  const load=React.useCallback(async()=>{
+  // silent=true : rafraîchit les données sans repasser par l'écran "Chargement..." plein écran —
+  // utilisé pour les refresh déclenchés par un événement temps réel (un athlète, pas le coach,
+  // vient d'agir) pour ne pas faire disparaître la liste déjà affichée à chaque séance loguée
+  // par n'importe quel athlète.
+  const load=React.useCallback(async(silent=false)=>{
     try{
-      setLoading(true);
+      if(!silent)setLoading(true);
       const baseReqs=[
         apiCall('/api/coach/athletes'),
         apiCall('/api/coach/invites'),
@@ -9264,7 +9229,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       setAthletes(Array.isArray(results[0])?results[0]:(results[0].athletes||[]));setInvites(results[1]);setAvailable(Array.isArray(results[2])?results[2]:(results[2].athletes||[]));
       if(isMain)setPending(results[3]);
     }catch(e){console.error(e);}
-    setLoading(false);
+    if(!silent)setLoading(false);
   },[isMain]);
   React.useEffect(()=>{load();},[load]);
 
@@ -9300,14 +9265,14 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
   // Realtime: refresh athletes when sessions/profile/nutrition come in
   useSocket(authToken,{
-    'session-added':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'session-added':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
     // Idem pour une séance déplacée/modifiée ou supprimée : sans ça, "Mes athlètes" garde un
     // sessionCount/lastSessionAt périmé après une action du coach lui-même (le serveur émet
     // désormais aussi ces events vers le coach, pas seulement vers l'athlète concerné).
-    'session-updated':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
-    'session-deleted':()=>{load();if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
-    'athlete-profile-updated':()=>{load();},
-    'pending-request':()=>{load();},
+    'session-updated':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'session-deleted':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
+    'athlete-profile-updated':()=>{load(true);},
+    'pending-request':()=>{load(true);},
     'nutrition-meal-validated':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
     'nutrition-free-food-added':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
     'nutrition-free-food-removed':({athleteId:aid})=>{if(selected&&aid===selected.id)reloadDetail(selected.id);},
@@ -9891,7 +9856,6 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   athleteName={(a.firstName||a.email.split('@')[0])+(a.lastName?' '+a.lastName:'')}
                   initialPlan={nutriDetail&&nutriDetail.plan?nutriDetail.plan.data:null}
                   assignedAt={nutriDetail&&nutriDetail.plan?nutriDetail.plan.assignedAt:null}
-                  attachedDocument={nutriDetail&&nutriDetail.plan?nutriDetail.plan.document:null}
                   onSaved={()=>reloadDetail(a.id)}
                   onImported={()=>reloadDetail(a.id)}
                 />
@@ -9902,7 +9866,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {/* ── Tab 4 : Historique ── */}
         {detailTab==='historique'&&(
-          <div style={{padding:'0 18px'}}>
+          <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
+            <LogoWatermark/>
             <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
             {sessions.length===0?(
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
@@ -9926,7 +9891,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {/* ── Tab 5 : Biblio (vue consolidée de tout ce que l'athlète possède) ── */}
         {detailTab==='biblio'&&(
-          <div style={{padding:'0 18px'}}>
+          <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
+            <LogoWatermark/>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
               const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
@@ -10052,13 +10018,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                     </div>
                   )}
 
-                  {/* Bibliothèque du coach (séances à la carte) */}
+                  {/* Bibliothèque de l'athlète (séances à la carte assignées par le coach) */}
                   {coachLibSessions.length>0&&(
                     <div>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                         <div style={{width:28,height:28,borderRadius:9,background:'rgba(90,138,224,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>📚</div>
                         <div>
-                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Bibliothèque du coach</div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Bibliothèque de l'athlète</div>
                           <div style={{fontSize:10,color:T.textFaint}}>{coachLibSessions.length} séance{coachLibSessions.length>1?'s':''} à la carte{libData?.assignedAt?' · maj '+new Date(libData.assignedAt).toLocaleDateString('fr-FR'):''}</div>
                         </div>
                       </div>
@@ -10558,9 +10524,8 @@ function AuthScreen({onLogin,onSignup}){
     setErr(null);setLoading(true);
     try{
       if(password.length<8){setErr('Mot de passe trop court (8 minimum)');setLoading(false);return;}
-      const r=await apiCall('/api/auth/reset-password',{method:'POST',body:{token:resetTokenFromUrl,password},noAuth:true});
-      // Token valide → on est reconnecté
-      localStorage.setItem('pa_token',r.token);
+      await apiCall('/api/auth/reset-password',{method:'POST',body:{token:resetTokenFromUrl,password},noAuth:true});
+      // Token valide → le serveur a posé le cookie httpOnly de session, on est reconnecté
       window.history.replaceState({},'',window.location.pathname);
       window.location.reload();
     }catch(ex){setErr(AUTH_ERR_FR[ex.message]||ex.message||'Lien invalide ou expiré');}
@@ -10634,7 +10599,7 @@ function AuthScreen({onLogin,onSignup}){
             <button onClick={async()=>{
               try{
                 const r=await apiCall('/api/auth/login',{method:'POST',body:{email:pendingMsg.email,password}});
-                if(r.token){localStorage.setItem('pa_token',r.token);window.location.reload();}
+                if(r.user){window.location.reload();}
               }catch(e){
                 if(e.message==='pending_approval'){alert('Ton compte est toujours en attente. Patiente un peu...');}
                 else{setPendingMsg(null);setMode('login');setErr(AUTH_ERR_FR[e.message]||e.message);}
@@ -10871,7 +10836,7 @@ function App(){
   const auth=useAuth();
   if(auth.loading)return<Splash/>;
   if(!auth.user)return<AuthScreen onLogin={auth.login} onSignup={auth.signup}/>;
-  return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.token}/>;
+  return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.user.id}/>;
 }
 
 // Onboarding modal pour la 1re connexion (apparait si user n'a pas encore d'onboardedAt)
