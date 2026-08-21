@@ -9877,12 +9877,12 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         {/* ── Tab 5 : Biblio (vue consolidée de tout ce que l'athlète possède) ── */}
         {detailTab==='biblio'&&(
           <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
-            {/* Filigrane discret — logo en watermark très faible opacité, purement décoratif
-                (pointer-events:none pour ne jamais gêner un clic dessous, zIndex négatif +
-                contexte d'empilement posé sur le conteneur pour rester bien derrière le contenu,
-                pas juste au-dessus grâce à l'opacité). Centré à l'écran plutôt que dans un coin.
-                Test sur cet écran avant extension à d'autres endroits clé de l'app. */}
-            <img src="/logo-mark.svg" alt="" aria-hidden="true" style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:280,height:280,opacity:0.045,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
+            {/* Filigrane discret — vrai logo Prime Athl (PNG détouré, fond transparent) en
+                watermark très faible opacité, purement décoratif (pointer-events:none pour ne
+                jamais gêner un clic dessous, zIndex négatif + contexte d'empilement posé sur le
+                conteneur pour rester bien derrière le contenu). Centré à l'écran plutôt que dans
+                un coin. Test sur cet écran avant extension à d'autres endroits clé de l'app. */}
+            <img src="/logo-watermark.png" alt="" aria-hidden="true" style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:320,height:132,opacity:0.06,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
               const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
