@@ -516,6 +516,18 @@ function useSocket(authKey,handlers){
   },[authKey]);
 }
 
+// Filigrane discret du logo Prime Athl — purement décoratif, centré sur l'écran qui l'utilise.
+// Le parent doit avoir position:'relative',zIndex:0 (pour que le zIndex négatif ci-dessous reste
+// bien CONTENU derrière le contenu du parent, plutôt que de risquer de passer derrière tout
+// l'arrière-plan de l'app faute de contexte d'empilement local).
+function LogoWatermark({size=320}={}){
+  const h=Math.round(size*(132/320)); // conserve le ratio du logo détouré (776×321)
+  return(
+    <img src="/logo-watermark.png" alt="" aria-hidden="true"
+      style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:size,height:h,opacity:0.06,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
+  );
+}
+
 function useLocalState(key,defaultValue,onSave){
   const[state,setState]=React.useState(()=>{
     try{const s=localStorage.getItem(key);return s?JSON.parse(s):defaultValue;}
@@ -4325,7 +4337,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   };
 
   return(
-    <div style={{padding:'18px 18px 30px',color:T.text}}>
+    <div style={{padding:'18px 18px 30px',color:T.text,position:'relative',zIndex:0}}>
+      <LogoWatermark/>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleFile}/>
       <ImportPreviewModal open={!!importPreview} title="Import du programme" stats={importPreview?.stats} warnings={importPreview?.warnings} allowSchedule={importPreview?.allowSchedule}
         onClose={()=>setImportPreview(null)} onConfirm={activateOn=>{importPreview.onConfirm(activateOn);setImportPreview(null);}}/>
@@ -5245,7 +5258,8 @@ function NutritionScreen({authToken,profile,onRefresh:globalRefresh,refreshing:g
   const score=Math.round((kcalRatio+pRatio+cRatio+fRatio)/4*100);
 
   return(
-    <div style={{padding:'18px 18px 100px',color:T.text}}>
+    <div style={{padding:'18px 18px 100px',color:T.text,position:'relative',zIndex:0}}>
+      <LogoWatermark/>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/octet-stream,*/*" style={{display:'none'}} onChange={handleSelfImport}/>
       <ImportPreviewModal open={!!importPreview} title="Import du plan nutrition" stats={importPreview?.stats} warnings={importPreview?.warnings}
         onClose={()=>setImportPreview(null)} onConfirm={()=>{importPreview.onConfirm();setImportPreview(null);}}/>
@@ -9852,7 +9866,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {/* ── Tab 4 : Historique ── */}
         {detailTab==='historique'&&(
-          <div style={{padding:'0 18px'}}>
+          <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
+            <LogoWatermark/>
             <SectionHeader title="Historique" right={<span style={{fontSize:10,color:T.textFaint}}>{sessions.length} séance{sessions.length>1?'s':''} · {Math.round(totalVol).toLocaleString('fr-FR')} kg</span>}/>
             {sessions.length===0?(
               <GlassCard padding={14}><div style={{fontSize:13,color:T.textDim,textAlign:'center'}}>Pas encore de séance terminée.</div></GlassCard>
@@ -9877,12 +9892,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         {/* ── Tab 5 : Biblio (vue consolidée de tout ce que l'athlète possède) ── */}
         {detailTab==='biblio'&&(
           <div style={{padding:'0 18px',position:'relative',zIndex:0}}>
-            {/* Filigrane discret — vrai logo Prime Athl (PNG détouré, fond transparent) en
-                watermark très faible opacité, purement décoratif (pointer-events:none pour ne
-                jamais gêner un clic dessous, zIndex négatif + contexte d'empilement posé sur le
-                conteneur pour rester bien derrière le contenu). Centré à l'écran plutôt que dans
-                un coin. Test sur cet écran avant extension à d'autres endroits clé de l'app. */}
-            <img src="/logo-watermark.png" alt="" aria-hidden="true" style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:320,height:132,opacity:0.06,pointerEvents:'none',userSelect:'none',zIndex:-1}}/>
+            <LogoWatermark/>
             {coachBiblioPreview?(()=>{
               const s=coachBiblioPreview;
               const sc=s._source==='coach-lib'?'#5A8AE0':s._source==='program'?T.accent:'#9F7AEA';
