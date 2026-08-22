@@ -2944,6 +2944,34 @@ function ExerciseProgressChart({history}){
     return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
   },[history]);
 
+  // Vue d'ensemble : un résumé (dernière valeur, tendance, dernière date) pour CHAQUE exercice
+  // suivi — jusqu'ici il fallait sélectionner les exercices un par un pour voir leurs chiffres,
+  // ce qui masquait le suivi complet dès qu'un athlète en pratique beaucoup (ex: 31 exercices).
+  const allExerciseStats=React.useMemo(()=>{
+    const byName={};
+    const sorted=[...(history||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    for(const h of sorted){
+      for(const ex of(h.exercises||[])){
+        if(!ex.name)continue;
+        if(!byName[ex.name])byName[ex.name]={weightPts:[],cardioPts:[]};
+        const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
+        if(maxW>0)byName[ex.name].weightPts.push({date:new Date(h.date),value:maxW});
+        if(ex.cardio){
+          const v=+ex.cardio.vitesse||0;
+          if(v>0)byName[ex.name].cardioPts.push({date:new Date(h.date),value:v});
+        }
+      }
+    }
+    return Object.entries(byName).map(([name,d])=>{
+      const pts=d.weightPts.length>0?d.weightPts:d.cardioPts;
+      if(pts.length===0)return null;
+      const unit=d.weightPts.length>0?'kg':'km/h';
+      const last=pts[pts.length-1],first=pts[0];
+      const delta=pts.length>1?+(last.value-first.value).toFixed(1):null;
+      return{name,unit,lastValue:last.value,lastDate:last.date,sessionsCount:pts.length,delta};
+    }).filter(Boolean).sort((a,b)=>b.lastDate-a.lastDate);
+  },[history]);
+
   // Build data points: one par séance contenant l'exercice sélectionné.
   // Poids max pour un exercice classique ; vitesse (km/h) pour un exercice Tapis (aucune charge/reps à suivre).
   const dataPoints=React.useMemo(()=>{
@@ -3095,6 +3123,28 @@ function ExerciseProgressChart({history}){
         {selected&&chart}
         {selected&&points.length===0&&<div style={{marginTop:12,fontSize:12,color:T.textFaint,textAlign:'center'}}>Pas encore de données pour cet exercice</div>}
         {!selected&&<div style={{marginTop:12,fontSize:12,color:T.textFaint,textAlign:'center'}}>Sélectionne un exercice pour voir sa courbe de progression</div>}
+
+        {/* Vue d'ensemble : tous les exercices suivis d'un coup d'œil (dernière valeur + tendance),
+            au lieu de devoir les sélectionner un par un pour voir leurs chiffres. */}
+        {allExerciseStats.length>0&&(
+          <div style={{marginTop:18,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>Vue d'ensemble · {allExerciseStats.length} exercice{allExerciseStats.length>1?'s':''} suivi{allExerciseStats.length>1?'s':''}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:2,maxHeight:340,overflowY:'auto'}}>
+              {allExerciseStats.map(s=>(
+                <div key={s.name} onClick={()=>setSelected(s.name)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'9px 10px',borderRadius:10,cursor:'pointer',background:s.name===selected?'rgba(44,196,160,0.1)':'transparent'}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:13,fontWeight:s.name===selected?600:500,color:s.name===selected?T.good:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                    <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{s.sessionsCount} séance{s.sessionsCount>1?'s':''} · {s.lastDate.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>{s.lastValue} <span style={{fontSize:10,color:T.textFaint,fontWeight:600}}>{s.unit}</span></div>
+                    {s.delta!==null&&s.delta!==0&&<div style={{fontSize:10,fontWeight:700,color:s.delta>0?T.good:T.danger,marginTop:1}}>{s.delta>0?'↑':'↓'} {Math.abs(s.delta)}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </HoloCard>
   );
