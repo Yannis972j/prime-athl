@@ -1861,7 +1861,11 @@ function sanitizeCoachExercise(e) {
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
   const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
-  if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name_required' });
+  // Un nom par défaut plutôt qu'un rejet pur : une séance sans nom (programme généré par l'IA
+  // sans champ "name", etc.) n'a aucune raison de se perdre silencieusement. Avant ce correctif,
+  // le 400 ici faisait échouer la sauvegarde à chaque tentative (retries + resync inclus) sans
+  // jamais atteindre le coach, tant que le client renvoyait le même nom vide.
+  const safeName = typeof name === 'string' && name.trim() ? name : 'Séance';
   const safeVolume = Math.max(0, Math.min(1e7, parseFloat(totalVolume) || 0));
   const safeExercises = (Array.isArray(exercises) ? exercises : []).slice(0, 50).map(ex => {
     const style = VALID_EX_STYLES.includes(ex.style) ? ex.style : undefined;
@@ -1897,7 +1901,7 @@ app.post('/api/sessions', authRequired, (req, res) => {
   const session = {
     id, userId: req.user.id,
     date: date || new Date().toISOString(),
-    name: String(name).slice(0, 100),
+    name: safeName.slice(0, 100),
     totalVolume: safeVolume,
     exercises: safeExercises,
   };
@@ -2056,12 +2060,16 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   if (!athlete) return res.status(404).json({ error: 'not_found' });
   if (athlete.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   const { name, date, exercises, totalVolume, duration, notes } = req.body || {};
-  if (!name || !Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
+  if (!Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
+  // Même filet que POST /api/sessions : un nom par défaut plutôt qu'un rejet silencieux (cf.
+  // commentaire là-bas — le client le garde déjà côté CoachLiveSessionScreen, mais mieux vaut
+  // ne pas dépendre uniquement du client pour ça).
+  const safeName = typeof name === 'string' && name.trim() ? name : 'Séance';
   const id = 'cs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
   const safeDate = date && !isNaN(new Date(date)) ? date : new Date().toISOString();
   const session = {
     id, userId: athlete.id,
-    name: name.slice(0, 120),
+    name: safeName.slice(0, 120),
     date: safeDate,
     exercises: exercises.map(sanitizeCoachExercise),
     totalVolume: +totalVolume || 0,

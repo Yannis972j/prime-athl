@@ -1197,7 +1197,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       const snap={
         date:new Date().toISOString(),
-        name:workout.name,
+        // Le serveur rejette une séance sans nom (400 name_required) — sans ce repli, un
+        // programme dont le nom est vide ou manquant (ex: programme généré par l'IA sans champ
+        // "name") faisait échouer la sauvegarde à CHAQUE tentative, y compris les 3 retries et
+        // la resynchronisation automatique : la séance restait indéfiniment coincée dans la file
+        // locale ("⚠ séance non synchronisée") sans jamais atteindre le coach, silencieusement.
+        name:workout.name||'Séance',
         totalVolume,
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
