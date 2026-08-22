@@ -1101,6 +1101,15 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
                 </button>
               </div>
 
+              {/* Unilatéral : un bras/une jambe à la fois — chaque série loguée pendant la séance
+                  sera alors étiquetée G (gauche) ou D (droite) au lieu d'un total agrégé. */}
+              <button onClick={()=>updEx(ei,{unilateral:!ex.unilateral})} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',borderRadius:9,border:`1px solid ${ex.unilateral?'rgba(90,138,224,0.4)':'rgba(255,255,255,0.1)'}`,background:ex.unilateral?'rgba(90,138,224,0.1)':'rgba(255,255,255,0.03)',color:ex.unilateral?'#5A8AE0':T.textFaint,fontSize:11,fontWeight:700,cursor:'pointer',marginBottom:10}}>
+                <span style={{width:14,height:14,borderRadius:4,border:`1px solid ${ex.unilateral?'#5A8AE0':'rgba(255,255,255,0.25)'}`,background:ex.unilateral?'#5A8AE0':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {ex.unilateral&&<Icon name="check" size={10} stroke="#fff" strokeWidth={3}/>}
+                </span>
+                Unilatéral (G/D)
+              </button>
+
               {/* sets header */}
               <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr 32px',gap:6,marginBottom:6,paddingLeft:2}}>
                 {['#','Poids (kg)','Reps cible','Reps réelles',''].map((h,i)=>(
@@ -1194,10 +1203,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         exercises:exercises.map(e=>({
           name:e.name,muscle:e.muscle,
           ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
+          ...(e.unilateral?{unilateral:true}:{}),
           ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
           ...(e.style!=='CARDIO'?{restSeconds:e.restSeconds||90}:{}),
           ...(e.style!=='CARDIO'&&e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),
-          sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.note?{note:s.note}:{})})),
+          sets:e.style==='CARDIO'?e.sets.map(s=>({weight:s.weight||0,reps:s.reps||0,done:true})):e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,...(s.side==='G'||s.side==='D'?{side:s.side}:{}),...(s.note?{note:s.note}:{})})),
         })).filter(e=>e.style==='CARDIO'||e.sets.length>0),
       };
       if(rpe!=null)snap.rpe=rpe;
@@ -1998,6 +2008,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           <Icon name="check" size={12} stroke="#fff" strokeWidth={3}/>
                         </div>
                         <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.3,flexShrink:0}}>S{i+1}</span>
+                        {ex.unilateral&&s.side&&<span style={{fontSize:9,fontWeight:800,color:'#5A8AE0',background:'rgba(90,138,224,0.14)',border:'1px solid rgba(90,138,224,0.35)',borderRadius:6,padding:'2px 6px',flexShrink:0}}>{s.side==='G'?'GAUCHE':'DROITE'}</span>}
                         <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                           {ex.holdSeconds>0?(
                             <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} tenues</span>
@@ -2037,11 +2048,24 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           </div>
                         )}
                         <div style={{background:'rgba(255,255,255,0.05)',padding:'6px 8px',display:'flex',alignItems:'center',gap:3}}>
-                        {/* Badge */}
-                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0,width:20}}>
-                          <div style={{width:20,height:20,borderRadius:6,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff'}}>{i+1}</div>
-                          {targetLabel&&<span style={{fontSize:7,color:T.textFaint,fontWeight:600,marginTop:1}}>{targetLabel}r</span>}
-                        </div>
+                        {/* Badge — en unilatéral, tap pour changer de côté (G/D déduit par défaut
+                            en alternant selon la position : paire=G, impaire=D). Affiché SOUS le
+                            numéro plutôt qu'à côté pour ne rien ajouter à la largeur de cette
+                            rangée déjà pleine (poids/reps/valider) sur petit écran. */}
+                        {ex.unilateral?(()=>{
+                          const side=s.side||(i%2===0?'G':'D');
+                          return(
+                            <button onClick={()=>updSet(currentEx,i,{side:side==='G'?'D':'G'})} title="Changer de côté" style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0,width:20,border:'none',background:'transparent',cursor:'pointer',padding:0}}>
+                              <div style={{width:20,height:20,borderRadius:6,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff'}}>{i+1}</div>
+                              <span style={{fontSize:8,color:'#5A8AE0',fontWeight:800,marginTop:1}}>{side}</span>
+                            </button>
+                          );
+                        })():(
+                          <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0,width:20}}>
+                            <div style={{width:20,height:20,borderRadius:6,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff'}}>{i+1}</div>
+                            {targetLabel&&<span style={{fontSize:7,color:T.textFaint,fontWeight:600,marginTop:1}}>{targetLabel}r</span>}
+                          </div>
+                        )}
                         {/* − KG + */}
                         <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                         <div style={{textAlign:'center',width:54,flexShrink:0}}>
@@ -2086,6 +2110,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   return(
                     <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(255,255,255,0.018)',border:'1px solid rgba(255,255,255,0.04)',opacity:0.6}}>
                       <div style={{width:22,height:22,borderRadius:8,background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.textFaint,flexShrink:0}}>{i+1}</div>
+                      {ex.unilateral&&<span style={{fontSize:9,fontWeight:800,color:T.textFaint,flexShrink:0}}>{s.side||(i%2===0?'G':'D')}</span>}
                       <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                         {ex.holdSeconds>0?(
                           <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} à tenir</span>
@@ -4596,7 +4621,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                               return(
                                 <React.Fragment key={si}>
                                 <div style={{display:'grid',gridTemplateColumns:'28px 1fr 1fr 1fr',gap:4,padding:'6px 0',borderTop:'1px solid rgba(255,255,255,0.04)',alignItems:'center'}}>
-                                  <div style={{width:22,height:22,borderRadius:7,background:'rgba(191,160,96,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.accent}}>{si+1}</div>
+                                  <div style={{width:22,height:22,borderRadius:7,background:ex.unilateral?'rgba(90,138,224,0.14)':'rgba(191,160,96,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:ex.unilateral?9:10,fontWeight:700,color:ex.unilateral?'#5A8AE0':T.accent}}>{ex.unilateral?`${si+1}${s.side||(si%2===0?'G':'D')}`:si+1}</div>
                                   <div style={{textAlign:'center',fontSize:14,fontWeight:700,color:T.text,fontVariantNumeric:'tabular-nums'}}>
                                     {s.weight>0?<>{s.weight}<span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint}}>—</span>}
                                   </div>
@@ -8438,7 +8463,10 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
                                 </div>
                                 {(e.sets||[]).map((st,si)=>(
                                   <div key={si} style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
-                                    <div style={{fontSize:12,color:T.textFaint}}>#{si+1}</div>
+                                    <div style={{fontSize:12,color:T.textFaint,display:'flex',alignItems:'center',gap:3}}>
+                                      #{si+1}
+                                      {e.unilateral&&<span style={{fontSize:9,fontWeight:800,color:'#5A8AE0',background:'rgba(90,138,224,0.14)',border:'1px solid rgba(90,138,224,0.3)',borderRadius:4,padding:'1px 4px'}}>{st.side||(si%2===0?'G':'D')}</span>}
+                                    </div>
                                     <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.weight}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> kg</span></div>
                                     <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></div>
                                     <div style={{fontSize:12,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{Math.round((st.weight||0)*(st.reps||0))}</div>
@@ -8766,6 +8794,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[pendingEx,setPendingEx]=React.useState({name:'',muscle:'',brand:''});
   const[addingTo,setAddingTo]=React.useState(null);
   const[pendingGroupType,setPendingGroupType]=React.useState('classic');
+  const[pendingUnilateral,setPendingUnilateral]=React.useState(false);
   const[pendingGroupId,setPendingGroupId]=React.useState(null);
   const[setW,setSetW]=React.useState(0);
   const[setR,setSetR]=React.useState(10);
@@ -8823,7 +8852,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     }
     setPendingEx({name,muscle:muscle||'',brand:brand||''});
     setAddingTo(null);setSetW(lastW);setSetR(10);setSetRest(lastRest);
-    setCardVitesse(0);setCardIncl(0);setCardDuree(0);
+    setCardVitesse(0);setCardIncl(0);setCardDuree(0);setPendingUnilateral(false);
     setMode('add-set');
   };
 
@@ -8871,10 +8900,11 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
       setEditingSet(null);
     }else if(addingTo===null){
       const gid=pendingGroupId||uid();
-      setExercises(prev=>[...prev,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,brand:pendingEx.brand,sets:[{weight:setW,reps:setR,rest:setRest,done:true}],groupId:gid,groupType:pendingGroupType}]);
+      setExercises(prev=>[...prev,{id:uid(),name:pendingEx.name,muscle:pendingEx.muscle,brand:pendingEx.brand,...(pendingUnilateral?{unilateral:true}:{}),sets:[{weight:setW,reps:setR,rest:setRest,done:true,...(pendingUnilateral?{side:'G'}:{})}],groupId:gid,groupType:pendingGroupType}]);
       setPendingGroupId(null);
     }else{
-      setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,rest:setRest,done:true}]}));
+      // Côté alterné automatiquement (G puis D) pour chaque nouvelle série d'un exercice unilatéral.
+      setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,reps:setR,rest:setRest,done:true,...(e.unilateral?{side:e.sets.length%2===0?'G':'D'}:{})}]}));
     }
     setMode('session');
   };
@@ -8893,7 +8923,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
+      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(e.unilateral?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
       }else{
@@ -8982,6 +9012,14 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
                   </button>
                 ))}
               </div>
+              {pendingGroupType!=='cardio'&&(
+                <button onClick={()=>setPendingUnilateral(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,marginTop:8,padding:'8px 10px',borderRadius:10,border:`1px solid ${pendingUnilateral?'rgba(90,138,224,0.4)':'rgba(255,255,255,0.08)'}`,background:pendingUnilateral?'rgba(90,138,224,0.1)':'rgba(255,255,255,0.03)',color:pendingUnilateral?'#5A8AE0':T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',width:'100%'}}>
+                  <span style={{width:14,height:14,borderRadius:4,border:`1px solid ${pendingUnilateral?'#5A8AE0':'rgba(255,255,255,0.25)'}`,background:pendingUnilateral?'#5A8AE0':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    {pendingUnilateral&&<Icon name="check" size={9} stroke="#fff" strokeWidth={3}/>}
+                  </span>
+                  Unilatéral — répétitions par bras/jambe (G/D)
+                </button>
+              )}
             </div>
           )}
 
@@ -9176,6 +9214,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
                           {ex.sets.map((s,si)=>(
                             <div key={si} onClick={()=>openEditSet(ex.idx,si)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:'rgba(255,255,255,0.04)',cursor:'pointer'}}>
                               <div style={{width:20,height:20,borderRadius:5,background:'rgba(44,196,160,0.15)',border:'1px solid rgba(44,196,160,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:T.good,flexShrink:0}}>S{si+1}</div>
+                              {ex.unilateral&&<span style={{fontSize:8,fontWeight:800,color:'#5A8AE0',background:'rgba(90,138,224,0.14)',border:'1px solid rgba(90,138,224,0.3)',borderRadius:5,padding:'2px 5px',flexShrink:0}}>{s.side||(si%2===0?'G':'D')}</span>}
                               <div style={{flex:1,fontSize:12,fontWeight:600}}>
                                 {s.weight>0?<><span>{s.weight}</span><span style={{fontSize:9,color:T.textFaint,marginLeft:2}}>kg</span></>:<span style={{color:T.textFaint,fontSize:10}}>PDC</span>}
                                 <span style={{color:T.textFaint,margin:'0 5px'}}>×</span>

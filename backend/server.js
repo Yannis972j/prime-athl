@@ -1839,10 +1839,14 @@ function sanitizeCoachExercise(e) {
     groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
     groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',
     ...(style ? { style } : {}),
+    // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
+    // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
+    ...(e.unilateral ? { unilateral: true } : {}),
     ...(!isCardio && e.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(e.restSeconds) || 0)) } : {}),
     ...(!isCardio && e.holdSeconds ? { holdSeconds: Math.max(0, Math.min(600, parseInt(e.holdSeconds) || 0)) } : {}),
     sets: (e.sets || []).map(s => ({
       weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
+      ...(s.side === 'G' || s.side === 'D' ? { side: s.side } : {}),
       ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
     })),
     cardio: isCardio && e.cardio ? {
@@ -1865,6 +1869,9 @@ app.post('/api/sessions', authRequired, (req, res) => {
       name: String(ex.name || '').slice(0, 100),
       muscle: String(ex.muscle || '').slice(0, 50),
       ...(style ? { style } : {}),
+      // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
+      // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
+      ...(ex.unilateral ? { unilateral: true } : {}),
       // Champs cardio conservés en texte libre (pas coercés en nombre) : une plage Excel type
       // "4-5" ou "1h15" serait sinon tronquée en un simple nombre (voire réduite à 0 et donc
       // masquée par cardioHasVal). fixCardioVal/cardioHasVal les traitent déjà comme du texte.
@@ -1882,6 +1889,7 @@ app.post('/api/sessions', authRequired, (req, res) => {
         weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
         reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
         done: !!s.done,
+        ...(s.side === 'G' || s.side === 'D' ? { side: s.side } : {}),
         note: s.note ? String(s.note).slice(0, 200) : undefined,
       })),
     };
