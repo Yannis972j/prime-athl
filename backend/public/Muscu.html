@@ -9626,8 +9626,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {msg&&<div style={{margin:'0 18px 12px',padding:'10px 14px',borderRadius:11,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
-        {/* Tab bar */}
-        <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none'}}>
+        {/* Tab bar — 7 onglets ne tiennent pas sur un écran mobile : scroll horizontal avec un
+            fondu aux bords (masque CSS, pas de JS de scroll à suivre) pour que ça se voie qu'il
+            y a d'autres onglets au lieu d'une coupure nette qui donne l'impression que la barre
+            s'arrête là. */}
+        <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none',WebkitOverflowScrolling:'touch',
+          WebkitMaskImage:'linear-gradient(to right,transparent 0,black 18px,black calc(100% - 18px),transparent 100%)',
+          maskImage:'linear-gradient(to right,transparent 0,black 18px,black calc(100% - 18px),transparent 100%)'}}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
               {t.label}
