@@ -2388,24 +2388,35 @@ function MiniBarChart({data,todayIdx}){
 
 
 // ── Weight Chart ──────────────────────────────────────────
-function WeightChartSection({userId}){
+// athleteId : quand fourni (coach consultant la fiche d'un athlète), lit le poids via l'endpoint
+// coach dédié et repasse en lecture seule — sinon les appels /api/weight sans ce prop opèrent
+// TOUJOURS sur l'utilisateur connecté (le coach), pas sur l'athlète affiché : sans ce garde-fou,
+// un coach qui clique "Ajouter" depuis la fiche d'un athlète polluerait silencieusement SON
+// PROPRE historique de poids en croyant modifier celui de l'athlète.
+function WeightChartSection({userId,athleteId}){
+  const readOnly=!!athleteId;
   const[logs,setLogs]=React.useState([]);
   const[newW,setNewW]=React.useState('');
   const[loading,setLoading]=React.useState(true);
 
   const load=React.useCallback(async()=>{
-    try{const r=await apiCall('/api/weight');setLogs(r.logs||[]);}catch{}finally{setLoading(false);}
-  },[]);
+    try{
+      const r=await apiCall(readOnly?`/api/coach/athletes/${athleteId}/weight`:'/api/weight');
+      setLogs(r.logs||[]);
+    }catch{}finally{setLoading(false);}
+  },[readOnly,athleteId]);
 
   React.useEffect(()=>{load();},[load]);
 
   const add=async()=>{
+    if(readOnly)return;
     const w=parseFloat(newW);
     if(!w||w<20||w>300)return;
     try{await apiCall('/api/weight',{method:'POST',body:{weight:w,date:Date.now()}});setNewW('');load();}catch{}
   };
 
   const del=async(id)=>{
+    if(readOnly)return;
     try{await apiCall('/api/weight/'+id,{method:'DELETE'});load();}catch{}
   };
 
@@ -2460,15 +2471,17 @@ function WeightChartSection({userId}){
         </div>
         {/* Chart */}
         {chart}
-        {sorted.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'12px 0',fontStyle:'italic'}}>Aucune donnée — ajoute ton poids ci-dessous</div>}
-        {/* Add entry */}
-        <div style={{display:'flex',gap:8,marginTop:8}}>
-          <div style={{position:'relative',flex:1}}>
-            <input type="number" inputMode="decimal" value={newW} onChange={e=>setNewW(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="Ex : 84.5" style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:9,color:T.text,fontSize:14,fontWeight:600,padding:'7px 30px 7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
-            <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint}}>kg</span>
+        {sorted.length===0&&<div style={{fontSize:12,color:T.textFaint,textAlign:'center',padding:'12px 0',fontStyle:'italic'}}>{readOnly?"Aucune donnée — l'athlète n'a pas encore renseigné son poids":'Aucune donnée — ajoute ton poids ci-dessous'}</div>}
+        {/* Add entry — l'athlète renseigne lui-même son poids ; le coach consulte en lecture seule */}
+        {!readOnly&&(
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <div style={{position:'relative',flex:1}}>
+              <input type="number" inputMode="decimal" value={newW} onChange={e=>setNewW(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="Ex : 84.5" style={{width:'100%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:9,color:T.text,fontSize:14,fontWeight:600,padding:'7px 30px 7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+              <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint}}>kg</span>
+            </div>
+            <button onClick={add} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:T.accentSoft,color:T.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>Ajouter</button>
           </div>
-          <button onClick={add} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:T.accentSoft,color:T.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>Ajouter</button>
-        </div>
+        )}
         {/* History list (last 5) */}
         {sorted.length>0&&(
           <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:4}}>
@@ -2476,7 +2489,7 @@ function WeightChartSection({userId}){
               <div key={l.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 6px',borderRadius:7,background:'rgba(255,255,255,0.025)'}}>
                 <span style={{fontSize:11,color:T.textDim}}>{new Date(l.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
                 <span style={{fontSize:13,fontWeight:600}}>{l.weight} kg</span>
-                <button onClick={()=>del(l.id)} style={{border:'none',background:'transparent',color:T.textFaint,cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}>×</button>
+                {!readOnly&&<button onClick={()=>del(l.id)} style={{border:'none',background:'transparent',color:T.textFaint,cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}>×</button>}
               </div>
             ))}
           </div>
@@ -3104,7 +3117,7 @@ function StatTile({icon,iconColor,value,unit,label,sub}){
 }
 
 // ── Stats ─────────────────────────────────────────────────
-function StatsScreen({history,profile}){
+function StatsScreen({history,profile,athleteId}){
   const now=Date.now();
   const dayMs=24*60*60*1000;
   // Différence en JOURS CALENDAIRES (minuit à minuit), pas en heures écoulées ÷ 24 —
@@ -3186,7 +3199,7 @@ function StatsScreen({history,profile}){
             <Icon name="chart" size={26} stroke="#fff" strokeWidth={1.8}/>
           </div>
           <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Pas encore de données</div>
-          <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,maxWidth:280,margin:'0 auto'}}>Termine ta 1re séance ou renseigne tes PR dans <b>Profil</b> pour voir tes courbes.</div>
+          <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,maxWidth:280,margin:'0 auto'}}>{athleteId?"Cet athlète n'a pas encore de séance terminée ni de PR renseigné.":<>Termine ta 1re séance ou renseigne tes PR dans <b>Profil</b> pour voir tes courbes.</>}</div>
         </div>
       </div>
     );
@@ -3265,7 +3278,7 @@ function StatsScreen({history,profile}){
       )}
 
       <ExerciseProgressChart history={history}/>
-      <WeightChartSection/>
+      <WeightChartSection athleteId={athleteId}/>
       <CalendarView history={history}/>
     </div>
   );
@@ -9565,6 +9578,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       {id:'sport',label:'Séances',icon:'dumbbell'},
       {id:'nutrition',label:'Nutrition',icon:'apple'},
       {id:'historique',label:'Historique',icon:'clock'},
+      {id:'stats',label:'Stats',icon:'chart'},
       {id:'biblio',label:'Biblio',icon:'book'},
       {id:'album',label:'Album',icon:'image'},
     ];
@@ -9886,6 +9900,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Tab : Stats (progression de l'athlète — même écran que côté athlète, pour un
+             meilleur suivi par le coach : volume, série en cours, record, répartition muscles) ── */}
+        {detailTab==='stats'&&(
+          <div style={{position:'relative',zIndex:0}}>
+            <LogoWatermark/>
+            <StatsScreen history={sessions} profile={detail} athleteId={a.id}/>
           </div>
         )}
 
