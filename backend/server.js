@@ -1846,7 +1846,10 @@ function sanitizeCoachExercise(e) {
     ...(!isCardio && e.holdSeconds ? { holdSeconds: Math.max(0, Math.min(600, parseInt(e.holdSeconds) || 0)) } : {}),
     sets: (e.sets || []).map(s => ({
       weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
-      ...(s.side === 'G' || s.side === 'D' ? { side: s.side } : {}),
+      // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
+      // reps ci-dessus reste la somme des deux, pour que le volume/les stats existants
+      // continuent de fonctionner sans rien changer ailleurs.
+      ...(e.unilateral ? { repsL: Math.max(0, Math.min(200, parseInt(s.repsL) || 0)), repsR: Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) } : {}),
       ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
     })),
     cardio: isCardio && e.cardio ? {
@@ -1893,7 +1896,9 @@ app.post('/api/sessions', authRequired, (req, res) => {
         weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
         reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
         done: !!s.done,
-        ...(s.side === 'G' || s.side === 'D' ? { side: s.side } : {}),
+        // Unilatéral : G et D se renseignent sur la MÊME série — reps ci-dessus reste la somme
+        // des deux, pour que le volume/les stats existants continuent de fonctionner tels quels.
+        ...(ex.unilateral ? { repsL: Math.max(0, Math.min(200, parseInt(s.repsL) || 0)), repsR: Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) } : {}),
         note: s.note ? String(s.note).slice(0, 200) : undefined,
       })),
     };
