@@ -639,6 +639,17 @@ function fmtHoldDuration(secs) {
   if (secs < 60) return `${secs}s`;
   return `${Math.floor(secs / 60)}min${String(secs % 60).padStart(2, '0')}`;
 }
+// Colonne "Durée" d'un programme importé : convention en SECONDES (ex: "30'", "20-30''"),
+// contrairement à la colonne "Temps de repos" qui suit la notation minute'seconde — d'où un
+// parseur dédié plutôt que parseRestDuration. Une plage "20-30'" est moyennée (25s).
+function parseDureeSeconds(str) {
+  const s = String(str || '').trim().replace(/'+$/, '').trim();
+  if (!s) return 0;
+  const range = s.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (range) return Math.round((parseInt(range[1]) + parseInt(range[2])) / 2);
+  const m = s.match(/(\d+)/);
+  return m ? parseInt(m[1]) : 0;
+}
 
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
@@ -767,16 +778,35 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // Si la cellule muscle contient un nombre (ex: charge mise par erreur), utiliser currentCategory
           const muscleName = (muscleRaw && isNaN(parseFloat(muscleRaw))) ? muscleRaw : currentCategory;
           const seriesNum = parseFloat(String(row[colSeries]||'').replace(',','.'));
-          // CARDIO = toujours 1 série (bouton "terminé" unique)
-          const numSets = styleVal==='CARDIO' ? 1 : (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
-          if (!isNaN(seriesNum) && seriesNum > 0 && styleVal!=='CARDIO') lastSeriesCount = numSets;
+
+          // Dès que la colonne Durée est renseignée, l'exercice devient un compte à rebours à
+          // tenir (comme Gainage) plutôt qu'un exercice en répétitions — sauf le tapis de course
+          // (et assimilés), qui reste suivi en distance/vitesse via l'objet cardio ci-dessous.
+          const dureeTxt = cellText(colDuree);
+          const isTapis = /tapis/.test(norm(exName));
+          const isHold = !isTapis && (!!dureeTxt || isHoldExercise(exName));
+
+          // Cardio "vrai" (tapis, vélo...) : suivi en distance/vitesse, jamais en compte à
+          // rebours. On utilise .w (texte formaté) pour préserver les plages comme "4-5" qu'Excel
+          // converti sinon en numéro de série de date.
+          const cardio = (styleVal === 'CARDIO' && !isHold) ? {
+            distance:    cellText(colDist),
+            vitesse:     cellText(colVitesse),
+            inclinaison: cellText(colIncli),
+            duree:       dureeTxt,
+          } : null;
+
+          // 1 série uniquement pour le cardio "vrai" (bouton "terminé" unique) ; un compte à
+          // rebours (gainage, chaise, jumping jacks minutés...) suit le nombre de séries du tableau.
+          const numSets = cardio ? 1 : (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
+          if (!isNaN(seriesNum) && seriesNum > 0 && !cardio) lastSeriesCount = numSets;
 
           const weight = parseWeight(row[colCharge]);
           const weightStr = String(row[colCharge]||'').trim();
-          // Gainage/planche : pas de reps mais une durée à tenir — la cellule Répétitions
-          // contient alors du texte libre ("1min", "45s"...), même notation que le repos.
-          const isHold = isHoldExercise(exName);
-          const holdSeconds = isHold ? parseRestDuration(row[colReps]) : 0;
+          // Durée renseignée → durée du compte à rebours prise dessus (convention secondes).
+          // Sinon (ancien format sans colonne Durée, ex: "Gainage" détecté par le nom seul) on
+          // retombe sur la cellule Répétitions, qui contenait alors du texte libre ("1min", "45s").
+          const holdSeconds = isHold ? (dureeTxt ? parseDureeSeconds(dureeTxt) : parseRestDuration(row[colReps])) : 0;
           const repsVal = isHold ? null : parseReps(row[colReps]);
           const repsStr = isHold ? fmtHoldDuration(holdSeconds) : (repsVal === null ? '' : String(repsVal));
           // Pour les fourchettes "10-12", target numérique = borne basse, targetStr = "10-12"
@@ -789,15 +819,6 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           const restStr = restCell || lastRestStr;
           if (restCell) lastRestStr = restCell;
           const restSecs = parseRest(restStr);
-
-          // Cardio : champs spécifiques — on utilise .w (texte formaté) pour préserver
-          // les plages comme "4-5" qu'Excel converti sinon en numéro de série de date.
-          const cardio = styleVal === 'CARDIO' ? {
-            distance:    cellText(colDist),
-            vitesse:     cellText(colVitesse),
-            inclinaison: cellText(colIncli),
-            duree:       cellText(colDuree),
-          } : null;
 
           const exercise = {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
