@@ -2118,7 +2118,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           </div>
                           <div style={{padding:'0 8px 8px',display:'flex',gap:6}}>
                             {[{key:'repsL',label:'G'},{key:'repsR',label:'D'}].map(({key,label})=>(
-                              <div key={key} style={{flex:1,display:'flex',alignItems:'center',gap:3,borderRadius:10,background:'rgba(90,138,224,0.08)',border:'1px solid rgba(90,138,224,0.25)',padding:'4px 6px'}}>
+                              // minWidth:0 est indispensable ici : sans lui, un flex item qui est
+                              // lui-même un conteneur flex (donc la box G/D) refuse de rétrécir en
+                              // dessous de la taille naturelle de son contenu (le NumField), même
+                              // si CE DERNIER a minWidth:0 — du coup la box D était repoussée hors
+                              // écran au lieu d'être partagée 50/50 avec G sur mobile.
+                              <div key={key} style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:3,borderRadius:10,background:'rgba(90,138,224,0.08)',border:'1px solid rgba(90,138,224,0.25)',padding:'4px 6px'}}>
                                 <span style={{fontSize:12,fontWeight:800,color:'#5A8AE0',flexShrink:0,width:14,textAlign:'center'}}>{label}</span>
                                 <button onClick={()=>updSet(currentEx,i,{[key]:Math.max(0,(parseFloat(s[key])||0)-1)})} style={{width:24,height:24,borderRadius:6,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                                 <NumField value={s[key]||0} placeholder="0" onCommit={v=>updSet(currentEx,i,{[key]:v})} style={{flex:1,minWidth:0,height:24,background:'transparent',border:'none',color:'#fff',fontSize:15,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
@@ -9126,12 +9131,15 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
                 {(isUnilateral?[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Reps G',unit:'reps',val:setRL,set:setSetRL,step:1,min:0},{label:'Reps D',unit:'reps',val:setRR,set:setSetRR,step:1,min:0}]:[{label:'Charge',unit:'kg',val:setW,set:setSetW,step:2.5,min:0},{label:'Reps',unit:'reps',val:setR,set:setSetR,step:1,min:1}]).map(({label,unit,val,set,step,min},idx)=>(
                   <React.Fragment key={label}>
                     {idx>0&&<div style={{width:1,background:T.border,flexShrink:0}}/>}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                    {/* minWidth:0 sur les deux niveaux flex:1 imbriqués : sans ça, sur 3 colonnes
+                        (Charge/Reps G/Reps D) une colonne refuse de rétrécir sous la taille
+                        naturelle de son input et se fait repousser hors écran sur mobile. */}
+                    <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',alignItems:'center'}}>
                       <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',paddingTop:10,marginBottom:4}}>{label}</div>
-                      <div style={{display:'flex',alignItems:'center',width:'100%',flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',width:'100%',flex:1,minWidth:0}}>
                         <button onClick={()=>adj(set,-step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                          <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',border:'none',background:'transparent',color:T.text,fontSize:24,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
+                        <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                          <input type="number" value={val} onChange={e=>set(parseFloat(e.target.value)||0)} style={{width:'100%',minWidth:0,border:'none',background:'transparent',color:T.text,fontSize:24,fontWeight:800,textAlign:'center',outline:'none',fontFamily:'inherit',padding:0,lineHeight:1}}/>
                         </div>
                         <button onClick={()=>adj(set,step,min)} style={{width:40,height:'100%',minHeight:48,border:'none',background:'transparent',color:T.textDim,fontSize:24,fontWeight:300,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                       </div>
@@ -9790,15 +9798,13 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {msg&&<div style={{margin:'0 18px 12px',padding:'10px 14px',borderRadius:11,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
-        {/* Tab bar — 7 onglets ne tiennent pas sur un écran mobile : scroll horizontal avec un
-            fondu aux bords (masque CSS, pas de JS de scroll à suivre) pour que ça se voie qu'il
-            y a d'autres onglets au lieu d'une coupure nette qui donne l'impression que la barre
-            s'arrête là. */}
-        <div style={{display:'flex',gap:0,marginBottom:16,padding:'0 18px',overflowX:'auto',scrollbarWidth:'none',WebkitOverflowScrolling:'touch',
-          WebkitMaskImage:'linear-gradient(to right,transparent 0,black 18px,black calc(100% - 18px),transparent 100%)',
-          maskImage:'linear-gradient(to right,transparent 0,black 18px,black calc(100% - 18px),transparent 100%)'}}>
+        {/* Tab bar — 7 onglets ne tiennent pas sur une seule ligne mobile en scroll horizontal
+            (le fondu aux bords ne suffisait pas à faire comprendre qu'il fallait swiper, les
+            derniers onglets restaient invisibles pour l'utilisateur) : on les répartit plutôt
+            sur 2 lignes avec flexWrap, tous visibles sans avoir besoin de scroller. */}
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16,padding:'0 18px'}}>
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:'0 0 auto',padding:'7px 13px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
+            <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:'0 0 auto',padding:'7px 11px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
               {t.label}
             </button>
           ))}
