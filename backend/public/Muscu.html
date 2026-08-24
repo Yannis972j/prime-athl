@@ -1021,6 +1021,25 @@ function RangeField({value,onCommit,placeholder,style}){
   );
 }
 
+// Champ texte libre, sans filtrage de caractères — pour les valeurs cardio (vitesse,
+// inclinaison, durée) qui viennent souvent d'Excel sous forme de texte libre ("30'", "8-11"...)
+// et ne servent à aucun calcul, juste à l'affichage : pas besoin (et pas souhaitable) de les
+// contraindre à un format numérique strict comme NumField/RangeField.
+function FreeTextField({value,onCommit,placeholder,style}){
+  const[buf,setBuf]=React.useState(null);
+  const display=buf!==null?buf:(value||'');
+  return(
+    <input
+      type="text" enterKeyHint="done"
+      value={display} placeholder={placeholder}
+      onFocus={e=>{const el=e.currentTarget;setBuf(value||'');requestAnimationFrame(()=>{try{el.select();}catch(_){}});}}
+      onChange={e=>{setBuf(e.target.value);onCommit(e.target.value);}}
+      onBlur={()=>setBuf(null)}
+      onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
+      style={style}/>
+  );
+}
+
 function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,importedPrograms,history}){
   const uid=()=>Math.random().toString(36).slice(2);
   const fileRef = React.useRef(null);
@@ -1575,6 +1594,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
+  // Cardio (tapis...) : vitesse/inclinaison/durée modifiables pendant la séance (ex: incliner
+  // le tapis en cours de route) — distance non éditable, c'est un résultat, pas un réglage.
+  const updCardio=(ei,field,val)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,cardio:{...e.cardio,[field]:val}}));
 
   const validateSet=si=>{
     // Annuler le timer de série s'il est en cours
@@ -2019,18 +2041,28 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Distance</div>
                         <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.distance)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
                       </div>}
-                      {cardioHasVal(c.vitesse)&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                      {/* Vitesse/inclinaison/durée modifiables (ex: ajuster le tapis en cours de
+                          séance) — toujours affichées dès que c'est un cardio, contrairement à la
+                          distance (lecture seule, un résultat plutôt qu'un réglage) : sinon la
+                          case disparaîtrait dès qu'on l'efface pour taper une nouvelle valeur. */}
+                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.vitesse)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km/h</span></div>
-                      </div>}
-                      {cardioHasVal(c.inclinaison)&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center'}}>
+                          <FreeTextField value={fixCardioVal(c.vitesse)} placeholder="—" onCommit={v=>updCardio(currentEx,'vitesse',v)} style={{width:44,flexShrink:0,border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:0,fontFamily:'inherit'}}/>
+                          <span style={{fontSize:11,color:T.textDim,marginLeft:2,flexShrink:0}}>km/h</span>
+                        </div>
+                      </div>
+                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Inclinaison</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.inclinaison)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>%</span></div>
-                      </div>}
-                      {cardioHasVal(c.duree)&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
+                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center'}}>
+                          <FreeTextField value={fixCardioVal(c.inclinaison)} placeholder="—" onCommit={v=>updCardio(currentEx,'inclinaison',v)} style={{width:44,flexShrink:0,border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:0,fontFamily:'inherit'}}/>
+                          <span style={{fontSize:11,color:T.textDim,marginLeft:2,flexShrink:0}}>%</span>
+                        </div>
+                      </div>
+                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.duree)}</div>
-                      </div>}
+                        <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{width:'100%',minWidth:0,border:'none',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:0,fontFamily:'inherit'}}/>
+                      </div>
                     </div>
                     <button onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }} style={{width:'100%',height:46,borderRadius:13,border:'none',background:allDone?'rgba(255,255,255,0.06)':`linear-gradient(135deg,${sc},#BFA060)`,color:allDone?T.textDim:'#fff',fontSize:14,fontWeight:700,cursor:allDone?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
                       {allDone?<><Icon name="check" size={16} stroke={T.textDim} strokeWidth={2.5}/> Cardio terminé</>:<><Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/> Marquer comme terminé</>}
