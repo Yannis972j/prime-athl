@@ -644,6 +644,14 @@ function isUnilateralName(name) {
 function isUnilateralEx(ex) {
   return !!(ex && (ex.unilateral || isUnilateralName(ex.name)));
 }
+// Regroupement "même exercice" à travers l'historique/les stats : une variante de casse ou
+// d'espaces (import Excel en MAJUSCULES, saisie manuelle, un espace de trop laissé dans une
+// cellule Excel — ex: "GAINAGE " vu dans un vrai fichier importé cette session) ne doit pas
+// compter comme un exercice distinct ni fragmenter sa courbe de progression. Utilisé partout où
+// des exercices sont regroupés/comparés par nom (stats, "dernière fois", vue d'ensemble...).
+function normExerciseName(name) {
+  return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+}
 function fmtHoldDuration(secs) {
   secs = Math.max(0, Math.round(secs || 0));
   if (secs % 60 === 0) return `${secs / 60}min`;
@@ -1333,15 +1341,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   React.useEffect(()=>{try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,exercises}));}catch{}},[exercises]);
   React.useEffect(()=>{if(!sessionTime||sessionTime%30!==0)return;try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,sessionTime}));}catch{}},[sessionTime]);
 
-  // Per-exercise last-session data for progressive overload hints
+  // Per-exercise last-session data for progressive overload hints — clé normalisée (casse/
+  // espaces/accents, cf. normExerciseName) sinon "Leg Press" (saisi ce soir) ne retrouve pas
+  // "LEG PRESS" (importé depuis Excel en majuscules la fois d'avant) : la suggestion "dernière
+  // fois" disparaît silencieusement dès que la même variante n'est pas retapée à l'identique.
   const lastExData=React.useMemo(()=>{
     const map={};
     const sorted=[...(history||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
     for(const h of sorted){
       for(const he of (h.exercises||[])){
-        if(he.name&&!map[he.name]){
+        const k=normExerciseName(he.name);
+        if(k&&!map[k]){
           const best=(he.sets||[]).reduce((b,s)=>!b||(s.weight||0)>(b.weight||0)?s:b,null);
-          if(best)map[he.name]={weight:best.weight,reps:best.reps,allSets:he.sets};
+          if(best)map[k]={weight:best.weight,reps:best.reps,allSets:he.sets};
         }
       }
     }
@@ -1459,7 +1471,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     setExercises(prev=>{
       let anyChange=false;
       const next=prev.map(ex=>{
-        const hist=lastExData[ex.name];
+        const hist=lastExData[normExerciseName(ex.name)];
         if(!hist)return ex;
         let exChanged=false;
         const newSets=ex.sets.map((s,si)=>{
@@ -2108,7 +2120,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
                   if(isNext){
                     const targetLabel=s.targetStr||(s.target?String(s.target):null);
-                    const prev=lastExData[ex.name];
+                    const prev=lastExData[normExerciseName(ex.name)];
                     // Progressive overload: compare current set weight against last session
                     const prevSetData=prev?.allSets?.[i]||prev?.allSets?.[0]||null;
                     const suggestWeight=prev&&(s.weight||0)===0?prev.weight:null;
@@ -2211,7 +2223,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                     );
                   }
 
-                  const prevSetData=lastExData[ex.name]?.allSets?.[i]||null;
+                  const prevSetData=lastExData[normExerciseName(ex.name)]?.allSets?.[i]||null;
                   return(
                     <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:14,background:'rgba(255,255,255,0.018)',border:'1px solid rgba(255,255,255,0.04)',opacity:0.6}}>
                       <div style={{width:22,height:22,borderRadius:8,background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.textFaint,flexShrink:0}}>{i+1}</div>
@@ -3057,21 +3069,41 @@ function ExerciseProgressChart({history}){
   const[selected,setSelected]=React.useState(null);
   const[open,setOpen]=React.useState(false);
 
+  // Un même exercice arrive souvent sous plusieurs variantes de casse/espaces selon son origine
+  // (import Excel en MAJUSCULES, saisie manuelle, un espace de trop laissé dans une cellule —
+  // ex: "GAINAGE " vu dans un vrai fichier importé cette session) : "Leg Press" et "LEG PRESS"
+  // sont pour un humain le même exercice, mais un regroupement par chaîne exacte les traitait
+  // comme deux exercices distincts, chacun avec un historique tronqué et une tendance fausse.
+  // On regroupe donc par forme normalisée (normExerciseName), en gardant pour l'affichage la
+  // variante la plus récemment utilisée (plus représentative que la première rencontrée).
+  const canonicalMap=React.useMemo(()=>{
+    const m={};
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{
+      if(!e.name)return;
+      const k=normExerciseName(e.name);
+      if(!k)return;
+      const d=new Date(h.date);
+      if(!m[k]||d>m[k].lastDate)m[k]={display:e.name.trim(),lastDate:d};
+    }));
+    return m;
+  },[history]);
+  const canonName=name=>canonicalMap[normExerciseName(name)]?.display||(name||'').trim();
+
   // Build exercise list from history
   const exerciseNames=React.useMemo(()=>{
     const s=new Set();
-    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(e.name);}));
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(canonName(e.name));}));
     return [...s].sort();
-  },[history]);
+  },[history,canonicalMap]);
 
   const filtered=query.trim()?exerciseNames.filter(n=>n.toLowerCase().includes(query.toLowerCase())):exerciseNames;
 
   // Exercices les plus pratiqués (par nombre de séances où ils apparaissent) — accès rapide sans recherche
   const topExercises=React.useMemo(()=>{
     const counts={};
-    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)counts[e.name]=(counts[e.name]||0)+1;}));
+    (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name){const n=canonName(e.name);counts[n]=(counts[n]||0)+1;}}));
     return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
-  },[history]);
+  },[history,canonicalMap]);
 
   // Vue d'ensemble : un résumé (dernière valeur, tendance, dernière date) pour CHAQUE exercice
   // suivi — jusqu'ici il fallait sélectionner les exercices un par un pour voir leurs chiffres,
@@ -3082,12 +3114,13 @@ function ExerciseProgressChart({history}){
     for(const h of sorted){
       for(const ex of(h.exercises||[])){
         if(!ex.name)continue;
-        if(!byName[ex.name])byName[ex.name]={weightPts:[],cardioPts:[]};
+        const name=canonName(ex.name);
+        if(!byName[name])byName[name]={weightPts:[],cardioPts:[]};
         const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
-        if(maxW>0)byName[ex.name].weightPts.push({date:new Date(h.date),value:maxW});
+        if(maxW>0)byName[name].weightPts.push({date:new Date(h.date),value:maxW});
         if(ex.cardio){
           const v=+ex.cardio.vitesse||0;
-          if(v>0)byName[ex.name].cardioPts.push({date:new Date(h.date),value:v});
+          if(v>0)byName[name].cardioPts.push({date:new Date(h.date),value:v});
         }
       }
     }
@@ -3099,7 +3132,7 @@ function ExerciseProgressChart({history}){
       const delta=pts.length>1?+(last.value-first.value).toFixed(1):null;
       return{name,unit,lastValue:last.value,lastDate:last.date,sessionsCount:pts.length,delta};
     }).filter(Boolean).sort((a,b)=>b.lastDate-a.lastDate);
-  },[history]);
+  },[history,canonicalMap]);
 
   // Build data points: one par séance contenant l'exercice sélectionné.
   // Poids max pour un exercice classique ; vitesse (km/h) pour un exercice Tapis (aucune charge/reps à suivre).
@@ -3108,26 +3141,26 @@ function ExerciseProgressChart({history}){
     const pts=[];
     const sorted=[...(history||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
     for(const h of sorted){
-      const ex=(h.exercises||[]).find(e=>e.name===selected);
+      const ex=(h.exercises||[]).find(e=>canonName(e.name)===selected);
       if(!ex)continue;
       const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
       if(maxW>0)pts.push({date:new Date(h.date),value:maxW,reps:(ex.sets||[]).find(s=>(s.weight||0)===maxW)?.reps||0});
     }
     return pts;
-  },[history,selected]);
+  },[history,selected,canonicalMap]);
 
   const cardioPoints=React.useMemo(()=>{
     if(!selected)return[];
     const pts=[];
     const sorted=[...(history||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
     for(const h of sorted){
-      const ex=(h.exercises||[]).find(e=>e.name===selected);
+      const ex=(h.exercises||[]).find(e=>canonName(e.name)===selected);
       if(!ex||!ex.cardio)continue;
       const v=+ex.cardio.vitesse||0;
       if(v>0)pts.push({date:new Date(h.date),value:v,duree:+ex.cardio.duree||0,inclinaison:+ex.cardio.inclinaison||0});
     }
     return pts;
-  },[history,selected]);
+  },[history,selected,canonicalMap]);
 
   const isCardio=dataPoints.length===0&&cardioPoints.length>0;
   const points=isCardio?cardioPoints:dataPoints;
@@ -3362,7 +3395,7 @@ function StatsScreen({history,profile,athleteId}){
   },[history]);
   const distinctExercisesCount=React.useMemo(()=>{
     const s=new Set();
-    history.forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(e.name);}));
+    history.forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(normExerciseName(e.name));}));
     return s.size;
   },[history]);
 
