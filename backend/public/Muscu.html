@@ -13521,6 +13521,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     window.addEventListener('online',flushPendingSessions);
     return()=>window.removeEventListener('online',flushPendingSessions);
   },[flushPendingSessions]);
+  // Filet supplémentaire : tant qu'il reste des séances en attente, on retente périodiquement
+  // en tâche de fond (ex: cold start Render — le serveur gratuit met du temps à se réveiller
+  // après une inactivité, les 3 tentatives initiales peuvent toutes échouer avant qu'il
+  // réponde). Sans ça, une séance en échec restait coincée jusqu'à ce que l'athlète pense à
+  // rouvrir l'app ou perde/retrouve sa connexion — silencieusement, sans jamais atteindre le
+  // coach entre-temps.
+  React.useEffect(()=>{
+    if(pendingSyncCount<=0)return;
+    const t=setInterval(flushPendingSessions,20000);
+    return()=>clearInterval(t);
+  },[pendingSyncCount,flushPendingSessions]);
   const[nutriRefreshKey,setNutriRefreshKey]=React.useState(0);
 
   const[refreshing,setRefreshing]=React.useState(false);
@@ -13717,16 +13728,21 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
-    // Jusqu'à 3 tentatives (pauses courtes) avant d'abandonner — une séance que l'athlète
-    // vient de valider ne doit pas disparaître silencieusement au premier blip réseau/serveur.
-    for(let attempt=0;attempt<3;attempt++){
+    // Jusqu'à 5 tentatives avec backoff croissant (1.5s/3s/6s/10s ≈ 20s au total) avant
+    // d'abandonner — une séance que l'athlète vient de valider ne doit pas disparaître
+    // silencieusement au premier blip réseau/serveur. Fenêtre volontairement large : le
+    // serveur gratuit (Render) peut mettre plusieurs dizaines de secondes à se réveiller
+    // après une inactivité (cold start), et 3 tentatives rapprochées (~4.5s) pouvaient toutes
+    // échouer avant qu'il ne réponde.
+    const BACKOFFS=[1500,3000,6000,10000];
+    for(let attempt=0;attempt<=BACKOFFS.length;attempt++){
       try{
         const res=await apiCall('/api/sessions',{method:'POST',body:snapshot});
         if(res?.id)setHistory(h=>h.map(s=>s.date===snapshot.date&&!s.id?{...s,id:res.id}:s));
         return;
       }catch(e){
         console.error('session sync attempt',attempt+1,e);
-        if(attempt<2)await new Promise(r=>setTimeout(r,1500*(attempt+1)));
+        if(attempt<BACKOFFS.length)await new Promise(r=>setTimeout(r,BACKOFFS[attempt]));
       }
     }
     // Toujours en échec après les 3 essais : on la garde en file locale pour la renvoyer
