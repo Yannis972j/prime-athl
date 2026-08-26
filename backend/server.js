@@ -448,7 +448,7 @@ const MOTIVATION_MESSAGES = [
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];
 // Heure Paris (0-23) — facile à ajuster si Yannis veut un autre créneau.
-const MOTIVATION_HOUR = 8;
+const MOTIVATION_HOUR = 5;
 const MOTIVATION_MINUTE = 0;
 // 'YYYY-MM-DD' (Europe/Paris) du dernier envoi — évite un double envoi si la minute cible est
 // revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
