@@ -1250,7 +1250,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
 // ── Session Screen ────────────────────────────────────────
 
-function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,importedPrograms}){
+function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,importedPrograms,onRestUpdate}){
   const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
 
@@ -1604,6 +1604,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
   const allDone=exercises.length>0&&exercises.every(e=>e.sets.every(s=>s.done));
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+
+  // Remonte le compte à rebours de repos vers le badge flottant "En séance" (visible sur tous
+  // les onglets, cf. App) — SessionScreen reste monté en arrière-plan quand on navigue ailleurs
+  // dans l'app, donc son propre chrono continue de tourner ; ce callback sert juste à l'afficher.
+  React.useEffect(()=>{
+    onRestUpdate&&onRestUpdate(restSeconds>0?{restSeconds,restTotal,exerciseName:ex?.name||''}:null);
+  },[restSeconds,restTotal,ex?.name]);
 
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
   // Cardio (tapis...) : vitesse/inclinaison/durée modifiables pendant la séance (ex: incliner
@@ -13730,6 +13737,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const SESS_ACTIVE_KEY='pa_sess_active_'+authUser.id;
   const[sessionActive,setSessionActive]=React.useState(()=>{try{return!!localStorage.getItem('pa_sess_active_'+authUser.id);}catch{return false;}});
+  // Compte à rebours de repos remonté depuis SessionScreen (qui reste monté en display:none
+  // quand on navigue) pour l'afficher sur le badge flottant "En séance", visible sur tous les
+  // onglets — le vrai flottant "par-dessus les autres apps" est bloqué par iOS/Android pour un
+  // site web, ceci est le meilleur équivalent : visible partout DANS l'app tant qu'on y reste.
+  const[floatingRest,setFloatingRest]=React.useState(null);
+  const fmtRestBadge=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
   const[showCongrats,setShowCongrats]=React.useState(false);
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
@@ -13861,7 +13874,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName} importedPrograms={importedPrograms}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
@@ -13987,12 +14000,31 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         </div>
       )}
 
-      {/* Badge "En séance" flottant quand la séance tourne en arrière-plan */}
+      {/* Badge "En séance" flottant quand la séance tourne en arrière-plan — affiche le compte à
+          rebours de repos en direct s'il y en a un (un vrai flottant par-dessus d'autres apps
+          est bloqué par iOS/Android pour un site web ; ceci reste visible sur tous les onglets
+          DANS l'app, tant qu'on ne la quitte pas). */}
       {sessionActive&&screen!=='session'&&(
-        <button onClick={()=>setScreen('session')} style={{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',zIndex:60,height:38,padding:'0 18px',borderRadius:999,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',boxShadow:'0 6px 20px rgba(191,160,96,0.5)',display:'flex',alignItems:'center',gap:7,letterSpacing:0.3,whiteSpace:'nowrap'}}>
-          <span style={{width:7,height:7,borderRadius:4,background:'#fff',boxShadow:'0 0 6px #fff',animation:'celebrationPop 1s ease infinite alternate'}}/>
-          🏋️ Séance en cours — Reprendre
-        </button>
+        floatingRest?(
+          <button onClick={()=>setScreen('session')} style={{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',zIndex:60,height:44,padding:'0 18px 0 10px',borderRadius:999,border:'1px solid rgba(90,138,224,0.4)',background:'linear-gradient(135deg,rgba(90,138,224,0.94),rgba(138,173,238,0.94))',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',boxShadow:'0 6px 20px rgba(90,138,224,0.5)',display:'flex',alignItems:'center',gap:8,letterSpacing:0.3,whiteSpace:'nowrap'}}>
+            <svg width="26" height="26" viewBox="0 0 24 24" style={{transform:'rotate(-90deg)',flexShrink:0}}>
+              <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="2.6"/>
+              <circle cx="12" cy="12" r="10" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"
+                strokeDasharray={2*Math.PI*10} strokeDashoffset={2*Math.PI*10*(1-(floatingRest.restTotal>0?(floatingRest.restTotal-floatingRest.restSeconds)/floatingRest.restTotal:0))}
+                style={{transition:'stroke-dashoffset 1s linear'}}/>
+            </svg>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-start',lineHeight:1.15}}>
+              <span style={{fontSize:9,opacity:0.85,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Repos</span>
+              <span style={{fontSize:15,fontWeight:800,fontVariantNumeric:'tabular-nums'}}>{fmtRestBadge(floatingRest.restSeconds)}</span>
+            </div>
+            {floatingRest.exerciseName&&<span style={{fontSize:11,opacity:0.85,maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{floatingRest.exerciseName}</span>}
+          </button>
+        ):(
+          <button onClick={()=>setScreen('session')} style={{position:'absolute',bottom:70,left:'50%',transform:'translateX(-50%)',zIndex:60,height:38,padding:'0 18px',borderRadius:999,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',boxShadow:'0 6px 20px rgba(191,160,96,0.5)',display:'flex',alignItems:'center',gap:7,letterSpacing:0.3,whiteSpace:'nowrap'}}>
+            <span style={{width:7,height:7,borderRadius:4,background:'#fff',boxShadow:'0 0 6px #fff',animation:'celebrationPop 1s ease infinite alternate'}}/>
+            🏋️ Séance en cours — Reprendre
+          </button>
+        )
       )}
       {(!screen||screen==='session')&&<BottomTabBar tab={tab} onTab={t=>{window.scrollTo(0,0);setTab(t);setActiveUniverse(null);if(t==='messages')setUnreadMessages(0);if(screen==='session'){setScreen(null);}}} role={authUser.role} unreadMessages={unreadMessages} isCreator={isCreator}/>}
     </div>
