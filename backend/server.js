@@ -431,10 +431,10 @@ setTimeout(() => {
   if (n > 0) console.log(`[schedule] ${n} programme(s) programmé(s) activé(s) au démarrage`);
 }, 3000);
 
-// ── Notification quotidienne de motivation (athlètes) ────────────────
-// Demande de Yannis : un message de motivation envoyé chaque jour à tous les athlètes.
-// N'atteint que ceux ayant activé les notifications push dans leur profil (case déjà
-// existante) — sinon pushToUser no-op silencieusement, comme le reste des notifs de l'app.
+// ── Notification quotidienne de motivation (athlètes + coachs) ───────
+// Demande de Yannis : un message de motivation envoyé chaque jour, aux athlètes puis aussi
+// aux coachs. N'atteint que ceux ayant activé les notifications push dans leur profil (case
+// déjà existante) — sinon pushToUser no-op silencieusement, comme le reste des notifs de l'app.
 const MOTIVATION_MESSAGES = [
   "Une nouvelle journée, une nouvelle occasion de progresser.",
   "Ton objectif ne se rapprochera pas tout seul. À toi de jouer.",
@@ -456,13 +456,15 @@ const MOTIVATION_MINUTE = 0;
 let lastMotivationSentDate = null;
 
 function sendDailyMotivation() {
-  const athletes = Object.values(DATA.users).filter(u => u.role === 'athlete' && u.status === 'active');
-  if (!athletes.length) return;
+  const recipients = Object.values(DATA.users).filter(u => (u.role === 'athlete' || u.role === 'coach') && u.status === 'active');
+  if (!recipients.length) return;
   const msg = MOTIVATION_MESSAGES[Math.floor(Math.random() * MOTIVATION_MESSAGES.length)];
-  for (const a of athletes) {
-    pushToUser(a.id, { title: '💪 Prime Athl', body: msg, url: '/Muscu.html' });
+  for (const u of recipients) {
+    pushToUser(u.id, { title: '💪 Prime Athl', body: msg, url: '/Muscu.html' });
   }
-  console.log(`[motivation] Notification envoyée à ${athletes.length} athlète(s)`);
+  const nAthletes = recipients.filter(u => u.role === 'athlete').length;
+  const nCoaches = recipients.length - nAthletes;
+  console.log(`[motivation] Notification envoyée à ${nAthletes} athlète(s) et ${nCoaches} coach(s)`);
 }
 
 setInterval(() => {
