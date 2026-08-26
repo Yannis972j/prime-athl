@@ -3203,6 +3203,47 @@ app.delete('/api/push/subscribe', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Alarme "repos terminé" ──────────────────────────
+// Le compte à rebours de repos tourne côté client, mais le JS d'un onglet en arrière-plan est
+// suspendu par le navigateur (surtout iOS Safari) : impossible de garantir qu'un setTimeout côté
+// client sonnera à l'heure s'il faut sonner même app fermée/téléphone verrouillé. On planifie
+// donc l'alerte ICI, côté serveur, dès que le repos démarre — le serveur continue de tourner
+// indépendamment de l'état de l'onglet, et déclenche une vraie notification push au bon moment.
+// En mémoire (pas persisté) : un redémarrage serveur pendant un repos en cours annule l'alarme
+// silencieusement — fenêtre de quelques minutes, risque accepté plutôt qu'une file de jobs pour
+// une alerte annexe (le compte à rebours flottant dans l'app reste la référence principale).
+const restAlarms = new Map(); // userId -> Timeout
+
+app.post('/api/rest-timer/schedule', authRequired, (req, res) => {
+  const { seconds, exerciseName } = req.body || {};
+  const raw = parseInt(seconds);
+  if (!raw || raw <= 0) return res.status(400).json({ error: 'invalid_seconds' });
+  const secs = Math.min(1200, raw);
+  const prev = restAlarms.get(req.user.id);
+  if (prev) clearTimeout(prev);
+  const name = exerciseName ? String(exerciseName).trim().slice(0, 60) : '';
+  const t = setTimeout(() => {
+    restAlarms.delete(req.user.id);
+    pushToUser(req.user.id, {
+      title: '⏱ Repos terminé',
+      body: name ? `C'est reparti pour "${name}" !` : "C'est reparti pour la série suivante !",
+      url: '/Muscu.html',
+    });
+  }, secs * 1000);
+  t.unref?.(); // ne bloque pas l'arrêt propre du process si jamais nécessaire
+  restAlarms.set(req.user.id, t);
+  res.json({ ok: true });
+});
+
+// Annule l'alarme en attente (repos passé, série suivante démarrée avant la fin, séance
+// fermée...) — sans ça une notif "repos terminé" arriverait en double/à contretemps après que
+// l'athlète a déjà repris (le bip local a déjà sonné pendant qu'il regardait l'app).
+app.post('/api/rest-timer/cancel', authRequired, (req, res) => {
+  const prev = restAlarms.get(req.user.id);
+  if (prev) { clearTimeout(prev); restAlarms.delete(req.user.id); }
+  res.json({ ok: true });
+});
+
 // ── Server + Socket.IO ──────────────────────────────
 const server = http.createServer(app);
 // Même liste blanche que le CORS REST (origin:'*' + credentials est de toute façon interdit par

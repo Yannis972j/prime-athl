@@ -1612,6 +1612,30 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     onRestUpdate&&onRestUpdate(restSeconds>0?{restSeconds,restTotal,exerciseName:ex?.name||''}:null);
   },[restSeconds,restTotal,ex?.name]);
 
+  // Alarme "repos terminé" côté serveur : sonne (notification push) même si l'app est en
+  // arrière-plan ou le téléphone verrouillé — le JS d'un onglet backgrounded est suspendu par le
+  // navigateur, donc un simple setTimeout côté client ne peut pas garantir ça (cf. server.js
+  // /api/rest-timer/schedule). Une hausse de restSeconds (nouveau repos qui démarre, ou "+30s"
+  // qui l'allonge) (re)planifie l'alarme ; une baisse (tick normal du compte à rebours) n'appelle
+  // pas le serveur ; un retour à 0 (repos passé, changement d'exercice, fin naturelle) l'annule.
+  const prevRestSecRef=React.useRef(0);
+  React.useEffect(()=>{
+    const prev=prevRestSecRef.current;
+    prevRestSecRef.current=restSeconds;
+    if(restSeconds<=0){
+      if(prev>0)apiCall('/api/rest-timer/cancel',{method:'POST'}).catch(()=>{});
+      return;
+    }
+    if(restSeconds>prev){
+      apiCall('/api/rest-timer/schedule',{method:'POST',body:{seconds:restSeconds,exerciseName:ex?.name||''}}).catch(()=>{});
+    }
+  },[restSeconds]);
+  // Séance terminée pendant qu'un repos tournait encore (SessionScreen démonté par l'App) →
+  // annule l'alarme en attente, sinon une notif "repos terminé" arrive après coup pour rien.
+  React.useEffect(()=>()=>{
+    if(prevRestSecRef.current>0)apiCall('/api/rest-timer/cancel',{method:'POST'}).catch(()=>{});
+  },[]);
+
   const updSet=(ei,si,patch)=>setExercises(prev=>prev.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
   // Cardio (tapis...) : vitesse/inclinaison/durée modifiables pendant la séance (ex: incliner
   // le tapis en cours de route) — distance non éditable, c'est un résultat, pas un réglage.
