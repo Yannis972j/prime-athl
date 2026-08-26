@@ -431,6 +431,57 @@ setTimeout(() => {
   if (n > 0) console.log(`[schedule] ${n} programme(s) programmé(s) activé(s) au démarrage`);
 }, 3000);
 
+// ── Notification quotidienne de motivation (athlètes) ────────────────
+// Demande de Yannis : un message de motivation envoyé chaque jour à tous les athlètes.
+// N'atteint que ceux ayant activé les notifications push dans leur profil (case déjà
+// existante) — sinon pushToUser no-op silencieusement, comme le reste des notifs de l'app.
+const MOTIVATION_MESSAGES = [
+  "Une nouvelle journée, une nouvelle occasion de progresser.",
+  "Ton objectif ne se rapprochera pas tout seul. À toi de jouer.",
+  "Chaque séance compte, même les petites. Fais-en une aujourd'hui.",
+  "Le meilleur moment pour s'entraîner, c'est maintenant.",
+  "Ta seule limite est celle que tu t'imposes. Dépasse-la aujourd'hui.",
+  "Un entraînement de plus vers la meilleure version de toi-même.",
+  "La régularité bat le talent. Reste régulier aujourd'hui.",
+  "Le corps que tu veux se construit une séance à la fois.",
+  "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
+  "Petite victoire du jour : se bouger. Le reste suit.",
+];
+// Heure Paris (0-23) — facile à ajuster si Yannis veut un autre créneau.
+const MOTIVATION_HOUR = 8;
+const MOTIVATION_MINUTE = 0;
+// 'YYYY-MM-DD' (Europe/Paris) du dernier envoi — évite un double envoi si la minute cible est
+// revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
+// seulement (pas persisté) : au pire un redémarrage pile sur ce créneau saute un jour, pas plus.
+let lastMotivationSentDate = null;
+
+function sendDailyMotivation() {
+  const athletes = Object.values(DATA.users).filter(u => u.role === 'athlete' && u.status === 'active');
+  if (!athletes.length) return;
+  const msg = MOTIVATION_MESSAGES[Math.floor(Math.random() * MOTIVATION_MESSAGES.length)];
+  for (const a of athletes) {
+    pushToUser(a.id, { title: '💪 Prime Athl', body: msg, url: '/Muscu.html' });
+  }
+  console.log(`[motivation] Notification envoyée à ${athletes.length} athlète(s)`);
+}
+
+setInterval(() => {
+  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure de Paris
+  // (le serveur tourne en UTC sur Render, l'heure locale du navigateur n'entre pas en jeu ici).
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const get = t => parts.find(p => p.type === t)?.value;
+  const dateStr = `${get('year')}-${get('month')}-${get('day')}`;
+  const hour = parseInt(get('hour'), 10);
+  const minute = parseInt(get('minute'), 10);
+  if (hour === MOTIVATION_HOUR && minute === MOTIVATION_MINUTE && lastMotivationSentDate !== dateStr) {
+    lastMotivationSentDate = dateStr;
+    sendDailyMotivation();
+  }
+}, 60 * 1000);
+
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
