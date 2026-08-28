@@ -881,6 +881,63 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         }
       });
 
+      // ── Semaine de décharge : une 2e feuille "DECHARGE"/"DELOAD" contient les mêmes
+      // exercices, avec des valeurs réduites — on la fusionne dans le programme normal (comme
+      // ex.deload = {...}) plutôt que d'en faire un programme séparé, pour que le bouton DELOAD
+      // de l'app bascule tous les poids d'un coup au lieu d'obliger à choisir/importer un 2e
+      // programme à la main. Appariement simple : une seule feuille decharge + une seule autre
+      // feuille dans le fichier → elles se correspondent forcément ; sinon (plusieurs programmes
+      // dans le même fichier) on laisse la feuille telle quelle, trop ambigu pour deviner
+      // laquelle elle allège.
+      const deloadSheetNames = Object.keys(programs).filter(n => /decharge|deload/.test(norm(n)));
+      deloadSheetNames.forEach(deloadName => {
+        const others = Object.keys(programs).filter(n => n !== deloadName && !deloadSheetNames.includes(n));
+        if (others.length !== 1) return;
+        const targetDays = programs[others[0]];
+        const deloadDays = programs[deloadName];
+        Object.keys(deloadDays).forEach(day => {
+          const targetDay = targetDays[day];
+          if (!targetDay) return;
+          const tEntries = targetDay.exercises;
+          const dEntries = deloadDays[day].exercises;
+          const applyDeload = (tEx, dEx) => {
+            tEx.deload = {
+              weightStr: dEx.weightStr, repsStr: dEx.repsStr, restSeconds: dEx.restSeconds,
+              holdSeconds: dEx.holdSeconds, cardio: dEx.cardio,
+              sets: dEx.sets.map(s => ({...s})),
+            };
+          };
+          // 1re passe : appariement par nom normalisé (insensible casse/accents), avec un
+          // compteur d'occurrence pour gérer un nom répété sur le même jour (ex: "Tapis de
+          // course" en échauffement ET en fin de séance). Robuste à un ordre différent entre les
+          // deux feuilles — repéré sur un vrai fichier où "Pendulum Squat"/"Hack Squat"
+          // n'étaient pas dans le même ordre selon la feuille, ce qu'un appariement par simple
+          // position aurait accouplé aux mauvaises valeurs sans avertir.
+          const usedTargets = new Set();
+          const seenCount = {};
+          const unmatchedDeload = [];
+          dEntries.forEach(dEx => {
+            const key = norm(dEx.name);
+            const occurrence = seenCount[key] || 0;
+            seenCount[key] = occurrence + 1;
+            let matchIdx = -1, seen = 0;
+            for (let i = 0; i < tEntries.length; i++) {
+              if (usedTargets.has(i) || norm(tEntries[i].name) !== key) continue;
+              if (seen === occurrence) { matchIdx = i; break; }
+              seen++;
+            }
+            if (matchIdx >= 0) { usedTargets.add(matchIdx); applyDeload(tEntries[matchIdx], dEx); }
+            else unmatchedDeload.push(dEx);
+          });
+          // 2e passe (repli) : lignes dont le nom diffère légèrement entre les deux feuilles
+          // (ex: "Développé incliné à la barre guidée" vs "Développé incliné barre guidée") —
+          // appariées par position parmi les lignes restantes non déjà matchées, dans l'ordre.
+          const leftoverTargets = tEntries.map((ex, i) => ({ex, i})).filter(({i}) => !usedTargets.has(i));
+          unmatchedDeload.forEach((dEx, k) => { if (leftoverTargets[k]) applyDeload(leftoverTargets[k].ex, dEx); });
+        });
+        delete programs[deloadName];
+      });
+
       if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
       onSuccess(programs, warnings);
     } catch(e) { onError('Excel invalide : ' + (e.message || e)); }
@@ -4380,6 +4437,21 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
   const days=sheet?(importedPrograms[sheet]||{}):{};
+  // Semaine de décharge : bascule TOUT le programme (les 5-6 jours) sur les valeurs allégées
+  // importées depuis la feuille "DECHARGE"/"DELOAD" du fichier Excel (cf. parseYannisExcel qui
+  // les a fusionnées en ex.deload sur chaque exercice). Persisté par programme (localStorage),
+  // réversible à tout moment — rien n'est perdu, on ne fait que choisir quel jeu de valeurs
+  // utiliser au moment de démarrer une séance.
+  const hasDeload=React.useMemo(()=>Object.values(days).some(d=>(d.exercises||[]).some(e=>e.deload)),[days]);
+  const[deloadMode,setDeloadModeState]=React.useState(false);
+  React.useEffect(()=>{
+    try{setDeloadModeState(sheet?localStorage.getItem('pa_deload_'+sheet)==='1':false);}catch{setDeloadModeState(false);}
+  },[sheet]);
+  const toggleDeload=()=>{
+    const next=!deloadMode;
+    setDeloadModeState(next);
+    try{if(sheet)localStorage.setItem('pa_deload_'+sheet,next?'1':'0');}catch{}
+  };
   // Programme en attente (importé pour un mois futur, cf. "Programme prévu") : ses jours doivent
   // déjà apparaître sur le calendrier à partir de sa date d'activation, sans attendre qu'il
   // devienne le programme actif — sinon on prévisualise "dans le vide".
@@ -4586,13 +4658,22 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
 
   const handleFile=makeHandleProgramExcel(fileRef,onImportPrograms,setImportMsg,setImportPreview,true,onRefresh);
 
+  // Décharge active : remplace poids/reps/repos par le jeu de valeurs allégées de cet exercice
+  // s'il en a un — sinon (exercice absent de la feuille décharge) reste sur les valeurs
+  // normales plutôt que de planter/tout vider. Utilisé à la fois pour démarrer la séance ET pour
+  // l'aperçu du jour sélectionné, pour que l'athlète voie déjà les poids allégés avant de lancer.
+  const applyDeload=ex=>(deloadMode&&ex.deload)?{...ex,weightStr:ex.deload.weightStr,repsStr:ex.deload.repsStr,restSeconds:ex.deload.restSeconds,holdSeconds:ex.deload.holdSeconds,cardio:ex.deload.cardio,sets:ex.deload.sets}:ex;
+
   const startDay=(dayName,dateStr)=>{
     const d=(dateStr?daysForDate(dateStr):days)[dayName];
     if(!d)return;
     onStartWorkout({
       name:dayName,
       muscles:d.category||'',
-      exercises:d.exercises.map(ex=>({...ex,id:uid(),sets:ex.sets.map(s=>({...s,reps:0,done:false}))})),
+      exercises:d.exercises.map(ex=>{
+        const src=applyDeload(ex);
+        return{...src,id:uid(),sets:src.sets.map(s=>({...s,reps:0,done:false}))};
+      }),
     });
   };
 
@@ -4935,6 +5016,17 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
         </div>
       )}
 
+      {/* Bouton DELOAD : bascule tout le programme (tous les jours) sur les valeurs allégées
+          importées depuis la feuille "DECHARGE"/"DELOAD" du fichier Excel. Réversible — retaper
+          dessus revient aux valeurs normales, rien n'est perdu. N'apparaît que si le programme
+          actif contient effectivement des données de décharge. */}
+      {hasDeload&&(
+        <button onClick={toggleDeload} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',height:44,marginBottom:14,borderRadius:14,border:deloadMode?'1px solid rgba(90,138,224,0.5)':'1px solid rgba(255,255,255,0.1)',background:deloadMode?'linear-gradient(135deg,#5A8AE0,#8AADEE)':'rgba(255,255,255,0.04)',color:deloadMode?'#fff':T.textDim,fontSize:13,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:deloadMode?'0 6px 18px rgba(90,138,224,0.4)':'none',transition:'background 0.2s,border-color 0.2s'}}>
+          <span style={{width:9,height:9,borderRadius:5,background:deloadMode?'#fff':'rgba(255,255,255,0.2)',flexShrink:0}}/>
+          DELOAD {deloadMode?'· ACTIVÉ (poids allégés)':'· semaine de décharge'}
+        </button>
+      )}
+
       {/* Calendar */}
       {(sheetNames.length>0||Object.keys(planned).length>0)&&(
         <>
@@ -5023,7 +5115,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const isDone=doneDates.has(selectedDay.dateStr);
             // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
             const histSession=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===selectedDay.dateStr);
-            const displayExercises=d?d.exercises:(histSession?.exercises||null);
+            const displayExercises=d?d.exercises.map(applyDeload):(histSession?.exercises||null);
             const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
             const refaire=()=>{
