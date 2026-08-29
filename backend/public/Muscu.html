@@ -822,11 +822,17 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
           const weight = parseWeight(row[colCharge]);
           const weightStr = String(row[colCharge]||'').trim();
+          // cellText (pas row[colReps] brut) : une fourchette tapée "4-5" ou "10-12" dans la
+          // colonne Répétitions est parfois auto-convertie en date par Excel côté source ("4-5"
+          // → 4 mai) — déjà géré pour les colonnes cardio via cellText, il fallait la même
+          // reconstitution ici, sinon la cellule redevient un simple nombre de série (ex: 46146)
+          // que le filet >200 écrasait silencieusement en "10" au lieu de la vraie valeur voulue.
+          const repsTxt = cellText(colReps);
           // Durée renseignée → durée du compte à rebours prise dessus (convention secondes).
           // Sinon (ancien format sans colonne Durée, ex: "Gainage" détecté par le nom seul) on
           // retombe sur la cellule Répétitions, qui contenait alors du texte libre ("1min", "45s").
-          const holdSeconds = isHold ? (dureeTxt ? parseDureeSeconds(dureeTxt) : parseRestDuration(row[colReps])) : 0;
-          const repsVal = isHold ? null : parseReps(row[colReps]);
+          const holdSeconds = isHold ? (dureeTxt ? parseDureeSeconds(dureeTxt) : parseRestDuration(repsTxt)) : 0;
+          const repsVal = isHold ? null : parseReps(repsTxt);
           const repsStr = isHold ? fmtHoldDuration(holdSeconds) : (repsVal === null ? '' : String(repsVal));
           // Pour les fourchettes "10-12", target numérique = borne basse, targetStr = "10-12"
           const repsMin = isHold ? 0 : (repsVal === null ? 10 : repsVal === 'MAX' ? 10 : (typeof repsVal === 'string' ? (parseInt(repsVal)||10) : repsVal));
