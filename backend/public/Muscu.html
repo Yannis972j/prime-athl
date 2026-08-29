@@ -4437,12 +4437,23 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
   const days=sheet?(importedPrograms[sheet]||{}):{};
+  // Programme en attente (importé pour un mois futur, cf. "Programme prévu") : ses jours doivent
+  // déjà apparaître sur le calendrier à partir de sa date d'activation, sans attendre qu'il
+  // devienne le programme actif — sinon on prévisualise "dans le vide".
+  const scheduledActivateOn=programMeta?.scheduledProgram?.activateOn||null;
+  const scheduledSheetData=programMeta?.scheduledProgram?.data||null;
+  const scheduledDays=scheduledSheetData?(Object.values(scheduledSheetData)[0]||{}):{};
+  const daysForDate=dateStr=>(scheduledActivateOn&&scheduledSheetData&&dateStr>=scheduledActivateOn)?scheduledDays:days;
   // Semaine de décharge : bascule TOUT le programme (les 5-6 jours) sur les valeurs allégées
   // importées depuis la feuille "DECHARGE"/"DELOAD" du fichier Excel (cf. parseYannisExcel qui
   // les a fusionnées en ex.deload sur chaque exercice). Persisté par programme (localStorage),
   // réversible à tout moment — rien n'est perdu, on ne fait que choisir quel jeu de valeurs
-  // utiliser au moment de démarrer une séance.
-  const hasDeload=React.useMemo(()=>Object.values(days).some(d=>(d.exercises||[]).some(e=>e.deload)),[days]);
+  // utiliser au moment de démarrer une séance. Vérifie AUSSI le programme programmé (pas
+  // seulement l'actif) : un programme importé via "📅 Programmer" pour une date future — cf.
+  // "Programme prévu" — a bien ses données deload dès l'import, mais ne devient "days" qu'à son
+  // activation ; sans ce 2e check le bouton restait invisible jusque-là.
+  const hasDeloadIn=obj=>Object.values(obj||{}).some(d=>(d.exercises||[]).some(e=>e.deload));
+  const hasDeload=React.useMemo(()=>hasDeloadIn(days)||hasDeloadIn(scheduledDays),[days,scheduledDays]);
   const[deloadMode,setDeloadModeState]=React.useState(false);
   React.useEffect(()=>{
     try{setDeloadModeState(sheet?localStorage.getItem('pa_deload_'+sheet)==='1':false);}catch{setDeloadModeState(false);}
@@ -4452,13 +4463,6 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     setDeloadModeState(next);
     try{if(sheet)localStorage.setItem('pa_deload_'+sheet,next?'1':'0');}catch{}
   };
-  // Programme en attente (importé pour un mois futur, cf. "Programme prévu") : ses jours doivent
-  // déjà apparaître sur le calendrier à partir de sa date d'activation, sans attendre qu'il
-  // devienne le programme actif — sinon on prévisualise "dans le vide".
-  const scheduledActivateOn=programMeta?.scheduledProgram?.activateOn||null;
-  const scheduledSheetData=programMeta?.scheduledProgram?.data||null;
-  const scheduledDays=scheduledSheetData?(Object.values(scheduledSheetData)[0]||{}):{};
-  const daysForDate=dateStr=>(scheduledActivateOn&&scheduledSheetData&&dateStr>=scheduledActivateOn)?scheduledDays:days;
   const movesByTarget=scheduleMoves||{};
   const suppressedSources=React.useMemo(()=>{
     const s=new Set();
