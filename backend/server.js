@@ -2491,11 +2491,12 @@ app.delete('/api/foods/:id', authRequired, coachOnly, (req, res) => {
 app.post('/api/nutrition/validate/:mealId', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
+  const mealId = req.params.mealId;
+  if (!isSafeObjectKey(mealId)) return res.status(400).json({ error: 'invalid_meal_id' });
   const today = ymd(Date.now());
   if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
   if (!DATA.nutritionLogs[u.id][today]) DATA.nutritionLogs[u.id][today] = { validated: {}, validatedAt: {} };
   const log = DATA.nutritionLogs[u.id][today];
-  const mealId = req.params.mealId;
   const newVal = !log.validated[mealId];
   log.validated[mealId] = newVal;
   log.validatedAt[mealId] = newVal ? Date.now() : null;
@@ -2511,6 +2512,7 @@ app.post('/api/nutrition/rate', authRequired, (req, res) => {
   if (!u) return res.status(404).json({ error: 'not_found' });
   const { date, rating } = req.body || {};
   const dateStr = date || ymd(Date.now());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ error: 'invalid_date' });
   const r = parseInt(rating);
   if (!r || r < 1 || r > 5) return res.status(400).json({ error: 'invalid_rating' });
   if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
@@ -2527,6 +2529,7 @@ app.post('/api/nutrition/copy-day', authRequired, (req, res) => {
   if (!u) return res.status(404).json({ error: 'not_found' });
   const { fromDate, toDate, validatedEntries } = req.body || {};
   if (!fromDate || !toDate) return res.status(400).json({ error: 'dates_required' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) return res.status(400).json({ error: 'invalid_date' });
   if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
   // Copy the validated entries from source to target
   const srcLog = DATA.nutritionLogs[u.id][fromDate] || {};
