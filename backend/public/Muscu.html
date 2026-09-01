@@ -1711,6 +1711,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     // Débloquer/créer l'AudioContext pendant ce geste utilisateur (requis sur iOS)
     // pour que la sonnerie de fin de repos puisse jouer plus tard.
     getAudioCtx();
+    // Retour en haut de l'écran après validation — taper le poids/les reps ouvre le clavier
+    // virtuel du téléphone, et sa fermeture laisse souvent la page scrollée plus bas qu'avant
+    // (comportement des navigateurs mobiles). On force un retour cohérent en haut de la carte
+    // d'exercice à chaque série validée, plutôt que de laisser l'athlète scrollé n'importe où.
+    if(scrollRef.current)scrollRef.current.scrollTo({top:0,behavior:'smooth'});
+    try{window.scrollTo(0,0);}catch{}
     // Marquer la série comme faite et copier poids+reps vers la suivante
     const updatedExercises=exercises.map((e,ei)=>{
       if(ei!==currentEx)return e;
@@ -1817,8 +1823,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     setSetTimerTotal(t=>Math.max(t,next));
     return next;
   });
-  const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&(
-    <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
+  // Rendu via portal directement sur document.body : sinon position:'fixed' reste piégé par le
+  // willChange:'transform' du gestureRef (nav par swipe, cf. App) qui fait office de containing
+  // block, et l'overlay se centre par rapport à la hauteur totale de la liste d'exercices
+  // (souvent bien plus grande que l'écran) au lieu de l'écran visible — le compte à rebours se
+  // retrouvait hors-champ, seul le libellé du haut dépassant tout en bas de l'écran.
+  const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
       <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
       <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
       <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
@@ -1843,7 +1854,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
         <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);validateSet(ex.sets.findIndex(s=>!s.done));}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 
   // ── FOCUS MODE : 1 exercice / 1 série à la fois, gros bouton FAIT, chrono plein écran ──
@@ -1861,9 +1873,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return(
       <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',background:T.bg,position:'relative',overflow:'hidden'}}>
 
-        {/* Overlay chrono repos plein écran */}
-        {restSeconds>0&&(
-          <div style={{position:'absolute',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.25) 0%, rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
+        {/* Overlay chrono repos plein écran — portal document.body : même piège willChange:'transform'
+            du gestureRef que setTimerOverlay ci-dessus (cf. son commentaire) */}
+        {restSeconds>0&&ReactDOM.createPortal(
+          <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.25) 0%, rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
             <div style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:18}}>Repos</div>
             <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
               <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
@@ -1881,7 +1894,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>+30s</button>
               <button onClick={()=>setRestSeconds(0)} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(44,196,160,0.35)'}}>Passer le repos</button>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Overlay compte à rebours de série — plein écran (factorisé, voir setTimerOverlay) */}
