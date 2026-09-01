@@ -1987,6 +1987,31 @@ app.post('/api/sessions', authRequired, (req, res) => {
   res.json({ id });
 });
 
+// Athlète : modifier une de ses propres séances déjà enregistrées (ex: ajouter une série
+// oubliée sur le moment, corriger un poids/des reps après coup) — jusqu'ici seul le coach
+// pouvait éditer une séance a posteriori (PATCH /api/coach/sessions/:id), l'athlète ne pouvait
+// que la consulter en lecture seule. Réutilise sanitizeCoachExercise : même forme d'exercice
+// des deux côtés (style/holdSeconds/restSeconds/cardio/unilateral inclus).
+app.patch('/api/sessions/:id', authRequired, (req, res) => {
+  const s = DATA.sessions[req.params.id];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  if (s.userId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  if (req.body.name) s.name = String(req.body.name).slice(0, 120);
+  if (typeof req.body.notes === 'string') s.notes = req.body.notes.slice(0, 500);
+  if (Array.isArray(req.body.exercises)) {
+    s.exercises = req.body.exercises.slice(0, 50).map(sanitizeCoachExercise);
+    s.totalVolume = Math.max(0, Math.min(1e7, parseFloat(req.body.totalVolume) || 0));
+  }
+  if (req.body.duration != null) s.duration = Math.max(0, Math.min(600, parseInt(req.body.duration) || 0));
+  persist();
+  // Prévient le coach en temps réel (comme PATCH /api/coach/sessions/:id) : sinon son historique
+  // de l'athlète reste périmé tant qu'il ne recharge pas la page.
+  const u = DATA.users[req.user.id];
+  if (u?.coachId) io.to('user:' + u.coachId).emit('session-updated', { session: s });
+  io.to('user:' + req.user.id).emit('session-updated', { session: s });
+  res.json({ ok: true, session: s });
+});
+
 // Athlète : supprimer une de ses propres séances
 app.delete('/api/sessions/:id', authRequired, (req, res) => {
   const s = DATA.sessions[req.params.id];
