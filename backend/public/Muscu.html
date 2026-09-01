@@ -4452,7 +4452,7 @@ function exportAIProgramPDF(program){
   savePdfCompat(doc,fname);
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession,onUpdateSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
@@ -4508,6 +4508,26 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[viewArchive,setViewArchive]=React.useState(null);
   const[confirmDel,setConfirmDel]=React.useState(null);
   const[viewHistSession,setViewHistSession]=React.useState(null);
+  // Édition d'une séance déjà validée (ex: ajouter une série oubliée, corriger un poids après
+  // coup) — editHistExercises est un brouillon local (copie profonde) modifié librement, envoyé
+  // au serveur seulement au clic "Enregistrer" ; annuler ou fermer le panneau l'abandonne sans
+  // toucher à la séance réelle tant qu'on n'a pas validé.
+  const[editingHist,setEditingHist]=React.useState(false);
+  const[editHistExercises,setEditHistExercises]=React.useState(null);
+  const[savingHistEdit,setSavingHistEdit]=React.useState(false);
+  const startEditHist=()=>{setEditHistExercises(JSON.parse(JSON.stringify(viewHistSession.exercises||[])));setEditingHist(true);};
+  const cancelEditHist=()=>{setEditingHist(false);setEditHistExercises(null);};
+  const saveEditHist=async()=>{
+    if(!viewHistSession?.id||savingHistEdit)return;
+    setSavingHistEdit(true);
+    try{
+      const totalVolume=(editHistExercises||[]).reduce((s,e)=>s+(e.sets||[]).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+      const saved=await onUpdateSession(viewHistSession.id,{exercises:editHistExercises,totalVolume});
+      setViewHistSession(v=>v?{...v,...(saved||{exercises:editHistExercises,totalVolume})}:v);
+      setEditingHist(false);setEditHistExercises(null);
+    }catch(e){alert('✗ Impossible d\'enregistrer : '+(e.message||e));}
+    setSavingHistEdit(false);
+  };
   const[showSaveModal,setShowSaveModal]=React.useState(false);
   const[saveName,setSaveName]=React.useState('');
   const[shareState,setShareState]=React.useState(null); // null | 'loading' | {url,token} | 'error'
@@ -4543,7 +4563,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
       refreshPdfDownloads(session.id);
     }catch(e){setShareState('error');}
   };
-  React.useEffect(()=>{setShareState(null);setShareCopied(false);setPdfDownloads(null);},[viewHistSession?.id]);
+  React.useEffect(()=>{setShareState(null);setShareCopied(false);setPdfDownloads(null);setEditingHist(false);setEditHistExercises(null);},[viewHistSession?.id]);
 
   // Séances planifiées (via Biblio/Live ou par le coach) — affichées sur ce calendrier
   const[planned,setPlanned]=React.useState({});
@@ -4778,6 +4798,14 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.3,lineHeight:1.1}}>{viewHistSession.name||'Séance'}</div>
                 </div>
                 <div style={{display:'flex',gap:8,flexShrink:0,marginTop:2}}>
+                  {editingHist?(
+                    <button onClick={cancelEditHist} style={{height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      Annuler
+                    </button>
+                  ):(onUpdateSession&&<button onClick={startEditHist} style={{height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
+                    <Icon name="edit" size={13} stroke={T.text}/> Modifier
+                  </button>)}
+                  {!editingHist&&(<>
                   <button onClick={()=>exportSessionPDF(viewHistSession)} style={{height:34,padding:'0 12px',borderRadius:17,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.1)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     PDF
@@ -4786,6 +4814,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
                     Partager
                   </button>
+                  </>)}
                   <button onClick={()=>setViewHistSession(null)} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
                 </div>
               </div>
@@ -4836,6 +4865,68 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
 
             {/* Scrollable content */}
             <div style={{overflowY:'auto',flex:1,padding:'14px 16px 36px'}}>
+              {editingHist?(
+                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                  {(editHistExercises||[]).length===0&&(
+                    <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
+                  )}
+                  {(editHistExercises||[]).map((ex,ei)=>{
+                    const isCardio=exType(ex)==='cardio';
+                    const isHold=ex.holdSeconds>0;
+                    const uni=isUnilateralEx(ex);
+                    const updSet=(si,patch)=>setEditHistExercises(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
+                    const addSet=()=>setEditHistExercises(arr=>arr.map((e,i)=>{
+                      if(i!==ei)return e;
+                      const last=e.sets[e.sets.length-1];
+                      return{...e,sets:[...e.sets,{weight:last?.weight||0,reps:0,done:true,...(uni?{repsL:0,repsR:0}:{})}]};
+                    }));
+                    const delLastSet=()=>setEditHistExercises(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.slice(0,-1)}));
+                    const delEx=()=>{if(confirm('Supprimer "'+ex.name+'" de cette séance ?'))setEditHistExercises(arr=>arr.filter((_,i)=>i!==ei));};
+                    const numStyle={width:52,height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:14,fontWeight:700,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'};
+                    return(
+                      <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.025)',padding:'10px 12px'}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                            {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                          </div>
+                          <button onClick={delEx} title="Supprimer cet exercice" style={{width:28,height:28,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:13,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
+                        </div>
+                        {isCardio?(
+                          <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Séance cardio — non modifiable ici</div>
+                        ):(<>
+                          {(ex.sets||[]).map((s,si)=>(
+                            <div key={si} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                              <div style={{width:18,fontSize:10,color:T.textFaint,fontWeight:700,flexShrink:0}}>{si+1}</div>
+                              {isHold?(<>
+                                <div style={{fontSize:12,color:T.textDim,flex:1}}>{fmtHoldDuration(ex.holdSeconds)} <span style={{fontSize:9,color:T.textFaint}}>tenues</span></div>
+                                <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                                <span style={{fontSize:9,color:T.textFaint,width:16}}>kg</span>
+                              </>):uni?(<>
+                                <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                                <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                                <input type="number" value={s.repsL||0} min="0" onChange={e=>updSet(si,{repsL:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                                <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>G</span>
+                                <input type="number" value={s.repsR||0} min="0" onChange={e=>updSet(si,{repsR:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                                <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>D</span>
+                              </>):(<>
+                                <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                                <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                                <input type="number" value={s.reps||0} min="0" onChange={e=>updSet(si,{reps:parseInt(e.target.value)||0})} style={numStyle}/>
+                                <span style={{fontSize:9,color:T.textFaint}}>reps</span>
+                              </>)}
+                            </div>
+                          ))}
+                          <div style={{display:'flex',gap:8,marginTop:8}}>
+                            <button onClick={addSet} style={{flex:1,height:34,borderRadius:10,border:'1px dashed rgba(191,160,96,0.4)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter une série</button>
+                            {(ex.sets||[]).length>0&&<button onClick={delLastSet} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>− Retirer la dernière</button>}
+                          </div>
+                        </>)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ):(<>
               {(viewHistSession.exercises||[]).length===0&&(
                 <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
               )}
@@ -4926,6 +5017,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   );
                 })}
               </div>
+              </>)}
 
               {/* Ressenti athlète */}
               {viewHistSession.notes&&(
@@ -4946,6 +5038,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                 </div>
               )}
             </div>
+            {editingHist&&(
+              <div style={{padding:'10px 16px',borderTop:'1px solid rgba(255,255,255,0.08)',flexShrink:0,display:'flex',gap:8,paddingBottom:'calc(10px + env(safe-area-inset-bottom))'}}>
+                <button onClick={cancelEditHist} disabled={savingHistEdit} style={{flex:1,height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:13,fontWeight:700,cursor:savingHistEdit?'wait':'pointer'}}>Annuler</button>
+                <button onClick={saveEditHist} disabled={savingHistEdit} style={{flex:2,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:13,fontWeight:800,cursor:savingHistEdit?'wait':'pointer',opacity:savingHistEdit?0.7:1}}>{savingHistEdit?'Enregistrement…':'✓ Enregistrer'}</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -13948,6 +14046,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setHistory(h=>h.filter(s=>s.id!==sessionId&&!((s.date?ymdKey(new Date(s.date)):null)===sessionDate&&!s.id)));
     if(sessionId){try{await apiCall(`/api/sessions/${sessionId}`,{method:'DELETE'});}catch(e){console.error('delete session',e);}}
   };
+  // Modifier une séance déjà validée (ex: ajouter une série oubliée) — renvoie la séance à jour
+  // pour que l'appelant (panneau détail historique) puisse rafraîchir son affichage sans attendre
+  // le prochain refreshAll().
+  const updateSession=async(sessionId,patch)=>{
+    const res=await apiCall(`/api/sessions/${sessionId}`,{method:'PATCH',body:patch});
+    if(res?.session)setHistory(h=>h.map(s=>s.id===sessionId?{...s,...res.session}:s));
+    return res?.session;
+  };
 
   const editDay=(sheet,day)=>{setEditingDayKey({sheet,day});setScreen('programDay');};
   const closeDayEdit=()=>{setScreen(null);setEditingDayKey(null);};
@@ -14050,7 +14156,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   onEditDay={editDay} profile={profile} programMeta={programMeta} onRefresh={refreshAll}
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
                   authToken={authToken} nutriRefreshKey={nutriRefreshKey}
-                  onDeleteSession={deleteSession} sessionLibrary={sessionLibrary}
+                  onDeleteSession={deleteSession} onUpdateSession={updateSession} sessionLibrary={sessionLibrary}
                 />
               </UniverseShell>
             )}
@@ -14784,7 +14890,7 @@ function LiveSessionsView({sessions,onStartWorkout}){
 }
 
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,sessionLibrary}){
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,onUpdateSession,sessionLibrary}){
   const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
@@ -14816,7 +14922,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
           onStartWorkout={onStartWorkout} onEdit={onEdit} onResume={onResume}
           onEditDay={onEditDay} profile={profile} programMeta={programMeta}
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
-          onDeleteSession={onDeleteSession}
+          onDeleteSession={onDeleteSession} onUpdateSession={onUpdateSession}
         />}
         {sub==='live'&&<LiveSessionsView sessions={liveSessions} onStartWorkout={onStartWorkout}/>}
         {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} onDeleteSession={onDeleteSession} />}
