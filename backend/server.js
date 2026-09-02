@@ -2556,11 +2556,17 @@ app.post('/api/nutrition/copy-day', authRequired, (req, res) => {
   if (!fromDate || !toDate) return res.status(400).json({ error: 'dates_required' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) return res.status(400).json({ error: 'invalid_date' });
   if (!DATA.nutritionLogs[u.id]) DATA.nutritionLogs[u.id] = {};
-  // Copy the validated entries from source to target
+  // Copy the validated entries from source to target — validatedEntries vient du corps de la
+  // requête (client) : filtrer ses clés via isSafeObjectKey avant de les propager, sinon
+  // {"__proto__": {...}} glissé dans le JSON reste une clé "propre" pour JSON.parse/le spread
+  // ci-dessous et écrase le prototype de l'objet nouvellement créé (mêmes clés dangereuses que
+  // celles bloquées ailleurs sur mealId/dateStr).
   const srcLog = DATA.nutritionLogs[u.id][fromDate] || {};
+  const rawEntries = validatedEntries || srcLog.validated || {};
+  const safeEntries = Object.fromEntries(Object.entries(rawEntries).filter(([k]) => isSafeObjectKey(k)));
   DATA.nutritionLogs[u.id][toDate] = {
-    validated: { ...(validatedEntries || srcLog.validated || {}) },
-    validatedAt: Object.fromEntries(Object.entries(validatedEntries || srcLog.validated || {}).map(([k,v]) => [k, v ? Date.now() : null])),
+    validated: safeEntries,
+    validatedAt: Object.fromEntries(Object.entries(safeEntries).map(([k,v]) => [k, v ? Date.now() : null])),
     copiedFrom: fromDate,
   };
   persist();
