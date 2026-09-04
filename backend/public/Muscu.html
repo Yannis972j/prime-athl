@@ -752,7 +752,13 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
         // Styles qui s'héritent sur les lignes suivantes (cellule fusionnée Excel)
         const INHERITABLE = ['SUPERSET','TRISET','ABDOS','CARDIO'];
-        const normalizeStyle = s => s === 'TRI-SET' ? 'TRISET' : s;
+        // "CIRCUIT"/"CIRCUITS" est un synonyme d'ABDOS (bloc circuit illimité, enchaîné sans
+        // repos entre exercices) utilisé par certains coachs à la place du libellé ABDOS — sans
+        // cet alias, seule la 1ère ligne du bloc porte le style "CIRCUIT" (non reconnu, donc pas
+        // groupée, pas de chaînage), et les lignes suivantes de la cellule fusionnée retombent
+        // en CLASSIQUE (CIRCUIT n'étant pas dans INHERITABLE) : le bloc entier se retrouvait
+        // éclaté en exercices isolés au lieu du circuit voulu.
+        const normalizeStyle = s => s === 'TRI-SET' ? 'TRISET' : (s === 'CIRCUIT' || s === 'CIRCUITS') ? 'ABDOS' : s;
 
         const sheetData = {};
         const categoryData = {};
