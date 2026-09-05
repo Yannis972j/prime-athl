@@ -2978,7 +2978,12 @@ app.get('/api/messages/summary', authRequired, (req, res) => {
 app.post('/api/messages/:partnerId/read', authRequired, (req, res) => {
   const me = req.user.id;
   const partner = req.params.partnerId;
-  if (!DATA.users[partner]) return res.status(404).json({ error: 'not_found' });
+  const partnerUser = DATA.users[partner];
+  if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  // Même contrôle que sur GET/POST /api/messages/:partnerId : on ne marque une conversation
+  // comme lue que si les deux utilisateurs sont bien en relation coach↔athlète. Sans ça, un
+  // partnerId arbitraire pouvait être écrit dans messageReads (état de lecture du demandeur).
+  if (!canChat(DATA.users[me], partnerUser)) return res.status(403).json({ error: 'forbidden' });
   if (!DATA.messageReads[me]) DATA.messageReads[me] = {};
   DATA.messageReads[me][partner] = Date.now();
   persist();
@@ -3818,6 +3823,11 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
       break;
     case 'checkout.session.completed': {
       const sess = event.data.object;
+      // Ne créditer l'achat que si le paiement est réellement encaissé. Pour un paiement par
+      // carte (synchrone) payment_status vaut 'paid' dès la complétion ; mais un moyen de
+      // paiement asynchrone peut compléter la session en 'unpaid'/'no_payment_required' — sans
+      // ce garde-fou, le programme payant serait accordé avant l'encaissement effectif.
+      if (sess.payment_status && sess.payment_status !== 'paid' && sess.payment_status !== 'no_payment_required') break;
       if (sess.metadata?.type === 'training_program') {
         const { programId, userId } = sess.metadata;
         if (userId && programId && DATA.trainingPrograms[programId]) {
