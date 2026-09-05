@@ -3845,12 +3845,29 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
   res.json({ received: true });
 });
 
-// Global error handlers — keep server alive on unexpected errors
-process.on('uncaughtException', err => {
-  console.error('uncaughtException:', err);
-});
+// Global error handlers.
+// unhandledRejection : une promesse rejetée est en général localisée (une requête, un envoi
+// push…) et ne corrompt pas l'état global — on log et on continue pour ne pas provoquer de
+// coupure sur une erreur transitoire (ex: réseau).
 process.on('unhandledRejection', (reason, p) => {
   console.error('unhandledRejection:', reason);
+});
+// uncaughtException : après une exception non rattrapée, le process Node est dans un état
+// indéfini. Continuer à servir des requêtes risque de corrompre DATA (et donc le prochain
+// pgSave/backup). On tente un flush SYNCHRONE best-effort de la base locale, puis on sort avec
+// un code d'erreur pour que la plateforme (Render) relance un process propre — la source de
+// vérité Postgres a déjà été sauvegardée par le debounce (~500ms) et le backup quotidien.
+let fatalHandling = false;
+process.on('uncaughtException', err => {
+  console.error('uncaughtException:', err);
+  if (fatalHandling) return;
+  fatalHandling = true;
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(DATA));
+    console.error('[fatal] DB locale flushée avant redémarrage');
+  } catch (e) { console.error('[fatal] échec du flush DB locale:', e.message); }
+  // Laisse les logs partir, puis force la sortie pour déclencher un redémarrage propre.
+  setTimeout(() => process.exit(1), 100).unref();
 });
 
 // Graceful shutdown : flush DB (locale ET Postgres) avant de mourir. Corrige deux pièges qui
