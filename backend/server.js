@@ -2741,7 +2741,11 @@ app.get('/api/widget', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   const p = DATA.programs[u.id];
-  const sessions = Object.values(DATA.sessions).filter(s => s.userId === u.id).sort((a,b) => b.date - a.date);
+  // Les séances stockent date en chaîne ISO (new Date().toISOString()), pas en timestamp
+  // numérique comme les poids/photos : "b.date - a.date" donnait donc NaN → tri inopérant →
+  // sessions[0] n'était PAS la dernière séance, et le widget "dernière séance" affichait une
+  // séance arbitraire, incohérente avec l'historique (qui trie via new Date()). On convertit.
+  const sessions = Object.values(DATA.sessions).filter(s => s.userId === u.id).sort((a,b) => new Date(b.date) - new Date(a.date));
   const lastSession = sessions[0] || null;
 
   // Per-day volumes Mon(0)–Sun(6) for current week
