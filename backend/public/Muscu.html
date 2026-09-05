@@ -542,32 +542,6 @@ function useLocalState(key,defaultValue,onSave){
   return[state,setState];
 }
 
-// ── Default workout data ──────────────────────────────────
-const DEFAULT_WORKOUT={
-  name:'Push Day',
-  muscles:'Pectoraux · Épaules · Triceps',
-  exercises:[
-    {id:'bench',name:'Développé couché',muscle:'Pectoraux',sets:[
-      {weight:80,reps:8,done:true},{weight:80,reps:8,done:true},
-      {weight:82.5,reps:0,done:false,target:8},{weight:82.5,reps:0,done:false,target:8},
-    ]},
-    {id:'incline',name:'Développé incliné haltères',muscle:'Haut pecs',sets:[
-      {weight:30,reps:0,done:false,target:10},{weight:30,reps:0,done:false,target:10},{weight:30,reps:0,done:false,target:10},
-    ]},
-    {id:'fly',name:'Écarté poulie',muscle:'Pectoraux',sets:[
-      {weight:20,reps:0,done:false,target:12},{weight:20,reps:0,done:false,target:12},{weight:20,reps:0,done:false,target:12},
-    ]},
-    {id:'ohp',name:'Développé militaire',muscle:'Épaules',sets:[
-      {weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},
-    ]},
-    {id:'lat',name:'Élévations latérales',muscle:'Deltoïdes',sets:[
-      {weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},
-    ]},
-    {id:'tri',name:'Extensions triceps poulie',muscle:'Triceps',sets:[
-      {weight:25,reps:0,done:false,target:12},{weight:25,reps:0,done:false,target:12},{weight:25,reps:0,done:false,target:12},
-    ]},
-  ],
-};
 
 // ── Correction des valeurs cardio stockées comme serials de date Excel ──────
 // Quand l'utilisateur tape "4-5" (plage vitesse), Excel l'auto-convertit en
@@ -3537,19 +3511,6 @@ function VolumeAreaChart({data}){
 
 
 // ── Profile ───────────────────────────────────────────────
-function ProfileField({label,value,onChange,suffix,type='text',inputMode}){
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-      <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{label}</div>
-      <div style={{display:'flex',alignItems:'center',gap:6,padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
-        <input type={type} inputMode={inputMode} value={value||''} onChange={onChange}
-          style={{flex:1,minWidth:0,background:'transparent',border:'none',color:T.text,fontSize:15,fontWeight:600,outline:'none',fontFamily:'inherit'}}
-          placeholder="—"/>
-        {suffix&&<span style={{fontSize:12,color:T.textDim,fontWeight:600,flexShrink:0}}>{suffix}</span>}
-      </div>
-    </div>
-  );
-}
 
 function BackupRestoreCard(){
   const[msg,setMsg]=React.useState(null);
@@ -11125,7 +11086,6 @@ function Splash(){
 }
 
 // ── App ───────────────────────────────────────────────────
-const DEFAULT_PROFILE={firstName:'',lastName:'',height:'',weight:'',objective:'Hypertrophie'};
 
 // ── Pricing Screen ────────────────────────────────────────────────────────────
 function PricingScreen({onBack,currentUser}){
@@ -11491,7 +11451,6 @@ const TP_CATS=[
 const TP_LEVELS=['Débutant','Intermédiaire','Avancé'];
 const TP_DURATIONS={'1month':'1 mois','2months':'2 mois','3months':'3 mois','4months':'4 mois','5months':'5 mois','6months':'6 mois','7months':'7 mois','8months':'8 mois','9months':'9 mois','10months':'10 mois','11months':'11 mois','12months':'12 mois'};
 const TP_ACCENT='#E07020';
-const TP_ACCENT2='#D4883A';
 const TP_GRAD='linear-gradient(135deg,#E07020,#D4883A)';
 
 function TrainingProgramsScreen({authUser,onStartWorkout}){
