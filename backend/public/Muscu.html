@@ -1375,6 +1375,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         // la resynchronisation automatique : la séance restait indéfiniment coincée dans la file
         // locale ("⚠ séance non synchronisée") sans jamais atteindre le coach, silencieusement.
         name:workout.name||'Séance',
+        muscles:workout.muscles||'',
         totalVolume,
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
@@ -7640,7 +7641,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 {sess?(
                   <div onClick={()=>setViewSession(sess)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}{(sess.muscles||progData?.category)?' · '+(sess.muscles||progData?.category):''}</div>
                       <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg · {(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0,padding:'4px 8px',borderRadius:7,background:'rgba(44,196,160,0.12)'}}>
@@ -7650,7 +7651,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   </div>
                 ):hasProg&&progData?(
                   <>
-                    <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName} — non effectué</div>
+                    <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName}{progData?.category?' · '+progData.category:''} — non effectué</div>
                     {progData.exercises?.slice(0,3).map((ex,i)=>(
                       <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}</div>
                     ))}
