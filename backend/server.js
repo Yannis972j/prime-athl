@@ -3054,7 +3054,10 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
 
 // ── Push helper ──────────────────────────────────────
 const PUSH_ICON = '/push-icon.webp';
-const PUSH_BADGE = '/icon-192.png';
+// Badge = petite icône de la barre d'état Android : doit être MONOCHROME à fond transparent
+// (Android n'en garde que la silhouette via l'alpha). icon-192.png a un fond noir opaque → rendu
+// en carré blanc. notif-badge.png est le logo Prime Athl blanc sur fond transparent.
+const PUSH_BADGE = '/notif-badge.png';
 function pushToUser(userId, payload) {
   if (!VAPID_PUBLIC_KEY) return;
   const sub = DATA.pushSubscriptions[userId];
