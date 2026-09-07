@@ -744,6 +744,11 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
         let lastRestStr = '';
+        // Muscle courant, hérité sur les lignes vides d'un même bloc — la colonne Muscle est
+        // souvent une cellule fusionnée (ex: "JAMBES" couvrant tout un circuit), donc seule la
+        // 1ère ligne du bloc porte la valeur ; sans héritage, les suivantes retombaient sur le
+        // titre du bloc. On respecte ainsi ce qui est réellement écrit dans le tableau.
+        let lastMuscle = '';
         // Libellé du bloc/circuit courant ("ÉCHAUFFEMENT", "CIRCUIT 2"…) hérité sur les lignes
         // suivantes de la cellule fusionnée, comme lastExplicitStyle/lastRestStr.
         let lastBlockLabel = null;
@@ -751,7 +756,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
           if (isHeaderRow(row)) { detectCols(row); return; }
-          if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); return; }
+          if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); lastMuscle = ''; lastBlockLabel = null; return; }
 
           // Lit le texte d'une cellule cardio en gérant les plages "4-5" auto-converties
           // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
@@ -773,7 +778,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; lastMuscle = ''; }
 
           // Circuits numérotés ("CIRCUIT 1", "CIRCUIT 2"…) et échauffement : reconnus comme des
           // blocs de circuit DISTINCTS (chaînés comme un ABDOS, mais jamais fusionnés entre eux),
@@ -797,8 +802,11 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           }
 
           const muscleRaw = String(row[colMuscle]||'').trim();
-          // Si la cellule muscle contient un nombre (ex: charge mise par erreur), utiliser currentCategory
-          const muscleName = (muscleRaw && isNaN(parseFloat(muscleRaw))) ? muscleRaw : currentCategory;
+          // Muscle valide = texte non numérique (une cellule numérique = charge mise par erreur).
+          // Cellule vide → on hérite du muscle du bloc (cellule fusionnée), sinon le titre du bloc.
+          const muscleValid = muscleRaw && isNaN(parseFloat(muscleRaw));
+          const muscleName = muscleValid ? muscleRaw : (lastMuscle || currentCategory);
+          if (muscleValid) lastMuscle = muscleRaw;
           const seriesNum = parseFloat(String(row[colSeries]||'').replace(',','.'));
 
           // Dès que la colonne Durée est renseignée, l'exercice devient un compte à rebours à
