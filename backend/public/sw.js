@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v10'; // v10 : nouveau logo (icônes + manifest) — invalide l'ancien cache
+const CACHE = 'prime-athl-v11'; // v11 : badge de notification (logo monochrome barre d'état)
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -16,7 +16,7 @@ function schedulePing() {
 // sur la version de share.html mise en cache à sa première visite, indéfiniment (le cache-first
 // ci-dessous ne revalide jamais, et la clé de cache inclut même le ?t=token donc chaque lien
 // distinct se met en cache séparément).
-const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/notif-badge.png'];
 const NEVER_CACHE_SUFFIXES = ['/Muscu.html', '/share.html'];
 
 self.addEventListener('install', e => {
@@ -58,7 +58,8 @@ self.addEventListener('push', e => {
     self.registration.showNotification(data.title || 'Prime Athl', {
       body: data.body || '',
       icon: data.icon || '/push-icon.webp',
-      badge: data.badge || '/icon-192.png',
+      // Badge barre d'état Android : logo monochrome à fond transparent (silhouette).
+      badge: data.badge || '/notif-badge.png',
       image: data.image || undefined,
       tag: data.tag || 'prime-athl',
       renotify: true,
