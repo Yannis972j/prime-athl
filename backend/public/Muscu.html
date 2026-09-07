@@ -657,6 +657,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
       if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) { onError('Fichier Excel vide ou illisible'); return; }
       const programs = {};
       const warnings = [];
+      // Séances sans jour (à router vers la Bibliothèque). Cf. daylessData plus bas.
+      const librarySessions = [];
       const DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
       const uid = () => Math.random().toString(36).slice(2);
 
@@ -736,6 +738,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
         const sheetData = {};
         const categoryData = {};
+        const daylessData = {}; // blocs sans jour → Bibliothèque (séances à démarrer sans calendrier)
         let currentDay = null;
         let currentCategory = '';
         let lastSeriesCount = 3;
@@ -859,14 +862,17 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
           };
 
-          // Un bloc SANS jour (ex: une séance "TERREVILLE" en tête de fichier, avant tout
-          // LUNDI…DIMANCHE) n'est plus ignoré : on le garde comme une séance à part entière,
-          // clée par son titre de bloc (currentCategory) au lieu d'un jour de la semaine. Il
-          // apparaît ainsi dans l'app comme une séance importée normale (échauffement + circuits
-          // inclus), au lieu de disparaître silencieusement.
-          const dataKey = currentDay || currentCategory || 'Séance';
-          if (!sheetData[dataKey]) sheetData[dataKey] = {category:currentCategory, exercises:[]};
-          sheetData[dataKey].exercises.push(exercise);
+          if (currentDay) {
+            if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
+            sheetData[currentDay].exercises.push(exercise);
+          } else {
+            // Bloc SANS jour (ex: séance "TERREVILLE" en tête de fichier, avant tout LUNDI…) :
+            // au lieu d'être ignoré, il devient une séance de la BIBLIOTHÈQUE (à démarrer quand on
+            // veut, sans calendrier). Collecté à part, clé = titre du bloc.
+            const dlKey = currentCategory || sheetName;
+            if (!daylessData[dlKey]) daylessData[dlKey] = {name:dlKey, category:currentCategory, exercises:[]};
+            daylessData[dlKey].exercises.push(exercise);
+          }
 
           // Bibliothèque sans colonne JOUR : un bloc de catégorie = une séance
           const catKey = currentCategory || sheetName;
@@ -877,19 +883,22 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         // Bibliothèque : toujours grouper par catégorie, jamais par jour de la semaine
         if (categoryFallback) {
           if (Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
-        } else if (Object.keys(sheetData).length > 0) {
-          programs[sheetName] = sheetData;
+        } else {
+          if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
+          // Les blocs sans jour de cette feuille deviennent des séances de Bibliothèque.
+          for (const k of Object.keys(daylessData)) {
+            if (daylessData[k].exercises.length) librarySessions.push(daylessData[k]);
+          }
         }
-        // categoryData compte TOUTE ligne avec un nom d'exercice, même avant qu'un jour ne
-        // soit détecté ; sheetData ne garde que celles rattachées à un jour. L'écart entre
-        // les deux = des lignes silencieusement perdues (jour manquant/mal placé en 1ère
-        // ligne du bloc) — averti au lieu de disparaître sans explication.
+        // Filet : en mode programme, une ligne d'exercice ne doit atterrir NI dans sheetData
+        // (jour) NI dans daylessData (bloc sans jour) que si un bug l'a perdue — on avertit alors.
         if (!categoryFallback) {
           const totalExRows = Object.values(categoryData).reduce((s,c)=>s+c.exercises.length,0);
-          const keptExRows = Object.values(sheetData).reduce((s,d)=>s+d.exercises.length,0);
+          const keptExRows = Object.values(sheetData).reduce((s,d)=>s+d.exercises.length,0)
+                           + Object.values(daylessData).reduce((s,d)=>s+d.exercises.length,0);
           if (totalExRows > keptExRows) {
             const dropped = totalExRows - keptExRows;
-            warnings.push(`Feuille "${sheetName}" : ${dropped} ligne${dropped>1?'s':''} ignorée${dropped>1?'s':''} (aucun jour LUNDI…DIMANCHE détecté avant).`);
+            warnings.push(`Feuille "${sheetName}" : ${dropped} ligne${dropped>1?'s':''} ignorée${dropped>1?'s':''}.`);
           }
         }
       });
@@ -951,8 +960,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         delete programs[deloadName];
       });
 
-      if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
-      onSuccess(programs, warnings);
+      if (!Object.keys(programs).length && !librarySessions.length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
+      onSuccess(programs, warnings, librarySessions);
     } catch(e) { onError('Excel invalide : ' + (e.message || e)); }
   };
   reader.readAsArrayBuffer(file);
@@ -990,18 +999,32 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
     if (!file) return;
     e.target.value = '';
     parseYannisExcel(file,
-      (programs, warnings) => {
+      (programs, warnings, librarySessions) => {
         const nS = Object.keys(programs).length;
         const nD = Object.values(programs).reduce((s,d)=>s+Object.keys(d).length,0);
         const nEx = Object.values(programs).reduce((s,d)=>s+Object.values(d).reduce((s2,day)=>s2+(day.exercises||[]).length,0),0);
+        const libSessions = librarySessions || [];
+        const nLib = libSessions.length;
+        // Enregistre les séances sans jour dans la Bibliothèque perso (à démarrer sans calendrier).
+        const saveLib = () => Promise.all(libSessions.map(s =>
+          apiCall('/api/my-library/sessions', {method:'POST', body:{name:s.name, muscles:s.category||'', exercises:s.exercises}}).catch(()=>{})
+        ));
+        const okMsg = () => {
+          const parts = [];
+          if (nS) parts.push(`${nS} mois · ${nD} jours`);
+          if (nLib) parts.push(`${nLib} séance${nLib>1?'s':''} en bibliothèque`);
+          return `✓ ${parts.join(' · ')} importé${(nD+nLib)>1?'s':''}`;
+        };
         // Aperçu avant d'écraser quoi que ce soit : le coach voit ce qui a été détecté
         // (et les lignes ignorées) avant de confirmer, plutôt qu'après coup.
+        const stats = [{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}];
+        if (nLib) stats.push({label:'séances biblio',value:nLib});
         setPreview({
-          stats:[{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}],
+          stats,
           warnings: warnings||[],
           allowSchedule: !!allowSchedule,
           onConfirm: (activateOn) => {
-            if (allowSchedule && activateOn) {
+            if (allowSchedule && activateOn && nS) {
               setMsg('⏳ Programmation...');
               apiCall('/api/my-program/scheduled', {method:'PUT', body:{data:programs, activateOn}}).then(r => {
                 if (r?.scheduled === false) {
@@ -1009,18 +1032,21 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
                   // base sur SA réponse, pas sur notre variable locale (horloge client/serveur
                   // potentiellement désynchronisée autour de minuit).
                   if (onImportPrograms) onImportPrograms(programs);
-                  setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+                  setMsg(okMsg());
                 } else {
                   const dateLabel = new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
-                  setMsg(`✓ Programme programmé pour le ${dateLabel}`);
+                  setMsg(`✓ Programme programmé pour le ${dateLabel}${nLib?` · ${nLib} séance${nLib>1?'s':''} en bibliothèque`:''}`);
                 }
-                if (onScheduled) onScheduled();
-                setTimeout(() => setMsg(null), 4000);
-              }).catch(ex => { setMsg('✗ '+(ex.message||'Erreur')); setTimeout(() => setMsg(null), 4000); });
+                return saveLib();
+              }).then(() => { if (onScheduled) onScheduled(); setTimeout(() => setMsg(null), 4000); })
+                .catch(ex => { setMsg('✗ '+(ex.message||'Erreur')); setTimeout(() => setMsg(null), 4000); });
               return;
             }
-            if (onImportPrograms) onImportPrograms(programs);
-            setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+            // n'écrase le programme (jours) que s'il y en a un — un fichier 100% "séances sans jour"
+            // ne doit pas vider le programme existant.
+            if (onImportPrograms && nS) onImportPrograms(programs);
+            saveLib().then(() => { if (onScheduled) onScheduled(); });
+            setMsg(okMsg());
             setTimeout(() => setMsg(null), 4000);
           },
         });
