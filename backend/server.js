@@ -18,8 +18,6 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
-import { createRequire } from 'module';
-const _require = createRequire(import.meta.url);
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2741,7 +2739,11 @@ app.get('/api/widget', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   const p = DATA.programs[u.id];
-  const sessions = Object.values(DATA.sessions).filter(s => s.userId === u.id).sort((a,b) => b.date - a.date);
+  // Les séances stockent date en chaîne ISO (new Date().toISOString()), pas en timestamp
+  // numérique comme les poids/photos : "b.date - a.date" donnait donc NaN → tri inopérant →
+  // sessions[0] n'était PAS la dernière séance, et le widget "dernière séance" affichait une
+  // séance arbitraire, incohérente avec l'historique (qui trie via new Date()). On convertit.
+  const sessions = Object.values(DATA.sessions).filter(s => s.userId === u.id).sort((a,b) => new Date(b.date) - new Date(a.date));
   const lastSession = sessions[0] || null;
 
   // Per-day volumes Mon(0)–Sun(6) for current week
@@ -2978,7 +2980,12 @@ app.get('/api/messages/summary', authRequired, (req, res) => {
 app.post('/api/messages/:partnerId/read', authRequired, (req, res) => {
   const me = req.user.id;
   const partner = req.params.partnerId;
-  if (!DATA.users[partner]) return res.status(404).json({ error: 'not_found' });
+  const partnerUser = DATA.users[partner];
+  if (!partnerUser) return res.status(404).json({ error: 'not_found' });
+  // Même contrôle que sur GET/POST /api/messages/:partnerId : on ne marque une conversation
+  // comme lue que si les deux utilisateurs sont bien en relation coach↔athlète. Sans ça, un
+  // partnerId arbitraire pouvait être écrit dans messageReads (état de lecture du demandeur).
+  if (!canChat(DATA.users[me], partnerUser)) return res.status(403).json({ error: 'forbidden' });
   if (!DATA.messageReads[me]) DATA.messageReads[me] = {};
   DATA.messageReads[me][partner] = Date.now();
   persist();
@@ -3818,6 +3825,11 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
       break;
     case 'checkout.session.completed': {
       const sess = event.data.object;
+      // Ne créditer l'achat que si le paiement est réellement encaissé. Pour un paiement par
+      // carte (synchrone) payment_status vaut 'paid' dès la complétion ; mais un moyen de
+      // paiement asynchrone peut compléter la session en 'unpaid'/'no_payment_required' — sans
+      // ce garde-fou, le programme payant serait accordé avant l'encaissement effectif.
+      if (sess.payment_status && sess.payment_status !== 'paid' && sess.payment_status !== 'no_payment_required') break;
       if (sess.metadata?.type === 'training_program') {
         const { programId, userId } = sess.metadata;
         if (userId && programId && DATA.trainingPrograms[programId]) {
@@ -3845,12 +3857,29 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
   res.json({ received: true });
 });
 
-// Global error handlers — keep server alive on unexpected errors
-process.on('uncaughtException', err => {
-  console.error('uncaughtException:', err);
-});
+// Global error handlers.
+// unhandledRejection : une promesse rejetée est en général localisée (une requête, un envoi
+// push…) et ne corrompt pas l'état global — on log et on continue pour ne pas provoquer de
+// coupure sur une erreur transitoire (ex: réseau).
 process.on('unhandledRejection', (reason, p) => {
   console.error('unhandledRejection:', reason);
+});
+// uncaughtException : après une exception non rattrapée, le process Node est dans un état
+// indéfini. Continuer à servir des requêtes risque de corrompre DATA (et donc le prochain
+// pgSave/backup). On tente un flush SYNCHRONE best-effort de la base locale, puis on sort avec
+// un code d'erreur pour que la plateforme (Render) relance un process propre — la source de
+// vérité Postgres a déjà été sauvegardée par le debounce (~500ms) et le backup quotidien.
+let fatalHandling = false;
+process.on('uncaughtException', err => {
+  console.error('uncaughtException:', err);
+  if (fatalHandling) return;
+  fatalHandling = true;
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(DATA));
+    console.error('[fatal] DB locale flushée avant redémarrage');
+  } catch (e) { console.error('[fatal] échec du flush DB locale:', e.message); }
+  // Laisse les logs partir, puis force la sortie pour déclencher un redémarrage propre.
+  setTimeout(() => process.exit(1), 100).unref();
 });
 
 // Graceful shutdown : flush DB (locale ET Postgres) avant de mourir. Corrige deux pièges qui

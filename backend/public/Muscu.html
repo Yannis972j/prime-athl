@@ -542,32 +542,6 @@ function useLocalState(key,defaultValue,onSave){
   return[state,setState];
 }
 
-// ── Default workout data ──────────────────────────────────
-const DEFAULT_WORKOUT={
-  name:'Push Day',
-  muscles:'Pectoraux · Épaules · Triceps',
-  exercises:[
-    {id:'bench',name:'Développé couché',muscle:'Pectoraux',sets:[
-      {weight:80,reps:8,done:true},{weight:80,reps:8,done:true},
-      {weight:82.5,reps:0,done:false,target:8},{weight:82.5,reps:0,done:false,target:8},
-    ]},
-    {id:'incline',name:'Développé incliné haltères',muscle:'Haut pecs',sets:[
-      {weight:30,reps:0,done:false,target:10},{weight:30,reps:0,done:false,target:10},{weight:30,reps:0,done:false,target:10},
-    ]},
-    {id:'fly',name:'Écarté poulie',muscle:'Pectoraux',sets:[
-      {weight:20,reps:0,done:false,target:12},{weight:20,reps:0,done:false,target:12},{weight:20,reps:0,done:false,target:12},
-    ]},
-    {id:'ohp',name:'Développé militaire',muscle:'Épaules',sets:[
-      {weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},{weight:50,reps:0,done:false,target:8},
-    ]},
-    {id:'lat',name:'Élévations latérales',muscle:'Deltoïdes',sets:[
-      {weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},{weight:12,reps:0,done:false,target:15},
-    ]},
-    {id:'tri',name:'Extensions triceps poulie',muscle:'Triceps',sets:[
-      {weight:25,reps:0,done:false,target:12},{weight:25,reps:0,done:false,target:12},{weight:25,reps:0,done:false,target:12},
-    ]},
-  ],
-};
 
 // ── Correction des valeurs cardio stockées comme serials de date Excel ──────
 // Quand l'utilisateur tape "4-5" (plage vitesse), Excel l'auto-convertit en
@@ -683,6 +657,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
       if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) { onError('Fichier Excel vide ou illisible'); return; }
       const programs = {};
       const warnings = [];
+      // Séances sans jour (à router vers la Bibliothèque). Cf. daylessData plus bas.
+      const librarySessions = [];
       const DAYS = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
       const uid = () => Math.random().toString(36).slice(2);
 
@@ -762,11 +738,15 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
         const sheetData = {};
         const categoryData = {};
+        const daylessData = {}; // blocs sans jour → Bibliothèque (séances à démarrer sans calendrier)
         let currentDay = null;
         let currentCategory = '';
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
         let lastRestStr = '';
+        // Libellé du bloc/circuit courant ("ÉCHAUFFEMENT", "CIRCUIT 2"…) hérité sur les lignes
+        // suivantes de la cellule fusionnée, comme lastExplicitStyle/lastRestStr.
+        let lastBlockLabel = null;
 
         rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
@@ -793,11 +773,28 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; }
 
-          const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
-          const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
-          if (rawStyle) lastExplicitStyle = rawStyle;
+          // Circuits numérotés ("CIRCUIT 1", "CIRCUIT 2"…) et échauffement : reconnus comme des
+          // blocs de circuit DISTINCTS (chaînés comme un ABDOS, mais jamais fusionnés entre eux),
+          // affichés dans l'ordre. Un bloc dont la colonne Muscle (ou le style) indique
+          // l'échauffement porte le libellé "ÉCHAUFFEMENT" au lieu de "CIRCUIT N". Le libellé
+          // s'hérite sur les lignes suivantes de la cellule Style fusionnée (lastBlockLabel).
+          const rawStyleUp = String(row[colStyle]||'').trim().toUpperCase();
+          const circuitNum = (rawStyleUp.match(/^CIRCUITS?\s*(\d+)/) || [])[1];
+          const isBareCircuit = /^CIRCUITS?$/.test(rawStyleUp);
+          const isWarmupRow = /echauff/.test(norm(row[colMuscle])) || /echauff/.test(norm(rawStyleUp));
+          let styleVal, blockLabel;
+          if (circuitNum || isBareCircuit || isWarmupRow) {
+            styleVal = 'ABDOS';
+            blockLabel = isWarmupRow ? 'ÉCHAUFFEMENT' : (circuitNum ? 'CIRCUIT ' + circuitNum : 'CIRCUIT');
+            lastExplicitStyle = 'ABDOS';
+            lastBlockLabel = blockLabel;
+          } else {
+            const rawStyle = normalizeStyle(rawStyleUp);
+            if (rawStyle) { styleVal = rawStyle; lastExplicitStyle = rawStyle; lastBlockLabel = null; blockLabel = null; }
+            else { styleVal = INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE'; blockLabel = lastBlockLabel; }
+          }
 
           const muscleRaw = String(row[colMuscle]||'').trim();
           // Si la cellule muscle contient un nombre (ex: charge mise par erreur), utiliser currentCategory
@@ -855,6 +852,9 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
             holdSeconds: isHold ? holdSeconds : 0,
+            // Libellé de circuit / échauffement (ex: "CIRCUIT 2", "ÉCHAUFFEMENT") — sert à
+            // séparer et nommer les blocs distincts au regroupement/affichage.
+            ...(blockLabel ? { block: blockLabel } : {}),
             // "unilatéral" dans le nom (ex: "Leg Extension Unilatéral") → tagué dès l'import,
             // pour que le toggle G/D de l'éditeur reflète bien l'état sans que Yannis ait à y
             // repenser (isUnilateralEx() sert par ailleurs de filet à l'affichage/la saisie).
@@ -865,6 +865,13 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (currentDay) {
             if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
             sheetData[currentDay].exercises.push(exercise);
+          } else {
+            // Bloc SANS jour (ex: séance "TERREVILLE" en tête de fichier, avant tout LUNDI…) :
+            // au lieu d'être ignoré, il devient une séance de la BIBLIOTHÈQUE (à démarrer quand on
+            // veut, sans calendrier). Collecté à part, clé = titre du bloc.
+            const dlKey = currentCategory || sheetName;
+            if (!daylessData[dlKey]) daylessData[dlKey] = {name:dlKey, category:currentCategory, exercises:[]};
+            daylessData[dlKey].exercises.push(exercise);
           }
 
           // Bibliothèque sans colonne JOUR : un bloc de catégorie = une séance
@@ -876,19 +883,22 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         // Bibliothèque : toujours grouper par catégorie, jamais par jour de la semaine
         if (categoryFallback) {
           if (Object.keys(categoryData).length > 0) programs[sheetName] = categoryData;
-        } else if (Object.keys(sheetData).length > 0) {
-          programs[sheetName] = sheetData;
+        } else {
+          if (Object.keys(sheetData).length > 0) programs[sheetName] = sheetData;
+          // Les blocs sans jour de cette feuille deviennent des séances de Bibliothèque.
+          for (const k of Object.keys(daylessData)) {
+            if (daylessData[k].exercises.length) librarySessions.push(daylessData[k]);
+          }
         }
-        // categoryData compte TOUTE ligne avec un nom d'exercice, même avant qu'un jour ne
-        // soit détecté ; sheetData ne garde que celles rattachées à un jour. L'écart entre
-        // les deux = des lignes silencieusement perdues (jour manquant/mal placé en 1ère
-        // ligne du bloc) — averti au lieu de disparaître sans explication.
+        // Filet : en mode programme, une ligne d'exercice ne doit atterrir NI dans sheetData
+        // (jour) NI dans daylessData (bloc sans jour) que si un bug l'a perdue — on avertit alors.
         if (!categoryFallback) {
           const totalExRows = Object.values(categoryData).reduce((s,c)=>s+c.exercises.length,0);
-          const keptExRows = Object.values(sheetData).reduce((s,d)=>s+d.exercises.length,0);
+          const keptExRows = Object.values(sheetData).reduce((s,d)=>s+d.exercises.length,0)
+                           + Object.values(daylessData).reduce((s,d)=>s+d.exercises.length,0);
           if (totalExRows > keptExRows) {
             const dropped = totalExRows - keptExRows;
-            warnings.push(`Feuille "${sheetName}" : ${dropped} ligne${dropped>1?'s':''} ignorée${dropped>1?'s':''} (aucun jour LUNDI…DIMANCHE détecté avant).`);
+            warnings.push(`Feuille "${sheetName}" : ${dropped} ligne${dropped>1?'s':''} ignorée${dropped>1?'s':''}.`);
           }
         }
       });
@@ -950,8 +960,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         delete programs[deloadName];
       });
 
-      if (!Object.keys(programs).length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
-      onSuccess(programs, warnings);
+      if (!Object.keys(programs).length && !librarySessions.length) { onError('Aucun programme détecté. Vérifie que les feuilles contiennent les colonnes JOUR / EXERCICE / SERIES / REPETITIONS / REPOS et au moins une ligne avec un jour (LUNDI…DIMANCHE).'); return; }
+      onSuccess(programs, warnings, librarySessions);
     } catch(e) { onError('Excel invalide : ' + (e.message || e)); }
   };
   reader.readAsArrayBuffer(file);
@@ -989,18 +999,32 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
     if (!file) return;
     e.target.value = '';
     parseYannisExcel(file,
-      (programs, warnings) => {
+      (programs, warnings, librarySessions) => {
         const nS = Object.keys(programs).length;
         const nD = Object.values(programs).reduce((s,d)=>s+Object.keys(d).length,0);
         const nEx = Object.values(programs).reduce((s,d)=>s+Object.values(d).reduce((s2,day)=>s2+(day.exercises||[]).length,0),0);
+        const libSessions = librarySessions || [];
+        const nLib = libSessions.length;
+        // Enregistre les séances sans jour dans la Bibliothèque perso (à démarrer sans calendrier).
+        const saveLib = () => Promise.all(libSessions.map(s =>
+          apiCall('/api/my-library/sessions', {method:'POST', body:{name:s.name, muscles:s.category||'', exercises:s.exercises}}).catch(()=>{})
+        ));
+        const okMsg = () => {
+          const parts = [];
+          if (nS) parts.push(`${nS} mois · ${nD} jours`);
+          if (nLib) parts.push(`${nLib} séance${nLib>1?'s':''} en bibliothèque`);
+          return `✓ ${parts.join(' · ')} importé${(nD+nLib)>1?'s':''}`;
+        };
         // Aperçu avant d'écraser quoi que ce soit : le coach voit ce qui a été détecté
         // (et les lignes ignorées) avant de confirmer, plutôt qu'après coup.
+        const stats = [{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}];
+        if (nLib) stats.push({label:'séances biblio',value:nLib});
         setPreview({
-          stats:[{label:'mois/blocs',value:nS},{label:'jours',value:nD},{label:'exercices',value:nEx}],
+          stats,
           warnings: warnings||[],
           allowSchedule: !!allowSchedule,
           onConfirm: (activateOn) => {
-            if (allowSchedule && activateOn) {
+            if (allowSchedule && activateOn && nS) {
               setMsg('⏳ Programmation...');
               apiCall('/api/my-program/scheduled', {method:'PUT', body:{data:programs, activateOn}}).then(r => {
                 if (r?.scheduled === false) {
@@ -1008,18 +1032,21 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
                   // base sur SA réponse, pas sur notre variable locale (horloge client/serveur
                   // potentiellement désynchronisée autour de minuit).
                   if (onImportPrograms) onImportPrograms(programs);
-                  setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+                  setMsg(okMsg());
                 } else {
                   const dateLabel = new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
-                  setMsg(`✓ Programme programmé pour le ${dateLabel}`);
+                  setMsg(`✓ Programme programmé pour le ${dateLabel}${nLib?` · ${nLib} séance${nLib>1?'s':''} en bibliothèque`:''}`);
                 }
-                if (onScheduled) onScheduled();
-                setTimeout(() => setMsg(null), 4000);
-              }).catch(ex => { setMsg('✗ '+(ex.message||'Erreur')); setTimeout(() => setMsg(null), 4000); });
+                return saveLib();
+              }).then(() => { if (onScheduled) onScheduled(); setTimeout(() => setMsg(null), 4000); })
+                .catch(ex => { setMsg('✗ '+(ex.message||'Erreur')); setTimeout(() => setMsg(null), 4000); });
               return;
             }
-            if (onImportPrograms) onImportPrograms(programs);
-            setMsg(`✓ ${nS} mois · ${nD} jours importés`);
+            // n'écrase le programme (jours) que s'il y en a un — un fichier 100% "séances sans jour"
+            // ne doit pas vider le programme existant.
+            if (onImportPrograms && nS) onImportPrograms(programs);
+            saveLib().then(() => { if (onScheduled) onScheduled(); });
+            setMsg(okMsg());
             setTimeout(() => setMsg(null), 4000);
           },
         });
@@ -1031,7 +1058,7 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
 // ── Workout Editor Screen ─────────────────────────────────
 // Couleurs par style
 // CLASSIQUE=gris, SUPERSET=bleu, TRISET=rose, ABDOS=vert, CARDIO=orange
-const STYLE_COLORS={CLASSIQUE:'#C8C8DC',SUPERSET:'#5A8AE0',TRISET:'#A060D0',ABDOS:'#2CC4A0',CARDIO:'#C89040'};
+const STYLE_COLORS={CLASSIQUE:'#C8C8DC',SUPERSET:'#5A8AE0',TRISET:'#A060D0',ABDOS:'#2CC4A0',CARDIO:'#C89040',ECHAUFFEMENT:'#E0785A'};
 function groupExercises(exercises){
   const groups=[];
   let i=0;
@@ -1041,11 +1068,16 @@ function groupExercises(exercises){
     if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
       // SUPERSET = 2 exos max, TRISET = 3 exos max, ABDOS = illimité (bloc ab)
       const maxItems=s==='SUPERSET'?2:s==='TRISET'?3:Infinity;
+      const blk=ex.block||null;
       const items=[{ex,idx:i}]; i++;
-      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems){
+      // ABDOS : on ne fusionne QUE les exercices du même bloc (ex.block), pour que des circuits
+      // distincts ("CIRCUIT 1", "CIRCUIT 2", "ÉCHAUFFEMENT"…) restent séparés dans l'ordre plutôt
+      // que fondus en un seul bloc continu.
+      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems&&(s!=='ABDOS'||(exercises[i].block||null)===blk)){
         items.push({ex:exercises[i],idx:i});i++;
       }
-      groups.push({style:s,color:STYLE_COLORS[s]||T.accent,items});
+      const color=(blk==='ÉCHAUFFEMENT'?STYLE_COLORS.ECHAUFFEMENT:STYLE_COLORS[s])||T.accent;
+      groups.push({style:s,color,items,label:blk});
     } else if(s==='CARDIO'){
       groups.push({style:'CARDIO',color:STYLE_COLORS.CARDIO,items:[{ex,idx:i}]});i++;
     } else {
@@ -2442,8 +2474,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
             const labelMap={CLASSIQUE:'CLASSIQUE',SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'ABDOS',CARDIO:'CARDIO'};
             const subMap={CLASSIQUE:'',SUPERSET:'· enchaîner sans repos',TRISET:'· enchaîner sans repos',ABDOS:'· Abdominaux',CARDIO:''};
-            const label=labelMap[group.style]||group.style;
-            const sub=subMap[group.style]||'';
+            const label=group.label||labelMap[group.style]||group.style;
+            const sub=group.label?(group.label==='ÉCHAUFFEMENT'?'· à faire en premier':'· enchaîner sans repos'):(subMap[group.style]||'');
 
             return(
               <div key={gi} style={{borderRadius:14,border:`1px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
@@ -2516,134 +2548,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     </div>
   );
 }
-
-// ── Dashboard ─────────────────────────────────────────────
-function DashboardScreen({workout,onStart,onEdit,onTab}){
-  const days=['L','M','M','J','V','S','D'];
-  const totalSets=workout.exercises.reduce((s,e)=>s+e.sets.length,0);
-  const totalEx=workout.exercises.length;
-  const estMin=Math.round(totalSets*2.5+totalEx*1.5);
-
-  const[widget,setWidget]=React.useState(null);
-  React.useEffect(()=>{apiCall('/api/widget').then(d=>setWidget(d)).catch(()=>{});},[]);
-
-  const todayIdx=(new Date().getDay()+6)%7; // Mon=0
-  const weekCells=(widget?.weekDayVolumes||[0,0,0,0,0,0,0]).map((vol,i)=>{
-    if(i>todayIdx)return 3; // futur
-    if(vol>0)return 1; // fait
-    if(i<todayIdx)return 0; // manqué
-    return 2; // aujourd'hui
-  });
-  const firstName=widget?.firstName||'';
-  const streak=widget?.streak||0;
-  const totalVol=widget?.weekStats?.volume||0;
-  const now=new Date();
-  const dateStr=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-
-  return(
-    <div style={{padding:'4px 18px 100px',color:T.text}}>
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginTop:6,marginBottom:22}}>
-        <div>
-          <div style={{fontSize:13,color:T.textDim,fontWeight:500,textTransform:'capitalize'}}>{dateStr}</div>
-          <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.6,marginTop:2,lineHeight:1.1}}>Salut, <HoloText>{firstName||'…'}</HoloText></div>
-        </div>
-        {firstName&&<div style={{width:44,height:44,borderRadius:22,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#fff',fontSize:16,boxShadow:'0 6px 20px rgba(191,160,96,0.45)'}}>{firstName[0].toUpperCase()}</div>}
-      </div>
-
-      <HoloCard intense padding={0} style={{marginBottom:18}}>
-        <div style={{padding:20,position:'relative'}}>
-          <div style={{position:'absolute',top:-40,right:-40,width:180,height:180,background:HOLO.iris,opacity:0.45,filter:'blur(40px)',borderRadius:'50%',pointerEvents:'none'}}/>
-          <div style={{position:'relative'}}>
-            <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Aujourd'hui</div>
-            <div style={{fontSize:30,fontWeight:700,letterSpacing:-0.8,lineHeight:1.05,marginTop:4}}>{workout.name}</div>
-            <div style={{fontSize:13,color:T.textDim,marginTop:4}}>{workout.muscles}</div>
-            <div style={{display:'flex',gap:16,marginTop:18}}>
-              <StatBox label="Exercices" value={String(totalEx)}/>
-              <StatBox label="Séries" value={String(totalSets)}/>
-              {estMin>0&&<StatBox label="Durée" value={`~${estMin}`} suffix="min"/>}
-            </div>
-            <div style={{display:'flex',gap:10,marginTop:20}}>
-              <button onClick={onStart} style={{flex:1,height:50,border:'none',borderRadius:15,cursor:'pointer',background:'linear-gradient(135deg,#BFA060,#B85070 80%)',color:'#fff',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 10px 30px rgba(191,160,96,0.4)'}}>
-                <Icon name="play" size={17} stroke="#fff"/>Commencer
-              </button>
-              <button onClick={onEdit} style={{width:50,height:50,border:'1px solid rgba(191,160,96,0.35)',borderRadius:15,cursor:'pointer',background:T.accentSoft,color:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <Icon name="edit" size={18} stroke={T.accent}/>
-              </button>
-            </div>
-          </div>
-        </div>
-      </HoloCard>
-
-      <div style={{marginBottom:18}}>
-        <SectionHeader title="Cette semaine" right={<span style={{color:T.accent,fontSize:12,fontWeight:600}}>{weekCells.filter(s=>s===1).length} séance{weekCells.filter(s=>s===1).length!==1?'s':''}</span>}/>
-        <GlassCard padding={14}>
-          <div style={{display:'flex',justifyContent:'space-between',gap:6}}>
-            {weekCells.map((s,i)=><DayCell key={i} day={days[i]} state={s} active={i===todayIdx}/>)}
-          </div>
-        </GlassCard>
-      </div>
-
-      {streak>0&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-          <GlassCard padding={14}>
-            <div style={{display:'flex',alignItems:'center',gap:6,color:T.warn,marginBottom:8}}><Icon name="flame" size={16} stroke={T.warn}/><span style={{fontSize:11,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Série</span></div>
-            <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,lineHeight:1}}>{streak}</div>
-            <div style={{fontSize:12,color:T.textDim,marginTop:4}}>jour{streak>1?'s':''} consécutif{streak>1?'s':''}</div>
-          </GlassCard>
-        </div>
-      )}
-
-      <SectionHeader title="Volume hebdo" right={<button onClick={()=>onTab('stats')} style={{background:'none',border:'none',color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:2}}>Voir tout <Icon name="chevronRight" size={14} stroke={T.accent}/></button>}/>
-      <GlassCard padding={16}>
-        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:6}}>
-          <div>
-            <div style={{fontSize:24,fontWeight:700,letterSpacing:-0.4}}><HoloText>{totalVol>0?totalVol.toLocaleString('fr-FR'):'—'}</HoloText>{totalVol>0&&<span style={{fontSize:13,color:T.textDim,fontWeight:500,marginLeft:4}}>kg</span>}</div>
-            <div style={{fontSize:11,color:T.textDim,fontWeight:500,marginTop:2}}>cette semaine</div>
-          </div>
-        </div>
-        <MiniBarChart data={widget?.weekDayVolumes||[0,0,0,0,0,0,0]} todayIdx={todayIdx}/>
-      </GlassCard>
-    </div>
-  );
-}
-
-function StatBox({label,value,suffix}){
-  return(<div><div style={{fontSize:10,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{label}</div><div style={{fontSize:18,fontWeight:700,letterSpacing:-0.3,marginTop:2}}>{value}{suffix&&<span style={{fontSize:11,color:T.textDim,marginLeft:2,fontWeight:500}}>{suffix}</span>}</div></div>);
-}
-
-function DayCell({day,state,active}){
-  const isDone=state===1,isToday=state===2||active,isMissed=state===0;
-  return(<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,flex:1}}>
-    <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4}}>{day}</div>
-    <div style={{width:34,height:34,borderRadius:12,background:isToday?'transparent':isDone?'rgba(191,160,96,0.18)':isMissed?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.03)',border:isToday?'1.5px solid rgba(191,160,96,0.6)':isDone?'1px solid rgba(191,160,96,0.35)':'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-      {isDone&&<Icon name="check" size={16} stroke={T.accent} strokeWidth={2.4}/>}
-      {isToday&&<div style={{width:6,height:6,borderRadius:3,background:HOLO.irisHorizon,backgroundSize:'200% 100%',animation:'holoText 4s linear infinite'}}/>}
-      {isMissed&&<Icon name="x" size={14} stroke={T.textFaint} strokeWidth={2}/>}
-    </div>
-  </div>);
-}
-
-function MiniBarChart({data,todayIdx}){
-  const max=Math.max(...data,1);
-  const today=todayIdx!=null?todayIdx:(new Date().getDay()+6)%7;
-  return(<div style={{display:'flex',alignItems:'flex-end',gap:6,height:60,marginTop:12}}>
-    {data.map((v,i)=>{
-      const isFuture=i>today;
-      const isToday=i===today;
-      const bg=v===0?'rgba(255,255,255,0.06)':isToday?HOLO.irisHorizon:'linear-gradient(180deg,rgba(191,160,96,0.7),rgba(191,160,96,0.25))';
-      return(
-        <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%',opacity:isFuture?0.3:1}}>
-          <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end'}}>
-            <div style={{width:'100%',height:`${Math.max(4,(v/max)*100)}%`,background:bg,borderRadius:5}}/>
-          </div>
-          <div style={{fontSize:9,color:isToday?T.accent:T.textFaint,fontWeight:isToday?700:600}}>{['L','M','M','J','V','S','D'][i]}</div>
-        </div>
-      );
-    })}
-  </div>);
-}
-
-
 
 
 // ── Weight Chart ──────────────────────────────────────────
@@ -3665,19 +3569,6 @@ function VolumeAreaChart({data}){
 
 
 // ── Profile ───────────────────────────────────────────────
-function ProfileField({label,value,onChange,suffix,type='text',inputMode}){
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-      <div style={{fontSize:10,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>{label}</div>
-      <div style={{display:'flex',alignItems:'center',gap:6,padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)'}}>
-        <input type={type} inputMode={inputMode} value={value||''} onChange={onChange}
-          style={{flex:1,minWidth:0,background:'transparent',border:'none',color:T.text,fontSize:15,fontWeight:600,outline:'none',fontFamily:'inherit'}}
-          placeholder="—"/>
-        {suffix&&<span style={{fontSize:12,color:T.textDim,fontWeight:600,flexShrink:0}}>{suffix}</span>}
-      </div>
-    </div>
-  );
-}
 
 function BackupRestoreCard(){
   const[msg,setMsg]=React.useState(null);
@@ -5278,8 +5169,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
                               <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
                                 <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
-                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{labelMap[group.style]||group.style}</span>
-                                {subMap[group.style]&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>{subMap[group.style]}</span>}
+                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{group.label||labelMap[group.style]||group.style}</span>
+                                {(group.label?(group.label!=='ÉCHAUFFEMENT'):subMap[group.style])&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>{group.label?'· enchaîner sans repos':subMap[group.style]}</span>}
                               </div>
                               {group.items.map(({ex,idx:i},bi)=>(
                                 <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
@@ -11253,7 +11144,6 @@ function Splash(){
 }
 
 // ── App ───────────────────────────────────────────────────
-const DEFAULT_PROFILE={firstName:'',lastName:'',height:'',weight:'',objective:'Hypertrophie'};
 
 // ── Pricing Screen ────────────────────────────────────────────────────────────
 function PricingScreen({onBack,currentUser}){
@@ -11619,7 +11509,6 @@ const TP_CATS=[
 const TP_LEVELS=['Débutant','Intermédiaire','Avancé'];
 const TP_DURATIONS={'1month':'1 mois','2months':'2 mois','3months':'3 mois','4months':'4 mois','5months':'5 mois','6months':'6 mois','7months':'7 mois','8months':'8 mois','9months':'9 mois','10months':'10 mois','11months':'11 mois','12months':'12 mois'};
 const TP_ACCENT='#E07020';
-const TP_ACCENT2='#D4883A';
 const TP_GRAD='linear-gradient(135deg,#E07020,#D4883A)';
 
 function TrainingProgramsScreen({authUser,onStartWorkout}){
