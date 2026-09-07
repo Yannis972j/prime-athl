@@ -2163,9 +2163,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           <div style={{padding:'12px 14px 14px',position:'relative'}}>
             <div style={{position:'relative'}}>
               {(ex.style==='SUPERSET'||ex.style==='TRISET'||ex.style==='ABDOS'||ex.style==='CARDIO')&&(()=>{
-                const sc=STYLE_COLORS[ex.style]||T.accent;
-                const label=ex.style==='TRISET'?'TRI-SET':ex.style;
-                const sub=ex.style==='CARDIO'?'':ex.style==='ABDOS'?'· Abdominaux':'· Enchaîner sans repos';
+                // Circuit numéroté / échauffement : on affiche le libellé du bloc (ex: "CIRCUIT 2",
+                // "ÉCHAUFFEMENT") — pas "ABDOS", qui n'est que le style interne de chaînage et
+                // n'a rien à voir avec le muscle réel (JAMBES, etc.).
+                const isWarm=ex.block==='ÉCHAUFFEMENT';
+                const sc=isWarm?STYLE_COLORS.ECHAUFFEMENT:(STYLE_COLORS[ex.style]||T.accent);
+                const label=ex.block?ex.block:(ex.style==='TRISET'?'TRI-SET':ex.style);
+                const sub=ex.block?(isWarm?'· à faire en premier':'· enchaîner sans repos'):(ex.style==='CARDIO'?'':ex.style==='ABDOS'?'· Abdominaux':'· Enchaîner sans repos');
                 return(
                   <div style={{display:'inline-flex',alignItems:'center',gap:5,marginBottom:6,padding:'3px 9px',borderRadius:999,background:`${sc}14`,border:`1px solid ${sc}44`}}>
                     <div style={{width:5,height:5,borderRadius:3,background:sc}}/>
