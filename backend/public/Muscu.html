@@ -741,6 +741,9 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
         let lastRestStr = '';
+        // Libellé du bloc/circuit courant ("ÉCHAUFFEMENT", "CIRCUIT 2"…) hérité sur les lignes
+        // suivantes de la cellule fusionnée, comme lastExplicitStyle/lastRestStr.
+        let lastBlockLabel = null;
 
         rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
@@ -767,11 +770,28 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; }
 
-          const rawStyle = normalizeStyle(String(row[colStyle]||'').trim().toUpperCase());
-          const styleVal = rawStyle || (INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE');
-          if (rawStyle) lastExplicitStyle = rawStyle;
+          // Circuits numérotés ("CIRCUIT 1", "CIRCUIT 2"…) et échauffement : reconnus comme des
+          // blocs de circuit DISTINCTS (chaînés comme un ABDOS, mais jamais fusionnés entre eux),
+          // affichés dans l'ordre. Un bloc dont la colonne Muscle (ou le style) indique
+          // l'échauffement porte le libellé "ÉCHAUFFEMENT" au lieu de "CIRCUIT N". Le libellé
+          // s'hérite sur les lignes suivantes de la cellule Style fusionnée (lastBlockLabel).
+          const rawStyleUp = String(row[colStyle]||'').trim().toUpperCase();
+          const circuitNum = (rawStyleUp.match(/^CIRCUITS?\s*(\d+)/) || [])[1];
+          const isBareCircuit = /^CIRCUITS?$/.test(rawStyleUp);
+          const isWarmupRow = /echauff/.test(norm(row[colMuscle])) || /echauff/.test(norm(rawStyleUp));
+          let styleVal, blockLabel;
+          if (circuitNum || isBareCircuit || isWarmupRow) {
+            styleVal = 'ABDOS';
+            blockLabel = isWarmupRow ? 'ÉCHAUFFEMENT' : (circuitNum ? 'CIRCUIT ' + circuitNum : 'CIRCUIT');
+            lastExplicitStyle = 'ABDOS';
+            lastBlockLabel = blockLabel;
+          } else {
+            const rawStyle = normalizeStyle(rawStyleUp);
+            if (rawStyle) { styleVal = rawStyle; lastExplicitStyle = rawStyle; lastBlockLabel = null; blockLabel = null; }
+            else { styleVal = INHERITABLE.includes(lastExplicitStyle) ? lastExplicitStyle : 'CLASSIQUE'; blockLabel = lastBlockLabel; }
+          }
 
           const muscleRaw = String(row[colMuscle]||'').trim();
           // Si la cellule muscle contient un nombre (ex: charge mise par erreur), utiliser currentCategory
@@ -829,6 +849,9 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
             holdSeconds: isHold ? holdSeconds : 0,
+            // Libellé de circuit / échauffement (ex: "CIRCUIT 2", "ÉCHAUFFEMENT") — sert à
+            // séparer et nommer les blocs distincts au regroupement/affichage.
+            ...(blockLabel ? { block: blockLabel } : {}),
             // "unilatéral" dans le nom (ex: "Leg Extension Unilatéral") → tagué dès l'import,
             // pour que le toggle G/D de l'éditeur reflète bien l'état sans que Yannis ait à y
             // repenser (isUnilateralEx() sert par ailleurs de filet à l'affichage/la saisie).
@@ -836,10 +859,14 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
           };
 
-          if (currentDay) {
-            if (!sheetData[currentDay]) sheetData[currentDay] = {category:currentCategory, exercises:[]};
-            sheetData[currentDay].exercises.push(exercise);
-          }
+          // Un bloc SANS jour (ex: une séance "TERREVILLE" en tête de fichier, avant tout
+          // LUNDI…DIMANCHE) n'est plus ignoré : on le garde comme une séance à part entière,
+          // clée par son titre de bloc (currentCategory) au lieu d'un jour de la semaine. Il
+          // apparaît ainsi dans l'app comme une séance importée normale (échauffement + circuits
+          // inclus), au lieu de disparaître silencieusement.
+          const dataKey = currentDay || currentCategory || 'Séance';
+          if (!sheetData[dataKey]) sheetData[dataKey] = {category:currentCategory, exercises:[]};
+          sheetData[dataKey].exercises.push(exercise);
 
           // Bibliothèque sans colonne JOUR : un bloc de catégorie = une séance
           const catKey = currentCategory || sheetName;
@@ -1005,7 +1032,7 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
 // ── Workout Editor Screen ─────────────────────────────────
 // Couleurs par style
 // CLASSIQUE=gris, SUPERSET=bleu, TRISET=rose, ABDOS=vert, CARDIO=orange
-const STYLE_COLORS={CLASSIQUE:'#C8C8DC',SUPERSET:'#5A8AE0',TRISET:'#A060D0',ABDOS:'#2CC4A0',CARDIO:'#C89040'};
+const STYLE_COLORS={CLASSIQUE:'#C8C8DC',SUPERSET:'#5A8AE0',TRISET:'#A060D0',ABDOS:'#2CC4A0',CARDIO:'#C89040',ECHAUFFEMENT:'#E0785A'};
 function groupExercises(exercises){
   const groups=[];
   let i=0;
@@ -1015,11 +1042,16 @@ function groupExercises(exercises){
     if(s==='SUPERSET'||s==='TRISET'||s==='ABDOS'){
       // SUPERSET = 2 exos max, TRISET = 3 exos max, ABDOS = illimité (bloc ab)
       const maxItems=s==='SUPERSET'?2:s==='TRISET'?3:Infinity;
+      const blk=ex.block||null;
       const items=[{ex,idx:i}]; i++;
-      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems){
+      // ABDOS : on ne fusionne QUE les exercices du même bloc (ex.block), pour que des circuits
+      // distincts ("CIRCUIT 1", "CIRCUIT 2", "ÉCHAUFFEMENT"…) restent séparés dans l'ordre plutôt
+      // que fondus en un seul bloc continu.
+      while(i<exercises.length&&exercises[i].style===s&&items.length<maxItems&&(s!=='ABDOS'||(exercises[i].block||null)===blk)){
         items.push({ex:exercises[i],idx:i});i++;
       }
-      groups.push({style:s,color:STYLE_COLORS[s]||T.accent,items});
+      const color=(blk==='ÉCHAUFFEMENT'?STYLE_COLORS.ECHAUFFEMENT:STYLE_COLORS[s])||T.accent;
+      groups.push({style:s,color,items,label:blk});
     } else if(s==='CARDIO'){
       groups.push({style:'CARDIO',color:STYLE_COLORS.CARDIO,items:[{ex,idx:i}]});i++;
     } else {
@@ -2416,8 +2448,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
             const labelMap={CLASSIQUE:'CLASSIQUE',SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'ABDOS',CARDIO:'CARDIO'};
             const subMap={CLASSIQUE:'',SUPERSET:'· enchaîner sans repos',TRISET:'· enchaîner sans repos',ABDOS:'· Abdominaux',CARDIO:''};
-            const label=labelMap[group.style]||group.style;
-            const sub=subMap[group.style]||'';
+            const label=group.label||labelMap[group.style]||group.style;
+            const sub=group.label?(group.label==='ÉCHAUFFEMENT'?'· à faire en premier':'· enchaîner sans repos'):(subMap[group.style]||'');
 
             return(
               <div key={gi} style={{borderRadius:14,border:`1px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
@@ -5111,8 +5143,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
                               <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
                                 <div style={{width:5,height:5,borderRadius:3,background:group.color}}/>
-                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{labelMap[group.style]||group.style}</span>
-                                {subMap[group.style]&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>{subMap[group.style]}</span>}
+                                <span style={{fontSize:9,color:group.color,fontWeight:800,letterSpacing:0.5}}>{group.label||labelMap[group.style]||group.style}</span>
+                                {(group.label?(group.label!=='ÉCHAUFFEMENT'):subMap[group.style])&&<span style={{fontSize:8,color:T.textFaint,fontWeight:600}}>{group.label?'· enchaîner sans repos':subMap[group.style]}</span>}
                               </div>
                               {group.items.map(({ex,idx:i},bi)=>(
                                 <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderTop:bi>0?`1px dashed ${group.color}22`:'none'}}>
