@@ -2294,7 +2294,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',background:'rgba(44,196,160,0.06)',borderBottom:'1px solid rgba(191,160,96,0.12)'}}>
                             <span style={{fontSize:9,color:T.good,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',flexShrink:0}}>Dernière fois</span>
                             <span style={{fontSize:11,color:T.textDim,fontWeight:600,flex:1}}>
-                              {prevSetData?`${prevSetData.weight||0} kg × ${prevSetData.reps||0} reps`:`${prev.weight||0} kg × ${prev.reps||0} reps`}
+                              {prevSetData?(prevSetData.repsL||prevSetData.repsR?`${prevSetData.weight||0} kg × G${prevSetData.repsL||0} · D${prevSetData.repsR||0}`:`${prevSetData.weight||0} kg × ${prevSetData.reps||0} reps`):(prev.repsL||prev.repsR?`${prev.weight||0} kg × G${prev.repsL||0} · D${prev.repsR||0}`:`${prev.weight||0} kg × ${prev.reps||0} reps`)}
                             </span>
                             {suggestWeight&&(
                               <button onClick={()=>updSet(currentEx,i,{weight:suggestWeight})} style={{fontSize:9,color:T.good,fontWeight:700,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',borderRadius:6,padding:'2px 7px',cursor:'pointer',letterSpacing:0.3,flexShrink:0}}>
@@ -2404,7 +2404,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       {prevSetData&&(
                         <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0}}>
                           <span style={{fontSize:7,color:T.good,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase'}}>Dernière fois</span>
-                          <span style={{fontSize:10,color:T.textFaint,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{prevSetData.weight||0}kg × {prevSetData.reps||0} reps</span>
+                          <span style={{fontSize:10,color:T.textFaint,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{prevSetData.repsL||prevSetData.repsR?`${prevSetData.weight||0}kg × G${prevSetData.repsL||0} · D${prevSetData.repsR||0}`:`${prevSetData.weight||0}kg × ${prevSetData.reps||0} reps`}</span>
                         </div>
                       )}
                     </div>
