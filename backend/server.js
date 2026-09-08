@@ -114,9 +114,10 @@ const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.co
 // ── Stripe ───────────────────────────────────────────
 const STRIPE_SECRET_KEY      = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
-const STRIPE_PRICE_EXPLORER  = process.env.STRIPE_PRICE_EXPLORER || '';  // 4,99€/mois
-const STRIPE_PRICE_IA        = process.env.STRIPE_PRICE_IA || '';         // 14,99€/mois
-const STRIPE_PRICE_COACHING  = process.env.STRIPE_PRICE_COACHING || '';   // 24,99€/mois
+const STRIPE_PRICE_EXPLORER          = process.env.STRIPE_PRICE_EXPLORER || '';          // 4,99€/mois
+const STRIPE_PRICE_IA                = process.env.STRIPE_PRICE_IA || '';                // 14,99€/mois
+const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 149€/mois  (Coaching Online)
+const STRIPE_PRICE_COACHING_COMPLET  = process.env.STRIPE_PRICE_COACHING_COMPLET || '';  // 249€/mois  (Coaching Complet)
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
 if (!STRIPE_SECRET_KEY) {
   console.warn('[config] STRIPE_SECRET_KEY non défini — paiements désactivés (abonnements ET achat de programmes), /api/stripe/* et /api/training-programs/:id/purchase renverront stripe_not_configured');
@@ -124,19 +125,21 @@ if (!STRIPE_SECRET_KEY) {
 
 // Mapping price_id → plan slug
 const PRICE_TO_PLAN = {};
-if (STRIPE_PRICE_EXPLORER) PRICE_TO_PLAN[STRIPE_PRICE_EXPLORER] = 'explorer';
-if (STRIPE_PRICE_IA)       PRICE_TO_PLAN[STRIPE_PRICE_IA]       = 'ia';
-if (STRIPE_PRICE_COACHING) PRICE_TO_PLAN[STRIPE_PRICE_COACHING] = 'coaching';
+if (STRIPE_PRICE_EXPLORER)         PRICE_TO_PLAN[STRIPE_PRICE_EXPLORER]         = 'explorer';
+if (STRIPE_PRICE_IA)               PRICE_TO_PLAN[STRIPE_PRICE_IA]               = 'ia';
+if (STRIPE_PRICE_COACHING)         PRICE_TO_PLAN[STRIPE_PRICE_COACHING]         = 'coaching';
+if (STRIPE_PRICE_COACHING_COMPLET) PRICE_TO_PLAN[STRIPE_PRICE_COACHING_COMPLET] = 'coaching_complet';
 
-// Accès par plan (cascade) : coaching > ia > explorer
+// Accès par plan (cascade) : coaching/coaching_complet > ia > explorer
 const PLAN_UNIVERSES = {
-  explorer: ['explorer'],
-  ia:       ['explorer', 'ia'],
-  coaching: ['explorer', 'ia', 'coach'],
+  explorer:          ['explorer'],
+  ia:                ['explorer', 'ia'],
+  coaching:          ['explorer', 'ia', 'coach'],
+  coaching_complet:  ['explorer', 'ia', 'coach'],
 };
 
-// Durée de l'essai gratuit
-const TRIAL_MS = 7 * 24 * 3600 * 1000;
+// Durée de l'essai gratuit (14 jours)
+const TRIAL_MS = 14 * 24 * 3600 * 1000;
 
 function userHasAccess(u, universe) {
   if (!u) return false;
@@ -3746,7 +3749,7 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
 app.post('/api/stripe/checkout', authRequired, async (req, res) => {
   if (!stripe) { console.error('[stripe] checkout: stripe not configured'); return res.status(503).json({ error: 'stripe_not_configured' }); }
   const { plan } = req.body || {};
-  const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING };
+  const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING, coaching_complet: STRIPE_PRICE_COACHING_COMPLET };
   const priceId = priceMap[plan];
   console.log(`[stripe] checkout plan=${plan} priceId=${priceId} userId=${req.user.id}`);
   if (!priceId) return res.status(400).json({ error: 'invalid_plan', detail: `plan '${plan}' not found in price map` });
