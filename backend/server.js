@@ -518,7 +518,6 @@ const profileOf = u => u && {
   fullAccess: !!u.fullAccess,
   stripeStatus: u.stripeStatus || null,
   stripePlan: u.stripePlan || null,
-  stripeCustomerId: u.stripeCustomerId || null,
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -671,6 +670,15 @@ const restoreLimiter = rateLimit({
   max: 5,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests', detail: 'Trop de tentatives de restauration. Réessaie dans 15 minutes.' },
+});
+// Rate-limit Stripe checkout : par user — 10 sessions Checkout / 15 min pour éviter le spam
+// de sessions Stripe (chaque appel crée un objet Stripe facturable au niveau API).
+const stripeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user?.id ? 'stripe:' + req.user.id : 'stripe:' + ipKeyGenerator(req.ip),
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives de paiement. Réessaie dans 15 minutes.' },
 });
 // Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
 const aiLimiter = rateLimit({
@@ -3600,7 +3608,7 @@ app.post('/api/training-programs/:id/uncomplete', authRequired, (req, res) => {
   });
 });
 
-app.post('/api/training-programs/:id/purchase', authRequired, async (req, res) => {
+app.post('/api/training-programs/:id/purchase', authRequired, stripeLimiter, async (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
   const already = Object.values(DATA.userPurchasedPrograms || {}).find(
@@ -3645,7 +3653,7 @@ app.post('/api/training-programs/:id/purchase', authRequired, async (req, res) =
     res.json({ url: session.url });
   } catch (e) {
     console.error('[stripe] training program checkout error:', e.message);
-    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+    res.status(500).json({ error: 'checkout_failed' });
   }
 });
 
@@ -3746,13 +3754,15 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
 });
 
 // Créer une session Checkout Stripe
-app.post('/api/stripe/checkout', authRequired, async (req, res) => {
+app.post('/api/stripe/checkout', authRequired, stripeLimiter, async (req, res) => {
   if (!stripe) { console.error('[stripe] checkout: stripe not configured'); return res.status(503).json({ error: 'stripe_not_configured' }); }
   const { plan } = req.body || {};
+  const VALID_PLANS = ['explorer', 'ia', 'coaching', 'coaching_complet'];
+  if (!plan || !VALID_PLANS.includes(plan)) return res.status(400).json({ error: 'invalid_plan' });
   const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING, coaching_complet: STRIPE_PRICE_COACHING_COMPLET };
   const priceId = priceMap[plan];
   console.log(`[stripe] checkout plan=${plan} priceId=${priceId} userId=${req.user.id}`);
-  if (!priceId) return res.status(400).json({ error: 'invalid_plan', detail: `plan '${plan}' not found in price map` });
+  if (!priceId) return res.status(400).json({ error: 'price_not_configured' });
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   try {
@@ -3776,7 +3786,7 @@ app.post('/api/stripe/checkout', authRequired, async (req, res) => {
     res.json({ url: session.url });
   } catch(e) {
     console.error('[stripe] checkout error:', e.message);
-    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+    res.status(500).json({ error: 'checkout_failed' });
   }
 });
 
@@ -3793,13 +3803,16 @@ app.post('/api/stripe/portal', authRequired, async (req, res) => {
     res.json({ url: session.url });
   } catch(e) {
     console.error('[stripe] portal error:', e.message);
-    res.status(500).json({ error: 'portal_failed', detail: e.message });
+    res.status(500).json({ error: 'portal_failed' });
   }
 });
 
 // Webhook Stripe — raw body obligatoire
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(200).json({ ok: true });
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    console.warn('[stripe] webhook received but stripe/webhook secret not configured — rejecting');
+    return res.status(503).json({ error: 'webhook_not_configured' });
+  }
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
