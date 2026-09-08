@@ -11174,7 +11174,7 @@ function PricingScreen({onBack,currentUser}){
     {
       id:'coaching',price:'149€',period:'/mois',label:'Coaching Online',emoji:'💬',tag:'100 % distanciel · suivi complet',
       color:'#BFA060',glow:'rgba(191,160,96,0.4)',bg:'rgba(191,160,96,0.07)',border:'rgba(191,160,96,0.3)',
-      features:['Programme d\'entraînement perso','Plan nutritionnel sur mesure*','Chat direct avec ton coach','Ajustements hebdomadaires','Accès complet à l\'application'],
+      features:['Programme d\'entraînement perso','Chat direct avec ton coach','Ajustements hebdomadaires','Accès complet à l\'application'],
       popular:true,section:'coaching',
     },
     {
@@ -11298,6 +11298,14 @@ function PricingScreen({onBack,currentUser}){
             <div style={{fontSize:10,color:T.textFaint}}>Programmes multi-semaines · achat unique</div>
           </div>
           <div style={{fontSize:12,fontWeight:800,color:'#E07020',flexShrink:0}}>9,99 — 499€</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'rgba(191,160,96,0.05)',border:`1px solid rgba(191,160,96,0.2)`,borderRadius:14}}>
+          <div style={{width:34,height:34,borderRadius:9,background:'rgba(191,160,96,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>🥗</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>Plan nutritionnel sur mesure</div>
+            <div style={{fontSize:10,color:T.textFaint}}>En option · par ton coach</div>
+          </div>
+          <div style={{fontSize:12,fontWeight:800,color:'#BFA060',flexShrink:0}}>100€</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'rgba(99,102,241,0.05)',border:`1px solid rgba(99,102,241,0.2)`,borderRadius:14}}>
           <div style={{width:34,height:34,borderRadius:9,background:'rgba(99,102,241,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>💪</div>
