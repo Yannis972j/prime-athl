@@ -378,6 +378,14 @@ setInterval(() => {
     }
   }
 
+  // Purge freeFoodLogs > 90 jours
+  let removedFreeFoodLogs = 0;
+  for (const uid of Object.keys(DATA.freeFoodLogs || {})) {
+    for (const dateKey of Object.keys(DATA.freeFoodLogs[uid] || {})) {
+      if (dateKey < cutoffStr) { delete DATA.freeFoodLogs[uid][dateKey]; removedFreeFoodLogs++; }
+    }
+  }
+
   // Supprime les comptes pending > 30 jours (inscrits mais jamais approuvés)
   const PENDING_TTL = 30 * 24 * 60 * 60 * 1000;
   let removedPending = 0;
@@ -395,6 +403,17 @@ setInterval(() => {
       delete DATA.plannedSessions[u.id];
       delete DATA.nutritionPrograms[u.id];
       delete DATA.scheduleMoves[u.id];
+      delete DATA.nutritionLogs?.[u.id];
+      delete DATA.freeFoodLogs?.[u.id];
+      delete DATA.weightLogs?.[u.id];
+      delete DATA.progressPhotos?.[u.id];
+      delete DATA.sessionLibrary?.[u.id];
+      delete DATA.pushSubscriptions?.[u.id];
+      delete DATA.messageReads?.[u.id];
+      delete DATA.userPurchasedPrograms?.[u.id];
+      for (const chatId of Object.keys(DATA.messages || {})) {
+        if (chatId.includes(u.id)) delete DATA.messages[chatId];
+      }
       for (const sid of Object.keys(DATA.sessions || {})) {
         if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
       }
@@ -1258,6 +1277,18 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   // reste consultable indéfiniment via un lien déjà distribué (Instagram, etc.).
   for (const token of Object.keys(DATA.sharedSessions || {})) {
     if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
+  }
+  delete DATA.freeFoodLogs?.[u.id];
+  delete DATA.savedPrograms?.[u.id];
+  delete DATA.myLibrary?.[u.id];
+  delete DATA.sessionLibrary?.[u.id];
+  delete DATA.plannedSessions?.[u.id];
+  delete DATA.pushSubscriptions?.[u.id];
+  delete DATA.messageReads?.[u.id];
+  delete DATA.userPurchasedPrograms?.[u.id];
+  // Supprimer les messages des conversations où l'athlète participe
+  for (const chatId of Object.keys(DATA.messages || {})) {
+    if (chatId.includes(u.id)) delete DATA.messages[chatId];
   }
   // Retirer des invites (DATA.invites est un objet keyé par code)
   for (const code of Object.keys(DATA.invites || {})) {
@@ -2132,7 +2163,7 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   if (req.body.name) s.name = String(req.body.name).slice(0, 120);
   if (typeof req.body.notes === 'string') s.notes = req.body.notes.slice(0, 500);
   if (Array.isArray(req.body.exercises)) {
-    s.exercises = req.body.exercises.map(sanitizeCoachExercise);
+    s.exercises = req.body.exercises.slice(0, 50).map(sanitizeCoachExercise);
     s.totalVolume = +req.body.totalVolume || 0;
   }
   if (req.body.duration != null) s.duration = +req.body.duration || 0;
@@ -2163,7 +2194,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     id, userId: athlete.id,
     name: safeName.slice(0, 120),
     date: safeDate,
-    exercises: exercises.map(sanitizeCoachExercise),
+    exercises: exercises.slice(0, 50).map(sanitizeCoachExercise),
     totalVolume: +totalVolume || 0,
     duration: +duration || 0,
     notes: notes ? String(notes).slice(0, 500) : '',
@@ -2336,6 +2367,20 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.scheduledPrograms[u.id];
   delete DATA.savedPrograms[u.id];
   delete DATA.myLibrary[u.id];
+  delete DATA.nutritionLogs?.[u.id];
+  delete DATA.nutritionPrograms?.[u.id];
+  delete DATA.weightLogs?.[u.id];
+  delete DATA.progressPhotos?.[u.id];
+  delete DATA.scheduleMoves?.[u.id];
+  delete DATA.freeFoodLogs?.[u.id];
+  delete DATA.sessionLibrary?.[u.id];
+  delete DATA.plannedSessions?.[u.id];
+  delete DATA.pushSubscriptions?.[u.id];
+  delete DATA.messageReads?.[u.id];
+  delete DATA.userPurchasedPrograms?.[u.id];
+  for (const chatId of Object.keys(DATA.messages || {})) {
+    if (chatId.includes(u.id)) delete DATA.messages[chatId];
+  }
   delete DATA.users[u.id];
   persist();
   res.json({ ok: true, removed: true });
@@ -2641,7 +2686,8 @@ app.post('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, 
     io.to('user:' + a.id).emit('nutrition-updated', { plan: DATA.nutritionPrograms[a.id], assignedAt: DATA.nutritionPrograms[a.id].assignedAt });
     res.json({ ok: true, document: doc });
   } catch (e) {
-    res.status(500).json({ error: 'upload_failed', detail: e.message });
+    console.error('Upload document error:', e.message);
+    res.status(500).json({ error: 'upload_failed' });
   }
 });
 
@@ -2870,7 +2916,8 @@ app.post('/api/upload', authRequired, uploadMedia.single('file'), async (req, re
       });
       return res.json({ url: result.secure_url, isVideo });
     } catch(e) {
-      return res.status(500).json({ error: 'upload_failed', detail: e.message });
+      console.error('Upload media error:', e.message);
+      return res.status(500).json({ error: 'upload_failed' });
     }
   }
   // Fallback base64 — vidéos non supportées sans Cloudinary
@@ -3217,7 +3264,7 @@ Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par r
     res.json({ targets, plan });
   } catch(e) {
     console.error('AI nutrition error:', e.message);
-    res.status(500).json({ error: 'generation_failed', detail: e.message });
+    res.status(500).json({ error: 'generation_failed' });
   }
 });
 
@@ -3244,7 +3291,7 @@ Réponds UNIQUEMENT en JSON sans markdown, EXACTEMENT 2-3 aliments : {"items":[{
     res.json({ items: parsed.items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
   } catch(e) {
     console.error('AI regen meal error:', e.message);
-    res.status(500).json({ error: 'regeneration_failed', detail: e.message });
+    res.status(500).json({ error: 'regeneration_failed' });
   }
 });
 
@@ -3283,7 +3330,7 @@ Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. 
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
-    res.status(500).json({ error: 'generation_failed', detail: e.message });
+    res.status(500).json({ error: 'generation_failed' });
   }
 });
 
@@ -3791,7 +3838,7 @@ app.post('/api/stripe/checkout', authRequired, stripeLimiter, async (req, res) =
 });
 
 // Portail client (gérer / annuler l'abonnement)
-app.post('/api/stripe/portal', authRequired, async (req, res) => {
+app.post('/api/stripe/portal', authRequired, stripeLimiter, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
   const u = DATA.users[req.user.id];
   if (!u?.stripeCustomerId) return res.status(400).json({ error: 'no_subscription' });
