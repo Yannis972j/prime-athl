@@ -505,8 +505,8 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── Helpers ─────────────────────────────────────────
-const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
-const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
+const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);
+const inviteCode = () => 'PA-' + crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
 
 // Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
 // objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
@@ -887,7 +887,10 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
 const UNLOCK_SECRET = process.env.UNLOCK_SECRET
   || ('unlock-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
 if (!process.env.UNLOCK_SECRET) {
-  console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET}`);
+  // Ne PAS loguer le secret complet : les logs Render sont accessibles depuis le dashboard
+  // et pourraient être exposés via un collecteur. On log seulement les 6 premiers caractères
+  // pour le diagnostic, le reste est masqué.
+  console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET.slice(0, 6)}…`);
   console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
 app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
@@ -2265,8 +2268,13 @@ app.post('/api/admin/restore', restoreLimiter, authRequired, coachOnly, mainCoac
   }
 });
 
-// Health endpoint
+// Health endpoint — version publique : seul le strict nécessaire (monitoring / uptime check).
+// Les détails internes (nombre d'utilisateurs, chemin DB, type de stockage) ne sont exposés
+// qu'au coach principal authentifié, pour le diagnostic.
 app.get('/api/health', (req, res) => {
+  res.json({ ok: true, timestamp: Date.now() });
+});
+app.get('/api/admin/health', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   res.json({
     ok: true,
     uptime: Math.round(process.uptime()),
@@ -2938,6 +2946,12 @@ app.post('/api/photos', authRequired, (req, res) => {
   const { url, dataUrl, note, date } = req.body || {};
   const src = url || dataUrl;
   if (!src) return res.status(400).json({ error: 'url_required' });
+  // Seuls les protocoles sûrs sont acceptés : https://, http:// (dev) ou data:image/ (base64).
+  // Rejette javascript:, vbscript:, data:text/html, et toute URI qui pourrait servir de XSS
+  // si le frontend l'injecte dans un <img src> ou un <a href>.
+  if (!(/^https?:\/\//i.test(src) || /^data:image\//i.test(src))) {
+    return res.status(400).json({ error: 'invalid_url', detail: 'URL https:// ou data:image/ uniquement.' });
+  }
   // Limite taille uniquement pour base64 (les URLs Cloudinary sont légères)
   if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[req.user.id]) DATA.progressPhotos[req.user.id] = [];
@@ -3488,19 +3502,32 @@ app.get('/api/seances/random', authRequired, (req, res) => {
 });
 
 // Activer premium via code d'accès
-app.post('/api/premium/unlock', authRequired, (req, res) => {
+// Rate-limit strict : 5 tentatives / 15 min par utilisateur (anti brute-force sur les codes)
+const premiumUnlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => 'premium:' + (req.user?.id || ipKeyGenerator(req.ip)),
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
+});
+app.post('/api/premium/unlock', authRequired, premiumUnlockLimiter, (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'code_required' });
   const rawCodes = (process.env.PREMIUM_CODES || '').split(',').map(c => c.trim()).filter(Boolean);
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
   if (u.premium) return res.json({ ok: true, already: true });
-  // Vérifier code valide et non déjà utilisé
+  // Vérifier code valide via comparaison timing-safe (anti timing-attack)
+  const provided = Buffer.from(String(code));
+  const found = rawCodes.find(c => {
+    const expected = Buffer.from(c);
+    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  });
+  if (!found) return res.status(400).json({ error: 'invalid_code' });
   const used = DATA.premiumCodes || {};
-  if (!rawCodes.includes(code)) return res.status(400).json({ error: 'invalid_code' });
-  if (used[code]) return res.status(400).json({ error: 'code_already_used' });
+  if (used[found]) return res.status(400).json({ error: 'code_already_used' });
   // Activer
-  DATA.premiumCodes[code] = { usedBy: req.user.id, usedAt: Date.now() };
+  DATA.premiumCodes[found] = { usedBy: req.user.id, usedAt: Date.now() };
   u.premium = true;
   persist();
   res.json({ ok: true });
@@ -3589,13 +3616,36 @@ app.get('/api/training-programs/my-programs', authRequired, (req, res) => {
 });
 
 // authRequired : le contenu complet d'un programme (semaines/séances/exercices) est un bien
-// payant — avant ce correctif, n'importe qui pouvait le récupérer intégralement sans compte ni
-// achat (seul le paywall côté affichage empêchait l'accès, pas l'API). L'app ne rend cet écran
-// qu'une fois connecté, donc exiger un token ici ne change rien au parcours normal.
+// payant — seuls les utilisateurs qui l'ont acheté (ou le coach principal) reçoivent le détail
+// complet (weeks). Tout autre utilisateur connecté reçoit un aperçu sans les exercices, suffisant
+// pour afficher la page produit / le bouton d'achat, mais pas pour suivre le programme.
 app.get('/api/training-programs/:id', authRequired, (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
-  res.json(prog);
+  const u = DATA.users[req.user.id];
+  const isAdmin = u && isMainCoach(u);
+  const hasPurchased = Object.values(DATA.userPurchasedPrograms || {}).some(
+    p => p.userId === req.user.id && p.programId === prog.id
+  );
+  // Programme gratuit (price <= 0) : accessible intégralement par tous les connectés
+  if (isAdmin || hasPurchased || !prog.price || prog.price <= 0) {
+    return res.json(prog);
+  }
+  // Aperçu : tout sauf le contenu des exercices (les semaines gardent leur structure mais les
+  // séances ne montrent que le nom et le nombre d'exercices, pas le détail)
+  const preview = {
+    ...prog,
+    weeks: (prog.weeks || []).map(w => ({
+      ...w,
+      sessions: (w.sessions || []).map(s => ({
+        name: s.name,
+        exerciseCount: (s.exercises || []).length,
+        exercises: undefined,
+      })),
+    })),
+    _preview: true,
+  };
+  res.json(preview);
 });
 
 app.get('/api/training-programs/:id/my-progress', authRequired, (req, res) => {
