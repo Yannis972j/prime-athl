@@ -114,9 +114,10 @@ const MAIN_COACH_EMAIL = (process.env.MAIN_COACH_EMAIL || 'yannisgym972@gmail.co
 // ── Stripe ───────────────────────────────────────────
 const STRIPE_SECRET_KEY      = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
-const STRIPE_PRICE_EXPLORER  = process.env.STRIPE_PRICE_EXPLORER || '';  // 4,99€/mois
-const STRIPE_PRICE_IA        = process.env.STRIPE_PRICE_IA || '';         // 14,99€/mois
-const STRIPE_PRICE_COACHING  = process.env.STRIPE_PRICE_COACHING || '';   // 24,99€/mois
+const STRIPE_PRICE_EXPLORER          = process.env.STRIPE_PRICE_EXPLORER || '';          // 4,99€/mois
+const STRIPE_PRICE_IA                = process.env.STRIPE_PRICE_IA || '';                // 14,99€/mois
+const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 149€/mois  (Coaching Online)
+const STRIPE_PRICE_COACHING_COMPLET  = process.env.STRIPE_PRICE_COACHING_COMPLET || '';  // 249€/mois  (Coaching Complet)
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
 if (!STRIPE_SECRET_KEY) {
   console.warn('[config] STRIPE_SECRET_KEY non défini — paiements désactivés (abonnements ET achat de programmes), /api/stripe/* et /api/training-programs/:id/purchase renverront stripe_not_configured');
@@ -124,18 +125,20 @@ if (!STRIPE_SECRET_KEY) {
 
 // Mapping price_id → plan slug
 const PRICE_TO_PLAN = {};
-if (STRIPE_PRICE_EXPLORER) PRICE_TO_PLAN[STRIPE_PRICE_EXPLORER] = 'explorer';
-if (STRIPE_PRICE_IA)       PRICE_TO_PLAN[STRIPE_PRICE_IA]       = 'ia';
-if (STRIPE_PRICE_COACHING) PRICE_TO_PLAN[STRIPE_PRICE_COACHING] = 'coaching';
+if (STRIPE_PRICE_EXPLORER)         PRICE_TO_PLAN[STRIPE_PRICE_EXPLORER]         = 'explorer';
+if (STRIPE_PRICE_IA)               PRICE_TO_PLAN[STRIPE_PRICE_IA]               = 'ia';
+if (STRIPE_PRICE_COACHING)         PRICE_TO_PLAN[STRIPE_PRICE_COACHING]         = 'coaching';
+if (STRIPE_PRICE_COACHING_COMPLET) PRICE_TO_PLAN[STRIPE_PRICE_COACHING_COMPLET] = 'coaching_complet';
 
-// Accès par plan (cascade) : coaching > ia > explorer
+// Accès par plan (cascade) : coaching/coaching_complet > ia > explorer
 const PLAN_UNIVERSES = {
-  explorer: ['explorer'],
-  ia:       ['explorer', 'ia'],
-  coaching: ['explorer', 'ia', 'coach'],
+  explorer:          ['explorer'],
+  ia:                ['explorer', 'ia'],
+  coaching:          ['explorer', 'ia', 'coach'],
+  coaching_complet:  ['explorer', 'ia', 'coach'],
 };
 
-// Durée de l'essai gratuit
+// Durée de l'essai gratuit (7 jours)
 const TRIAL_MS = 7 * 24 * 3600 * 1000;
 
 function userHasAccess(u, universe) {
@@ -375,6 +378,14 @@ setInterval(() => {
     }
   }
 
+  // Purge freeFoodLogs > 90 jours
+  let removedFreeFoodLogs = 0;
+  for (const uid of Object.keys(DATA.freeFoodLogs || {})) {
+    for (const dateKey of Object.keys(DATA.freeFoodLogs[uid] || {})) {
+      if (dateKey < cutoffStr) { delete DATA.freeFoodLogs[uid][dateKey]; removedFreeFoodLogs++; }
+    }
+  }
+
   // Supprime les comptes pending > 30 jours (inscrits mais jamais approuvés)
   const PENDING_TTL = 30 * 24 * 60 * 60 * 1000;
   let removedPending = 0;
@@ -392,6 +403,17 @@ setInterval(() => {
       delete DATA.plannedSessions[u.id];
       delete DATA.nutritionPrograms[u.id];
       delete DATA.scheduleMoves[u.id];
+      delete DATA.nutritionLogs?.[u.id];
+      delete DATA.freeFoodLogs?.[u.id];
+      delete DATA.weightLogs?.[u.id];
+      delete DATA.progressPhotos?.[u.id];
+      delete DATA.sessionLibrary?.[u.id];
+      delete DATA.pushSubscriptions?.[u.id];
+      delete DATA.messageReads?.[u.id];
+      delete DATA.userPurchasedPrograms?.[u.id];
+      for (const chatId of Object.keys(DATA.messages || {})) {
+        if (chatId.includes(u.id)) delete DATA.messages[chatId];
+      }
       for (const sid of Object.keys(DATA.sessions || {})) {
         if (DATA.sessions[sid].userId === u.id) delete DATA.sessions[sid];
       }
@@ -483,8 +505,8 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── Helpers ─────────────────────────────────────────
-const uid        = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
-const inviteCode = () => 'PA-' + Math.random().toString(36).slice(2,8).toUpperCase();
+const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);
+const inviteCode = () => 'PA-' + crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
 
 // Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
 // objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
@@ -515,7 +537,6 @@ const profileOf = u => u && {
   fullAccess: !!u.fullAccess,
   stripeStatus: u.stripeStatus || null,
   stripePlan: u.stripePlan || null,
-  stripeCustomerId: u.stripeCustomerId || null,
 };
 
 const isMainCoach = u => u && (u.isMainCoach || u.email === MAIN_COACH_EMAIL);
@@ -668,6 +689,15 @@ const restoreLimiter = rateLimit({
   max: 5,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'too_many_requests', detail: 'Trop de tentatives de restauration. Réessaie dans 15 minutes.' },
+});
+// Rate-limit Stripe checkout : par user — 10 sessions Checkout / 15 min pour éviter le spam
+// de sessions Stripe (chaque appel crée un objet Stripe facturable au niveau API).
+const stripeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user?.id ? 'stripe:' + req.user.id : 'stripe:' + ipKeyGenerator(req.ip),
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives de paiement. Réessaie dans 15 minutes.' },
 });
 // Rate-limit IA : par user (pas par IP) — 10 générations / heure, s'applique APRÈS authRequired
 const aiLimiter = rateLimit({
@@ -857,7 +887,10 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
 const UNLOCK_SECRET = process.env.UNLOCK_SECRET
   || ('unlock-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
 if (!process.env.UNLOCK_SECRET) {
-  console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET}`);
+  // Ne PAS loguer le secret complet : les logs Render sont accessibles depuis le dashboard
+  // et pourraient être exposés via un collecteur. On log seulement les 6 premiers caractères
+  // pour le diagnostic, le reste est masqué.
+  console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET.slice(0, 6)}…`);
   console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
 app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
@@ -1247,6 +1280,18 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   // reste consultable indéfiniment via un lien déjà distribué (Instagram, etc.).
   for (const token of Object.keys(DATA.sharedSessions || {})) {
     if (DATA.sharedSessions[token].ownerId === u.id) delete DATA.sharedSessions[token];
+  }
+  delete DATA.freeFoodLogs?.[u.id];
+  delete DATA.savedPrograms?.[u.id];
+  delete DATA.myLibrary?.[u.id];
+  delete DATA.sessionLibrary?.[u.id];
+  delete DATA.plannedSessions?.[u.id];
+  delete DATA.pushSubscriptions?.[u.id];
+  delete DATA.messageReads?.[u.id];
+  delete DATA.userPurchasedPrograms?.[u.id];
+  // Supprimer les messages des conversations où l'athlète participe
+  for (const chatId of Object.keys(DATA.messages || {})) {
+    if (chatId.includes(u.id)) delete DATA.messages[chatId];
   }
   // Retirer des invites (DATA.invites est un objet keyé par code)
   for (const code of Object.keys(DATA.invites || {})) {
@@ -2121,7 +2166,7 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   if (req.body.name) s.name = String(req.body.name).slice(0, 120);
   if (typeof req.body.notes === 'string') s.notes = req.body.notes.slice(0, 500);
   if (Array.isArray(req.body.exercises)) {
-    s.exercises = req.body.exercises.map(sanitizeCoachExercise);
+    s.exercises = req.body.exercises.slice(0, 50).map(sanitizeCoachExercise);
     s.totalVolume = +req.body.totalVolume || 0;
   }
   if (req.body.duration != null) s.duration = +req.body.duration || 0;
@@ -2152,7 +2197,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     id, userId: athlete.id,
     name: safeName.slice(0, 120),
     date: safeDate,
-    exercises: exercises.map(sanitizeCoachExercise),
+    exercises: exercises.slice(0, 50).map(sanitizeCoachExercise),
     totalVolume: +totalVolume || 0,
     duration: +duration || 0,
     notes: notes ? String(notes).slice(0, 500) : '',
@@ -2223,8 +2268,13 @@ app.post('/api/admin/restore', restoreLimiter, authRequired, coachOnly, mainCoac
   }
 });
 
-// Health endpoint
+// Health endpoint — version publique : seul le strict nécessaire (monitoring / uptime check).
+// Les détails internes (nombre d'utilisateurs, chemin DB, type de stockage) ne sont exposés
+// qu'au coach principal authentifié, pour le diagnostic.
 app.get('/api/health', (req, res) => {
+  res.json({ ok: true, timestamp: Date.now() });
+});
+app.get('/api/admin/health', authRequired, coachOnly, mainCoachOnly, (req, res) => {
   res.json({
     ok: true,
     uptime: Math.round(process.uptime()),
@@ -2325,6 +2375,20 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.scheduledPrograms[u.id];
   delete DATA.savedPrograms[u.id];
   delete DATA.myLibrary[u.id];
+  delete DATA.nutritionLogs?.[u.id];
+  delete DATA.nutritionPrograms?.[u.id];
+  delete DATA.weightLogs?.[u.id];
+  delete DATA.progressPhotos?.[u.id];
+  delete DATA.scheduleMoves?.[u.id];
+  delete DATA.freeFoodLogs?.[u.id];
+  delete DATA.sessionLibrary?.[u.id];
+  delete DATA.plannedSessions?.[u.id];
+  delete DATA.pushSubscriptions?.[u.id];
+  delete DATA.messageReads?.[u.id];
+  delete DATA.userPurchasedPrograms?.[u.id];
+  for (const chatId of Object.keys(DATA.messages || {})) {
+    if (chatId.includes(u.id)) delete DATA.messages[chatId];
+  }
   delete DATA.users[u.id];
   persist();
   res.json({ ok: true, removed: true });
@@ -2630,7 +2694,8 @@ app.post('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, 
     io.to('user:' + a.id).emit('nutrition-updated', { plan: DATA.nutritionPrograms[a.id], assignedAt: DATA.nutritionPrograms[a.id].assignedAt });
     res.json({ ok: true, document: doc });
   } catch (e) {
-    res.status(500).json({ error: 'upload_failed', detail: e.message });
+    console.error('Upload document error:', e.message);
+    res.status(500).json({ error: 'upload_failed' });
   }
 });
 
@@ -2859,7 +2924,8 @@ app.post('/api/upload', authRequired, uploadMedia.single('file'), async (req, re
       });
       return res.json({ url: result.secure_url, isVideo });
     } catch(e) {
-      return res.status(500).json({ error: 'upload_failed', detail: e.message });
+      console.error('Upload media error:', e.message);
+      return res.status(500).json({ error: 'upload_failed' });
     }
   }
   // Fallback base64 — vidéos non supportées sans Cloudinary
@@ -2880,6 +2946,12 @@ app.post('/api/photos', authRequired, (req, res) => {
   const { url, dataUrl, note, date } = req.body || {};
   const src = url || dataUrl;
   if (!src) return res.status(400).json({ error: 'url_required' });
+  // Seuls les protocoles sûrs sont acceptés : https://, http:// (dev) ou data:image/ (base64).
+  // Rejette javascript:, vbscript:, data:text/html, et toute URI qui pourrait servir de XSS
+  // si le frontend l'injecte dans un <img src> ou un <a href>.
+  if (!(/^https?:\/\//i.test(src) || /^data:image\//i.test(src))) {
+    return res.status(400).json({ error: 'invalid_url', detail: 'URL https:// ou data:image/ uniquement.' });
+  }
   // Limite taille uniquement pour base64 (les URLs Cloudinary sont légères)
   if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[req.user.id]) DATA.progressPhotos[req.user.id] = [];
@@ -3206,7 +3278,7 @@ Chaque jour: exactement ${mealCount} repas. Items: EXACTEMENT 2-3 aliments par r
     res.json({ targets, plan });
   } catch(e) {
     console.error('AI nutrition error:', e.message);
-    res.status(500).json({ error: 'generation_failed', detail: e.message });
+    res.status(500).json({ error: 'generation_failed' });
   }
 });
 
@@ -3233,7 +3305,7 @@ Réponds UNIQUEMENT en JSON sans markdown, EXACTEMENT 2-3 aliments : {"items":[{
     res.json({ items: parsed.items.map(it=>({name:String(it.name||'').trim(),qty:Number(it.qty)||0,unit:String(it.unit||'g'),kcal:Number(it.kcal)||0,p:Number(it.p)||0,c:Number(it.c)||0,f:Number(it.f)||0})) });
   } catch(e) {
     console.error('AI regen meal error:', e.message);
-    res.status(500).json({ error: 'regeneration_failed', detail: e.message });
+    res.status(500).json({ error: 'regeneration_failed' });
   }
 });
 
@@ -3272,7 +3344,7 @@ Génère 5 à 7 exercices. Débutant = exercices simples avec machines/guidés. 
     res.json({ program });
   } catch(e) {
     console.error('AI generate error:', e.message);
-    res.status(500).json({ error: 'generation_failed', detail: e.message });
+    res.status(500).json({ error: 'generation_failed' });
   }
 });
 
@@ -3430,19 +3502,32 @@ app.get('/api/seances/random', authRequired, (req, res) => {
 });
 
 // Activer premium via code d'accès
-app.post('/api/premium/unlock', authRequired, (req, res) => {
+// Rate-limit strict : 5 tentatives / 15 min par utilisateur (anti brute-force sur les codes)
+const premiumUnlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => 'premium:' + (req.user?.id || ipKeyGenerator(req.ip)),
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'too_many_requests', detail: 'Trop de tentatives. Réessaie dans 15 minutes.' },
+});
+app.post('/api/premium/unlock', authRequired, premiumUnlockLimiter, (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'code_required' });
   const rawCodes = (process.env.PREMIUM_CODES || '').split(',').map(c => c.trim()).filter(Boolean);
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
   if (u.premium) return res.json({ ok: true, already: true });
-  // Vérifier code valide et non déjà utilisé
+  // Vérifier code valide via comparaison timing-safe (anti timing-attack)
+  const provided = Buffer.from(String(code));
+  const found = rawCodes.find(c => {
+    const expected = Buffer.from(c);
+    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  });
+  if (!found) return res.status(400).json({ error: 'invalid_code' });
   const used = DATA.premiumCodes || {};
-  if (!rawCodes.includes(code)) return res.status(400).json({ error: 'invalid_code' });
-  if (used[code]) return res.status(400).json({ error: 'code_already_used' });
+  if (used[found]) return res.status(400).json({ error: 'code_already_used' });
   // Activer
-  DATA.premiumCodes[code] = { usedBy: req.user.id, usedAt: Date.now() };
+  DATA.premiumCodes[found] = { usedBy: req.user.id, usedAt: Date.now() };
   u.premium = true;
   persist();
   res.json({ ok: true });
@@ -3531,13 +3616,36 @@ app.get('/api/training-programs/my-programs', authRequired, (req, res) => {
 });
 
 // authRequired : le contenu complet d'un programme (semaines/séances/exercices) est un bien
-// payant — avant ce correctif, n'importe qui pouvait le récupérer intégralement sans compte ni
-// achat (seul le paywall côté affichage empêchait l'accès, pas l'API). L'app ne rend cet écran
-// qu'une fois connecté, donc exiger un token ici ne change rien au parcours normal.
+// payant — seuls les utilisateurs qui l'ont acheté (ou le coach principal) reçoivent le détail
+// complet (weeks). Tout autre utilisateur connecté reçoit un aperçu sans les exercices, suffisant
+// pour afficher la page produit / le bouton d'achat, mais pas pour suivre le programme.
 app.get('/api/training-programs/:id', authRequired, (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
-  res.json(prog);
+  const u = DATA.users[req.user.id];
+  const isAdmin = u && isMainCoach(u);
+  const hasPurchased = Object.values(DATA.userPurchasedPrograms || {}).some(
+    p => p.userId === req.user.id && p.programId === prog.id
+  );
+  // Programme gratuit (price <= 0) : accessible intégralement par tous les connectés
+  if (isAdmin || hasPurchased || !prog.price || prog.price <= 0) {
+    return res.json(prog);
+  }
+  // Aperçu : tout sauf le contenu des exercices (les semaines gardent leur structure mais les
+  // séances ne montrent que le nom et le nombre d'exercices, pas le détail)
+  const preview = {
+    ...prog,
+    weeks: (prog.weeks || []).map(w => ({
+      ...w,
+      sessions: (w.sessions || []).map(s => ({
+        name: s.name,
+        exerciseCount: (s.exercises || []).length,
+        exercises: undefined,
+      })),
+    })),
+    _preview: true,
+  };
+  res.json(preview);
 });
 
 app.get('/api/training-programs/:id/my-progress', authRequired, (req, res) => {
@@ -3597,7 +3705,7 @@ app.post('/api/training-programs/:id/uncomplete', authRequired, (req, res) => {
   });
 });
 
-app.post('/api/training-programs/:id/purchase', authRequired, async (req, res) => {
+app.post('/api/training-programs/:id/purchase', authRequired, stripeLimiter, async (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog || !prog.published) return res.status(404).json({ error: 'not_found' });
   const already = Object.values(DATA.userPurchasedPrograms || {}).find(
@@ -3642,7 +3750,7 @@ app.post('/api/training-programs/:id/purchase', authRequired, async (req, res) =
     res.json({ url: session.url });
   } catch (e) {
     console.error('[stripe] training program checkout error:', e.message);
-    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+    res.status(500).json({ error: 'checkout_failed' });
   }
 });
 
@@ -3743,13 +3851,15 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
 });
 
 // Créer une session Checkout Stripe
-app.post('/api/stripe/checkout', authRequired, async (req, res) => {
+app.post('/api/stripe/checkout', authRequired, stripeLimiter, async (req, res) => {
   if (!stripe) { console.error('[stripe] checkout: stripe not configured'); return res.status(503).json({ error: 'stripe_not_configured' }); }
   const { plan } = req.body || {};
-  const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING };
+  const VALID_PLANS = ['explorer', 'ia', 'coaching', 'coaching_complet'];
+  if (!plan || !VALID_PLANS.includes(plan)) return res.status(400).json({ error: 'invalid_plan' });
+  const priceMap = { explorer: STRIPE_PRICE_EXPLORER, ia: STRIPE_PRICE_IA, coaching: STRIPE_PRICE_COACHING, coaching_complet: STRIPE_PRICE_COACHING_COMPLET };
   const priceId = priceMap[plan];
   console.log(`[stripe] checkout plan=${plan} priceId=${priceId} userId=${req.user.id}`);
-  if (!priceId) return res.status(400).json({ error: 'invalid_plan', detail: `plan '${plan}' not found in price map` });
+  if (!priceId) return res.status(400).json({ error: 'price_not_configured' });
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
   try {
@@ -3773,12 +3883,12 @@ app.post('/api/stripe/checkout', authRequired, async (req, res) => {
     res.json({ url: session.url });
   } catch(e) {
     console.error('[stripe] checkout error:', e.message);
-    res.status(500).json({ error: 'checkout_failed', detail: e.message });
+    res.status(500).json({ error: 'checkout_failed' });
   }
 });
 
 // Portail client (gérer / annuler l'abonnement)
-app.post('/api/stripe/portal', authRequired, async (req, res) => {
+app.post('/api/stripe/portal', authRequired, stripeLimiter, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
   const u = DATA.users[req.user.id];
   if (!u?.stripeCustomerId) return res.status(400).json({ error: 'no_subscription' });
@@ -3790,13 +3900,16 @@ app.post('/api/stripe/portal', authRequired, async (req, res) => {
     res.json({ url: session.url });
   } catch(e) {
     console.error('[stripe] portal error:', e.message);
-    res.status(500).json({ error: 'portal_failed', detail: e.message });
+    res.status(500).json({ error: 'portal_failed' });
   }
 });
 
 // Webhook Stripe — raw body obligatoire
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(200).json({ ok: true });
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    console.warn('[stripe] webhook received but stripe/webhook secret not configured — rejecting');
+    return res.status(503).json({ error: 'webhook_not_configured' });
+  }
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
