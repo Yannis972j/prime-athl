@@ -3853,8 +3853,8 @@ function SubscriptionCard({profile,onShowPricing}){
   const[err,setErr]=React.useState('');
   const CREATOR='yannisgym972@gmail.com';
   if(profile.email===CREATOR||profile.role==='coach')return null;
-  const inTrial=profile.createdAt&&Date.now()<(profile.createdAt+14*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((profile.createdAt+14*24*3600*1000)-Date.now())/(24*3600*1000)):0;
+  const inTrial=profile.createdAt&&Date.now()<(profile.createdAt+7*24*3600*1000);
+  const trialDaysLeft=inTrial?Math.ceil(((profile.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const isActive=profile.stripeStatus==='active';
   const PLAN_LABELS={explorer:'Explorer — 4,99€/mois',ia:'IA Programme — 14,99€/mois',coaching:'Coaching Online — 149€/mois',coaching_complet:'Coaching Complet — 249€/mois'};
   const PLAN_COLORS={explorer:'#0d9488',ia:'#6366f1',coaching:'#BFA060',coaching_complet:'#D4883A'};
@@ -3891,7 +3891,7 @@ function SubscriptionCard({profile,onShowPricing}){
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
               <span style={{fontSize:20}}>🎁</span>
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — 14 jours</div>
+                <div style={{fontSize:13,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — 7 jours</div>
                 <div style={{fontSize:11,color:T.textDim}}>{trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
               </div>
             </div>
@@ -11174,13 +11174,13 @@ function PricingScreen({onBack,currentUser}){
     {
       id:'coaching',price:'149€',period:'/mois',label:'Coaching Online',emoji:'💬',tag:'100 % distanciel · suivi complet',
       color:'#BFA060',glow:'rgba(191,160,96,0.4)',bg:'rgba(191,160,96,0.07)',border:'rgba(191,160,96,0.3)',
-      features:['Programme d\'entraînement perso','Plan nutritionnel sur mesure','Chat direct avec ton coach','Ajustements hebdomadaires','Accès complet à l\'application'],
+      features:['Programme d\'entraînement perso','Plan nutritionnel sur mesure*','Chat direct avec ton coach','Ajustements hebdomadaires','Accès complet à l\'application'],
       popular:true,section:'coaching',
     },
     {
       id:'coaching_complet',price:'249€',period:'/mois',label:'Coaching Complet',emoji:'🏋️',tag:'Online + 1 séance présentiel / semaine',
       color:'#D4883A',glow:'rgba(212,136,58,0.4)',bg:'rgba(212,136,58,0.07)',border:'rgba(212,136,58,0.3)',
-      features:['Tout du Coaching Online inclus','1 séance en salle / semaine','Correction posture & technique','Bilan physique mensuel'],
+      features:['Tout du Coaching Online inclus','1 séance en présentiel / semaine','Correction posture & technique'],
       section:'coaching',
     },
   ];
@@ -11193,8 +11193,8 @@ function PricingScreen({onBack,currentUser}){
     setLoading(null);
   };
   const isActive=(planId)=>currentUser?.stripeStatus==='active'&&currentUser?.stripePlan===planId;
-  const inTrial=currentUser?.createdAt&&Date.now()<(currentUser.createdAt+14*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((currentUser.createdAt+14*24*3600*1000)-Date.now())/(24*3600*1000)):0;
+  const inTrial=currentUser?.createdAt&&Date.now()<(currentUser.createdAt+7*24*3600*1000);
+  const trialDaysLeft=inTrial?Math.ceil(((currentUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const soloPlans=PLANS.filter(p=>p.section==='solo');
   const coachPlans=PLANS.filter(p=>p.section==='coaching');
   const renderPlan=(plan)=>{
@@ -11303,12 +11303,12 @@ function PricingScreen({onBack,currentUser}){
           <div style={{width:34,height:34,borderRadius:9,background:'rgba(99,102,241,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>💪</div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12,fontWeight:700,color:T.text}}>Séance supplémentaire</div>
-            <div style={{fontSize:10,color:T.textFaint}}>Présentiel en salle avec coach</div>
+            <div style={{fontSize:10,color:T.textFaint}}>Présentiel avec coach</div>
           </div>
           <div style={{fontSize:12,fontWeight:800,color:'#6366f1',flexShrink:0}}>30€</div>
         </div>
       </div>
-      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Essai gratuit 14 jours · Résiliation à tout moment<br/>Paiement sécurisé Stripe</div>
+      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Essai gratuit 7 jours · Résiliation à tout moment<br/>Paiement sécurisé Stripe</div>
     </div>
   );
 }
@@ -12875,7 +12875,7 @@ function userHasAccessFE(u,universe){
   if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
   if(u.fullAccess)return true;
-  if(u.createdAt&&Date.now()<(u.createdAt+14*24*3600*1000))return true;
+  if(u.createdAt&&Date.now()<(u.createdAt+7*24*3600*1000))return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
 }
@@ -12890,8 +12890,8 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
     {id:'programmes',emoji:'📋',title:'Catalogue',desc:'Programmes structurés multi-semaines à acheter et suivre',
      grad:'linear-gradient(135deg,#E07020,#D4883A)',glow:'rgba(224,112,32,0.4)',border:'rgba(224,112,32,0.3)',bg:'rgba(224,112,32,0.07)',plan:null},
   ];
-  const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+14*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((authUser.createdAt+14*24*3600*1000)-Date.now())/(24*3600*1000)):0;
+  const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+7*24*3600*1000);
+  const trialDaysLeft=inTrial?Math.ceil(((authUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   return(
     <div style={{padding:'28px 20px 100px',color:T.text,height:'100%',boxSizing:'border-box',overflowY:'auto'}}>
       <div style={{marginBottom:24}}>

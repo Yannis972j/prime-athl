@@ -138,8 +138,8 @@ const PLAN_UNIVERSES = {
   coaching_complet:  ['explorer', 'ia', 'coach'],
 };
 
-// Durée de l'essai gratuit (14 jours)
-const TRIAL_MS = 14 * 24 * 3600 * 1000;
+// Durée de l'essai gratuit (7 jours)
+const TRIAL_MS = 7 * 24 * 3600 * 1000;
 
 function userHasAccess(u, universe) {
   if (!u) return false;
