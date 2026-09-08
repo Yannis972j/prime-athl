@@ -3806,6 +3806,138 @@ function PushNotifToggle(){
   );
 }
 
+// ── Versions compactes pour le bloc Préférences du profil ──
+function ProfilePushRow(){
+  const[status,setStatus]=React.useState('loading');
+  const[error,setError]=React.useState(null);
+  React.useEffect(()=>{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){setStatus('unsupported');return;}
+    if(Notification.permission==='denied'){setStatus('denied');return;}
+    navigator.serviceWorker.ready.then(async reg=>{
+      const sub=await reg.pushManager.getSubscription();
+      if(!sub){setStatus('off');return;}
+      try{const s=await apiCall('/api/push/status');if(!s.subscribed)await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});}catch(e){}
+      setStatus('on');
+    }).catch(()=>setStatus('off'));
+  },[]);
+  const enable=async()=>{
+    setStatus('subscribing');setError(null);
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){setStatus('denied');return;}
+      const reg=await navigator.serviceWorker.ready;
+      const{key}=await apiCall('/api/push/vapid-public-key');
+      if(!key){setError('Non configuré');setStatus('off');return;}
+      const raw=atob(key.replace(/-/g,'+').replace(/_/g,'/'));
+      const vapidKey=new Uint8Array(raw.split('').map(c=>c.charCodeAt(0)));
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:vapidKey});
+      await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+      setStatus('on');
+    }catch(e){setError(e.message||'Erreur');setStatus('off');}
+  };
+  const disable=async()=>{
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(sub)await sub.unsubscribe();
+      await apiCall('/api/push/subscribe',{method:'DELETE'});
+      setStatus('off');
+    }catch(e){setError(e.message||'Erreur');}
+  };
+  if(status==='loading')return null;
+  const isOn=status==='on';
+  const isLoading=status==='subscribing';
+  const label=status==='unsupported'?'Non supporté':status==='denied'?'Bloquées':isOn?'Activées':'Désactivées';
+  return(
+    <>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:16,flexShrink:0}}>{isOn?'🔔':'🔕'}</span>
+          <div>
+            <span style={{fontSize:12,fontWeight:600,color:T.text}}>Notifications</span>
+            {error&&<div style={{fontSize:9,color:T.danger}}>{error}</div>}
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:10,color:isOn?T.good:T.textFaint,fontWeight:500}}>{label}</span>
+          {status!=='unsupported'&&status!=='denied'&&(
+            <button onClick={isOn?disable:enable} disabled={isLoading} style={{height:26,padding:'0 10px',borderRadius:7,border:'none',background:isOn?'rgba(184,80,112,0.12)':'rgba(44,196,160,0.12)',color:isOn?T.danger:T.good,fontSize:10,fontWeight:700,cursor:isLoading?'default':'pointer',opacity:isLoading?0.6:1}}>
+              {isLoading?'…':isOn?'Off':'On'}
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{height:1,background:T.border,marginLeft:14,marginRight:14}}/>
+    </>
+  );
+}
+
+function ProfileInstallRow(){
+  const[deferred,setDeferred]=React.useState(null);
+  const[showIOSHint,setShowIOSHint]=React.useState(false);
+  const standalone=typeof window!=='undefined'&&(window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone);
+  const isIOS=typeof navigator!=='undefined'&&/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  const isAndroid=typeof navigator!=='undefined'&&/Android/i.test(navigator.userAgent);
+  React.useEffect(()=>{
+    const onBefore=e=>{e.preventDefault();setDeferred(e);};
+    window.addEventListener('beforeinstallprompt',onBefore);
+    return()=>window.removeEventListener('beforeinstallprompt',onBefore);
+  },[]);
+  const install=async()=>{
+    if(deferred){deferred.prompt();const{outcome}=await deferred.userChoice;if(outcome==='accepted')setDeferred(null);}
+    else setShowIOSHint(true);
+  };
+  if(standalone){
+    return(
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px'}}>
+        <span style={{fontSize:16,flexShrink:0}}>📱</span>
+        <span style={{fontSize:12,fontWeight:600,color:T.text}}>App installée</span>
+        <span style={{fontSize:10,color:T.good,marginLeft:'auto'}}>✓</span>
+      </div>
+    );
+  }
+  return(
+    <>
+      <button onClick={install} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',border:'none',background:'transparent',cursor:'pointer'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:16,flexShrink:0}}>📱</span>
+          <span style={{fontSize:12,fontWeight:600,color:T.text}}>Installer l'app</span>
+        </div>
+        <Icon name="chevronRight" size={14} stroke={T.textFaint}/>
+      </button>
+      {showIOSHint&&(
+        <div onClick={()=>setShowIOSHint(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:24,zIndex:9999,backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)'}}>
+          <div onClick={e=>e.stopPropagation()} style={{maxWidth:400,width:'100%',borderRadius:22,padding:1,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 8s linear infinite'}}>
+            <div style={{borderRadius:21,padding:24,background:'linear-gradient(160deg,rgba(28,28,40,0.98),rgba(12,12,18,0.98))'}}>
+              <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Installation</div>
+              <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,marginBottom:14}}><HoloText>Ajouter Prime Athl</HoloText></div>
+              {isIOS?(
+                <ol style={{margin:0,paddingLeft:20,fontSize:13,color:T.textDim,lineHeight:1.7}}>
+                  <li>Tape l'icône <b style={{color:T.text}}>Partager</b> ⎍ (en bas de Safari)</li>
+                  <li>Descends et tape <b style={{color:T.text}}>"Sur l'écran d'accueil"</b></li>
+                  <li>Confirme <b style={{color:T.text}}>"Ajouter"</b> en haut à droite</li>
+                  <li>✨ L'icône Prime Athl apparaît sur ton écran</li>
+                </ol>
+              ):(
+                <ol style={{margin:0,paddingLeft:20,fontSize:13,color:T.textDim,lineHeight:1.7}}>
+                  <li>Ouvre le menu Chrome <b style={{color:T.text}}>⋮</b> (3 points en haut à droite)</li>
+                  <li>Tape <b style={{color:T.text}}>"Installer l'application"</b> ou <b style={{color:T.text}}>"Ajouter à l'écran d'accueil"</b></li>
+                  <li>Confirme</li>
+                  <li>✨ Icône Prime Athl installée</li>
+                </ol>
+              )}
+              <div style={{padding:12,marginTop:14,borderRadius:11,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.25)',fontSize:11,color:T.warn,fontWeight:600}}>
+                💡 <b>Astuce</b> : une fois installée, fais un appui long sur l'icône → menu raccourcis
+              </div>
+              <button onClick={()=>setShowIOSHint(false)} style={{width:'100%',marginTop:16,height:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>OK, compris</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function TestEmailCard(){
   const[status,setStatus]=React.useState(null); // null | 'loading' | 'ok' | 'error' | 'no_key'
   const[detail,setDetail]=React.useState('');
@@ -3929,6 +4061,7 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const[avatarSheet,setAvatarSheet]=React.useState(false);
   const[avatarBusy,setAvatarBusy]=React.useState(false);
   const avatarFileRef=React.useRef(null);
+  const[editOpen,setEditOpen]=React.useState(false);
 
   const handleAvatarFile=e=>{
     const file=e.target.files[0];
@@ -3938,7 +4071,6 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
     reader.onload=ev=>{
       const img=new Image();
       img.onload=()=>{
-        // Recadrage centré en carré + redimensionnement (même pipeline que l'album photo)
         const side=Math.min(img.width,img.height);
         const dim=440;
         const canvas=document.createElement('canvas');
@@ -3965,10 +4097,17 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
     if(profile.avatarUrl&&confirm('Supprimer ta photo de profil ?'))onChange({avatarUrl:''});
   };
 
+  // Résumé compact des infos profil pour le mode fermé
+  const summaryParts=[];
+  if(profile.height)summaryParts.push(profile.height+'cm');
+  if(profile.weight)summaryParts.push(profile.weight+'kg');
+  if(profile.objective)summaryParts.push(profile.objective);
+  const summaryText=summaryParts.length?summaryParts.join(' · '):'Non renseigné';
+
   return(
     <div style={{padding:'14px 16px 90px',color:T.text}}>
       {/* Header compact : avatar modifiable + identité + role inline */}
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:18}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
         <button onClick={()=>setAvatarSheet(true)} aria-label="Modifier la photo de profil" style={{position:'relative',width:52,height:52,padding:0,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,borderRadius:26}}>
           <div style={{width:52,height:52,borderRadius:26,padding:1.5,background:HOLO.iris,backgroundSize:'200% 200%',animation:'holoShift 16s linear infinite'}}>
             <div style={{width:'100%',height:'100%',borderRadius:24.5,overflow:'hidden',background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:600,color:'#fff'}}>
@@ -4000,27 +4139,39 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
         </div>
       </BottomSheet>
 
-      {/* Identité (4 champs en grid 2x2) */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
-        <input style={inp} value={profile.firstName||''} onChange={e=>upd('firstName',e.target.value)} placeholder="Prénom"/>
-        <input style={inp} value={profile.lastName||''} onChange={e=>upd('lastName',e.target.value)} placeholder="Nom"/>
-        <div style={{position:'relative'}}>
-          <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.height||''} onChange={e=>upd('height',e.target.value)} placeholder="Taille"/>
-          <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>cm</span>
+      {/* Infos profil : section dépliable */}
+      <button onClick={()=>setEditOpen(!editOpen)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:editOpen?'12px 12px 0 0':12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderBottom:editOpen?'none':`1px solid ${T.border}`,cursor:'pointer',marginBottom:editOpen?0:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <Icon name="user" size={14} stroke={T.textDim}/>
+          <div style={{textAlign:'left'}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>Infos profil</div>
+            {!editOpen&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{summaryText}</div>}
+          </div>
         </div>
-        <div style={{position:'relative'}}>
-          <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.weight||''} onChange={e=>upd('weight',e.target.value)} placeholder="Poids"/>
-          <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>kg</span>
+        <Icon name={editOpen?'chevronDown':'chevronRight'} size={14} stroke={T.textFaint}/>
+      </button>
+      {editOpen&&(
+        <div style={{padding:'10px 14px 14px',borderRadius:'0 0 12px 12px',background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderTop:'none',marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
+            <input style={inp} value={profile.firstName||''} onChange={e=>upd('firstName',e.target.value)} placeholder="Prénom"/>
+            <input style={inp} value={profile.lastName||''} onChange={e=>upd('lastName',e.target.value)} placeholder="Nom"/>
+            <div style={{position:'relative'}}>
+              <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.height||''} onChange={e=>upd('height',e.target.value)} placeholder="Taille"/>
+              <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>cm</span>
+            </div>
+            <div style={{position:'relative'}}>
+              <input style={{...inp,paddingRight:26}} type="number" inputMode="decimal" value={profile.weight||''} onChange={e=>upd('weight',e.target.value)} placeholder="Poids"/>
+              <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>kg</span>
+            </div>
+          </div>
+          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif</div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {objectives.map(o=>(
+              <button key={o} onClick={()=>upd('objective',o)} style={{flex:'1 1 auto',height:28,padding:'0 9px',borderRadius:7,border:profile.objective===o?'1px solid transparent':'1px solid '+T.border,background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.025)',color:profile.objective===o?T.accent:T.textDim,fontSize:10.5,fontWeight:profile.objective===o?700:500,cursor:'pointer',letterSpacing:0.2,whiteSpace:'nowrap'}}>{o}</button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Objectif — chips compactes */}
-      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif</div>
-      <div style={{display:'flex',gap:4,marginBottom:18,flexWrap:'wrap'}}>
-        {objectives.map(o=>(
-          <button key={o} onClick={()=>upd('objective',o)} style={{flex:'1 1 auto',height:28,padding:'0 9px',borderRadius:7,border:profile.objective===o?'1px solid transparent':'1px solid '+T.border,background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.025)',color:profile.objective===o?T.accent:T.textDim,fontSize:10.5,fontWeight:profile.objective===o?700:500,cursor:'pointer',letterSpacing:0.2,whiteSpace:'nowrap'}}>{o}</button>
-        ))}
-      </div>
+      )}
 
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
 
@@ -4029,19 +4180,25 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
       {profile.isMainCoach&&<BackupRestoreCard/>}
       {profile.isMainCoach&&<TestEmailCard/>}
 
-      {/* Préférences regroupées : thème, notifications, installation — un seul bloc cohérent */}
+      {/* Préférences : bloc unique avec lignes séparées */}
       <SectionHeader title="Préférences"/>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,marginBottom:8}}>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <span style={{fontSize:20,flexShrink:0}}>🎨</span>
-          <span style={{fontSize:12,fontWeight:700,color:T.text}}>Thème</span>
+      <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,overflow:'hidden',marginBottom:10}}>
+        {/* Thème */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:16,flexShrink:0}}>🎨</span>
+            <span style={{fontSize:12,fontWeight:600,color:T.text}}>Thème</span>
+          </div>
+          <ThemePicker/>
         </div>
-        <ThemePicker/>
+        <div style={{height:1,background:T.border,marginLeft:14,marginRight:14}}/>
+        {/* Notifications */}
+        <ProfilePushRow/>
+        {/* Install */}
+        <ProfileInstallRow/>
       </div>
-      <PushNotifToggle/>
-      <InstallPrompt/>
 
-      <button onClick={onLogout} style={{width:'100%',height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3,marginTop:6}}>
+      <button onClick={onLogout} style={{width:'100%',height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.25)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,letterSpacing:0.3,marginTop:2}}>
         <Icon name="x" size={13} stroke={T.danger}/> Se déconnecter
       </button>
     </div>
