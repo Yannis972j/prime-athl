@@ -3905,15 +3905,18 @@ app.post('/api/admin/training-programs/import', authRequired, mainCoachOnly, upl
         const firstUp = first.toUpperCase();
         const firstNorm = norm(first);
 
-        // Détection module titre / objectif (premières lignes)
-        if (ri < 3 && first && !moduleObjSet) {
-          if (firstUp.startsWith('MODULE') || firstUp.includes('—') || firstUp.includes('-')) {
-            module.moduleName = first;
-            return;
-          }
-          if (firstNorm.startsWith('objectif')) {
+        // Détection module titre / objectif (premières lignes non vides)
+        if (ri < 4 && first) {
+          // Objectif module (doit être testé AVANT le titre car "Objectif : …—…" contient un tiret)
+          if (!moduleObjSet && firstNorm.startsWith('objectif')) {
             module.moduleObjective = first.replace(/^objectif\s*:\s*/i, '');
             moduleObjSet = true;
+            return;
+          }
+          // Titre module : première ligne non-objectif, non-programme, non-séance
+          if (!module._titleSet && !(/^PROGRAMME\s+\d/i.test(firstUp)) && !(/^S[ÉE]ANCE\s+\d/i.test(firstUp))) {
+            module.moduleName = first;
+            module._titleSet = true;
             return;
           }
         }
