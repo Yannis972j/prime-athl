@@ -4775,7 +4775,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     const d=(dateStr?daysForDate(dateStr):days)[dayName];
     if(!d)return;
     onStartWorkout({
-      name:dayName,
+      name:d.category||dayName,
       muscles:d.category||'',
       exercises:d.exercises.map(ex=>{
         const src=applyDeload(ex);
@@ -14194,7 +14194,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     if(!editingDayKey)return null;
     const d=importedPrograms[editingDayKey.sheet]&&importedPrograms[editingDayKey.sheet][editingDayKey.day];
     if(!d)return null;
-    return{name:editingDayKey.day,muscles:d.category||'',exercises:d.exercises||[]};
+    return{name:d.category||editingDayKey.day,muscles:d.category||'',exercises:d.exercises||[]};
   })();
   const saveDayChanges=w=>{
     if(!editingDayKey)return;
