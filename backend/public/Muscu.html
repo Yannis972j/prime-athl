@@ -9734,7 +9734,7 @@ function CoachProfileField({label,value,onCommit,suffix,type='text'}){
   );
 }
 
-function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit}){
+function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit,onStartWorkout}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
   const[selected,setSelected]=React.useState(null);
@@ -10109,7 +10109,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   }
 
   if(coachView==='programs'){
-    return <div style={{height:'100%',overflow:'auto'}}><TPAdminScreen onBack={()=>setCoachView('athletes')} initialEditId={initialProgramEditId} onConsumedInitialEdit={onConsumedInitialProgramEdit}/></div>;
+    return <div style={{height:'100%',overflow:'auto'}}><TPAdminScreen onBack={()=>setCoachView('athletes')} initialEditId={initialProgramEditId} onConsumedInitialEdit={onConsumedInitialProgramEdit} onStartWorkout={onStartWorkout}/></div>;
   }
 
   // ── Detail view ─────────────────────────────────
@@ -12303,7 +12303,7 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
   );
 }
 
-function TPAdminScreen({initialEditId,onConsumedInitialEdit}){
+function TPAdminScreen({initialEditId,onConsumedInitialEdit,onStartWorkout}){
   const[programs,setPrograms]=React.useState([]);
   const[loading,setLoading]=React.useState(true);
   const[editing,setEditing]=React.useState(null);
@@ -12335,7 +12335,7 @@ function TPAdminScreen({initialEditId,onConsumedInitialEdit}){
     try{await apiCall('/api/admin/training-programs/'+id,{method:'DELETE'});setPrograms(ps=>ps.filter(x=>x.id!==id));}catch(e){console.error(e);}
   };
 
-  if(editing)return<TPAdminEditor program={editing} onBack={()=>{setEditing(null);load();}} />;
+  if(editing)return<TPAdminEditor program={editing} onBack={()=>{setEditing(null);load();}} onStartWorkout={onStartWorkout}/>;
   if(creating)return<TPAdminImport onBack={()=>{setCreating(false);load();}} />;
 
   return(
@@ -12857,7 +12857,7 @@ function TPAdminImport({onBack}){
   );
 }
 
-function TPAdminEditor({program,onBack}){
+function TPAdminEditor({program,onBack,onStartWorkout}){
   const isNew=!program;
   const[form,setForm]=React.useState(()=>{
     if(program)return{...program,weeks:[...(program.weeks||[]).map(w=>({...w,sessions:[...(w.sessions||[]).map(s=>({...s,exercises:[...(s.exercises||[])]}))]}))],};
@@ -12919,6 +12919,28 @@ function TPAdminEditor({program,onBack}){
     w[wi]={...w[wi],sessions:[...(w[wi].sessions||[]),...imported]};
     set('weeks',w);
     setShowImport(null);
+  };
+
+  // Prévisualisation : lance la séance comme si on était athlète
+  const previewSession=(sess,wi,si)=>{
+    if(!onStartWorkout)return;
+    if(!sess||!Array.isArray(sess.exercises)||sess.exercises.length===0){alert('Cette séance ne contient aucun exercice.');return;}
+    const exercises=sess.exercises.map(ex=>{
+      const srcSets=Array.isArray(ex.sets)&&ex.sets.length?ex.sets:[{weight:0,target:10}];
+      return{
+        id:Math.random().toString(36).slice(2),
+        name:ex.name,muscle:ex.muscle||'',style:'CLASSIQUE',
+        cardio:null,
+        coachNotes:ex.coachNotes||ex.notes||'',
+        sets:srcSets.map(s=>({
+          weight:s.weight||0,reps:0,done:false,
+          target:s.target||10,
+          targetStr:s.targetStr||(s.target?String(s.target):''),
+        })),
+      };
+    });
+    const seqName=(form.weeks||[])[wi]?.moduleName||`Séquence ${wi+1}`;
+    onStartWorkout({name:sess.name||`${seqName} — Séance ${si+1}`,muscles:'',exercises,fromTrainingProgram:true});
   };
 
   if(editSession!==null){
@@ -13086,6 +13108,9 @@ function TPAdminEditor({program,onBack}){
                                   <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||`Séance ${si+1}`}</div>
                                   <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{seExCount} exercice{seExCount>1?'s':''}{seExCount>0?' · '+sess.exercises.map(e=>e.name||'?').slice(0,2).join(', ')+(seExCount>2?' …':''):''}</div>
                                 </div>
+                                {onStartWorkout&&seExCount>0&&<button onClick={()=>previewSession(sess,wi,si)} style={{height:32,padding:'0 10px',borderRadius:10,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.10)',color:T.good,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:4}} title="Tester cette séance comme un athlète">
+                                  ▶ Tester
+                                </button>}
                                 <button onClick={()=>setEditSession({wi,si})} style={{height:32,padding:'0 12px',borderRadius:10,border:`1px solid ${TP_ACCENT}40`,background:`${TP_ACCENT}12`,color:TP_ACCENT,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
                                   <Icon name="edit" size={12} stroke={TP_ACCENT}/>Éditer
                                 </button>
@@ -14599,7 +14624,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             )}
             {tab==='stats'&&<div style={{flex:1,overflow:'auto'}}><StatsScreen history={history} profile={profile}/></div>}
             {tab==='profile'&&<div style={{flex:1,overflow:'auto'}}><ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout} onShowPricing={()=>{setTab('univers');setActiveUniverse(null);setShowPricing(true);}}/></div>}
-            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser} initialCoachView={pendingProgramEditId?'programs':undefined} initialProgramEditId={pendingProgramEditId} onConsumedInitialProgramEdit={()=>setPendingProgramEditId(null)}/></div>}
+            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser} initialCoachView={pendingProgramEditId?'programs':undefined} initialProgramEditId={pendingProgramEditId} onConsumedInitialProgramEdit={()=>setPendingProgramEditId(null)} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/></div>}
             {tab==='messages'&&<div style={{flex:1,overflow:'auto'}}><MessagesScreen authUser={authUser}/></div>}
           </div>
         )}
