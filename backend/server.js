@@ -17,6 +17,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
+import XLSX from 'xlsx';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
@@ -3590,6 +3591,7 @@ app.get('/api/training-programs', (req, res) => {
     id: p.id, name: p.name, shortDescription: p.shortDescription, coverImage: p.coverImage,
     duration: p.duration, price: p.price, level: p.level, category: p.category,
     sessionsPerWeek: p.sessionsPerWeek, weekCount: (p.weeks || []).length,
+    emoji: p.emoji || '', frequency: p.frequency || '',
   }));
   res.json(safe);
 });
@@ -3773,12 +3775,314 @@ app.post('/api/admin/training-programs', authRequired, mainCoachOnly, (req, res)
   res.json(DATA.trainingPrograms[id]);
 });
 
+// ── Import programme depuis Excel ──────────────────────────────────────────
+// Le coach uploade un fichier .xlsx avec :
+//  - 1 feuille INFO (métadonnées : NOM, DESCRIPTION, PRIX, DURÉE, NIVEAU, OBJECTIF, CATÉGORIE, EMOJI, FRÉQUENCE)
+//  - N feuilles MODULE (ex: "MODULE 1 — MOIS 1-2") contenant PROGRAMME + SÉANCE + exercices
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+    ].includes(file.mimetype) || file.originalname?.endsWith('.xlsx') || file.originalname?.endsWith('.xls');
+    cb(null, ok);
+  },
+});
+
+app.post('/api/admin/training-programs/import', authRequired, mainCoachOnly, uploadExcel.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file', message: 'Aucun fichier reçu.' });
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer', raw: true, cellDates: false });
+    if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+      return res.status(400).json({ error: 'empty_workbook', message: 'Fichier Excel vide ou illisible.' });
+    }
+
+    const norm = s => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+    // ── 1. Chercher la feuille INFO ──
+    const infoSheetName = wb.SheetNames.find(n => norm(n) === 'info');
+    let meta = {};
+    if (infoSheetName) {
+      const ws = wb.Sheets[infoSheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+      // Format attendu : colonne A = clé, colonne B = valeur
+      rows.forEach(row => {
+        const key = norm(row[0]);
+        const val = row[1];
+        if (!key || key === 'champ') return; // header
+        if (key === 'nom') meta.name = String(val || '').trim();
+        else if (key === 'description') meta.description = String(val || '').trim();
+        else if (key === 'prix') meta.price = Math.round((parseFloat(val) || 0) * 100); // € → centimes
+        else if (key.includes('dur')) meta.duration = String(val || '').trim();
+        else if (key === 'niveau') meta.level = String(val || '').trim();
+        else if (key.includes('objectif')) meta.objectives = String(val || '').trim();
+        else if (key.includes('categori') || key.includes('categor')) meta.category = String(val || '').trim();
+        else if (key === 'emoji') meta.emoji = String(val || '').trim();
+        else if (key.includes('frequen') || key.includes('freq')) meta.frequency = String(val || '').trim();
+      });
+    }
+
+    // Convertir durée texte → clé standardisée
+    const parseDuration = raw => {
+      if (!raw) return '1month';
+      const s = norm(raw);
+      const m = s.match(/(\d+)/);
+      if (!m) return '1month';
+      const n = parseInt(m[1]);
+      return n === 1 ? '1month' : n + 'months';
+    };
+
+    // Convertir catégorie texte → id
+    const parseCategory = raw => {
+      if (!raw) return 'fullbody';
+      const s = norm(raw);
+      const found = TP_CATEGORIES.find(c => norm(c.label) === s || c.id === s);
+      return found ? found.id : raw.toLowerCase().replace(/\s+/g, '');
+    };
+
+    // ── 2. Parser les feuilles module ──
+    const moduleSheets = wb.SheetNames.filter(n => n !== infoSheetName);
+    if (moduleSheets.length === 0) {
+      return res.status(400).json({ error: 'no_modules', message: 'Aucune feuille de module trouvée.' });
+    }
+
+    const weeks = []; // weeks = modules dans la structure existante
+
+    moduleSheets.forEach(sheetName => {
+      const ws = wb.Sheets[sheetName];
+      if (!ws || !ws['!ref']) return;
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+      if (!rows.length) return;
+
+      const module = {
+        weekNumber: weeks.length + 1,
+        moduleName: sheetName,
+        moduleObjective: '',
+        programmes: [], // sous-structure : programmes[] → sessions[]
+        sessions: [],   // structure plate utilisée par le reste de l'app
+      };
+
+      // Détection de la structure : PROGRAMME N, SÉANCE N, et lignes d'exercices
+      // Format attendu (comme le sample Excel) :
+      //   Row: "PROGRAMME 1 — MOIS 1"
+      //   Row: "Objectif : ..."
+      //   Row: "SÉANCE 1 — QUADRICEPS FORCE"
+      //   Row: [Exercice, Séries, Reps, Charge, Repos, Notes] ← header
+      //   Row: [Back Squat, 4, 8, 80, 180, "..."] ← exercise
+      //   ... etc
+
+      let currentProgramme = null;
+      let currentSession = null;
+      let isInHeader = false;
+      let colExercice = 0, colSeries = 1, colReps = 2, colCharge = 3, colRepos = 4, colNotes = 5;
+      let moduleObjSet = false;
+
+      const isHeaderRow = row => {
+        return row.some(cell => {
+          const s = norm(cell);
+          return s.startsWith('exerci') || s === 'series' || s.startsWith('repeti') || s === 'reps';
+        });
+      };
+
+      const detectCols = row => {
+        row.forEach((cell, i) => {
+          const s = norm(cell);
+          if (s.startsWith('exerci')) colExercice = i;
+          else if (s.startsWith('serie')) colSeries = i;
+          else if (s.startsWith('repeti') || s === 'reps') colReps = i;
+          else if (s.includes('charge') || s === 'kg') colCharge = i;
+          else if (s.includes('repos')) colRepos = i;
+          else if (s.includes('note') || s.includes('conseil')) colNotes = i;
+        });
+      };
+
+      rows.forEach((row, ri) => {
+        if (!row || row.every(c => !String(c || '').trim())) return;
+
+        const first = String(row[0] || '').trim();
+        const firstUp = first.toUpperCase();
+        const firstNorm = norm(first);
+
+        // Détection module titre / objectif (premières lignes)
+        if (ri < 3 && first && !moduleObjSet) {
+          if (firstUp.startsWith('MODULE') || firstUp.includes('—') || firstUp.includes('-')) {
+            module.moduleName = first;
+            return;
+          }
+          if (firstNorm.startsWith('objectif')) {
+            module.moduleObjective = first.replace(/^objectif\s*:\s*/i, '');
+            moduleObjSet = true;
+            return;
+          }
+        }
+
+        // Détection PROGRAMME
+        if (/^PROGRAMME\s+\d/i.test(firstUp)) {
+          // Sauver la session en cours dans le programme en cours
+          if (currentSession && currentSession.exercises.length > 0) {
+            if (currentProgramme) currentProgramme.sessions.push(currentSession);
+            module.sessions.push(currentSession);
+          }
+          // Sauver le programme en cours
+          if (currentProgramme) module.programmes.push(currentProgramme);
+
+          currentProgramme = { name: first, objective: '', sessions: [] };
+          currentSession = null;
+          return;
+        }
+
+        // Objectif après un PROGRAMME
+        if (currentProgramme && !currentProgramme.objective && firstNorm.startsWith('objectif')) {
+          currentProgramme.objective = first.replace(/^objectif\s*:\s*/i, '');
+          return;
+        }
+
+        // Détection SÉANCE
+        if (/^S[ÉE]ANCE\s+\d/i.test(firstUp)) {
+          // Sauver la session en cours
+          if (currentSession && currentSession.exercises.length > 0) {
+            if (currentProgramme) currentProgramme.sessions.push(currentSession);
+            module.sessions.push(currentSession);
+          }
+          currentSession = { name: first, exercises: [] };
+          isInHeader = false;
+          return;
+        }
+
+        // Détection header de colonnes
+        if (isHeaderRow(row)) {
+          detectCols(row);
+          isInHeader = true;
+          return;
+        }
+
+        // Ligne d'exercice (après un header et dans une séance)
+        if (currentSession && isInHeader) {
+          const exName = String(row[colExercice] || '').trim();
+          if (!exName) return;
+
+          const seriesVal = parseInt(String(row[colSeries] || '')) || 3;
+          const repsRaw = String(row[colReps] || '').trim();
+          const chargeRaw = String(row[colCharge] || '').trim();
+          const reposRaw = String(row[colRepos] || '').trim();
+          const notes = String(row[colNotes] || '').trim();
+
+          const chargeNum = parseFloat(chargeRaw.replace(',', '.')) || 0;
+          const isPDC = /^(PDC|PC|BW)$/i.test(chargeRaw);
+          const weight = isPDC ? 0 : chargeNum;
+
+          // Parse reps : "8" → 8, "MAX" → "MAX", "" → 10
+          let repsTarget = 10;
+          let repsStr = repsRaw;
+          if (repsRaw && repsRaw.toUpperCase() !== 'MAX') {
+            const n = parseInt(repsRaw);
+            if (!isNaN(n)) repsTarget = n;
+          } else if (repsRaw.toUpperCase() === 'MAX') {
+            repsTarget = 10;
+            repsStr = 'MAX';
+          }
+
+          // Parse repos en secondes
+          let restSecs = 90;
+          if (reposRaw) {
+            const rn = parseInt(reposRaw);
+            if (!isNaN(rn)) restSecs = rn;
+          }
+
+          const isHold = /maintien|isometr|chaise|wall\s*sit|planche|gainage/i.test(exName);
+
+          const exercise = {
+            id: uid(),
+            name: exName,
+            muscle: '',
+            style: 'CLASSIQUE',
+            rest: reposRaw || String(restSecs) + 's',
+            restSeconds: restSecs,
+            weightStr: isPDC ? 'PDC' : chargeRaw,
+            repsStr: repsStr,
+            holdSeconds: isHold ? (parseInt(repsRaw) || 45) : 0,
+            notes: notes,
+            sets: Array.from({ length: seriesVal }, () => ({
+              weight,
+              reps: 0,
+              done: false,
+              target: repsTarget,
+              targetStr: repsStr,
+            })),
+          };
+
+          currentSession.exercises.push(exercise);
+        }
+      });
+
+      // Sauver la dernière session/programme en cours
+      if (currentSession && currentSession.exercises.length > 0) {
+        if (currentProgramme) currentProgramme.sessions.push(currentSession);
+        module.sessions.push(currentSession);
+      }
+      if (currentProgramme) module.programmes.push(currentProgramme);
+
+      // Si aucun PROGRAMME explicite trouvé, toutes les sessions sont dans un programme implicite
+      if (module.programmes.length === 0 && module.sessions.length > 0) {
+        module.programmes.push({ name: sheetName, objective: '', sessions: [...module.sessions] });
+      }
+
+      if (module.sessions.length > 0) weeks.push(module);
+    });
+
+    if (weeks.length === 0) {
+      return res.status(400).json({
+        error: 'no_exercises',
+        message: 'Aucun exercice détecté. Vérifie que les feuilles contiennent des SÉANCES avec des exercices.',
+      });
+    }
+
+    // Déterminer sessionsPerWeek
+    const allSessions = weeks.reduce((s, w) => s + w.sessions.length, 0);
+    const durationKey = parseDuration(meta.duration);
+    const durationMonths = parseInt(durationKey) || 1;
+    const sessionsPerWeek = meta.frequency
+      ? (parseInt(meta.frequency) || Math.ceil(allSessions / (durationMonths * 4)))
+      : Math.ceil(allSessions / (durationMonths * 4));
+
+    const id = uid();
+    DATA.trainingPrograms[id] = {
+      id,
+      name: meta.name || req.file.originalname?.replace(/\.xlsx?$/i, '') || 'Programme importé',
+      shortDescription: meta.description ? meta.description.slice(0, 120) : '',
+      description: meta.description || '',
+      coverImage: '',
+      duration: durationKey,
+      price: meta.price || 0,
+      level: meta.level || 'Intermédiaire',
+      category: parseCategory(meta.category),
+      objectives: meta.objectives || '',
+      emoji: meta.emoji || '🏋️',
+      frequency: meta.frequency || '',
+      sessionsPerWeek,
+      sessionDuration: '60min',
+      expectedResults: '',
+      published: false,
+      weeks,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    persist();
+    res.json(DATA.trainingPrograms[id]);
+  } catch (e) {
+    console.error('[training-programs] import error:', e);
+    res.status(500).json({ error: 'parse_failed', message: 'Erreur lors du parsing Excel: ' + (e.message || e) });
+  }
+});
+
 app.put('/api/admin/training-programs/:id', authRequired, mainCoachOnly, (req, res) => {
   const prog = DATA.trainingPrograms[req.params.id];
   if (!prog) return res.status(404).json({ error: 'not_found' });
   const allowed = ['name', 'shortDescription', 'description', 'coverImage', 'duration', 'price',
     'level', 'category', 'objectives', 'sessionsPerWeek', 'sessionDuration', 'expectedResults',
-    'published', 'weeks'];
+    'published', 'weeks', 'emoji', 'frequency'];
   for (const k of allowed) {
     if (req.body[k] !== undefined) prog[k] = req.body[k];
   }

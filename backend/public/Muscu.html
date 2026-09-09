@@ -11865,7 +11865,8 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
   const[buying,setBuying]=React.useState(false);
   const[buyError,setBuyError]=React.useState(null);
   const[owned,setOwned]=React.useState(false);
-  const[expandWeek,setExpandWeek]=React.useState(null);
+  const[expandMod,setExpandMod]=React.useState(null);
+  const[expandProg,setExpandProg]=React.useState(null);
 
   React.useEffect(()=>{
     setLoading(true);
@@ -11889,7 +11890,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
         onPurchased&&onPurchased();
       }else if(r.url){
         window.location.href=r.url;
-        return; // garder buying=true pendant la redirection
+        return;
       }else{
         setBuyError('Réponse inattendue du serveur.');
       }
@@ -11909,6 +11910,8 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
   (prog.weeks||[]).forEach(w=>(w.sessions||[]).forEach(s=>(s.exercises||[]).forEach(ex=>{
     if(!allExercises.find(e=>e.name===ex.name))allExercises.push(ex);
   })));
+  const totalSessions=(prog.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0);
+  const hasProgrammes=(prog.weeks||[]).some(w=>(w.programmes||[]).length>0);
 
   return(
     <div style={{color:T.text,paddingBottom:90}}>
@@ -11916,40 +11919,49 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
         <Icon name="chevronLeft" size={16} stroke={T.textDim}/>Retour
       </button>
 
+      {/* Hero */}
       {prog.coverImage?(
         <div style={{width:'100%',height:200,background:`url(${prog.coverImage}) center/cover no-repeat`,position:'relative'}}>
           <div style={{position:'absolute',bottom:0,left:0,right:0,height:80,background:'linear-gradient(transparent,#07070e)'}}/>
         </div>
       ):(
-        <div style={{width:'100%',height:160,background:`linear-gradient(135deg,${ac}30,${ac}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:56}}>{cat?.emoji||'🏋️'}</div>
+        <div style={{width:'100%',height:160,background:`linear-gradient(135deg,${ac}30,${ac}08)`,display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+          <div style={{fontSize:56}}>{prog.emoji||cat?.emoji||'🏋️'}</div>
+          <div style={{position:'absolute',bottom:0,left:0,right:0,height:40,background:'linear-gradient(transparent,#07070e)'}}/>
+        </div>
       )}
 
       <div style={{padding:'0 18px'}}>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,marginTop:prog.coverImage?-20:12,position:'relative',zIndex:1}}>
+        {/* Pills */}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,marginTop:prog.coverImage?-20:8,position:'relative',zIndex:1}}>
           <Pill color={ac}>{cat?.emoji} {cat?.label||prog.category}</Pill>
           <Pill color={T.accent}>📊 {prog.level}</Pill>
           <Pill color={T.accent}>⏱ {TP_DURATIONS[prog.duration]||prog.duration}</Pill>
+          {prog.frequency&&<Pill color={T.accent}>🔄 {prog.frequency}</Pill>}
         </div>
 
+        {/* Titre */}
         <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.5,marginBottom:8}}>{prog.name}</div>
 
         {prog.description&&<div style={{fontSize:14,color:T.textDim,lineHeight:1.65,marginBottom:18}}>{prog.description}</div>}
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
+        {/* Stats grid */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:20}}>
           {[
-            {label:'Séances/semaine',value:prog.sessionsPerWeek||'—',icon:'📅'},
-            {label:'Durée séance',value:prog.sessionDuration||'—',icon:'⏱'},
-            {label:'Modules',value:(prog.weeks||[]).length||'—',icon:'📆'},
+            {label:'Modules',value:(prog.weeks||[]).length||'—',icon:'📦'},
+            {label:'Séances',value:totalSessions||'—',icon:'🏋️'},
+            {label:'/semaine',value:prog.sessionsPerWeek||'—',icon:'📅'},
             {label:'Exercices',value:allExercises.length||'—',icon:'💪'},
           ].map((item,i)=>(
-            <div key={i} style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:18,marginBottom:4}}>{item.icon}</div>
+            <div key={i} style={{padding:'10px 8px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,textAlign:'center'}}>
+              <div style={{fontSize:14,marginBottom:2}}>{item.icon}</div>
               <div style={{fontSize:18,fontWeight:800,color:T.text}}>{item.value}</div>
-              <div style={{fontSize:11,color:T.textFaint,fontWeight:600}}>{item.label}</div>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3}}>{item.label}</div>
             </div>
           ))}
         </div>
 
+        {/* Objectifs */}
         {prog.objectives&&(
           <div style={{marginBottom:16}}>
             <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>🎯 Objectifs</div>
@@ -11964,39 +11976,110 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
           </div>
         )}
 
+        {/* ══ CONTENU DU PROGRAMME — Modules → Programmes → Séances ══ */}
         {(prog.weeks||[]).length>0&&(
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>📋 Aperçu du programme</div>
-            {(prog.weeks||[]).map((week,wi)=>(
-              <div key={wi} style={{marginBottom:6}}>
-                <button onClick={()=>setExpandWeek(expandWeek===wi?null:wi)} style={{width:'100%',padding:'10px 14px',borderRadius:12,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text}}>
-                  <span style={{fontSize:13,fontWeight:700}}>{week.moduleName||`Module ${wi+1}`}</span>
-                  <span style={{fontSize:11,color:T.textDim}}>{(week.sessions||[]).length} séance{(week.sessions||[]).length>1?'s':''} {expandWeek===wi?'▲':'▼'}</span>
-                </button>
-                {expandWeek===wi&&(
-                  <div style={{padding:'8px 0 0 12px'}}>
-                    {(week.sessions||[]).map((sess,si)=>(
-                      <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>{sess.name||`Séance ${si+1}`}</div>
-                        <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                          {(sess.exercises||[]).slice(0,4).map((ex,ei)=>{
-                            const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                            const repsLabel=setsArr[0]?.targetStr||setsArr[0]?.target||setsArr[0]?.reps||'?';
-                            return(
-                              <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}</div>
-                            );
-                          })}
-                          {(sess.exercises||[]).length>4&&<div style={{fontSize:10,color:T.textFaint}}>+{(sess.exercises||[]).length-4} exercices</div>}
-                        </div>
+            <div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:10}}>📋 Contenu du programme</div>
+
+            {(prog.weeks||[]).map((mod,mi)=>{
+              const modExpanded=expandMod===mi;
+              const modSessCount=(mod.sessions||[]).length;
+              const modProgs=(mod.programmes||[]);
+
+              return(
+                <div key={mi} style={{marginBottom:8}}>
+                  {/* Module header */}
+                  <button onClick={()=>setExpandMod(modExpanded?null:mi)} style={{width:'100%',padding:'12px 14px',borderRadius:14,border:`1px solid ${modExpanded?ac+'50':T.border}`,background:modExpanded?`${ac}10`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:T.text,transition:'all 0.2s',textAlign:'left'}}>
+                    <div style={{width:34,height:34,borderRadius:11,background:`linear-gradient(135deg,${ac},${ac}90)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:800,color:'#fff',flexShrink:0}}>{mi+1}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mod.moduleName||`Module ${mi+1}`}</div>
+                      {mod.moduleObjective&&<div style={{fontSize:11,color:T.textDim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mod.moduleObjective}</div>}
+                      <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>
+                        {modProgs.length>0?`${modProgs.length} programme${modProgs.length>1?'s':''} · `:''}{modSessCount} séance{modSessCount>1?'s':''}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                    </div>
+                    <Icon name={modExpanded?'chevronUp':'chevronDown'} size={18} stroke={T.textDim}/>
+                  </button>
+
+                  {/* Module content expanded */}
+                  {modExpanded&&(
+                    <div style={{padding:'8px 0 0',marginLeft:16,borderLeft:`2px solid ${ac}25`,paddingLeft:12}}>
+                      {/* Si des programmes existent, afficher la hiérarchie Programme → Séances */}
+                      {modProgs.length>0?modProgs.map((programme,pi)=>{
+                        const progKey=`${mi}-${pi}`;
+                        const progExpanded=expandProg===progKey;
+                        return(
+                          <div key={pi} style={{marginBottom:6}}>
+                            <button onClick={()=>setExpandProg(progExpanded?null:progKey)} style={{width:'100%',padding:'10px 12px',borderRadius:12,border:`1px solid ${progExpanded?ac+'30':T.border}`,background:progExpanded?`${ac}06`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',gap:8,color:T.text,textAlign:'left',transition:'all 0.15s'}}>
+                              <div style={{width:26,height:26,borderRadius:8,background:`${ac}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:ac,flexShrink:0}}>P{pi+1}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programme.name}</div>
+                                {programme.objective&&<div style={{fontSize:11,color:T.textDim,marginTop:1}}>{programme.objective}</div>}
+                                <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{(programme.sessions||[]).length} séance{(programme.sessions||[]).length>1?'s':''}</div>
+                              </div>
+                              <Icon name={progExpanded?'chevronUp':'chevronDown'} size={14} stroke={T.textDim}/>
+                            </button>
+
+                            {progExpanded&&(
+                              <div style={{padding:'6px 0 0 10px'}}>
+                                {(programme.sessions||[]).map((sess,si)=>{
+                                  const exCount=(sess.exercises||[]).length;
+                                  const isPreview=prog._preview;
+                                  return(
+                                    <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
+                                      <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:isPreview?0:4}}>{sess.name||`Séance ${si+1}`}</div>
+                                      {isPreview?(
+                                        <div style={{fontSize:11,color:T.textFaint}}>{sess.exerciseCount||0} exercices 🔒</div>
+                                      ):(
+                                        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                                          {(sess.exercises||[]).slice(0,5).map((ex,ei)=>{
+                                            const setsArr=Array.isArray(ex.sets)?ex.sets:[];
+                                            const repsLabel=ex.repsStr||setsArr[0]?.targetStr||setsArr[0]?.target||'?';
+                                            return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}{ex.notes&&<span style={{color:T.textFaint}}> · {ex.notes.slice(0,30)}</span>}</div>;
+                                          })}
+                                          {exCount>5&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-5} exercices</div>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }):(
+                        /* Pas de sous-programmes, afficher directement les séances */
+                        (mod.sessions||[]).map((sess,si)=>{
+                          const exCount=(sess.exercises||[]).length;
+                          const isPreview=prog._preview;
+                          return(
+                            <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
+                              <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:isPreview?0:4}}>{sess.name||`Séance ${si+1}`}</div>
+                              {isPreview?(
+                                <div style={{fontSize:11,color:T.textFaint}}>{sess.exerciseCount||0} exercices 🔒</div>
+                              ):(
+                                <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                                  {(sess.exercises||[]).slice(0,5).map((ex,ei)=>{
+                                    const setsArr=Array.isArray(ex.sets)?ex.sets:[];
+                                    const repsLabel=ex.repsStr||setsArr[0]?.targetStr||setsArr[0]?.target||'?';
+                                    return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}</div>;
+                                  })}
+                                  {exCount>5&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-5} exercices</div>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
+        {/* ══ BOUTON D'ACHAT ══ */}
         {owned?(
           <button onClick={onPurchased} style={{width:'100%',height:56,borderRadius:16,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 10px 28px rgba(44,196,160,0.4)',display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2}}>
             ✓ Programme débloqué — Voir ma progression
@@ -12253,7 +12336,7 @@ function TPAdminScreen({initialEditId,onConsumedInitialEdit}){
   };
 
   if(editing)return<TPAdminEditor program={editing} onBack={()=>{setEditing(null);load();}} />;
-  if(creating)return<TPAdminEditor program={null} onBack={()=>{setCreating(false);load();}} />;
+  if(creating)return<TPAdminImport onBack={()=>{setCreating(false);load();}} />;
 
   return(
     <div style={{padding:'18px 18px 90px',color:T.text}}>
@@ -12261,7 +12344,7 @@ function TPAdminScreen({initialEditId,onConsumedInitialEdit}){
       <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:16}}><HoloText>Catalogue de programmes</HoloText></div>
 
       <button onClick={()=>setCreating(true)} style={{width:'100%',height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:20}}>
-        + Créer un programme
+        📥 Importer un programme (Excel)
       </button>
 
       {loading?(
@@ -12564,6 +12647,212 @@ function TPSessionEditor({session,onSave,onBack,seqName,seqIndex}){
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TPAdminImport({onBack}){
+  const[step,setStep]=React.useState('upload'); // upload | preview | done
+  const[uploading,setUploading]=React.useState(false);
+  const[error,setError]=React.useState(null);
+  const[parsed,setParsed]=React.useState(null); // programme parsé par le backend
+  const[expandMod,setExpandMod]=React.useState(null);
+  const[expandProg,setExpandProg]=React.useState(null);
+  const fileRef=React.useRef(null);
+
+  const handleFile=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    setUploading(true);setError(null);
+    const fd=new FormData();
+    fd.append('file',file);
+    try{
+      const r=await apiCall('/api/admin/training-programs/import',{method:'POST',body:fd});
+      setParsed(r);
+      setStep('preview');
+    }catch(err){
+      setError(err.message||'Erreur lors de l\'import');
+    }finally{setUploading(false);}
+  };
+
+  const publish=async()=>{
+    if(!parsed)return;
+    try{
+      await apiCall('/api/admin/training-programs/'+parsed.id,{method:'PUT',body:{published:true}});
+      setStep('done');
+    }catch(e){setError(e.message);}
+  };
+
+  if(step==='done'){
+    return(
+      <div style={{padding:'60px 24px',textAlign:'center',color:T.text}}>
+        <div style={{fontSize:56,marginBottom:16}}>✅</div>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:8}}>Programme importé !</div>
+        <div style={{fontSize:14,color:T.textDim,lineHeight:1.6,marginBottom:24}}>{parsed?.name} est maintenant visible dans le catalogue.</div>
+        <button onClick={onBack} style={{height:44,padding:'0 24px',borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`}}>Retour au catalogue</button>
+      </div>
+    );
+  }
+
+  if(step==='preview'&&parsed){
+    const totalSessions=(parsed.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).length,0);
+    const totalExercises=(parsed.weeks||[]).reduce((s,w)=>s+(w.sessions||[]).reduce((ss,se)=>ss+(se.exercises||[]).length,0),0);
+    const cat=TP_CATS.find(c=>c.id===parsed.category);
+
+    return(
+      <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'6px 18px 0',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6,marginBottom:14}}>
+            <button onClick={()=>{setStep('upload');setParsed(null);}} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="chevronLeft" size={18}/>
+            </button>
+            <div style={{textAlign:'center',flex:1}}>
+              <div style={{fontSize:10,color:TP_ACCENT,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Aperçu de l'import</div>
+              <div style={{fontSize:16,fontWeight:800}}>{parsed.name}</div>
+            </div>
+            <div style={{width:38}}/>
+          </div>
+        </div>
+
+        <div style={{flex:1,overflowY:'auto',padding:'0 18px 100px'}}>
+          {/* Résumé */}
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            <div style={{width:56,height:56,borderRadius:16,background:`linear-gradient(135deg,${cat?.color||TP_ACCENT}30,${cat?.color||TP_ACCENT}10)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,flexShrink:0}}>{parsed.emoji||cat?.emoji||'🏋️'}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:16,fontWeight:800}}>{parsed.name}</div>
+              <div style={{fontSize:12,color:T.textDim,marginTop:2}}>{parsed.level} · {TP_DURATIONS[parsed.duration]||parsed.duration} · {parsed.price>0?((parsed.price/100).toFixed(2)+' €'):'Gratuit'}</div>
+              {parsed.description&&<div style={{fontSize:12,color:T.textDim,marginTop:4,lineHeight:1.5}}>{parsed.description.slice(0,200)}{parsed.description.length>200?'…':''}</div>}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div style={{display:'flex',gap:8,marginBottom:16}}>
+            {[
+              {n:(parsed.weeks||[]).length,l:'Module'+(parsed.weeks||[]).length>1?'s':''},
+              {n:totalSessions,l:'Séance'+((totalSessions>1)?'s':'')},
+              {n:totalExercises,l:'Exercice'+((totalExercises>1)?'s':'')},
+            ].map((s,i)=>(
+              <div key={i} style={{flex:1,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,textAlign:'center'}}>
+                <div style={{fontSize:20,fontWeight:800,color:TP_ACCENT}}>{s.n}</div>
+                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginTop:2}}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Modules détaillés */}
+          {(parsed.weeks||[]).map((mod,mi)=>(
+            <div key={mi} style={{marginBottom:10}}>
+              <button onClick={()=>setExpandMod(expandMod===mi?null:mi)} style={{width:'100%',padding:'12px 14px',borderRadius:14,border:`1px solid ${expandMod===mi?TP_ACCENT+'40':T.border}`,background:expandMod===mi?`${TP_ACCENT}08`:'rgba(255,255,255,0.02)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',color:T.text,transition:'all 0.2s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:30,height:30,borderRadius:10,background:TP_GRAD,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,color:'#fff'}}>{mi+1}</div>
+                  <div style={{textAlign:'left'}}>
+                    <div style={{fontSize:13,fontWeight:700}}>{mod.moduleName}</div>
+                    {mod.moduleObjective&&<div style={{fontSize:11,color:T.textDim,marginTop:2}}>{mod.moduleObjective}</div>}
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:11,color:T.textDim}}>{(mod.sessions||[]).length} séances</span>
+                  <Icon name={expandMod===mi?'chevronUp':'chevronDown'} size={16} stroke={T.textDim}/>
+                </div>
+              </button>
+
+              {expandMod===mi&&(
+                <div style={{padding:'8px 0 0 8px'}}>
+                  {(mod.programmes||[]).map((prog,pi)=>(
+                    <div key={pi} style={{marginBottom:8}}>
+                      <div style={{padding:'10px 14px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:12,fontWeight:700,color:TP_ACCENT,marginBottom:2}}>{prog.name}</div>
+                        {prog.objective&&<div style={{fontSize:11,color:T.textDim,marginBottom:6}}>{prog.objective}</div>}
+                        {(prog.sessions||[]).map((sess,si)=>{
+                          const exCount=(sess.exercises||[]).length;
+                          return(
+                            <div key={si} style={{padding:'8px 12px',borderRadius:10,background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,marginBottom:4}}>
+                              <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3}}>{sess.name}</div>
+                              <div style={{display:'flex',flexDirection:'column',gap:1}}>
+                                {(sess.exercises||[]).slice(0,3).map((ex,ei)=>{
+                                  const setsArr=Array.isArray(ex.sets)?ex.sets:[];
+                                  return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{ex.repsStr||setsArr[0]?.targetStr||'?'}{ex.notes?' · '+ex.notes.slice(0,40):''}</div>;
+                                })}
+                                {exCount>3&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-3} exercices</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {error&&<div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12.5,fontWeight:600,lineHeight:1.5,textAlign:'center'}}>⚠ {error}</div>}
+
+          {/* Actions */}
+          <div style={{display:'flex',gap:8,marginTop:16}}>
+            <button onClick={publish} style={{flex:2,height:48,borderRadius:14,border:'none',background:TP_GRAD,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:`0 6px 18px ${TP_ACCENT}40`,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+              ✓ Publier
+            </button>
+            <button onClick={onBack} style={{flex:1,height:48,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>
+              Brouillon
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step: Upload ──
+  return(
+    <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'6px 18px 0',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginTop:6,marginBottom:14}}>
+          <button onClick={onBack} style={{width:38,height:38,borderRadius:19,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Icon name="chevronLeft" size={18}/>
+          </button>
+          <div style={{fontSize:18,fontWeight:800}}>Importer un programme</div>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflowY:'auto',padding:'0 18px 40px'}}>
+        <input type="file" ref={fileRef} accept=".xlsx,.xls" style={{display:'none'}} onChange={handleFile}/>
+
+        <div onClick={()=>!uploading&&fileRef.current?.click()} style={{width:'100%',padding:'40px 20px',borderRadius:20,border:`2px dashed ${TP_ACCENT}40`,background:`${TP_ACCENT}06`,cursor:uploading?'wait':'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:12,marginBottom:20,transition:'all 0.2s',boxSizing:'border-box'}}>
+          <div style={{fontSize:48}}>{uploading?'⏳':'📥'}</div>
+          <div style={{fontSize:15,fontWeight:700,color:T.text}}>{uploading?'Import en cours…':'Sélectionner un fichier Excel'}</div>
+          <div style={{fontSize:12,color:T.textDim,textAlign:'center',lineHeight:1.6}}>
+            Fichier .xlsx avec une feuille INFO (métadonnées) et des feuilles MODULE (séances)
+          </div>
+        </div>
+
+        {error&&<div style={{padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.1)',border:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12.5,fontWeight:600,lineHeight:1.5,textAlign:'center',marginBottom:16}}>⚠ {error}</div>}
+
+        {/* Format attendu */}
+        <GlassCard padding={16} style={{marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>📋 Format attendu</div>
+          <div style={{fontSize:12,color:T.textDim,lineHeight:1.7}}>
+            <div style={{marginBottom:8}}><strong style={{color:T.text}}>Feuille INFO</strong> — métadonnées du programme :</div>
+            <div style={{padding:'8px 12px',borderRadius:8,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,fontSize:11,fontFamily:'monospace',lineHeight:1.8,marginBottom:12}}>
+              NOM &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Focus Jambes — 2 mois<br/>
+              DESCRIPTION&nbsp;&nbsp;| Programme complet…<br/>
+              PRIX &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 25<br/>
+              DURÉE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 2 mois<br/>
+              NIVEAU &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Intermédiaire<br/>
+              CATÉGORIE &nbsp;&nbsp;| Jambes<br/>
+              EMOJI &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 🦵
+            </div>
+            <div style={{marginBottom:8}}><strong style={{color:T.text}}>Feuilles MODULE</strong> — une feuille par module :</div>
+            <div style={{padding:'8px 12px',borderRadius:8,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,fontSize:11,fontFamily:'monospace',lineHeight:1.8}}>
+              PROGRAMME 1 — MOIS 1<br/>
+              Objectif : Construire la force…<br/>
+              <br/>
+              SÉANCE 1 — QUADRICEPS<br/>
+              Exercice | Séries | Reps | Charge | Repos | Notes<br/>
+              Back Squat | 4 | 8 | 80 | 180 | …
+            </div>
+          </div>
+        </GlassCard>
+      </div>
     </div>
   );
 }
