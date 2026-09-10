@@ -4558,7 +4558,30 @@ const VOLUME_SAME_MESSAGES=[
   name=>`${name}, même charge totale qu'à ta dernière séance. Reste sur ce rythme !`,
 ];
 
-function congratsMessage(name,volumeVsPrev){
+function congratsMessage(name,volumeVsPrev,comp){
+  // Si on a une comparaison complète, message basé sur la vraie performance
+  if(comp&&comp.totalExercises>0){
+    const {prsCount,upCount,downCount,totalExercises}=comp;
+    const upRatio=upCount/totalExercises;
+    const downRatio=downCount/totalExercises;
+    // Nouveau PR → féliciter fort
+    if(prsCount>=2)return `${name}, ${prsCount} nouveaux records personnels en une séance. T'es en feu, continue comme ça.`;
+    if(prsCount===1){
+      const prEx=comp.exercises.find(e=>e.isPR);
+      return `Nouveau PR sur ${prEx?prEx.name:'un exercice'}, ${name}. ${prEx?`${prEx.curMaxW}kg — c'est au-dessus de tout ce que t'as fait avant.`:'Respect.'}`;
+    }
+    // Majorité en hausse → booster
+    if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
+    if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
+    // Majorité en baisse → piquer
+    if(downRatio>=0.7)return `${name}, ${downCount} exercices sur ${totalExercises} en baisse par rapport à la dernière fois. C'est pas à ce niveau-là que tu vas progresser.`;
+    if(downRatio>=0.5)return `${name}, la moitié de tes exos en recul. Tu peux faire mieux que ça et tu le sais.`;
+    // Stable
+    if(upCount===0&&downCount===0)return `Volume identique à ta dernière "${comp.exercises[0]?.name||'séance'}", ${name}. Stable c'est bien, mais faut viser plus haut.`;
+    // Mix
+    return `${upCount} exo${upCount>1?'s':''} en hausse, ${downCount} en baisse, ${name}. Analyse ce qui a chuté et corrige ça la prochaine fois.`;
+  }
+  // Fallback volume simple
   if(volumeVsPrev){
     const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
     if(delta>0){const list=VOLUME_UP_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,delta);}
@@ -4570,6 +4593,7 @@ function congratsMessage(name,volumeVsPrev){
     }
     const list=VOLUME_SAME_MESSAGES;return list[Math.floor(Math.random()*list.length)](name);
   }
+  // Première séance de ce nom — message générique
   return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
 }
 
@@ -14833,6 +14857,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
+  const[sessionComparison,setSessionComparison]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
   const[pendingProgramEditId,setPendingProgramEditId]=React.useState(null);
   // Choke point unique pour tous les "Démarrer une séance" (jour de programme, séance live
@@ -14852,11 +14877,41 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
-    // Comparaison "vs la dernière fois" avec la même séance (même nom, ex: le mardi vs le
-    // mardi précédent), pas juste la toute dernière séance loggée — sinon un mardi juste
-    // après un lundi se compare au volume du lundi, deux séances totalement différentes.
+    // Comparaison complète "vs la dernière séance de même nom" — exercice par exercice
     const prevSession=history.find(s=>typeof s.totalVolume==='number'&&snapshot.name&&s.name===snapshot.name);
     setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
+    // Build detailed comparison
+    if(prevSession&&snapshot.exercises){
+      const comp={prevDate:prevSession.date,exercises:[]};
+      const prevExMap={};
+      (prevSession.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
+      let prsCount=0,upCount=0,downCount=0,sameCount=0;
+      snapshot.exercises.forEach(ex=>{
+        if(!ex.name)return;
+        const prev=prevExMap[normExerciseName(ex.name)];
+        const curSets=(ex.sets||[]).filter(s=>s.done!==false);
+        const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
+        const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+        const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
+        if(!prev){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
+        const prevSets=prev.sets||[];
+        const prevMaxW=Math.max(0,...prevSets.map(s=>s.weight||0));
+        const prevVol=prevSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+        const prevTotalReps=prevSets.reduce((a,s)=>a+(s.reps||0),0);
+        const wDelta=curMaxW-prevMaxW;
+        const vDelta=curVol-prevVol;
+        const isPR=curMaxW>0&&wDelta>0;
+        if(isPR)prsCount++;
+        const status=vDelta>0?'up':vDelta<0?'down':'same';
+        if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
+        comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:prevSets.length,curTotalReps,prevTotalReps});
+      });
+      comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
+      comp.totalExercises=comp.exercises.length;
+      setSessionComparison(comp);
+    }else{
+      setSessionComparison(null);
+    }
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
@@ -15026,15 +15081,139 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           </div>
         )}
       </div>
-      {/* Écran félicitations post-séance */}
+      {/* Écran félicitations post-séance — avec comparaison détaillée */}
       {showCongrats&&(
-        <div onClick={()=>{setShowCongrats(false);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.28) 0%, rgba(6,6,10,0.97) 65%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,cursor:'pointer'}}>
-          <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',pointerEvents:'none'}}>
-            <img src="/logo.svg" alt="Prime Athl" style={{width:72,height:72,borderRadius:20,objectFit:'cover',marginBottom:18,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
-            <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:8}}>Séance validée ✓</div>
-            <div style={{fontSize:32,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:8,color:'#fff'}}>Félicitations !</div>
-            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev)}</div>
-            <div style={{fontSize:11,color:'rgba(255,255,255,0.25)',fontWeight:600}}>Appuie n'importe où pour continuer</div>
+        <div style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse at 50% 30%, rgba(191,160,96,0.22) 0%, rgba(6,6,10,0.98) 60%)',display:'flex',flexDirection:'column',overflow:'auto',WebkitOverflowScrolling:'touch'}}>
+          <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',padding:'48px 24px 120px'}}>
+            {/* Header */}
+            <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',marginBottom:24}}>
+              <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
+              <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
+              <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:6,color:'#fff'}}>{lastFinishedSession?.name||'Séance'}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison)}</div>
+            </div>
+
+            {/* Résumé de la séance */}
+            {lastFinishedSession&&(
+              <div style={{width:'100%',maxWidth:380,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
+                {[
+                  {val:Math.round(lastFinishedSession.totalVolume||0).toLocaleString('fr-FR'),unit:'kg',label:'Volume'},
+                  {val:lastFinishedSession.duration||'-',unit:'min',label:'Durée'},
+                  {val:(lastFinishedSession.exercises||[]).length,unit:'',label:'Exercices'},
+                ].map((s,i)=>(
+                  <div key={i} style={{textAlign:'center',padding:'12px 8px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div style={{fontSize:20,fontWeight:800,color:'#fff'}}>{s.val}<span style={{fontSize:11,color:'rgba(255,255,255,0.4)',fontWeight:600}}> {s.unit}</span></div>
+                    <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:600,marginTop:2,textTransform:'uppercase',letterSpacing:0.3}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Comparaison volume global */}
+            {volumeVsPrev&&(
+              <div style={{width:'100%',maxWidth:380,padding:'14px 16px',borderRadius:16,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)',marginBottom:16}}>
+                <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Volume total vs dernière "{lastFinishedSession?.name}"</div>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                      <span style={{fontSize:12,color:'rgba(255,255,255,0.45)'}}>Avant</span>
+                      <span style={{fontSize:14,fontWeight:700,color:'rgba(255,255,255,0.55)'}}>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</span>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{fontSize:12,color:'#fff',fontWeight:600}}>Maintenant</span>
+                      <span style={{fontSize:14,fontWeight:700,color:'#fff'}}>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</span>
+                    </div>
+                  </div>
+                  {(()=>{
+                    const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
+                    const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
+                    const up=delta>0;
+                    return(
+                      <div style={{width:64,height:64,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                        <div style={{fontSize:16,fontWeight:800,color:delta===0?'rgba(255,255,255,0.5)':up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                        <div style={{fontSize:10,fontWeight:700,color:delta===0?'rgba(255,255,255,0.4)':up?T.good:T.danger}}>{pct}%</div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Comparaison exercice par exercice */}
+            {sessionComparison&&sessionComparison.exercises.length>0&&(
+              <div style={{width:'100%',maxWidth:380,marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Détail par exercice</div>
+                  {sessionComparison.prsCount>0&&(
+                    <span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'2px 8px',borderRadius:999,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.3)'}}>
+                      {sessionComparison.prsCount} PR{sessionComparison.prsCount>1?'s':''}
+                    </span>
+                  )}
+                </div>
+                <div style={{borderRadius:16,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
+                  {sessionComparison.exercises.map((ex,i)=>{
+                    const isNew=ex.status==='new';
+                    const up=ex.status==='up';
+                    const down=ex.status==='down';
+                    const statusColor=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                    const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
+                    const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
+                    return(
+                      <div key={i} style={{padding:'10px 14px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<sessionComparison.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <span style={{fontSize:14,width:22,textAlign:'center'}}>{statusIcon}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:13,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
+                              {ex.isPR&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)'}}>PR</span>}
+                            </div>
+                            <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                              {!isNew&&ex.prevMaxW>0&&(
+                                <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>
+                              )}
+                              {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                              {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                              {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                            </div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0}}>
+                            {vDeltaStr&&<div style={{fontSize:11,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
+                            <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Score global */}
+                <div style={{display:'flex',gap:8,marginTop:10}}>
+                  {[
+                    {count:sessionComparison.upCount,label:'en hausse',color:T.good,icon:'↑'},
+                    {count:sessionComparison.downCount,label:'en baisse',color:T.danger,icon:'↓'},
+                    {count:sessionComparison.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},
+                  ].filter(x=>x.count>0).map((x,i)=>(
+                    <div key={i} style={{flex:1,textAlign:'center',padding:'8px 6px',borderRadius:10,background:`${x.color}11`,border:`1px solid ${x.color}33`}}>
+                      <div style={{fontSize:16,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                      <div style={{fontSize:9,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pas de comparaison = première séance de ce nom */}
+            {!sessionComparison&&lastFinishedSession&&(
+              <div style={{width:'100%',maxWidth:380,padding:'14px 16px',borderRadius:16,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',marginBottom:16,textAlign:'center'}}>
+                <div style={{fontSize:12,color:'rgba(255,255,255,0.5)',lineHeight:1.5}}>
+                  Première séance <b style={{color:'#fff'}}>"{lastFinishedSession.name}"</b> enregistrée.<br/>La prochaine fois, tu verras ta progression exercice par exercice.
+                </div>
+              </div>
+            )}
+
+            {/* Bouton continuer */}
+            <button onClick={()=>{setShowCongrats(false);setSessionComparison(null);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{width:'100%',maxWidth:380,height:52,borderRadius:14,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:15,fontWeight:700,cursor:'pointer',marginTop:8}}>
+              Continuer
+            </button>
           </div>
         </div>
       )}
