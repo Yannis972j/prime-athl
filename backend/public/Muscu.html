@@ -4590,11 +4590,11 @@ const VOLUME_DOWN_MILD_MESSAGES=[
   (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Fais plus d'effort la prochaine séance.`,
   (name,kg)=>`Séance en retrait par rapport à la dernière (-${kg}kg), ${name}. Il va falloir hausser le niveau.`,
 ];
-// Baisse significative (≥15%) : franc, sans détour.
+// Baisse significative (≥15%) : dur, sans détour, on recadre.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
-  (name,kg)=>`${name}, tu as été moins bon que la dernière fois (-${kg}kg). Si tu continues comme ça, tu n'atteindras pas tes objectifs.`,
-  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name} — c'est en dessous de ce dont tu es capable. Reprends-toi dès la prochaine séance.`,
-  (name,kg)=>`${name}, grosse baisse par rapport à la dernière fois (-${kg}kg). Fais plus d'effort, sinon tu stagneras.`,
+  (name,kg)=>`${name}, -${kg}kg par rapport à la dernière fois. C'est une régression, pas un accident. Continue comme ça et tu n'atteindras jamais tes objectifs.`,
+  (name,kg)=>`${kg}kg de MOINS qu'à ta dernière séance, ${name}. Très loin de ce dont t'es capable. La prochaine, tu te reprends — pas de demi-mesure.`,
+  (name,kg)=>`Grosse baisse, ${name} (-${kg}kg). Une séance comme ça, ça efface des semaines de progrès. Remets-toi en question, maintenant.`,
 ];
 const VOLUME_SAME_MESSAGES=[
   name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
@@ -4618,17 +4618,21 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     // Majorité en hausse → booster
     if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
     if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
-    // Majorité en baisse → piquer
-    if(downRatio>=0.7)return `${name}, ${downCount} exercices sur ${totalExercises} en baisse par rapport à la dernière fois. C'est pas à ce niveau-là que tu vas progresser.`;
-    if(downRatio>=0.5)return `${name}, la moitié de tes exos en recul. Tu peux faire mieux que ça et tu le sais.`;
+    // Majorité en baisse → recadrage dur, on ne laisse rien passer
+    if(downRatio>=0.7)return `${name}, ${downCount} exercices sur ${totalExercises} en BAISSE. Là c'est un recul, pas un entraînement. Reprends-toi sérieusement, sinon tu régresses — point.`;
+    if(downRatio>=0.5)return `La moitié de tes exos en recul, ${name}. À ton niveau c'est inacceptable. La prochaine séance, tu remets les compteurs à l'endroit, pas de négociation.`;
     // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
     if(upCount===0&&downCount===0){
       return hasVolume
         ? `Même niveau qu'à ta dernière "${sn}", ${name}. Stable c'est déjà tenir — maintenant viens chercher plus.`
         : `Séance "${sn}" bouclée, ${name}. Pas de charge à battre ici, mais la régularité sur ce travail-là, c'est ça qui paie.`;
     }
-    // Mix
-    return `${upCount} exo${upCount>1?'s':''} en hausse, ${downCount} en baisse, ${name}. Analyse ce qui a chuté et corrige ça la prochaine fois.`;
+    // Mix avec régression au moins équivalente aux hausses → on pointe la baisse fermement
+    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Le compte n'y est pas. Regarde ce qui a chuté et corrige-le — pas d'excuse.`;
+    // Mix net positif mais avec des baisses → féliciter ET rappeler à l'ordre sur les reculs
+    if(downCount>0)return `${upCount} en hausse mais ${downCount} en baisse, ${name}. Laisse rien filer : sur ${downCount>1?'ces exos-là':'cet exo-là'}, tu dois revenir plus fort la prochaine fois.`;
+    // Que des hausses partielles
+    return `${upCount} exo${upCount>1?'s':''} en hausse, ${name}. Continue de pousser, mais va chercher les autres aussi.`;
   }
   // Fallback volume simple — uniquement pour les séances avec charge (sinon message générique)
   if(volumeVsPrev&&hasVolume){
@@ -4664,10 +4668,17 @@ const MOTIVATION_GOOD=[
 ];
 const MOTIVATION_PIQUE=[
   "T'as le potentiel, c'est un fait. Mais le potentiel sans l'intensité, ça reste une promesse. La prochaine séance, prouve-le.",
-  "Aujourd'hui c'était pas ton meilleur jour. Ça arrive. Ce qui définit un athlète, c'est ce qu'il fait de la séance d'après.",
   "Les chiffres mentent pas. Si t'es honnête avec toi-même, tu sais que t'avais plus à donner aujourd'hui.",
-  "Une mauvaise séance, c'est pas un échec. C'est un test. La vraie question : tu vas répondre quoi la prochaine fois ?",
+  "Une mauvaise séance, c'est un test. La vraie question : tu vas répondre quoi la prochaine fois ?",
   "Le confort, c'est l'ennemi du progrès. Si c'était facile, tout le monde serait affûté. Remets-toi en question.",
+];
+// Régression franche → ton dur, rappel à l'ordre sans complaisance
+const MOTIVATION_HARD=[
+  "Là c'est un recul, pas une séance. Personne va t'attendre : soit tu te reprends, soit tu régresses. À toi de choisir.",
+  "Tes chiffres ont baissé. Pas de filtre, pas d'excuse : c'est le résultat de tes choix cette semaine. Change-les.",
+  "Une séance en dessous, ça arrive. Deux, c'est une tendance. Trois, c'est ton nouveau niveau. Coupe ça maintenant.",
+  "T'es pas venu ici pour reculer. Cette séance, tu la ranges dans la case 'plus jamais' et tu reviens affamé.",
+  "Le corps oublie vite le confort mais retient chaque abandon. Fais en sorte que la prochaine efface celle-là.",
 ];
 const MOTIVATION_NEUTRAL=[
   "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
@@ -4687,17 +4698,20 @@ function motivationQuote(comp,volumeVsPrev){
     const {prsCount,upCount,downCount,totalExercises}=comp;
     const upRatio=upCount/totalExercises;
     const downRatio=downCount/totalExercises;
+    // La régression prime : on la signale AVANT de féliciter quoi que ce soit.
+    if(downRatio>=0.6)return pick(MOTIVATION_HARD);        // majorité en baisse → dur
     if(prsCount>=2||upRatio>=0.7)return pick(MOTIVATION_ELITE);
+    if(downRatio>=0.4||(downCount>upCount&&downCount>0))return pick(MOTIVATION_PIQUE); // baisse marquée → piquer
     if(prsCount>=1||upRatio>=0.5)return pick(MOTIVATION_GOOD);
-    if(downRatio>=0.6)return pick(MOTIVATION_PIQUE);
-    if(downRatio>=0.4)return pick(MOTIVATION_PIQUE);
     if(upCount===0&&downCount===0)return pick(MOTIVATION_NEUTRAL);
+    if(downCount>0)return pick(MOTIVATION_PIQUE);          // au moindre recul, on ne félicite pas
     return pick(MOTIVATION_GOOD);
   }
   if(volumeVsPrev){
     const delta=volumeVsPrev.current-volumeVsPrev.previous;
+    const pctDown=volumeVsPrev.previous>0?(volumeVsPrev.previous-volumeVsPrev.current)/volumeVsPrev.previous:0;
     if(delta>0)return pick(MOTIVATION_GOOD);
-    if(delta<0)return pick(MOTIVATION_PIQUE);
+    if(delta<0)return pick(pctDown>=0.15?MOTIVATION_HARD:MOTIVATION_PIQUE);
     return pick(MOTIVATION_NEUTRAL);
   }
   return pick(MOTIVATION_FIRST);
@@ -15204,6 +15218,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         // Comparaison de volume affichée seulement si les DEUX séances ont une charge > 0 : compare
         // 4100 kg à 0 kg (muscu → cardio même nom) n'a aucun sens.
         const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+        // Séance en recul : au moins autant d'exercices en baisse qu'en hausse (et ≥1 baisse),
+        // ou, à défaut de comparaison par exercice, un volume total en baisse. On le signale
+        // visuellement en haut du récap — impossible à rater.
+        const _cmp=sessionComparison;
+        const isRegression=(!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>0&&_cmp.downCount>=_cmp.upCount)
+          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
+        const regDown=_cmp?_cmp.downCount:0;
         const tiles=[];
         if(hasVolume)tiles.push({val:Math.round(totalVolume).toLocaleString('fr-FR'),unit:'kg',label:'Volume'});
         else tiles.push({val:totalSets,unit:'',label:totalSets>1?'Séries':'Série'});
@@ -15219,6 +15240,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
               <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume})}</div>
             </div>
+
+            {/* Alerte régression — signalée fort quand la séance est en recul */}
+            {isRegression&&(
+              <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
+                <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en baisse`:''}. Reprends-toi dès la prochaine, pas d'excuse.</div>
+              </div>
+            )}
 
             {/* Résumé de la séance */}
             {_s&&(
