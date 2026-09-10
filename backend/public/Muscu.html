@@ -4597,6 +4597,63 @@ function congratsMessage(name,volumeVsPrev,comp){
   return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
 }
 
+// Phrase de motivation / développement personnel en fin de récap
+// Adaptée au niveau de performance réel — féliciter, booster, ou piquer
+const MOTIVATION_ELITE=[
+  "Les gens ordinaires rêvent de résultats. Les athlètes construisent des habitudes. T'es dans la deuxième catégorie.",
+  "Le talent te donne un point de départ. La discipline décide de la destination.",
+  "Chaque PR que tu poses aujourd'hui, c'est le warm-up de la version de toi dans 6 mois.",
+  "Tu progresses pas parce que c'est facile. Tu progresses parce que t'as décidé que c'était non-négociable.",
+  "Le physique, c'est un effet secondaire. Ce que tu construis vraiment, c'est un mental en acier.",
+];
+const MOTIVATION_GOOD=[
+  "La progression se cache dans la régularité. T'es sur la bonne voie, continue de te pointer.",
+  "Tu fais ce que la majorité des gens reporte à demain. Ça compte plus que tu crois.",
+  "Le progrès, c'est pas linéaire. Les séances comme celle-là, c'est celles qui construisent le socle.",
+  "T'es pas là pour être parfait. T'es là pour être meilleur qu'hier. Et c'est le cas.",
+  "La différence entre toi et quelqu'un qui stagne ? Toi, tu te pointes même quand c'est dur.",
+];
+const MOTIVATION_PIQUE=[
+  "T'as le potentiel, c'est un fait. Mais le potentiel sans l'intensité, ça reste une promesse. La prochaine séance, prouve-le.",
+  "Aujourd'hui c'était pas ton meilleur jour. Ça arrive. Ce qui définit un athlète, c'est ce qu'il fait de la séance d'après.",
+  "Les chiffres mentent pas. Si t'es honnête avec toi-même, tu sais que t'avais plus à donner aujourd'hui.",
+  "Une mauvaise séance, c'est pas un échec. C'est un test. La vraie question : tu vas répondre quoi la prochaine fois ?",
+  "Le confort, c'est l'ennemi du progrès. Si c'était facile, tout le monde serait affûté. Remets-toi en question.",
+];
+const MOTIVATION_NEUTRAL=[
+  "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
+  "Ton corps s'adapte. Si tu lui donnes toujours le même stimulus, il te donnera toujours le même résultat.",
+  "Rester stable, c'est bien. Mais toi, t'es pas venu ici pour rester au même niveau, si ?",
+  "Le plateau, c'est un message : il est temps de changer quelque chose. Une charge, un tempo, un exo.",
+];
+const MOTIVATION_FIRST=[
+  "Première brique posée. À partir de maintenant, chaque séance écrit l'histoire. Fais-en une bonne.",
+  "Y'a pas de comparaison encore, mais y'a un point de départ. Et la seule direction qui compte, c'est vers le haut.",
+  "Le plus dur c'est de commencer. C'est fait. Maintenant, la seule règle : revenir.",
+];
+function motivationQuote(comp,volumeVsPrev){
+  const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+  if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
+  if(comp&&comp.totalExercises>0){
+    const {prsCount,upCount,downCount,totalExercises}=comp;
+    const upRatio=upCount/totalExercises;
+    const downRatio=downCount/totalExercises;
+    if(prsCount>=2||upRatio>=0.7)return pick(MOTIVATION_ELITE);
+    if(prsCount>=1||upRatio>=0.5)return pick(MOTIVATION_GOOD);
+    if(downRatio>=0.6)return pick(MOTIVATION_PIQUE);
+    if(downRatio>=0.4)return pick(MOTIVATION_PIQUE);
+    if(upCount===0&&downCount===0)return pick(MOTIVATION_NEUTRAL);
+    return pick(MOTIVATION_GOOD);
+  }
+  if(volumeVsPrev){
+    const delta=volumeVsPrev.current-volumeVsPrev.previous;
+    if(delta>0)return pick(MOTIVATION_GOOD);
+    if(delta<0)return pick(MOTIVATION_PIQUE);
+    return pick(MOTIVATION_NEUTRAL);
+  }
+  return pick(MOTIVATION_FIRST);
+}
+
 function MotivationMarquee(){
   const items=[...MOTIVATION_QUOTES,...MOTIVATION_QUOTES];
   return(
@@ -15209,6 +15266,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                 </div>
               </div>
             )}
+
+            {/* Phrase de motivation / développement personnel */}
+            <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev)}"</div>
+            </div>
 
             {/* Bouton continuer */}
             <button onClick={()=>{setShowCongrats(false);setSessionComparison(null);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{width:'100%',maxWidth:380,height:52,borderRadius:14,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:15,fontWeight:700,cursor:'pointer',marginTop:8}}>
