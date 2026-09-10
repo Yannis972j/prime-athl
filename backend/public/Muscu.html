@@ -9946,7 +9946,15 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     return[];
   });
   const[elapsed,setElapsed]=React.useState(()=>{
-    if(resumeData){const extra=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);return(resumeData.elapsed||0)+extra;}
+    if(resumeData){
+      // Reprise VOLONTAIRE (bouton "Quitter et reprendre") → séance en pause : le temps d'absence
+      // ne compte pas, on reprend au chrono sauvegardé. Reprise après coupure SUBIE (app fermée /
+      // arrière-plan qui a figé le chrono) → on rattrape le temps écoulé, mais plafonné à 30 min
+      // pour éviter une durée absurde si la séance est rouverte bien plus tard.
+      const away=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);
+      const extra=resumeData.paused?0:Math.min(Math.max(0,away),1800);
+      return(resumeData.elapsed||0)+extra;
+    }
     if(editSession)return(editSession.duration||0)*60;
     return 0;
   });
@@ -10361,16 +10369,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
 
   if(confirmingClose){
+    // Quitter en gardant la séance : on sauvegarde une dernière fois l'état puis on ferme SANS
+    // effacer le storage — le coach retrouve la bannière "Séance Live en cours" pour la reprendre.
+    const quitAndKeep=()=>{saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName,paused:true});onClose();};
     return(
       <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
-        <div style={{fontSize:40,marginBottom:16}}>⚠️</div>
-        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Abandonner la séance ?</div>
+        <div style={{fontSize:40,marginBottom:16}}>⏸️</div>
+        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Quitter la séance ?</div>
         <div style={{fontSize:13,color:T.textFaint,marginBottom:28,textAlign:'center',lineHeight:1.6}}>
-          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrée{totalSets>1?'s':''}
+          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''}<br/>Tu pourras la reprendre là où tu t'es arrêté.
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
-          <button onClick={()=>{clearLiveStorage();onClose();}} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:320}}>
+          <button onClick={quitAndKeep} style={{height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>💾 Quitter et reprendre plus tard</button>
           <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
+          <button onClick={()=>{if(confirm('Abandonner définitivement cette séance ? Tout sera perdu.')){clearLiveStorage();onClose();}}} style={{height:44,borderRadius:14,border:'none',background:'transparent',color:'#B85070',fontSize:12.5,fontWeight:700,cursor:'pointer',marginTop:4}}>Abandonner (tout supprimer)</button>
         </div>
       </div>
     );
@@ -11124,13 +11136,21 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         {/* ── Tab 2 : Séances / Programme ── */}
         {detailTab==='sport'&&(
           <div style={{padding:'0 18px'}}>
-            {/* Séance Live — barre compacte, CTA principal */}
-            <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
-              <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
-              <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>Séance Live</span>
-              <span style={{fontSize:10,color:T.textFaint}}>Temps réel</span>
-              <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
-            </button>
+            {/* Séance Live — barre compacte, CTA principal. Devient "Reprendre" si une séance
+                Live de CET athlète a été quittée sans être validée (le coach la retrouve ici,
+                pas seulement depuis la liste des athlètes). */}
+            {(()=>{
+              const savedLive=loadLiveFromStorage();
+              const canResume=savedLive&&(savedLive.exercises||[]).length>0&&selected&&savedLive.athleteId===selected.id;
+              return(
+                <button onClick={()=>canResume?setResumeLive(savedLive):setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
+                  <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
+                  <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>{canResume?'Reprendre la séance Live':'Séance Live'}</span>
+                  <span style={{fontSize:10,color:canResume?'#e84040':T.textFaint,fontWeight:canResume?700:400}}>{canResume?'En pause · '+(savedLive.exercises||[]).length+' ex.':'Temps réel'}</span>
+                  <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
+                </button>
+              );
+            })()}
             {/* Import programme & bibliothèque — regroupés côte à côte pour limiter l'empilement */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <div style={{position:'relative'}}>
