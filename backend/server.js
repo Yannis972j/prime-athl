@@ -2210,16 +2210,23 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const athleteName = athlete.firstName || 'L\'athlète';
   const fmtDate = ds => new Date(ds).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   // Notification enrichie : séance live = résumé volume + durée ; sinon message standard
   const exCount = (session.exercises || []).length;
   const vol = session.totalVolume || 0;
   const dur = session.duration || 0;
   const isLive = session.createdByCoach && dur > 0;
-  const pushBody = isLive
+  // Notification athlète
+  const athletePushBody = isLive
     ? `${coachName} a validé ta séance "${session.name}" — ${exCount} exo${exCount > 1 ? 's' : ''}, ${vol > 0 ? Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''}${dur > 0 ? (vol > 0 ? ', ' : '') + dur + ' min' : ''} 💪`
     : `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`;
-  pushToUser(athlete.id, { title: isLive ? '🔴 Séance Live terminée !' : '🏋️ Nouvelle séance', body: pushBody, url: '/Muscu.html' });
+  pushToUser(athlete.id, { title: isLive ? '🔴 Séance Live terminée !' : '🏋️ Nouvelle séance', body: athletePushBody, url: '/Muscu.html' });
+  // Notification coach : pour les séances live, prévenir le coach que l'athlète a terminé
+  if (isLive) {
+    const coachPushBody = `${athleteName} a terminé sa séance "${session.name}" — ${exCount} exo${exCount > 1 ? 's' : ''}, ${vol > 0 ? Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''}${dur > 0 ? (vol > 0 ? ', ' : '') + dur + ' min' : ''} 💪`;
+    pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: coachPushBody, url: '/Muscu.html' });
+  }
   res.json({ ok: true, id });
 });
 
