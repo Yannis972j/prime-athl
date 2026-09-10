@@ -1190,7 +1190,13 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
   const updEx=(idx,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i===idx?{...e,...patch}:e)});
   const updSet=(ei,si,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})})});
-  const delEx=(idx)=>onChange({...workout,exercises:workout.exercises.filter((_,i)=>i!==idx)});
+  const delEx=(idx)=>{
+    // Ne jamais laisser une séance sans aucun exercice : SessionScreen (mode focus/liste) calcule
+    // `ex=exercises[safeIdx]` qui devient `undefined` sur un tableau vide, et l'accès `ex.sets`
+    // plante l'app (écran blanc). On bloque la suppression du dernier exercice.
+    if(workout.exercises.length<=1)return;
+    onChange({...workout,exercises:workout.exercises.filter((_,i)=>i!==idx)});
+  };
   const delSet=(ei,si)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.filter((_,j)=>j!==si)})});
   const addSet=(ei)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:[...e.sets,{weight:e.sets[e.sets.length-1]?.weight||20,reps:0,done:false,target:e.sets[e.sets.length-1]?.target||10}]})});
   const addEx=()=>onChange({...workout,exercises:[...workout.exercises,{id:uid(),name:'Nouvel exercice',muscle:'Groupe musculaire',sets:[{weight:20,reps:0,done:false,target:10},{weight:20,reps:0,done:false,target:10},{weight:20,reps:0,done:false,target:10}]}]});
@@ -1427,7 +1433,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     </div>
   );
   const[exercises,setExercises]=React.useState(()=>{
-    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises))return s.exercises;}catch{}
+    // Array.isArray([]) est true : un snapshot avec un tableau d'exercices VIDE serait restauré
+    // tel quel et ferait planter le render (ex=undefined → ex.sets). On exige un tableau non vide,
+    // sinon on repart des exercices de la séance.
+    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises)&&s.exercises.length>0)return s.exercises;}catch{}
     return workout.exercises.map(e=>({...e,sets:e.sets.map(s=>({...s}))}));
   });
   const[currentEx,setCurrentEx]=React.useState(0);
@@ -1705,10 +1714,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     };
   },[]);
 
-  // Helper : changer d'exercice en stoppant le chrono repos en cours
-  if(currentEx>=exercises.length&&exercises.length>0)setCurrentEx(exercises.length-1);
+  // Recale currentEx si la liste a rétréci (ex: exercice supprimé en édition). Fait dans un effet
+  // et non pendant le render : un setState en pleine phase de rendu déclenche un double-render et
+  // un warning React. Le clamp `safeIdx` ci-dessous garde le render courant cohérent en attendant.
+  React.useEffect(()=>{
+    if(currentEx>=exercises.length&&exercises.length>0)setCurrentEx(exercises.length-1);
+  },[currentEx,exercises.length]);
   const safeIdx=Math.min(currentEx,exercises.length-1);
   const ex=exercises[safeIdx]||exercises[0];
+  // Ref "valeur courante" du nom d'exercice : l'effet d'alarme repos ci-dessous se déclenche sur
+  // [restSeconds] uniquement (le bon déclencheur), mais capturait alors un `ex` figé — si on
+  // changeait d'exercice pendant un repos puis qu'on l'allongeait (+30s), l'alarme partait avec
+  // le nom de l'exercice précédent. On lit le nom via cette ref, toujours à jour au render.
+  const exNameRef=React.useRef('');
+  exNameRef.current=ex?.name||'';
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -1720,7 +1739,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // dans l'app, donc son propre chrono continue de tourner ; ce callback sert juste à l'afficher.
   React.useEffect(()=>{
     onRestUpdate&&onRestUpdate(restSeconds>0?{restSeconds,restTotal,exerciseName:ex?.name||''}:null);
-  },[restSeconds,restTotal,ex?.name]);
+  },[restSeconds,restTotal,ex?.name,onRestUpdate]);
 
   // Alarme "repos terminé" côté serveur : sonne (notification push) même si l'app est en
   // arrière-plan ou le téléphone verrouillé — le JS d'un onglet backgrounded est suspendu par le
@@ -1737,7 +1756,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       return;
     }
     if(restSeconds>prev){
-      apiCall('/api/rest-timer/schedule',{method:'POST',body:{seconds:restSeconds,exerciseName:ex?.name||''}}).catch(()=>{});
+      apiCall('/api/rest-timer/schedule',{method:'POST',body:{seconds:restSeconds,exerciseName:exNameRef.current}}).catch(()=>{});
     }
   },[restSeconds]);
   // Séance terminée pendant qu'un repos tournait encore (SessionScreen démonté par l'App) →
@@ -1854,6 +1873,23 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         importedPrograms={importedPrograms}
         history={history}
       />
+    );
+  }
+
+  // Filet de sécurité : si la séance se retrouve sans aucun exercice (données corrompues, snapshot
+  // ancien, etc.), tout le rendu ci-dessous accède à `ex.sets` et planterait. On affiche un état
+  // vide propre plutôt qu'un écran blanc, avec de quoi rebondir (ajouter un exercice ou quitter).
+  if(exercises.length===0||!ex){
+    return(
+      <div style={{minHeight:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 24px',textAlign:'center',gap:16}}>
+        <div style={{fontSize:40}}>🏋️</div>
+        <div style={{fontSize:17,fontWeight:800,color:T.text}}>Aucun exercice dans cette séance</div>
+        <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,maxWidth:300}}>Ajoute au moins un exercice pour démarrer, ou reviens en arrière.</div>
+        <div style={{display:'flex',gap:10,marginTop:8}}>
+          <button onClick={()=>setEditMode(true)} style={{height:48,padding:'0 20px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer'}}>Ajouter un exercice</button>
+          <button onClick={onClose} style={{height:48,padding:'0 20px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Quitter</button>
+        </div>
+      </div>
     );
   }
 
@@ -3365,10 +3401,17 @@ function StatTile({icon,iconColor,value,unit,label,sub}){
 
 // ── Stats ─────────────────────────────────────────────────
 function StatsScreen({history,profile,athleteId}){
-  const now=Date.now();
   const dayMs=24*60*60*1000;
   const dayKeyOf=t=>{const dt=new Date(t);dt.setHours(0,0,0,0);return dt.getTime();};
-  const todayKey=dayKeyOf(now);
+  // todayKey en state, rafraîchi au passage de minuit : calculé une seule fois au montage, il
+  // pointait sinon sur la veille si l'utilisateur restait sur l'écran Stats après 00h00, décalant
+  // tous les filtres par période d'un jour. L'intervalle ne re-render que quand le jour change.
+  const[todayKey,setTodayKey]=React.useState(()=>dayKeyOf(Date.now()));
+  React.useEffect(()=>{
+    const t=setInterval(()=>{const k=dayKeyOf(Date.now());setTodayKey(prev=>prev!==k?k:prev);},60000);
+    return()=>clearInterval(t);
+  },[]);
+  const now=todayKey;
   const calDayDiff=t=>Math.round((todayKey-dayKeyOf(t))/dayMs);
 
   // ── Filtre temporel global ─────────────────────────
@@ -9672,13 +9715,16 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     return results;
   },[detail?.sessions]);
 
-  React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
+  // editSession DOIT être dans les deps : sans lui, passer en mode édition (ou en sortir) ne
+  // ré-évalue pas le garde `if(reviewing||editSession)return` — l'intervalle continue d'incrémenter
+  // `elapsed` en édition et fausse la durée totale de la séance.
+  React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing,editSession]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
   React.useEffect(()=>{
     if(editSession)return;
     if(exercises.length===0&&!sessionName){clearLiveStorage();return;}
     saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName});
-  },[exercises,sessionName]);
+  },[exercises,sessionName,athleteId,athleteName]);
   // Filet de sécurité : re-sauvegarde périodiquement le chrono même sans modif d'exercice.
   // Utilise une ref pour "elapsed" car il change chaque seconde — le mettre en dépendance
   // relancerait l'intervalle à chaque tick et l'empêcherait de jamais se déclencher.
@@ -9688,7 +9734,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     if(editSession||exercises.length===0)return;
     const t=setInterval(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed:elapsedRef.current,sessionName}),10000);
     return()=>clearInterval(t);
-  },[exercises,sessionName,editSession]);
+  },[exercises,sessionName,editSession,athleteId,athleteName]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');

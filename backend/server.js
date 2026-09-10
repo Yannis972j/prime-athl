@@ -363,6 +363,17 @@ if (USE_PG) {
   setTimeout(runBackup, 5 * 60 * 1000); // 1er backup 5 min après le boot (le temps que le serveur soit stable)
 }
 
+// DATA.userPurchasedPrograms est indexé par purchaseId (uid), PAS par userId — un
+// `delete DATA.userPurchasedPrograms[userId]` est donc un no-op silencieux qui laissait les achats
+// orphelins s'accumuler à chaque suppression d'utilisateur. Ce helper purge par userId correctement.
+function purgeUserPurchases(userId) {
+  const store = DATA.userPurchasedPrograms;
+  if (!store) return;
+  for (const pid of Object.keys(store)) {
+    if (store[pid]?.userId === userId) delete store[pid];
+  }
+}
+
 // ── Nettoyage mémoire périodique ─────────────────────
 setInterval(() => {
   const mb = v => Math.round(v / 1024 / 1024);
@@ -411,7 +422,7 @@ setInterval(() => {
       delete DATA.sessionLibrary?.[u.id];
       delete DATA.pushSubscriptions?.[u.id];
       delete DATA.messageReads?.[u.id];
-      delete DATA.userPurchasedPrograms?.[u.id];
+      purgeUserPurchases(u.id);
       for (const chatId of Object.keys(DATA.messages || {})) {
         if (chatId.includes(u.id)) delete DATA.messages[chatId];
       }
@@ -443,7 +454,7 @@ setInterval(() => {
   }
   if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
 
-  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0) persist();
+  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0 || removedFreeFoodLogs > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 // Vérifie aussi une fois au démarrage — sinon un programme dont la date d'activation est
 // passée pendant que le serveur était éteint attendrait jusqu'à 1h avant de s'activer
@@ -507,7 +518,9 @@ setInterval(() => {
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);
-const inviteCode = () => 'PA-' + crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+// 5 octets aléatoires = 40 bits d'entropie (10 caractères hex), au lieu de 24 bits auparavant
+// (4 octets tronqués à 6 caractères) — rend le brute-force/collision négligeable.
+const inviteCode = () => 'PA-' + crypto.randomBytes(5).toString('hex').toUpperCase();
 
 // Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
 // objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
@@ -894,10 +907,16 @@ if (!process.env.UNLOCK_SECRET) {
   console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET.slice(0, 6)}…`);
   console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
+// Comparaison à temps constant qui ne fuite pas la longueur du secret : on hash les deux côtés en
+// SHA-256 (toujours 32 octets) avant timingSafeEqual. Sans ça, le court-circuit `a.length===b.length`
+// révèle la longueur exacte du secret par mesure du temps de réponse.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
-  const provided = Buffer.from(String(req.query.secret || ''));
-  const expected = Buffer.from(UNLOCK_SECRET);
-  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  const match = safeEqual(String(req.query.secret || ''), UNLOCK_SECRET);
   if (!match) return res.status(403).json({ error: 'forbidden' });
   const main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
   if (!main) return res.status(404).json({ error: 'main_coach_not_found' });
@@ -1289,7 +1308,7 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.plannedSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   // Supprimer les messages des conversations où l'athlète participe
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
@@ -2400,7 +2419,7 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.plannedSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
   }
@@ -2999,6 +3018,13 @@ app.post('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =
   const { url, dataUrl, note, date, isVideo } = req.body || {};
   const src = url || dataUrl;
   if (!src) return res.status(400).json({ error: 'url_required' });
+  // Même validation de schéma que l'endpoint athlète (POST /api/photos) : sans elle, un coach
+  // pouvait stocker une URL javascript: / data:text/html dans les photos d'un athlète (XSS stocké
+  // si le front l'injecte dans un href/src). Seuls https://, http:// et data:image//data:video/
+  // (le coach peut ajouter des vidéos) sont acceptés.
+  if (!(/^https?:\/\//i.test(src) || /^data:(image|video)\//i.test(src))) {
+    return res.status(400).json({ error: 'invalid_url', detail: 'URL https:// ou data:image//data:video/ uniquement.' });
+  }
   if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[u.id]) DATA.progressPhotos[u.id] = [];
   if (DATA.progressPhotos[u.id].length >= MAX_PHOTOS_PER_USER) {
@@ -3532,12 +3558,8 @@ app.post('/api/premium/unlock', authRequired, premiumUnlockLimiter, (req, res) =
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
   if (u.premium) return res.json({ ok: true, already: true });
-  // Vérifier code valide via comparaison timing-safe (anti timing-attack)
-  const provided = Buffer.from(String(code));
-  const found = rawCodes.find(c => {
-    const expected = Buffer.from(c);
-    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-  });
+  // Vérifier code valide via comparaison timing-safe (anti timing-attack), sans fuiter la longueur
+  const found = rawCodes.find(c => safeEqual(String(code), c));
   if (!found) return res.status(400).json({ error: 'invalid_code' });
   const used = DATA.premiumCodes || {};
   if (used[found]) return res.status(400).json({ error: 'code_already_used' });
