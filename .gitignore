@@ -49,3 +49,7 @@ prod-snapshot.html
 /screenshots.mjs
 /package.json
 /package-lock.json
+
+# Exports de données générés (contiennent des données personnelles d'athlètes) — ne pas versionner
+Exercices_Prime_Athl*.xlsx
+*-backup-*.json
