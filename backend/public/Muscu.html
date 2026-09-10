@@ -15216,7 +15216,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',marginBottom:24}}>
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
-              <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:6,color:'#fff'}}>{_s?.name||'Séance'}</div>
+              <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
               <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume})}</div>
             </div>
 
@@ -15225,7 +15225,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <div style={{width:'100%',maxWidth:380,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
                 {tiles.map((s,i)=>(
                   <div key={i} style={{textAlign:'center',padding:'12px 8px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                    <div style={{fontSize:20,fontWeight:800,color:s.dim?'rgba(255,255,255,0.4)':'#fff'}}>{s.val}{s.unit&&<span style={{fontSize:11,color:'rgba(255,255,255,0.4)',fontWeight:600}}> {s.unit}</span>}</div>
+                    <div style={{fontSize:19,fontWeight:800,color:s.dim?'rgba(255,255,255,0.4)':'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.val}{s.unit&&<span style={{fontSize:11,color:'rgba(255,255,255,0.4)',fontWeight:600}}> {s.unit}</span>}</div>
                     <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:600,marginTop:2,textTransform:'uppercase',letterSpacing:0.3}}>{s.label}</div>
                   </div>
                 ))}
@@ -15252,7 +15252,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                     const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
                     const up=delta>0;
                     return(
-                      <div style={{width:64,height:64,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{width:64,height:64,flexShrink:0,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
                         <div style={{fontSize:16,fontWeight:800,color:delta===0?'rgba(255,255,255,0.5)':up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
                         <div style={{fontSize:10,fontWeight:700,color:delta===0?'rgba(255,255,255,0.4)':up?T.good:T.danger}}>{pct}%</div>
                       </div>
@@ -15287,8 +15287,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                           <span style={{fontSize:14,width:22,textAlign:'center'}}>{statusIcon}</span>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:'flex',alignItems:'center',gap:6}}>
-                              <span style={{fontSize:13,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
-                              {ex.isPR&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)'}}>PR</span>}
+                              <span style={{fontSize:13,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
+                              {ex.isPR&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
                             </div>
                             <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
                               {!isNew&&ex.prevMaxW>0&&(
