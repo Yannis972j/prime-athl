@@ -4717,6 +4717,55 @@ function motivationQuote(comp,volumeVsPrev){
   return pick(MOTIVATION_FIRST);
 }
 
+// Volume total (kg) d'une séance : utilise totalVolume si présent, sinon recalcule depuis les séries.
+function sessionVolumeOf(sess){
+  if(sess&&typeof sess.totalVolume==='number')return sess.totalVolume;
+  return (sess?.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
+}
+// Construit la comparaison complète d'une séance vs la dernière séance du MÊME nom qui la précède.
+// Réutilisé par saveSession (fin de séance) ET par le récap ouvert au clic sur le calendrier.
+// `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
+function buildSessionComparison(target,history){
+  if(!target)return{comp:null,volumeVsPrev:null};
+  const tName=target.name;
+  const tTime=new Date(target.date||0).getTime();
+  // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
+  // elle-même (par id, ou par référence si pas d'id).
+  const prev=(history||[])
+    .filter(s=>s&&s!==target&&tName&&s.name===tName&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
+    .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime())[0]||null;
+  const curVolTotal=sessionVolumeOf(target);
+  const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
+  if(!prev||!target.exercises)return{comp:null,volumeVsPrev};
+  const comp={prevDate:prev.date,exercises:[]};
+  const prevExMap={};
+  (prev.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
+  let prsCount=0,upCount=0,downCount=0,sameCount=0;
+  target.exercises.forEach(ex=>{
+    if(!ex.name)return;
+    const p=prevExMap[normExerciseName(ex.name)];
+    const curSets=(ex.sets||[]).filter(s=>s.done!==false);
+    const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
+    const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+    const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
+    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
+    const pSets=p.sets||[];
+    const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
+    const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+    const prevTotalReps=pSets.reduce((a,s)=>a+(s.reps||0),0);
+    const wDelta=curMaxW-prevMaxW;
+    const vDelta=curVol-prevVol;
+    const isPR=curMaxW>0&&wDelta>0;
+    if(isPR)prsCount++;
+    const status=vDelta>0?'up':vDelta<0?'down':'same';
+    if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
+    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps});
+  });
+  comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
+  comp.totalExercises=comp.exercises.length;
+  return{comp,volumeVsPrev};
+}
+
 function MotivationMarquee(){
   const items=[...MOTIVATION_QUOTES,...MOTIVATION_QUOTES];
   return(
@@ -8153,7 +8202,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
       {/* Legend */}
@@ -9247,11 +9296,20 @@ function groupExercisesByType(exercises){
   return groups;
 }
 
-function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
+function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
   const exGroups=React.useMemo(()=>groupExercisesByType(s.exercises),[s.exercises]);
+  // Récap de fin de séance : comparaison vs la dernière séance du même nom (comme l'écran de
+  // félicitations côté athlète), calculée à la volée à partir de l'historique de l'athlète.
+  const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[]),[s,history]);
+  // Map nom normalisé → comparaison de l'exercice, pour annoter la liste détaillée d'un badge ↑/↓/PR.
+  const compByName=React.useMemo(()=>{const m={};(comp?.exercises||[]).forEach(e=>{m[normExerciseName(e.name)]=e;});return m;},[comp]);
+  const hasVolume=totalVol>0;
+  const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous);
+  const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+  const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
   return(
     <div style={{position:'fixed',inset:0,zIndex:3000,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -9293,6 +9351,61 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
 
         {/* Scrollable content */}
         <div style={{flex:1,overflowY:'auto',padding:'16px 20px 24px'}}>
+          {/* ── RÉCAP DE FIN DE SÉANCE (comparaison vs dernière séance du même nom) ── */}
+          {(comp||showVolCompare)&&(
+            <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
+              <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
+              {/* Bilan */}
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume})}</div>
+              {/* Alerte régression */}
+              {isRegression&&(
+                <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
+                  <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                  <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{comp&&comp.downCount>0?` — ${comp.downCount} exercice${comp.downCount>1?'s':''} en baisse`:''}. À recadrer avec l'athlète.</div>
+                </div>
+              )}
+              {/* Comparaison volume vs dernière */}
+              {showVolCompare&&(()=>{
+                const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
+                const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
+                const up=delta>0;
+                return(
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:comp?12:0}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</span></div>
+                      <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</span></div>
+                    </div>
+                    <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Score global */}
+              {comp&&comp.totalExercises>0&&(
+                <div style={{display:'flex',gap:8}}>
+                  {[{count:comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:comp.prsCount,label:comp.prsCount>1?'PR':'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                    <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
+                      <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                      <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Mindset */}
+              <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
+                <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev)}"</div>
+              </div>
+            </div>
+          )}
+          {/* Première séance de ce nom (aucune comparaison possible) */}
+          {!comp&&!showVolCompare&&s.name&&(
+            <div style={{marginBottom:20,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',textAlign:'center'}}>
+              <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>Première séance <b style={{color:T.text}}>"{s.name}"</b> pour {firstName} — pas encore de comparaison. Le récap de progression apparaîtra à la prochaine séance du même nom.</div>
+            </div>
+          )}
           {/* Athlete notes */}
           {s.notes&&(
             <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(200,144,64,0.07)',border:'1px solid rgba(200,144,64,0.22)',fontSize:12,color:T.warn,lineHeight:1.5}}>
@@ -9325,7 +9438,19 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
                               <div style={{display:'flex',alignItems:'center',gap:8}}>
                                 {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+itemIdx)}</div>}
                                 <div>
-                                  <div style={{fontSize:13,fontWeight:700}}>{e.name}</div>
+                                  <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                                    <span style={{fontSize:13,fontWeight:700}}>{e.name}</span>
+                                    {(()=>{
+                                      const cx=compByName[normExerciseName(e.name)];
+                                      if(!cx)return null;
+                                      if(cx.status==='new')return <span style={{fontSize:8.5,fontWeight:800,color:'#5A8AE0',padding:'1px 6px',borderRadius:999,background:'rgba(90,138,224,0.15)'}}>NOUVEAU</span>;
+                                      const col=cx.status==='up'?T.good:cx.status==='down'?T.danger:T.textFaint;
+                                      const ic=cx.status==='up'?'↑':cx.status==='down'?'↓':'=';
+                                      return(<span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,fontWeight:800,color:col,padding:'1px 6px',borderRadius:999,background:`${col}1f`}}>
+                                        {cx.isPR?'★ PR':ic}{cx.wDelta?` ${cx.wDelta>0?'+':''}${cx.wDelta}kg`:''}
+                                      </span>);
+                                    })()}
+                                  </div>
                                   {e.muscle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>}
                                 </div>
                               </div>
@@ -15000,41 +15125,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
-    // Comparaison complète "vs la dernière séance de même nom" — exercice par exercice
-    const prevSession=history.find(s=>typeof s.totalVolume==='number'&&snapshot.name&&s.name===snapshot.name);
-    setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
-    // Build detailed comparison
-    if(prevSession&&snapshot.exercises){
-      const comp={prevDate:prevSession.date,exercises:[]};
-      const prevExMap={};
-      (prevSession.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
-      let prsCount=0,upCount=0,downCount=0,sameCount=0;
-      snapshot.exercises.forEach(ex=>{
-        if(!ex.name)return;
-        const prev=prevExMap[normExerciseName(ex.name)];
-        const curSets=(ex.sets||[]).filter(s=>s.done!==false);
-        const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
-        const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
-        const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
-        if(!prev){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
-        const prevSets=prev.sets||[];
-        const prevMaxW=Math.max(0,...prevSets.map(s=>s.weight||0));
-        const prevVol=prevSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
-        const prevTotalReps=prevSets.reduce((a,s)=>a+(s.reps||0),0);
-        const wDelta=curMaxW-prevMaxW;
-        const vDelta=curVol-prevVol;
-        const isPR=curMaxW>0&&wDelta>0;
-        if(isPR)prsCount++;
-        const status=vDelta>0?'up':vDelta<0?'down':'same';
-        if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-        comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:prevSets.length,curTotalReps,prevTotalReps});
-      });
-      comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
-      comp.totalExercises=comp.exercises.length;
-      setSessionComparison(comp);
-    }else{
-      setSessionComparison(null);
-    }
+    // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
+    // (même logique que le récap ouvert au clic sur le calendrier).
+    const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history);
+    setVolumeVsPrev(vvp);
+    setSessionComparison(comp);
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
