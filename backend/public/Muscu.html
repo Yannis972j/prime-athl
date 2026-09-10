@@ -5653,6 +5653,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
                           </>
                         )}
+                        {exType(ex)!=='cardio'&&exRestSeconds(ex)>0&&(
+                          <div style={{marginTop:8,fontSize:11,color:T.textFaint,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>⏳ Repos : {fmtRestLabel(exRestSeconds(ex))}</div>
+                        )}
                       </div>
                     </div>
                   );
@@ -9394,6 +9397,21 @@ function groupExercisesByType(exercises){
   return groups;
 }
 
+// Temps de repos d'un exercice, tous formats confondus : restSeconds (séances importées Excel)
+// OU le repos saisi par série pendant une Live Session (s.rest). Sans ça, le repos mis en live
+// n'apparaissait nulle part côté athlète (les vues n'affichaient que restSeconds).
+function exRestSeconds(ex){
+  if(!ex)return 0;
+  if(ex.restSeconds>0)return ex.restSeconds;
+  const rs=(ex.sets||[]).map(s=>s&&s.rest||0).filter(r=>r>0);
+  return rs.length?Math.max(...rs):0;
+}
+function fmtRestLabel(s){
+  s=Math.round(s||0);
+  if(s<=0)return '';
+  return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
+}
+
 function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
@@ -9605,6 +9623,9 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                   </div>
                                 ))}
                               </div>
+                            )}
+                            {exType(e)!=='cardio'&&exRestSeconds(e)>0&&(
+                              <div style={{padding:'0 14px 10px',fontSize:11,color:T.textFaint,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>⏳ Repos : {fmtRestLabel(exRestSeconds(e))}</div>
                             )}
                           </div>
                         );
@@ -10109,7 +10130,13 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
+      const exData=valid.map(e=>{
+        // Persiste aussi le repos au niveau exercice (restSeconds) à partir du repos saisi par
+        // série pendant la Live, pour que TOUTES les vues le reflètent (récap, partage, PDF),
+        // pas seulement celles qui lisent s.rest.
+        const restSec=e.restSeconds||exRestSeconds(e);
+        return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
+      });
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
       }else{
