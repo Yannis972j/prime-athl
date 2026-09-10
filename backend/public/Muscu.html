@@ -9380,8 +9380,14 @@ function groupExercisesByType(exercises){
   list.forEach(e=>{
     const type=exType(e);
     const isComplex=type!=='classic';
-    if(isComplex&&e.groupId&&byGroupId.has(e.groupId)){
-      byGroupId.get(e.groupId).items.push(e);
+    // Regroupement par groupId partagé (supersets/trisets des Live Sessions). On rattache dès que
+    // le groupId existe et est déjà connu — MÊME si ce membre-ci est 'classic' — et on PROMEUT le
+    // type du groupe si un membre est complexe. Sans ça, un superset dont le 1er exercice avait
+    // été enregistré en 'classic' (ou selon l'ordre) se cassait et retombait en classique.
+    if(e.groupId&&byGroupId.has(e.groupId)){
+      const g=byGroupId.get(e.groupId);
+      g.items.push(e);
+      if(isComplex&&(g.type==='classic'))g.type=type;
       return;
     }
     const prev=groups[groups.length-1];
@@ -9391,7 +9397,10 @@ function groupExercisesByType(exercises){
       return;
     }
     const g={type:isComplex?type:'classic',items:[e]};
-    if(isComplex&&e.groupId)byGroupId.set(e.groupId,g);
+    // On enregistre TOUT groupId (pas seulement les complexes) : les exercices classiques d'une
+    // Live ont chacun un groupId unique, donc aucun faux regroupement — mais un membre complexe
+    // ajouté ensuite sur le même groupId sera bien rattaché et promu.
+    if(e.groupId)byGroupId.set(e.groupId,g);
     groups.push(g);
   });
   return groups;
@@ -10130,12 +10139,18 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     setSaving(true);
     try{
       const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+      // Normalise le type de groupe : si plusieurs exercices partagent un groupId et qu'au moins
+      // un est superset/triset/cardio, on aligne TOUT le groupe sur ce type. Évite qu'un superset
+      // retombe en "classique" chez l'athlète si un membre avait gardé groupType 'classic'.
+      const groupTypeById={};
+      valid.forEach(e=>{if(e.groupId&&e.groupType&&e.groupType!=='classic'&&!groupTypeById[e.groupId])groupTypeById[e.groupId]=e.groupType;});
       const exData=valid.map(e=>{
         // Persiste aussi le repos au niveau exercice (restSeconds) à partir du repos saisi par
         // série pendant la Live, pour que TOUTES les vues le reflètent (récap, partage, PDF),
         // pas seulement celles qui lisent s.rest.
         const restSec=e.restSeconds||exRestSeconds(e);
-        return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
+        const gType=(e.groupId&&groupTypeById[e.groupId])||e.groupType||'classic';
+        return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:gType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
       });
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
