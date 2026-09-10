@@ -9260,6 +9260,47 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
 
+  // ── Rest timer countdown ──────────────────────────────────────────────────
+  const[restTimer,setRestTimer]=React.useState(0);
+  const[restTimerTotal,setRestTimerTotal]=React.useState(0);
+  const restTimerRef=React.useRef(null);
+  const startRestTimer=(seconds)=>{
+    if(!seconds||seconds<=0)return;
+    if(restTimerRef.current)clearInterval(restTimerRef.current);
+    setRestTimerTotal(seconds);setRestTimer(seconds);
+    restTimerRef.current=setInterval(()=>{
+      setRestTimer(prev=>{
+        if(prev<=1){
+          clearInterval(restTimerRef.current);restTimerRef.current=null;
+          try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}
+          return 0;
+        }
+        return prev-1;
+      });
+    },1000);
+  };
+  const dismissRestTimer=()=>{
+    if(restTimerRef.current)clearInterval(restTimerRef.current);
+    restTimerRef.current=null;setRestTimer(0);setRestTimerTotal(0);
+  };
+  React.useEffect(()=>()=>{if(restTimerRef.current)clearInterval(restTimerRef.current);},[]);
+
+  // ── Exercise history lookup (last 3 sessions for an exercise) ─────────────
+  const getExHistory=React.useCallback((exName)=>{
+    if(!exName)return[];
+    const n=(exName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const results=[];
+    const sessions=[...(detail?.sessions||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    for(const s of sessions){
+      const match=(s.exercises||[]).find(e=>(e.name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')===n);
+      if(match){
+        results.push({date:s.date,name:s.name,sets:match.sets||[],muscle:match.muscle});
+        if(results.length>=3)break;
+      }
+    }
+    return results;
+  },[detail?.sessions]);
+
   React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
   React.useEffect(()=>{
@@ -9362,6 +9403,8 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     }else{
       setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,...uniFields,rest:setRest,done:true}]}));
     }
+    // Lancer le timer de repos après validation d'une nouvelle série (pas en édition)
+    if(!editingSet&&setRest>0)startRestTimer(setRest);
     setMode('session');
   };
 
@@ -9457,7 +9500,35 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)',maxHeight:'92vh',overflowY:'auto'}}>
           <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
           <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{editingSet?(isCardioMode?'Modifier · Tapis':`Modifier · Série ${setNum}`):(isCardioMode?'Tapis':`Série ${setNum}`)}</div>
-          <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:8,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+
+          {/* ── Historique des dernières performances ── */}
+          {(()=>{
+            const hist=getExHistory(exName);
+            if(!hist.length)return null;
+            return(
+              <div style={{marginBottom:14,padding:'8px 10px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.18)'}}>
+                <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,color:'#5A8AE0',marginBottom:6}}>📊 Dernières perf.</div>
+                {hist.map((h,hi)=>{
+                  const d=new Date(h.date);
+                  const dateStr=d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+                  const bestSet=h.sets.reduce((best,s)=>(!best||(s.weight||0)>(best.weight||0))?s:best,null);
+                  return(
+                    <div key={hi} style={{display:'flex',alignItems:'center',gap:6,marginBottom:hi<hist.length-1?4:0}}>
+                      <span style={{fontSize:10,color:T.textFaint,fontWeight:600,minWidth:42}}>{dateStr}</span>
+                      <div style={{flex:1,display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                        {h.sets.map((s,si)=>(
+                          <span key={si} style={{fontSize:10,fontWeight:600,color:T.textDim,padding:'1px 5px',borderRadius:5,background:'rgba(255,255,255,0.05)'}}>
+                            {s.weight||0}<span style={{fontSize:8,color:T.textFaint}}>kg</span>×{s.reps||0}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {isNew&&!pendingGroupId&&(
             <div style={{marginBottom:16}}>
@@ -9710,6 +9781,42 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
           <Icon name="plus" size={18} stroke={T.accent}/>Ajouter un exercice
         </button>
       </div>
+
+      {/* ── Rest Timer Countdown ── */}
+      {restTimer>0&&(
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:10,padding:'0 16px calc(16px + env(safe-area-inset-bottom))',background:'linear-gradient(transparent,rgba(8,8,12,0.95) 20%)'}}>
+          <div style={{borderRadius:18,overflow:'hidden',background:'rgba(20,20,30,0.98)',border:'1px solid rgba(90,138,224,0.35)',boxShadow:'0 -8px 30px rgba(0,0,0,0.5)'}}>
+            {/* Progress bar */}
+            <div style={{height:4,background:'rgba(255,255,255,0.06)'}}>
+              <div style={{height:'100%',width:(restTimer/restTimerTotal*100)+'%',background:restTimer<=5?'#e84040':'linear-gradient(90deg,#5A8AE0,#2CC4A0)',borderRadius:2,transition:'width 1s linear'}}/>
+            </div>
+            <div style={{padding:'14px 18px',display:'flex',alignItems:'center',gap:14}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.8,color:restTimer<=5?'#e84040':'#5A8AE0',marginBottom:2}}>
+                  {restTimer<=5?'⚡ C\'est reparti !':'⏱ Repos'}
+                </div>
+                <div style={{fontSize:28,fontWeight:900,fontFamily:'JetBrains Mono,monospace',letterSpacing:2,color:restTimer<=10?'#e84040':T.text,lineHeight:1}}>
+                  {Math.floor(restTimer/60)>0&&<>{Math.floor(restTimer/60)}:</>}{String(restTimer%60).padStart(2,'0')}
+                </div>
+              </div>
+              <button onClick={dismissRestTimer} style={{width:42,height:42,borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Icon name="x" size={18} stroke={T.textDim}/>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {restTimer===0&&restTimerTotal>0&&(
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:10,padding:'0 16px calc(16px + env(safe-area-inset-bottom))',background:'linear-gradient(transparent,rgba(8,8,12,0.95) 20%)'}}>
+          <button onClick={dismissRestTimer} style={{width:'100%',borderRadius:18,overflow:'hidden',background:'rgba(232,64,64,0.12)',border:'1px solid rgba(232,64,64,0.4)',padding:'16px 18px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,color:T.text,boxShadow:'0 -8px 30px rgba(0,0,0,0.5)'}}>
+            <span style={{fontSize:26}}>🔔</span>
+            <div style={{flex:1,textAlign:'left'}}>
+              <div style={{fontSize:14,fontWeight:800,color:'#e84040'}}>Repos terminé !</div>
+              <div style={{fontSize:11,color:T.textDim,marginTop:2}}>Touche pour reprendre</div>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
