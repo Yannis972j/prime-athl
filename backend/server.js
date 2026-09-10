@@ -2224,8 +2224,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   pushToUser(athlete.id, { title: isLive ? '🔴 Séance Live terminée !' : '🏋️ Nouvelle séance', body: athletePushBody, url: '/Muscu.html' });
   // Notification coach : pour les séances live, prévenir le coach que l'athlète a terminé
   if (isLive) {
-    const coachPushBody = `${athleteName} a terminé sa séance "${session.name}" — ${exCount} exo${exCount > 1 ? 's' : ''}, ${vol > 0 ? Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''}${dur > 0 ? (vol > 0 ? ', ' : '') + dur + ' min' : ''} 💪`;
-    pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: coachPushBody, url: '/Muscu.html' });
+    pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: `${athleteName} a terminé sa séance "${session.name}"`, url: '/Muscu.html' });
   }
   res.json({ ok: true, id });
 });
