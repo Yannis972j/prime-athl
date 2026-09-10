@@ -5054,6 +5054,17 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[viewArchive,setViewArchive]=React.useState(null);
   const[confirmDel,setConfirmDel]=React.useState(null);
   const[viewHistSession,setViewHistSession]=React.useState(null);
+  // Récap de progression de la séance consultée (vs la dernière séance du même nom) — même helper
+  // partagé que la fin de séance et le récap coach, pour que l'athlète retrouve sa comparaison
+  // en rouvrant une séance passée depuis son calendrier.
+  const histRecap=React.useMemo(()=>{
+    if(!viewHistSession)return null;
+    const{comp,volumeVsPrev}=buildSessionComparison(viewHistSession,history||[]);
+    const hasVolume=sessionVolumeOf(viewHistSession)>0;
+    const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+    const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
+    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression};
+  },[viewHistSession,history]);
   // Édition d'une séance déjà validée (ex: ajouter une série oubliée, corriger un poids après
   // coup) — editHistExercises est un brouillon local (copie profonde) modifié librement, envoyé
   // au serveur seulement au clic "Enregistrer" ; annuler ou fermer le panneau l'abandonne sans
@@ -5473,6 +5484,93 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   })}
                 </div>
               ):(<>
+              {/* ── RÉCAP DE PROGRESSION (vs la dernière séance du même nom) ── */}
+              {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
+                <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
+                  <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume})}</div>
+                  {histRecap.isRegression&&(
+                    <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
+                      <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{histRecap.comp&&histRecap.comp.downCount>0?` — ${histRecap.comp.downCount} exercice${histRecap.comp.downCount>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.</div>
+                    </div>
+                  )}
+                  {histRecap.showVolCompare&&(()=>{
+                    const vp=histRecap.volumeVsPrev,delta=Math.round(vp.current-vp.previous);
+                    const pct=vp.previous>0?Math.round(Math.abs(delta)/vp.previous*100):0,up=delta>0;
+                    return(
+                      <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:histRecap.comp?12:0}}>
+                        <div style={{flex:1}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(vp.previous).toLocaleString('fr-FR')} kg</span></div>
+                          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(vp.current).toLocaleString('fr-FR')} kg</span></div>
+                        </div>
+                        <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                          <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                          <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {histRecap.comp&&histRecap.comp.exercises.length>0&&(
+                    <div style={{marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                        <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Détail par exercice</div>
+                        {histRecap.comp.prsCount>0&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'2px 8px',borderRadius:999,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.3)'}}>{histRecap.comp.prsCount} PR{histRecap.comp.prsCount>1?'s':''}</span>}
+                      </div>
+                      <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
+                        {histRecap.comp.exercises.map((ex,i)=>{
+                          const isNew=ex.status==='new',up=ex.status==='up',down=ex.status==='down';
+                          const sc=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                          const si=isNew?'🆕':up?'↑':down?'↓':'=';
+                          const vd=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
+                          return(
+                            <div key={i} style={{padding:'9px 12px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<histRecap.comp.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{fontSize:14,width:20,textAlign:'center',flexShrink:0}}>{si}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                    <span style={{fontSize:12.5,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
+                                    {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
+                                  </div>
+                                  <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                                    {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
+                                    {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                                    {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                    {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                  </div>
+                                </div>
+                                <div style={{textAlign:'right',flexShrink:0}}>
+                                  {vd&&<div style={{fontSize:10.5,fontWeight:700,color:sc}}>{vd}</div>}
+                                  {ex.curVol>0&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {histRecap.comp&&histRecap.comp.totalExercises>0&&(
+                    <div style={{display:'flex',gap:8}}>
+                      {[{count:histRecap.comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:histRecap.comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:histRecap.comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:histRecap.comp.prsCount,label:'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                        <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
+                          <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                          <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev)}"</div>
+                  </div>
+                </div>
+              )}
+              {histRecap&&!histRecap.comp&&!histRecap.showVolCompare&&viewHistSession.name&&(
+                <div style={{marginBottom:18,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',textAlign:'center'}}>
+                  <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>Première séance <b style={{color:T.text}}>"{viewHistSession.name}"</b> — pas encore de comparaison. Ton récap de progression apparaîtra à la prochaine séance du même nom.</div>
+                </div>
+              )}
               {(viewHistSession.exercises||[]).length===0&&(
                 <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
               )}
