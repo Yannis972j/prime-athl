@@ -10026,7 +10026,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   // editSession DOIT être dans les deps : sans lui, passer en mode édition (ou en sortir) ne
   // ré-évalue pas le garde `if(reviewing||editSession)return` — l'intervalle continue d'incrémenter
   // `elapsed` en édition et fausse la durée totale de la séance.
-  React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing,editSession]);
+  // Chrono basé sur l'HORLOGE RÉELLE, pas un compteur +1s : un setInterval est throttlé (voire
+  // gelé) quand l'app passe en arrière-plan ou que l'écran se verrouille, ce qui figeait le temps
+  // affiché. On ancre un instant de départ et on recalcule le temps écoulé à chaque tick ET au
+  // retour au premier plan — même pattern que SessionScreen côté athlète.
+  const startTsRef=React.useRef(0);
+  React.useEffect(()=>{
+    if(reviewing||editSession)return;
+    startTsRef.current=Date.now()-elapsed*1000; // ancrage à l'entrée (reprise/pause du chrono)
+    const tick=()=>setElapsed(Math.max(0,Math.round((Date.now()-startTsRef.current)/1000)));
+    const t=setInterval(tick,1000);
+    const onVis=()=>{if(document.visibilityState==='visible')tick();};
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{clearInterval(t);document.removeEventListener('visibilitychange',onVis);};
+  },[reviewing,editSession]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
   React.useEffect(()=>{
     if(editSession)return;
