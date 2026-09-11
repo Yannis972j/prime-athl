@@ -479,10 +479,12 @@ const MOTIVATION_MESSAGES = [
   "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];
-// Heure Paris (0-23) — facile à ajuster si Yannis veut un autre créneau.
+// Heure Martinique (0-23) — fuseau America/Martinique, UTC-4 toute l'année (pas de
+// changement d'heure). Facile à ajuster si Yannis veut un autre créneau.
+const MOTIVATION_TZ = 'America/Martinique';
 const MOTIVATION_HOUR = 5;
 const MOTIVATION_MINUTE = 0;
-// 'YYYY-MM-DD' (Europe/Paris) du dernier envoi — évite un double envoi si la minute cible est
+// 'YYYY-MM-DD' (heure Martinique) du dernier envoi — évite un double envoi si la minute cible est
 // revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
 // seulement (pas persisté) : au pire un redémarrage pile sur ce créneau saute un jour, pas plus.
 let lastMotivationSentDate = null;
@@ -500,10 +502,10 @@ function sendDailyMotivation() {
 }
 
 setInterval(() => {
-  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure de Paris
+  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure Martinique
   // (le serveur tourne en UTC sur Render, l'heure locale du navigateur n'entre pas en jeu ici).
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: MOTIVATION_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date());
   const get = t => parts.find(p => p.type === t)?.value;
