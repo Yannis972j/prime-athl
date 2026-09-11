@@ -8209,6 +8209,8 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[moveErr,setMoveErr]=React.useState(null);
   const[planSession,setPlanSession]=React.useState(null); // séance en cours de copie/planification
   const[viewSession,setViewSession]=React.useState(null); // séance en cours de consultation (détail exercices)
+  const[viewSessionTab,setViewSessionTab]=React.useState('recap'); // onglet initial du modal (recap/body)
+  const openSessionModal=(sess,tabKey)=>{setViewSessionTab(tabKey||'recap');setViewSession(sess);};
   const movePickerRef=React.useRef(null);
   React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
@@ -8303,18 +8305,17 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
-      {/* Legend */}
-      <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-        {mode!=='nutrition'&&[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])].map(([c,l])=>(
-          <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
+      {/* Carte calendrier — légende en pills + grille, groupées pour une lecture plus nette */}
+      <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:18,padding:'12px 12px 14px',marginBottom:4}}>
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+        {(mode==='nutrition'?[['#BFA060','Planifié']]:[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])]).concat(mode!=='sport'?[['#5A8AE0','Nutrition']]:[]).map(([c,l])=>(
+          <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:10,fontWeight:600,color:T.textDim,padding:'3px 9px',borderRadius:999,background:c+'14',border:`1px solid ${c}33`}}>
             <div style={{width:6,height:6,borderRadius:3,background:c}}/>{l}
           </div>
         ))}
-        {mode==='nutrition'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#BFA060'}}/>Planifié</div>}
-        {mode!=='sport'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#5A8AE0'}}/>Nutrition validée</div>}
       </div>
 
       <MonthCalendar year={calYear} month={calMonth} onPrevMonth={prevM} onNextMonth={nextM}
@@ -8352,6 +8353,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             ],
           };
         }}/>
+      </div>
 
       {/* Selected day panel */}
       {sel&&(()=>{
@@ -8376,14 +8378,16 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
                 </div>
                 {sess?(
-                  <div onClick={()=>setViewSession(sess)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:34,height:34,borderRadius:10,background:'rgba(44,196,160,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check" size={16} stroke={T.good}/></div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}{(sess.muscles||progData?.category)?' · '+(sess.muscles||progData?.category):''}</div>
-                      <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg · {(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0,padding:'4px 8px',borderRadius:7,background:'rgba(44,196,160,0.12)'}}>
-                      <span style={{fontSize:10,fontWeight:700,color:T.good}}>Voir</span>
-                      <Icon name="chevronRight" size={11} stroke={T.good}/>
+                      <div style={{fontSize:13.5,fontWeight:800,color:'#2CC4A0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||effectiveDayName}</div>
+                      <div style={{fontSize:10.5,color:T.textFaint,marginTop:2,display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+                        <span><b style={{color:T.textDim,fontWeight:700}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')}</b> kg</span>
+                        <span>· {(sess.exercises||[]).length} exo{(sess.exercises||[]).length>1?'s':''}</span>
+                        {sess.duration>0&&<span>· {sess.duration} min</span>}
+                        {(sess.muscles||progData?.category)&&<span style={{color:T.textFaint}}>· {sess.muscles||progData?.category}</span>}
+                      </div>
                     </div>
                   </div>
                 ):hasProg&&progData?(
@@ -8413,17 +8417,17 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 ):(
                   <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Jour de repos</div>
                 )}
+                {/* Actions pro sur une séance faite : Voir (corps) · Recap (rapport) · Copier · Suppr. */}
+                {sess&&(
+                  <div style={{display:'flex',gap:6,marginTop:10}}>
+                    <button onClick={()=>openSessionModal(sess,'body')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>👀 Voir</button>
+                    <button onClick={()=>openSessionModal(sess,'recap')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📊 Recap</button>
+                    {editable&&<button onClick={()=>setPlanSession(sess)} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📋 Copier</button>}
+                    {editable&&onDeleteSession&&<button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="trash" size={14} stroke={T.danger}/></button>}
+                  </div>
+                )}
                 {editable&&(
-                  sess?(
-                    <div style={{display:'flex',gap:6,marginTop:8}}>
-                      <button onClick={()=>setPlanSession(sess)} style={{flex:1,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 Copier cette séance</button>
-                      {onDeleteSession&&(
-                        <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                          <Icon name="trash" size={13} stroke={T.danger}/>
-                        </button>
-                      )}
-                    </div>
-                  ):movedHere?(
+                  sess?null:movedHere?(
                     <button onClick={()=>cancelMove(sel)} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',fontSize:11,fontWeight:700,cursor:'pointer'}}>↩ Annuler le déplacement</button>
                   ):hasProg?(
                     <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer cette séance</button>
@@ -9421,8 +9425,10 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
-function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved}){
+function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const[tab,setTab]=React.useState(initialTab||'recap');
+  React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
   const exGroups=React.useMemo(()=>groupExercisesByType(s.exercises),[s.exercises]);
@@ -9472,10 +9478,19 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
           </div>
         </div>
 
+        {/* Onglets : Récap (rapport de fin de séance) vs Séance (corps : exercices & séries) */}
+        <div style={{display:'flex',gap:8,padding:'12px 20px 0'}}>
+          {[{k:'recap',label:'📊 Récap',c:T.accent},{k:'body',label:'👀 Séance',c:'#5A8AE0'}].map(t=>{
+            const on=tab===t.k;
+            return(
+              <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,height:40,borderRadius:12,border:`1px solid ${on?t.c+'66':'rgba(255,255,255,0.08)'}`,background:on?t.c+'1a':'rgba(255,255,255,0.03)',color:on?t.c:T.textDim,fontSize:13,fontWeight:on?800:600,cursor:'pointer',transition:'all .15s'}}>{t.label}</button>
+            );
+          })}
+        </div>
         {/* Scrollable content */}
         <div style={{flex:1,overflowY:'auto',padding:'16px 20px 24px'}}>
           {/* ── RÉCAP DE FIN DE SÉANCE (comparaison vs dernière séance du même nom) ── */}
-          {(comp||showVolCompare)&&(
+          {tab==='recap'&&(comp||showVolCompare)&&(
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
@@ -9565,12 +9580,12 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             </div>
           )}
           {/* Première séance de ce nom (aucune comparaison possible) */}
-          {!comp&&!showVolCompare&&s.name&&(
+          {tab==='recap'&&!comp&&!showVolCompare&&s.name&&(
             <div style={{marginBottom:20,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',textAlign:'center'}}>
               <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>Première séance <b style={{color:T.text}}>"{s.name}"</b> pour {firstName} — pas encore de comparaison. Le récap de progression apparaîtra à la prochaine séance du même nom.</div>
             </div>
           )}
-          {/* Athlete notes */}
+          {/* Ressenti athlète — visible dans les deux onglets (contexte utile) */}
           {s.notes&&(
             <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(200,144,64,0.07)',border:'1px solid rgba(200,144,64,0.22)',fontSize:12,color:T.warn,lineHeight:1.5}}>
               <span style={{fontWeight:700,display:'block',marginBottom:2,fontSize:10,textTransform:'uppercase',letterSpacing:0.4}}>Ressenti athlète</span>
@@ -9578,8 +9593,8 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             </div>
           )}
 
-          {/* Exercises */}
-          {(s.exercises||[]).length>0&&(
+          {/* Exercices (corps de la séance) — onglet Séance */}
+          {tab==='body'&&(s.exercises||[]).length>0&&(
             <div style={{marginBottom:20}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:10}}>Exercices</div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
