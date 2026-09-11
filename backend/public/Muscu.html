@@ -8308,14 +8308,15 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
         <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
-      {/* Carte calendrier — légende en pills + grille, groupées pour une lecture plus nette */}
-      <div style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:18,padding:'12px 12px 14px',marginBottom:4}}>
-      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
-        {(mode==='nutrition'?[['#BFA060','Planifié']]:[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])]).concat(mode!=='sport'?[['#5A8AE0','Nutrition']]:[]).map(([c,l])=>(
-          <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:10,fontWeight:600,color:T.textDim,padding:'3px 9px',borderRadius:999,background:c+'14',border:`1px solid ${c}33`}}>
+      {/* Legend */}
+      <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
+        {mode!=='nutrition'&&[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])].map(([c,l])=>(
+          <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
             <div style={{width:6,height:6,borderRadius:3,background:c}}/>{l}
           </div>
         ))}
+        {mode==='nutrition'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#BFA060'}}/>Planifié</div>}
+        {mode!=='sport'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#5A8AE0'}}/>Nutrition validée</div>}
       </div>
 
       <MonthCalendar year={calYear} month={calMonth} onPrevMonth={prevM} onNextMonth={nextM}
@@ -8353,7 +8354,6 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             ],
           };
         }}/>
-      </div>
 
       {/* Selected day panel */}
       {sel&&(()=>{
