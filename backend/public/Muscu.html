@@ -8861,11 +8861,16 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
   const[sending,setSending]=React.useState(false);
   const[msg,setMsg]=React.useState('');
   const totalVol=exos.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
+  const addExercise=()=>setExos(arr=>[...arr,{name:'',muscle:'',groupType:'classic',sets:[{weight:0,reps:0,done:true}],_new:true}]);
   const save=async()=>{
-    if(!session?.id||sending)return;
+    if(sending)return;
+    // On retire les exercices ajoutés sans nom (formulaire laissé vide) et le drapeau _new.
+    const clean=exos.filter(e=>(e.name||'').trim()).map(({_new,...e})=>e);
+    if(!session?.id)return;
     setSending(true);setMsg('');
+    const cleanVol=clean.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
     try{
-      await apiCall('/api/coach/sessions/'+session.id,{method:'PATCH',body:{exercises:exos,totalVolume:totalVol}});
+      await apiCall('/api/coach/sessions/'+session.id,{method:'PATCH',body:{exercises:clean,totalVolume:cleanVol}});
       setMsg('✓ Séance corrigée');
       setTimeout(()=>{onDone&&onDone();},1000);
     }catch(e){setMsg('✗ '+(e.message||'Erreur'));setSending(false);}
@@ -8893,13 +8898,21 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
               const updSet=(si,patch)=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
               const addSet=()=>setExos(arr=>arr.map((e,i)=>{if(i!==ei)return e;const last=e.sets[e.sets.length-1];return{...e,sets:[...e.sets,{weight:last?.weight||0,reps:0,done:true,...(uni?{repsL:0,repsR:0}:{})}]};}));
               const delLastSet=()=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.slice(0,-1)}));
-              const delEx=()=>{if(confirm('Supprimer "'+ex.name+'" de cette séance ?'))setExos(arr=>arr.filter((_,i)=>i!==ei));};
+              const delEx=()=>{if(ex._new||confirm('Supprimer "'+ex.name+'" de cette séance ?'))setExos(arr=>arr.filter((_,i)=>i!==ei));};
+              const updEx=patch=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,...patch}));
               return(
-                <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.025)',padding:'10px 12px'}}>
+                <div key={ei} style={{borderRadius:14,border:'1px solid '+(ex._new?'rgba(44,196,160,0.35)':'rgba(255,255,255,0.08)'),background:ex._new?'rgba(44,196,160,0.05)':'rgba(255,255,255,0.025)',padding:'10px 12px'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                      {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                    <div style={{minWidth:0,flex:1}}>
+                      {ex._new?(<>
+                        <input autoFocus value={ex.name} onChange={e=>updEx({name:e.target.value})} placeholder="Nom de l'exercice"
+                          style={{width:'100%',padding:'7px 10px',borderRadius:9,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,fontWeight:700,outline:'none',boxSizing:'border-box'}}/>
+                        <input value={ex.muscle} onChange={e=>updEx({muscle:e.target.value})} placeholder="Muscle (optionnel)"
+                          style={{width:'100%',padding:'5px 10px',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,outline:'none',boxSizing:'border-box',marginTop:5}}/>
+                      </>):(<>
+                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                        {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                      </>)}
                     </div>
                     <button onClick={delEx} title="Supprimer cet exercice" style={{width:28,height:28,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:13,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
                   </div>
@@ -8936,6 +8949,7 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
                 </div>
               );
             })}
+            <button onClick={addExercise} style={{height:44,borderRadius:12,border:'1px dashed rgba(90,138,224,0.45)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>＋ Ajouter un exercice</button>
           </div>
           <div style={{textAlign:'center',fontSize:12,color:T.textFaint,margin:'14px 0 4px'}}>Volume total : <span style={{color:T.good,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg</span></div>
         </div>
