@@ -1190,7 +1190,13 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
   const updEx=(idx,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i===idx?{...e,...patch}:e)});
   const updSet=(ei,si,patch)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})})});
-  const delEx=(idx)=>onChange({...workout,exercises:workout.exercises.filter((_,i)=>i!==idx)});
+  const delEx=(idx)=>{
+    // Ne jamais laisser une séance sans aucun exercice : SessionScreen (mode focus/liste) calcule
+    // `ex=exercises[safeIdx]` qui devient `undefined` sur un tableau vide, et l'accès `ex.sets`
+    // plante l'app (écran blanc). On bloque la suppression du dernier exercice.
+    if(workout.exercises.length<=1)return;
+    onChange({...workout,exercises:workout.exercises.filter((_,i)=>i!==idx)});
+  };
   const delSet=(ei,si)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:e.sets.filter((_,j)=>j!==si)})});
   const addSet=(ei)=>onChange({...workout,exercises:workout.exercises.map((e,i)=>i!==ei?e:{...e,sets:[...e.sets,{weight:e.sets[e.sets.length-1]?.weight||20,reps:0,done:false,target:e.sets[e.sets.length-1]?.target||10}]})});
   const addEx=()=>onChange({...workout,exercises:[...workout.exercises,{id:uid(),name:'Nouvel exercice',muscle:'Groupe musculaire',sets:[{weight:20,reps:0,done:false,target:10},{weight:20,reps:0,done:false,target:10},{weight:20,reps:0,done:false,target:10}]}]});
@@ -1427,7 +1433,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     </div>
   );
   const[exercises,setExercises]=React.useState(()=>{
-    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises))return s.exercises;}catch{}
+    // Array.isArray([]) est true : un snapshot avec un tableau d'exercices VIDE serait restauré
+    // tel quel et ferait planter le render (ex=undefined → ex.sets). On exige un tableau non vide,
+    // sinon on repart des exercices de la séance.
+    try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises)&&s.exercises.length>0)return s.exercises;}catch{}
     return workout.exercises.map(e=>({...e,sets:e.sets.map(s=>({...s}))}));
   });
   const[currentEx,setCurrentEx]=React.useState(0);
@@ -1705,10 +1714,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     };
   },[]);
 
-  // Helper : changer d'exercice en stoppant le chrono repos en cours
-  if(currentEx>=exercises.length&&exercises.length>0)setCurrentEx(exercises.length-1);
+  // Recale currentEx si la liste a rétréci (ex: exercice supprimé en édition). Fait dans un effet
+  // et non pendant le render : un setState en pleine phase de rendu déclenche un double-render et
+  // un warning React. Le clamp `safeIdx` ci-dessous garde le render courant cohérent en attendant.
+  React.useEffect(()=>{
+    if(currentEx>=exercises.length&&exercises.length>0)setCurrentEx(exercises.length-1);
+  },[currentEx,exercises.length]);
   const safeIdx=Math.min(currentEx,exercises.length-1);
   const ex=exercises[safeIdx]||exercises[0];
+  // Ref "valeur courante" du nom d'exercice : l'effet d'alarme repos ci-dessous se déclenche sur
+  // [restSeconds] uniquement (le bon déclencheur), mais capturait alors un `ex` figé — si on
+  // changeait d'exercice pendant un repos puis qu'on l'allongeait (+30s), l'alarme partait avec
+  // le nom de l'exercice précédent. On lit le nom via cette ref, toujours à jour au render.
+  const exNameRef=React.useRef('');
+  exNameRef.current=ex?.name||'';
   const totalSets=exercises.reduce((s,e)=>s+e.sets.length,0);
   const doneSets=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0);
   const sessionVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
@@ -1720,7 +1739,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // dans l'app, donc son propre chrono continue de tourner ; ce callback sert juste à l'afficher.
   React.useEffect(()=>{
     onRestUpdate&&onRestUpdate(restSeconds>0?{restSeconds,restTotal,exerciseName:ex?.name||''}:null);
-  },[restSeconds,restTotal,ex?.name]);
+  },[restSeconds,restTotal,ex?.name,onRestUpdate]);
 
   // Alarme "repos terminé" côté serveur : sonne (notification push) même si l'app est en
   // arrière-plan ou le téléphone verrouillé — le JS d'un onglet backgrounded est suspendu par le
@@ -1737,7 +1756,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       return;
     }
     if(restSeconds>prev){
-      apiCall('/api/rest-timer/schedule',{method:'POST',body:{seconds:restSeconds,exerciseName:ex?.name||''}}).catch(()=>{});
+      apiCall('/api/rest-timer/schedule',{method:'POST',body:{seconds:restSeconds,exerciseName:exNameRef.current}}).catch(()=>{});
     }
   },[restSeconds]);
   // Séance terminée pendant qu'un repos tournait encore (SessionScreen démonté par l'App) →
@@ -1854,6 +1873,23 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         importedPrograms={importedPrograms}
         history={history}
       />
+    );
+  }
+
+  // Filet de sécurité : si la séance se retrouve sans aucun exercice (données corrompues, snapshot
+  // ancien, etc.), tout le rendu ci-dessous accède à `ex.sets` et planterait. On affiche un état
+  // vide propre plutôt qu'un écran blanc, avec de quoi rebondir (ajouter un exercice ou quitter).
+  if(exercises.length===0||!ex){
+    return(
+      <div style={{minHeight:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 24px',textAlign:'center',gap:16}}>
+        <div style={{fontSize:40}}>🏋️</div>
+        <div style={{fontSize:17,fontWeight:800,color:T.text}}>Aucun exercice dans cette séance</div>
+        <div style={{fontSize:13,color:T.textDim,lineHeight:1.5,maxWidth:300}}>Ajoute au moins un exercice pour démarrer, ou reviens en arrière.</div>
+        <div style={{display:'flex',gap:10,marginTop:8}}>
+          <button onClick={()=>setEditMode(true)} style={{height:48,padding:'0 20px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer'}}>Ajouter un exercice</button>
+          <button onClick={onClose} style={{height:48,padding:'0 20px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Quitter</button>
+        </div>
+      </div>
     );
   }
 
@@ -3365,52 +3401,112 @@ function StatTile({icon,iconColor,value,unit,label,sub}){
 
 // ── Stats ─────────────────────────────────────────────────
 function StatsScreen({history,profile,athleteId}){
-  const now=Date.now();
   const dayMs=24*60*60*1000;
-  // Différence en JOURS CALENDAIRES (minuit à minuit), pas en heures écoulées ÷ 24 —
-  // sinon une séance loggée tard le soir (ex: 23h50) apparaît dans le bucket "aujourd'hui"
-  // au lieu de son vrai jour dès qu'on consulte les stats le lendemain matin (< 24h plus tard).
   const dayKeyOf=t=>{const dt=new Date(t);dt.setHours(0,0,0,0);return dt.getTime();};
-  const todayKey=dayKeyOf(now);
+  // todayKey en state, rafraîchi au passage de minuit : calculé une seule fois au montage, il
+  // pointait sinon sur la veille si l'utilisateur restait sur l'écran Stats après 00h00, décalant
+  // tous les filtres par période d'un jour. L'intervalle ne re-render que quand le jour change.
+  const[todayKey,setTodayKey]=React.useState(()=>dayKeyOf(Date.now()));
+  React.useEffect(()=>{
+    const t=setInterval(()=>{const k=dayKeyOf(Date.now());setTodayKey(prev=>prev!==k?k:prev);},60000);
+    return()=>clearInterval(t);
+  },[]);
+  const now=todayKey;
   const calDayDiff=t=>Math.round((todayKey-dayKeyOf(t))/dayMs);
 
-  // Last 7 days volume (Mon-Sun)
+  // ── Filtre temporel global ─────────────────────────
+  const PERIODS=[{key:'30d',label:'30j',days:30},{key:'90d',label:'90j',days:90},{key:'6m',label:'6 mois',days:183},{key:'1y',label:'1 an',days:365},{key:'all',label:'Tout',days:Infinity}];
+  const[periodKey,setPeriodKey]=React.useState('30d');
+  const period=PERIODS.find(p=>p.key===periodKey)||PERIODS[0];
+  const filtered=React.useMemo(()=>{
+    if(period.days===Infinity)return history;
+    return history.filter(h=>calDayDiff(new Date(h.date).getTime())<period.days);
+  },[history,period.days]);
+  const prevFiltered=React.useMemo(()=>{
+    if(period.days===Infinity)return[];
+    return history.filter(h=>{const d=calDayDiff(new Date(h.date).getTime());return d>=period.days&&d<period.days*2;});
+  },[history,period.days]);
+
+  // ── Résumé semaine en cours ────────────────────────
+  const weekSummary=React.useMemo(()=>{
+    const todayDow=(new Date().getDay()+6)%7;
+    const thisWeek=history.filter(h=>{const d=calDayDiff(new Date(h.date).getTime());return d>=0&&d<=todayDow;});
+    const prevWeek=history.filter(h=>{const d=calDayDiff(new Date(h.date).getTime());return d>todayDow&&d<=todayDow+7;});
+    const vol=thisWeek.reduce((s,h)=>s+(h.totalVolume||0),0);
+    const prevVol=prevWeek.reduce((s,h)=>s+(h.totalVolume||0),0);
+    const dur=thisWeek.reduce((s,h)=>s+(h.duration||0),0);
+    const volDelta=prevVol>0?Math.round(((vol-prevVol)/prevVol)*100):null;
+    return{sessions:thisWeek.length,volume:vol,duration:dur,volDelta,prevSessions:prevWeek.length};
+  },[history]);
+
+  // ── Volume bar chart 7 derniers jours ──────────────
   const todayDow=(new Date().getDay()+6)%7;
   const weekData=[0,0,0,0,0,0,0];
+  const prevWeekData=[0,0,0,0,0,0,0];
   history.forEach(h=>{
     const diff=calDayDiff(new Date(h.date).getTime());
-    if(diff>=0&&diff<7){
-      const idx=(todayDow-diff+7)%7;
-      weekData[idx]+=h.totalVolume||0;
-    }
+    if(diff>=0&&diff<7){const idx=(todayDow-diff+7)%7;weekData[idx]+=h.totalVolume||0;}
+    if(diff>=7&&diff<14){const idx=(todayDow-diff+14)%7;prevWeekData[idx]+=h.totalVolume||0;}
   });
   const dayLabels=['L','M','M','J','V','S','D'];
 
-  // Last 30 days totals + comparaison à la période précédente (30-60j)
-  const last30=history.filter(h=>calDayDiff(new Date(h.date).getTime())<30);
-  const totalVol30=last30.reduce((s,h)=>s+(h.totalVolume||0),0);
-  const prevVol30=history.filter(h=>{const diff=calDayDiff(new Date(h.date).getTime());return diff>=30&&diff<60;}).reduce((s,h)=>s+(h.totalVolume||0),0);
-  const volDeltaPct=prevVol30>0?Math.round(((totalVol30-prevVol30)/prevVol30)*100):null;
+  // ── Volume période filtrée ─────────────────────────
+  const totalVol=filtered.reduce((s,h)=>s+(h.totalVolume||0),0);
+  const prevTotalVol=prevFiltered.reduce((s,h)=>s+(h.totalVolume||0),0);
+  const volDeltaPct=prevTotalVol>0?Math.round(((totalVol-prevTotalVol)/prevTotalVol)*100):null;
 
-  // Volume curve (last 30 days, daily)
-  const dailyVol=Array.from({length:30},()=>0);
-  history.forEach(h=>{
-    const diff=calDayDiff(new Date(h.date).getTime());
-    if(diff>=0&&diff<30) dailyVol[29-diff]+=h.totalVolume||0;
-  });
+  // Volume curve (daily, for the period — capped at 90 points for readability)
+  const curveDays=Math.min(period.days===Infinity?Math.max(30,calDayDiff(new Date(history[history.length-1]?.date||now).getTime())+1):period.days,90);
+  const dailyVol=React.useMemo(()=>{
+    const arr=Array.from({length:curveDays},()=>0);
+    history.forEach(h=>{const d=calDayDiff(new Date(h.date).getTime());if(d>=0&&d<curveDays)arr[curveDays-1-d]+=h.totalVolume||0;});
+    return arr;
+  },[history,curveDays]);
 
-  // Muscle distribution
+  // ── Fréquence d'entraînement ───────────────────────
+  const freqData=React.useMemo(()=>{
+    if(filtered.length<2)return null;
+    const dates=filtered.map(h=>new Date(h.date)).sort((a,b)=>a-b);
+    const firstDay=dayKeyOf(dates[0]);
+    const totalWeeks=Math.max(1,Math.round((todayKey-firstDay)/dayMs/7));
+    const avg=+(filtered.length/totalWeeks).toFixed(1);
+    // Sparkline : séances par semaine sur les 12 dernières semaines
+    const spark=Array.from({length:12},()=>0);
+    filtered.forEach(h=>{
+      const weeksAgo=Math.floor(calDayDiff(new Date(h.date).getTime())/7);
+      if(weeksAgo>=0&&weeksAgo<12)spark[11-weeksAgo]++;
+    });
+    return{avg,totalWeeks,spark};
+  },[filtered]);
+
+  // ── Muscle distribution (filtered) ─────────────────
   const muscleVol={};
-  history.forEach(h=>(h.exercises||[]).forEach(ex=>{
+  filtered.forEach(h=>(h.exercises||[]).forEach(ex=>{
     const m=ex.muscle||'Autre';
     const vol=(ex.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0);
     if(vol>0) muscleVol[m]=(muscleVol[m]||0)+vol;
   }));
   const muscleTotal=Object.values(muscleVol).reduce((a,b)=>a+b,0)||1;
-  const muscleArr=Object.entries(muscleVol).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const muscleArr=Object.entries(muscleVol).sort((a,b)=>b[1]-a[1]);
   const maxM=Math.max(1,...muscleArr.map(([_,v])=>v));
+  // Alerte de déséquilibre : un muscle > 35% ou < 5% du total (hors "Autre")
+  const muscleAlerts=React.useMemo(()=>{
+    const alerts=[];
+    const real=muscleArr.filter(([m])=>m!=='Autre');
+    real.forEach(([m,v])=>{
+      const pct=Math.round((v/muscleTotal)*100);
+      if(pct>35)alerts.push({muscle:m,pct,type:'over'});
+    });
+    // Check les groupes classiques absents ou très faibles
+    const knownGroups=['Dos','Dorsaux','Back','Jambes','Legs','Pectoraux','Chest','Épaules','Shoulders'];
+    const presentGroups=new Set(real.map(([m])=>m.toLowerCase()));
+    const hasMuscle=names=>names.some(n=>presentGroups.has(n.toLowerCase()));
+    if(!hasMuscle(['Dos','Dorsaux','Back'])&&real.length>=3)alerts.push({muscle:'Dos',pct:0,type:'missing'});
+    if(!hasMuscle(['Jambes','Legs','Quadriceps','Ischio'])&&real.length>=3)alerts.push({muscle:'Jambes',pct:0,type:'missing'});
+    return alerts;
+  },[muscleArr,muscleTotal]);
 
-  // Vue d'ensemble : série en cours, record, exercices suivis
+  // ── Vue d'ensemble : série en cours, record, exercices suivis
   const currentStreakWeeks=React.useMemo(()=>{
     if(!history.length)return 0;
     const weekKey=d=>{const dt=new Date(d);dt.setHours(0,0,0,0);const day=(dt.getDay()+6)%7;dt.setDate(dt.getDate()-day);return dt.toISOString().slice(0,10);};
@@ -3430,9 +3526,43 @@ function StatsScreen({history,profile,athleteId}){
   },[history]);
   const distinctExercisesCount=React.useMemo(()=>{
     const s=new Set();
-    history.forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(normExerciseName(e.name));}));
+    filtered.forEach(h=>(h.exercises||[]).forEach(e=>{if(e.name)s.add(normExerciseName(e.name));}));
     return s.size;
+  },[filtered]);
+
+  // ── PRs par exercice + 1RM estimé (Epley) ─────────
+  const exercisePRs=React.useMemo(()=>{
+    const byName={};
+    history.forEach(h=>(h.exercises||[]).forEach(ex=>{
+      if(!ex.name)return;
+      const key=normExerciseName(ex.name);
+      (ex.sets||[]).forEach(s=>{
+        const w=s.weight||0,r=s.reps||0;
+        if(w<=0)return;
+        // 1RM Epley : w × (1 + r/30) — pour r=1 c'est exactement le poids soulevé
+        const e1rm=r>0?Math.round(w*(1+r/30)):w;
+        if(!byName[key]||e1rm>byName[key].e1rm){
+          byName[key]={name:ex.name.trim(),weight:w,reps:r,e1rm,date:h.date,muscle:ex.muscle||''};
+        }
+      });
+    }));
+    return Object.values(byName).sort((a,b)=>b.e1rm-a.e1rm);
   },[history]);
+
+  // ── Calendrier heatmap data ────────────────────────
+  const sessionsByDay=React.useMemo(()=>{
+    const m={};
+    history.forEach(h=>{
+      const d=new Date(h.date);
+      const key=d.toISOString().slice(0,10);
+      if(!m[key])m[key]={count:0,volume:0,names:[]};
+      m[key].count++;
+      m[key].volume+=h.totalVolume||0;
+      m[key].names.push(h.name||'Séance');
+    });
+    return m;
+  },[history]);
+  const maxDayVol=React.useMemo(()=>Math.max(1,...Object.values(sessionsByDay).map(d=>d.volume)),[sessionsByDay]);
 
   if(history.length===0){
     return(
@@ -3454,94 +3584,297 @@ function StatsScreen({history,profile,athleteId}){
 
   return(
     <div style={{padding:'18px 18px 100px',color:T.text}}>
-      <div style={{marginBottom:16}}>
-        <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Progression</div>
-        <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}>Statistiques</div>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:14}}>
+        <div>
+          <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Progression</div>
+          <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}>Statistiques</div>
+        </div>
       </div>
 
-      {/* Vue d'ensemble : les 4 chiffres clés en un coup d'œil, avant tout graphique */}
+      {/* ── Filtre temporel global ── */}
+      <div style={{display:'flex',gap:6,marginBottom:18,overflowX:'auto',paddingBottom:2}}>
+        {PERIODS.map(p=>(
+          <button key={p.key} onClick={()=>setPeriodKey(p.key)} style={{
+            padding:'7px 14px',borderRadius:999,border:`1px solid ${p.key===periodKey?T.accent+'88':'rgba(255,255,255,0.10)'}`,
+            background:p.key===periodKey?T.accentSoft:'rgba(255,255,255,0.04)',
+            color:p.key===periodKey?T.accent:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,
+          }}>{p.label}</button>
+        ))}
+      </div>
+
+      {/* ── Résumé semaine en cours ── */}
+      <HoloCard padding={0} style={{marginBottom:16}}>
+        <div style={{padding:16}}>
+          <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:10}}>📊 Cette semaine</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+            <div>
+              <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.3}}><HoloText>{weekSummary.sessions}</HoloText></div>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>séance{weekSummary.sessions>1?'s':''}</div>
+              {weekSummary.prevSessions>0&&<div style={{fontSize:9,color:T.textDim,marginTop:2}}>vs {weekSummary.prevSessions} sem. dern.</div>}
+            </div>
+            <div>
+              <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.3}}><HoloText>{weekSummary.volume>0?Math.round(weekSummary.volume).toLocaleString('fr-FR'):'-'}</HoloText></div>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>kg volume</div>
+              {weekSummary.volDelta!==null&&(
+                <div style={{fontSize:9,fontWeight:700,color:weekSummary.volDelta>=0?T.good:T.danger,marginTop:2}}>
+                  {weekSummary.volDelta>=0?'↑':'↓'} {Math.abs(weekSummary.volDelta)}%
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.3}}><HoloText>{weekSummary.duration>0?weekSummary.duration:'-'}</HoloText></div>
+              <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>min durée</div>
+            </div>
+          </div>
+        </div>
+      </HoloCard>
+
+      {/* ── 4 StatTiles ── */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
         <StatTile icon="flame" iconColor="#C89040" value={currentStreakWeeks} unit={currentStreakWeeks>1?'sem.':'sem'} label="Série en cours"/>
-        <StatTile icon="dumbbell" iconColor="#5A8AE0" value={history.length} label="Séances au total"/>
+        <StatTile icon="dumbbell" iconColor="#5A8AE0" value={filtered.length} label={`Séances (${period.label})`}/>
         <StatTile icon="target" iconColor="#B85070" value={heaviestLift?heaviestLift.weight:'-'} unit={heaviestLift?'kg':''} label="Record de charge" sub={heaviestLift?.name}/>
         <StatTile icon="chart" iconColor="#2CC4A0" value={distinctExercisesCount} label="Exercices suivis"/>
       </div>
 
-      {history.length>0&&(
+      {/* ── Fréquence d'entraînement ── */}
+      {freqData&&(
+        <>
+          <SectionHeader title="Fréquence d'entraînement" icon="trending" iconColor="#2CC4A0"/>
+          <GlassCard padding={14} style={{marginBottom:18}}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div>
+                <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                  <span style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,color:T.text}}>{freqData.avg}</span>
+                  <span style={{fontSize:12,color:T.textDim,fontWeight:500}}>séances / sem</span>
+                </div>
+                <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>sur {freqData.totalWeeks} semaine{freqData.totalWeeks>1?'s':''}</div>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <FreqSparkline data={freqData.spark}/>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:T.textFaint,fontWeight:600,marginTop:4}}>
+                  <span>il y a 12 sem</span><span>cette sem</span>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        </>
+      )}
+
+      {/* ── Volume (période filtrée) ── */}
+      {filtered.length>0&&(
         <HoloCard padding={0} style={{marginBottom:16}}>
           <div style={{padding:18}}>
             <div style={{display:'flex',alignItems:'center',gap:6}}>
               <Icon name="trending" size={13} stroke={T.textDim}/>
-              <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Volume · 30 derniers jours</div>
+              <div style={{fontSize:11,color:T.textDim,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase'}}>Volume · {period.label}</div>
             </div>
             <div style={{display:'flex',alignItems:'baseline',gap:6,marginTop:4,flexWrap:'wrap'}}>
-              <span style={{fontSize:32,fontWeight:700,letterSpacing:-0.6,lineHeight:1}}><HoloText>{Math.round(totalVol30).toLocaleString('fr-FR')}</HoloText></span>
+              <span style={{fontSize:32,fontWeight:700,letterSpacing:-0.6,lineHeight:1}}><HoloText>{Math.round(totalVol).toLocaleString('fr-FR')}</HoloText></span>
               <span style={{fontSize:14,color:T.textDim,fontWeight:500}}>kg</span>
               {volDeltaPct!==null&&(
                 <span style={{fontSize:11,fontWeight:700,color:volDeltaPct>=0?T.good:T.danger,padding:'2px 7px',borderRadius:999,background:volDeltaPct>=0?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)'}}>
                   {volDeltaPct>=0?'↑':'↓'} {Math.abs(volDeltaPct)}%
                 </span>
               )}
-              <span style={{marginLeft:'auto',fontSize:12,color:T.textDim,fontWeight:600}}>{last30.length} séance{last30.length>1?'s':''}</span>
+              <span style={{marginLeft:'auto',fontSize:12,color:T.textDim,fontWeight:600}}>{filtered.length} séance{filtered.length>1?'s':''}</span>
             </div>
-            {volDeltaPct!==null&&<div style={{fontSize:10,color:T.textFaint,marginTop:2}}>vs {Math.round(prevVol30).toLocaleString('fr-FR')} kg les 30j précédents</div>}
+            {volDeltaPct!==null&&<div style={{fontSize:10,color:T.textFaint,marginTop:2}}>vs {Math.round(prevTotalVol).toLocaleString('fr-FR')} kg la période précédente</div>}
             <VolumeAreaChart data={dailyVol}/>
           </div>
         </HoloCard>
       )}
 
-      {history.length>0&&(
+      {/* ── Volume 7j avec comparaison semaine précédente ── */}
+      {filtered.length>0&&(
         <>
           <SectionHeader title="Volume · 7 derniers jours" icon="chart" iconColor="#5A8AE0"/>
           <GlassCard padding={16} style={{marginBottom:18}}>
-            <WeeklyBars data={weekData} labels={dayLabels}/>
+            <WeeklyBars data={weekData} prevData={prevWeekData} labels={dayLabels}/>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginTop:10,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                <div style={{width:10,height:4,borderRadius:2,background:HOLO.irisHorizon,backgroundSize:'200% 100%'}}/>
+                <span style={{fontSize:10,color:T.textFaint}}>Cette semaine</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                <div style={{width:10,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)'}}/>
+                <span style={{fontSize:10,color:T.textFaint}}>Semaine précédente</span>
+              </div>
+            </div>
           </GlassCard>
         </>
       )}
 
-
+      {/* ── Répartition musculaire + alertes déséquilibre ── */}
       {muscleArr.length>0&&(
         <>
           <SectionHeader title="Répartition musculaire" icon="dumbbell" iconColor="#B85070"/>
           <GlassCard padding={16} style={{marginBottom:18}}>
+            {muscleAlerts.length>0&&(
+              <div style={{marginBottom:14}}>
+                {muscleAlerts.map((a,i)=>(
+                  <div key={i} style={{padding:'8px 11px',borderRadius:10,background:a.type==='over'?'rgba(200,144,64,0.08)':'rgba(184,80,112,0.08)',border:`1px solid ${a.type==='over'?'rgba(200,144,64,0.25)':'rgba(184,80,112,0.25)'}`,marginBottom:6,fontSize:11,fontWeight:600,color:a.type==='over'?T.warn:T.danger}}>
+                    {a.type==='over'?`⚠️ ${a.muscle} = ${a.pct}% du volume — possible déséquilibre`:`⚠️ ${a.muscle} absent de l'entraînement`}
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              {muscleArr.map(([m,v])=>(
+              {muscleArr.map(([m,v])=>{
+                const pct=Math.round((v/muscleTotal)*100);
+                return(
                 <div key={m}>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12,fontWeight:500}}>
                     <span style={{color:T.text}}>{m}</span>
                     <span style={{display:'flex',alignItems:'baseline',gap:5}}>
-                      <span style={{color:T.textFaint,fontSize:10,fontWeight:600}}>{Math.round((v/muscleTotal)*100)}%</span>
+                      <span style={{color:pct>35?T.warn:pct<5?T.danger:T.textFaint,fontSize:10,fontWeight:700}}>{pct}%</span>
                       <span style={{color:T.textDim,fontWeight:600}}>{Math.round(v).toLocaleString('fr-FR')} kg</span>
                     </span>
                   </div>
                   <div style={{height:6,background:'rgba(255,255,255,0.05)',borderRadius:3,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${(v/maxM)*100}%`,background:HOLO.irisHorizon,backgroundSize:'200% 100%',animation:'holoText 8s linear infinite',borderRadius:3}}/>
+                    <div style={{height:'100%',width:`${(v/maxM)*100}%`,background:pct>35?'linear-gradient(90deg,#C89040,#B85070)':HOLO.irisHorizon,backgroundSize:'200% 100%',animation:'holoText 8s linear infinite',borderRadius:3}}/>
+                  </div>
+                </div>
+              );})}
+            </div>
+          </GlassCard>
+        </>
+      )}
+
+      {/* ── PRs par exercice + 1RM ── */}
+      {exercisePRs.length>0&&(
+        <>
+          <SectionHeader title="Records personnels (PR)" icon="target" iconColor="#C89040"/>
+          <GlassCard padding={0} style={{marginBottom:18}}>
+            <div style={{display:'flex',flexDirection:'column'}}>
+              {exercisePRs.slice(0,10).map((pr,i)=>(
+                <div key={pr.name} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:i<Math.min(exercisePRs.length,10)-1?`1px solid ${T.border}`:'none'}}>
+                  <div style={{width:26,height:26,borderRadius:8,background:i<3?'rgba(191,160,96,0.15)':'rgba(255,255,255,0.04)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <span style={{fontSize:11,fontWeight:800,color:i===0?T.accent:i<3?T.accentBright:T.textFaint}}>{i+1}</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pr.name}</div>
+                    <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{pr.muscle?pr.muscle+' · ':''}{new Date(pr.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:14,fontWeight:800,color:T.text}}>{pr.weight}<span style={{fontSize:10,color:T.textDim,fontWeight:600}}> kg</span></div>
+                    <div style={{fontSize:10,color:T.textDim,marginTop:1}}>{pr.reps} rep{pr.reps>1?'s':''} · <span style={{color:T.accent,fontWeight:700}}>1RM ≈ {pr.e1rm} kg</span></div>
                   </div>
                 </div>
               ))}
             </div>
+            {exercisePRs.length>10&&(
+              <div style={{padding:'8px 14px',fontSize:11,color:T.textFaint,textAlign:'center',borderTop:`1px solid ${T.border}`}}>
+                + {exercisePRs.length-10} autre{exercisePRs.length-10>1?'s':''}
+              </div>
+            )}
           </GlassCard>
         </>
       )}
 
       <ExerciseProgressChart history={history}/>
       <WeightChartSection athleteId={athleteId}/>
-      <CalendarView history={history}/>
+
+      {/* ── Calendrier Heatmap ── */}
+      <CalendarHeatmap history={history} sessionsByDay={sessionsByDay} maxDayVol={maxDayVol}/>
     </div>
   );
 }
 
-function WeeklyBars({data,labels}){
+// ── Sparkline pour la fréquence ──
+function FreqSparkline({data}){
   const max=Math.max(1,...data);
+  const w=120,h=32;
+  const pts=data.map((v,i)=>{
+    const x=(i/(data.length-1))*w;
+    const y=h-2-(v/max)*(h-4);
+    return`${x},${y}`;
+  });
+  return(
+    <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%',height:h,display:'block'}}>
+      <defs>
+        <linearGradient id="freqGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2CC4A0" stopOpacity="0.3"/>
+          <stop offset="100%" stopColor="#2CC4A0" stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={`M ${pts.join(' L ')} L ${w},${h} L 0,${h} Z`} fill="url(#freqGrad)"/>
+      <polyline points={pts.join(' ')} fill="none" stroke="#2CC4A0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={w} cy={h-2-(data[data.length-1]/max)*(h-4)} r="2.5" fill="#2CC4A0"/>
+    </svg>
+  );
+}
+
+// ── Calendrier Heatmap (remplace CalendarView dans StatsScreen) ──
+function CalendarHeatmap({history,sessionsByDay,maxDayVol}){
+  const now=new Date();
+  const[year,setYear]=React.useState(now.getFullYear());
+  const[month,setMonth]=React.useState(now.getMonth());
+  const prev=()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);};
+  const next=()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);};
+  const todayDay=now.getFullYear()===year&&now.getMonth()===month?now.getDate():null;
+
+  // Intensité de couleur basée sur le volume
+  const heatColor=(vol)=>{
+    if(!vol||vol<=0)return null;
+    const intensity=Math.min(1,vol/maxDayVol);
+    if(intensity<0.25)return{bg:'rgba(191,160,96,0.12)',border:'rgba(191,160,96,0.20)',text:T.accent};
+    if(intensity<0.5)return{bg:'rgba(191,160,96,0.22)',border:'rgba(191,160,96,0.35)',text:T.accent};
+    if(intensity<0.75)return{bg:'rgba(191,160,96,0.35)',border:'rgba(191,160,96,0.50)',text:T.accentBright};
+    return{bg:'rgba(191,160,96,0.50)',border:'rgba(191,160,96,0.65)',text:T.accentBright};
+  };
+
+  return(
+    <div style={{marginBottom:18}}>
+      <SectionHeader title="Calendrier" icon="clock" iconColor="#5A8AE0"/>
+      <GlassCard padding={12}>
+        <MonthCalendar year={year} month={month} onPrevMonth={prev} onNextMonth={next} gap={3}
+          getDayInfo={(dateStr,d)=>{
+            const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const dayData=sessionsByDay[key];
+            const hasSession=!!dayData;
+            const isToday=d===todayDay;
+            const heat=hasSession?heatColor(dayData.volume):null;
+            return{
+              selectable:false,
+              dots:hasSession&&dayData.count>1?[T.accent,'#5A8AE0']:[],
+              bg:heat?heat.bg:isToday?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.025)',
+              border:isToday?`1px solid ${T.accent}`:heat?`1px solid ${heat.border}`:'1px solid transparent',
+              textColor:heat?heat.text:isToday?T.text:T.textDim,
+              title:hasSession?`${dayData.names.join(', ')} — ${Math.round(dayData.volume).toLocaleString('fr-FR')} kg`:'',
+            };
+          }}/>
+        {/* Légende heatmap */}
+        <div style={{display:'flex',alignItems:'center',gap:10,marginTop:10,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+          <span style={{fontSize:10,color:T.textFaint}}>Intensité :</span>
+          <div style={{display:'flex',gap:3}}>
+            {[0.12,0.22,0.35,0.50].map((op,i)=>(
+              <div key={i} style={{width:14,height:14,borderRadius:3,background:`rgba(191,160,96,${op})`}}/>
+            ))}
+          </div>
+          <span style={{fontSize:10,color:T.textFaint,marginLeft:'auto'}}>●● = 2+ séances</span>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+function WeeklyBars({data,prevData,labels}){
+  const max=Math.max(1,...data,...(prevData||[]));
   return(
     <div style={{display:'flex',alignItems:'flex-end',gap:8,height:132}}>
       {data.map((v,i)=>{
+        const pv=(prevData||[])[i]||0;
         const h=v===0?4:Math.max(8,(v/max)*100);
+        const ph=pv===0?0:Math.max(4,(pv/max)*100);
         return(
           <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%'}}>
             <div style={{fontSize:9,color:T.textDim,fontWeight:700,height:12,lineHeight:'12px',fontVariantNumeric:'tabular-nums'}}>{v>0?Math.round(v):''}</div>
-            <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end'}}>
-              <div style={{width:'100%',height:`${h}%`,background:v===0?'rgba(255,255,255,0.06)':HOLO.irisHorizon,backgroundSize:'200% 100%',animation:v===0?'none':'holoText 6s linear infinite',borderRadius:6,transition:'height 0.3s'}}/>
+            <div style={{flex:1,width:'100%',display:'flex',alignItems:'flex-end',gap:2}}>
+              {/* Barre semaine précédente (fantôme) */}
+              {prevData&&<div style={{width:'40%',height:`${ph}%`,background:'rgba(255,255,255,0.08)',borderRadius:4,transition:'height 0.3s'}}/>}
+              {/* Barre semaine courante */}
+              <div style={{width:prevData?'60%':'100%',height:`${h}%`,background:v===0?'rgba(255,255,255,0.06)':HOLO.irisHorizon,backgroundSize:'200% 100%',animation:v===0?'none':'holoText 6s linear infinite',borderRadius:6,transition:'height 0.3s'}}/>
             </div>
             <div style={{fontSize:10,color:T.textFaint,fontWeight:600}}>{labels[i]}</div>
           </div>
@@ -3574,7 +3907,7 @@ function VolumeAreaChart({data}){
         <path d={d} fill="none" stroke="url(#vgLine)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px rgba(191,160,96,0.5))'}}/>
       </svg>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
-        <span>il y a 30j</span><span>aujourd'hui</span>
+        <span>il y a {data.length}j</span><span>aujourd'hui</span>
       </div>
     </div>
   );
@@ -4257,19 +4590,52 @@ const VOLUME_DOWN_MILD_MESSAGES=[
   (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Fais plus d'effort la prochaine séance.`,
   (name,kg)=>`Séance en retrait par rapport à la dernière (-${kg}kg), ${name}. Il va falloir hausser le niveau.`,
 ];
-// Baisse significative (≥15%) : franc, sans détour.
+// Baisse significative (≥15%) : dur, sans détour, on recadre.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
-  (name,kg)=>`${name}, tu as été moins bon que la dernière fois (-${kg}kg). Si tu continues comme ça, tu n'atteindras pas tes objectifs.`,
-  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name} — c'est en dessous de ce dont tu es capable. Reprends-toi dès la prochaine séance.`,
-  (name,kg)=>`${name}, grosse baisse par rapport à la dernière fois (-${kg}kg). Fais plus d'effort, sinon tu stagneras.`,
+  (name,kg)=>`${name}, -${kg}kg par rapport à la dernière fois. C'est une régression, pas un accident. Continue comme ça et tu n'atteindras jamais tes objectifs.`,
+  (name,kg)=>`${kg}kg de MOINS qu'à ta dernière séance, ${name}. Très loin de ce dont t'es capable. La prochaine, tu te reprends — pas de demi-mesure.`,
+  (name,kg)=>`Grosse baisse, ${name} (-${kg}kg). Une séance comme ça, ça efface des semaines de progrès. Remets-toi en question, maintenant.`,
 ];
 const VOLUME_SAME_MESSAGES=[
   name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
   name=>`${name}, même charge totale qu'à ta dernière séance. Reste sur ce rythme !`,
 ];
 
-function congratsMessage(name,volumeVsPrev){
-  if(volumeVsPrev){
+function congratsMessage(name,volumeVsPrev,comp,opts){
+  const {sessionName='',hasVolume=true}=opts||{};
+  const sn=sessionName||'séance';
+  // Si on a une comparaison complète, message basé sur la vraie performance
+  if(comp&&comp.totalExercises>0){
+    const {prsCount,upCount,downCount,totalExercises}=comp;
+    const upRatio=upCount/totalExercises;
+    const downRatio=downCount/totalExercises;
+    // Nouveau PR → féliciter fort
+    if(prsCount>=2)return `${name}, ${prsCount} nouveaux records personnels en une séance. T'es en feu, continue comme ça.`;
+    if(prsCount===1){
+      const prEx=comp.exercises.find(e=>e.isPR);
+      return `Nouveau PR sur ${prEx?prEx.name:'un exercice'}, ${name}. ${prEx?`${prEx.curMaxW}kg — c'est au-dessus de tout ce que t'as fait avant.`:'Respect.'}`;
+    }
+    // Majorité en hausse → booster
+    if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
+    if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
+    // Majorité en baisse → recadrage dur, on ne laisse rien passer
+    if(downRatio>=0.7)return `${name}, ${downCount} exercices sur ${totalExercises} en BAISSE. Là c'est un recul, pas un entraînement. Reprends-toi sérieusement, sinon tu régresses — point.`;
+    if(downRatio>=0.5)return `La moitié de tes exos en recul, ${name}. À ton niveau c'est inacceptable. La prochaine séance, tu remets les compteurs à l'endroit, pas de négociation.`;
+    // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
+    if(upCount===0&&downCount===0){
+      return hasVolume
+        ? `Même niveau qu'à ta dernière "${sn}", ${name}. Stable c'est déjà tenir — maintenant viens chercher plus.`
+        : `Séance "${sn}" bouclée, ${name}. Pas de charge à battre ici, mais la régularité sur ce travail-là, c'est ça qui paie.`;
+    }
+    // Mix avec régression au moins équivalente aux hausses → on pointe la baisse fermement
+    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Le compte n'y est pas. Regarde ce qui a chuté et corrige-le — pas d'excuse.`;
+    // Mix net positif mais avec des baisses → féliciter ET rappeler à l'ordre sur les reculs
+    if(downCount>0)return `${upCount} en hausse mais ${downCount} en baisse, ${name}. Laisse rien filer : sur ${downCount>1?'ces exos-là':'cet exo-là'}, tu dois revenir plus fort la prochaine fois.`;
+    // Que des hausses partielles
+    return `${upCount} exo${upCount>1?'s':''} en hausse, ${name}. Continue de pousser, mais va chercher les autres aussi.`;
+  }
+  // Fallback volume simple — uniquement pour les séances avec charge (sinon message générique)
+  if(volumeVsPrev&&hasVolume){
     const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
     if(delta>0){const list=VOLUME_UP_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,delta);}
     if(delta<0){
@@ -4280,7 +4646,124 @@ function congratsMessage(name,volumeVsPrev){
     }
     const list=VOLUME_SAME_MESSAGES;return list[Math.floor(Math.random()*list.length)](name);
   }
+  // Première séance de ce nom — message générique
   return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
+}
+
+// Phrase de motivation / développement personnel en fin de récap
+// Adaptée au niveau de performance réel — féliciter, booster, ou piquer
+const MOTIVATION_ELITE=[
+  "Les gens ordinaires rêvent de résultats. Les athlètes construisent des habitudes. T'es dans la deuxième catégorie.",
+  "Le talent te donne un point de départ. La discipline décide de la destination.",
+  "Chaque PR que tu poses aujourd'hui, c'est le warm-up de la version de toi dans 6 mois.",
+  "Tu progresses pas parce que c'est facile. Tu progresses parce que t'as décidé que c'était non-négociable.",
+  "Le physique, c'est un effet secondaire. Ce que tu construis vraiment, c'est un mental en acier.",
+];
+const MOTIVATION_GOOD=[
+  "La progression se cache dans la régularité. T'es sur la bonne voie, continue de te pointer.",
+  "Tu fais ce que la majorité des gens reporte à demain. Ça compte plus que tu crois.",
+  "Le progrès, c'est pas linéaire. Les séances comme celle-là, c'est celles qui construisent le socle.",
+  "T'es pas là pour être parfait. T'es là pour être meilleur qu'hier. Et c'est le cas.",
+  "La différence entre toi et quelqu'un qui stagne ? Toi, tu te pointes même quand c'est dur.",
+];
+const MOTIVATION_PIQUE=[
+  "T'as le potentiel, c'est un fait. Mais le potentiel sans l'intensité, ça reste une promesse. La prochaine séance, prouve-le.",
+  "Les chiffres mentent pas. Si t'es honnête avec toi-même, tu sais que t'avais plus à donner aujourd'hui.",
+  "Une mauvaise séance, c'est un test. La vraie question : tu vas répondre quoi la prochaine fois ?",
+  "Le confort, c'est l'ennemi du progrès. Si c'était facile, tout le monde serait affûté. Remets-toi en question.",
+];
+// Régression franche → ton dur, rappel à l'ordre sans complaisance
+const MOTIVATION_HARD=[
+  "Là c'est un recul, pas une séance. Personne va t'attendre : soit tu te reprends, soit tu régresses. À toi de choisir.",
+  "Tes chiffres ont baissé. Pas de filtre, pas d'excuse : c'est le résultat de tes choix cette semaine. Change-les.",
+  "Une séance en dessous, ça arrive. Deux, c'est une tendance. Trois, c'est ton nouveau niveau. Coupe ça maintenant.",
+  "T'es pas venu ici pour reculer. Cette séance, tu la ranges dans la case 'plus jamais' et tu reviens affamé.",
+  "Le corps oublie vite le confort mais retient chaque abandon. Fais en sorte que la prochaine efface celle-là.",
+];
+const MOTIVATION_NEUTRAL=[
+  "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
+  "Ton corps s'adapte. Si tu lui donnes toujours le même stimulus, il te donnera toujours le même résultat.",
+  "Rester stable, c'est bien. Mais toi, t'es pas venu ici pour rester au même niveau, si ?",
+  "Le plateau, c'est un message : il est temps de changer quelque chose. Une charge, un tempo, un exo.",
+];
+const MOTIVATION_FIRST=[
+  "Première brique posée. À partir de maintenant, chaque séance écrit l'histoire. Fais-en une bonne.",
+  "Y'a pas de comparaison encore, mais y'a un point de départ. Et la seule direction qui compte, c'est vers le haut.",
+  "Le plus dur c'est de commencer. C'est fait. Maintenant, la seule règle : revenir.",
+];
+function motivationQuote(comp,volumeVsPrev){
+  const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+  if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
+  if(comp&&comp.totalExercises>0){
+    const {prsCount,upCount,downCount,totalExercises}=comp;
+    const upRatio=upCount/totalExercises;
+    const downRatio=downCount/totalExercises;
+    // La régression prime : on la signale AVANT de féliciter quoi que ce soit.
+    if(downRatio>=0.6)return pick(MOTIVATION_HARD);        // majorité en baisse → dur
+    if(prsCount>=2||upRatio>=0.7)return pick(MOTIVATION_ELITE);
+    if(downRatio>=0.4||(downCount>upCount&&downCount>0))return pick(MOTIVATION_PIQUE); // baisse marquée → piquer
+    if(prsCount>=1||upRatio>=0.5)return pick(MOTIVATION_GOOD);
+    if(upCount===0&&downCount===0)return pick(MOTIVATION_NEUTRAL);
+    if(downCount>0)return pick(MOTIVATION_PIQUE);          // au moindre recul, on ne félicite pas
+    return pick(MOTIVATION_GOOD);
+  }
+  if(volumeVsPrev){
+    const delta=volumeVsPrev.current-volumeVsPrev.previous;
+    const pctDown=volumeVsPrev.previous>0?(volumeVsPrev.previous-volumeVsPrev.current)/volumeVsPrev.previous:0;
+    if(delta>0)return pick(MOTIVATION_GOOD);
+    if(delta<0)return pick(pctDown>=0.15?MOTIVATION_HARD:MOTIVATION_PIQUE);
+    return pick(MOTIVATION_NEUTRAL);
+  }
+  return pick(MOTIVATION_FIRST);
+}
+
+// Volume total (kg) d'une séance : utilise totalVolume si présent, sinon recalcule depuis les séries.
+function sessionVolumeOf(sess){
+  if(sess&&typeof sess.totalVolume==='number')return sess.totalVolume;
+  return (sess?.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
+}
+// Construit la comparaison complète d'une séance vs la dernière séance du MÊME nom qui la précède.
+// Réutilisé par saveSession (fin de séance) ET par le récap ouvert au clic sur le calendrier.
+// `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
+function buildSessionComparison(target,history){
+  if(!target)return{comp:null,volumeVsPrev:null};
+  const tName=target.name;
+  const tTime=new Date(target.date||0).getTime();
+  // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
+  // elle-même (par id, ou par référence si pas d'id).
+  const prev=(history||[])
+    .filter(s=>s&&s!==target&&tName&&s.name===tName&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
+    .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime())[0]||null;
+  const curVolTotal=sessionVolumeOf(target);
+  const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
+  if(!prev||!target.exercises)return{comp:null,volumeVsPrev};
+  const comp={prevDate:prev.date,exercises:[]};
+  const prevExMap={};
+  (prev.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
+  let prsCount=0,upCount=0,downCount=0,sameCount=0;
+  target.exercises.forEach(ex=>{
+    if(!ex.name)return;
+    const p=prevExMap[normExerciseName(ex.name)];
+    const curSets=(ex.sets||[]).filter(s=>s.done!==false);
+    const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
+    const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+    const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
+    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
+    const pSets=p.sets||[];
+    const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
+    const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
+    const prevTotalReps=pSets.reduce((a,s)=>a+(s.reps||0),0);
+    const wDelta=curMaxW-prevMaxW;
+    const vDelta=curVol-prevVol;
+    const isPR=curMaxW>0&&wDelta>0;
+    if(isPR)prsCount++;
+    const status=vDelta>0?'up':vDelta<0?'down':'same';
+    if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
+    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps});
+  });
+  comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
+  comp.totalExercises=comp.exercises.length;
+  return{comp,volumeVsPrev};
 }
 
 function MotivationMarquee(){
@@ -4571,6 +5054,17 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[viewArchive,setViewArchive]=React.useState(null);
   const[confirmDel,setConfirmDel]=React.useState(null);
   const[viewHistSession,setViewHistSession]=React.useState(null);
+  // Récap de progression de la séance consultée (vs la dernière séance du même nom) — même helper
+  // partagé que la fin de séance et le récap coach, pour que l'athlète retrouve sa comparaison
+  // en rouvrant une séance passée depuis son calendrier.
+  const histRecap=React.useMemo(()=>{
+    if(!viewHistSession)return null;
+    const{comp,volumeVsPrev}=buildSessionComparison(viewHistSession,history||[]);
+    const hasVolume=sessionVolumeOf(viewHistSession)>0;
+    const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+    const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
+    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression};
+  },[viewHistSession,history]);
   // Édition d'une séance déjà validée (ex: ajouter une série oubliée, corriger un poids après
   // coup) — editHistExercises est un brouillon local (copie profonde) modifié librement, envoyé
   // au serveur seulement au clic "Enregistrer" ; annuler ou fermer le panneau l'abandonne sans
@@ -4990,6 +5484,93 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   })}
                 </div>
               ):(<>
+              {/* ── RÉCAP DE PROGRESSION (vs la dernière séance du même nom) ── */}
+              {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
+                <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
+                  <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume})}</div>
+                  {histRecap.isRegression&&(
+                    <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
+                      <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{histRecap.comp&&histRecap.comp.downCount>0?` — ${histRecap.comp.downCount} exercice${histRecap.comp.downCount>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.</div>
+                    </div>
+                  )}
+                  {histRecap.showVolCompare&&(()=>{
+                    const vp=histRecap.volumeVsPrev,delta=Math.round(vp.current-vp.previous);
+                    const pct=vp.previous>0?Math.round(Math.abs(delta)/vp.previous*100):0,up=delta>0;
+                    return(
+                      <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:histRecap.comp?12:0}}>
+                        <div style={{flex:1}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(vp.previous).toLocaleString('fr-FR')} kg</span></div>
+                          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(vp.current).toLocaleString('fr-FR')} kg</span></div>
+                        </div>
+                        <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                          <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                          <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {histRecap.comp&&histRecap.comp.exercises.length>0&&(
+                    <div style={{marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                        <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Détail par exercice</div>
+                        {histRecap.comp.prsCount>0&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'2px 8px',borderRadius:999,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.3)'}}>{histRecap.comp.prsCount} PR{histRecap.comp.prsCount>1?'s':''}</span>}
+                      </div>
+                      <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
+                        {histRecap.comp.exercises.map((ex,i)=>{
+                          const isNew=ex.status==='new',up=ex.status==='up',down=ex.status==='down';
+                          const sc=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                          const si=isNew?'🆕':up?'↑':down?'↓':'=';
+                          const vd=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
+                          return(
+                            <div key={i} style={{padding:'9px 12px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<histRecap.comp.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{fontSize:14,width:20,textAlign:'center',flexShrink:0}}>{si}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                    <span style={{fontSize:12.5,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
+                                    {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
+                                  </div>
+                                  <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                                    {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
+                                    {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                                    {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                    {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                  </div>
+                                </div>
+                                <div style={{textAlign:'right',flexShrink:0}}>
+                                  {vd&&<div style={{fontSize:10.5,fontWeight:700,color:sc}}>{vd}</div>}
+                                  {ex.curVol>0&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {histRecap.comp&&histRecap.comp.totalExercises>0&&(
+                    <div style={{display:'flex',gap:8}}>
+                      {[{count:histRecap.comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:histRecap.comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:histRecap.comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:histRecap.comp.prsCount,label:'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                        <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
+                          <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                          <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev)}"</div>
+                  </div>
+                </div>
+              )}
+              {histRecap&&!histRecap.comp&&!histRecap.showVolCompare&&viewHistSession.name&&(
+                <div style={{marginBottom:18,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',textAlign:'center'}}>
+                  <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>Première séance <b style={{color:T.text}}>"{viewHistSession.name}"</b> — pas encore de comparaison. Ton récap de progression apparaîtra à la prochaine séance du même nom.</div>
+                </div>
+              )}
               {(viewHistSession.exercises||[]).length===0&&(
                 <div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:32}}>Détails non disponibles</div>
               )}
@@ -5071,6 +5652,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             })}
                             {!(ex.sets&&ex.sets.length)&&<div style={{fontSize:11,color:T.textFaint,textAlign:'center',padding:'8px 0'}}>Aucune série</div>}
                           </>
+                        )}
+                        {exType(ex)!=='cardio'&&exRestSeconds(ex)>0&&(
+                          <div style={{marginTop:8,fontSize:11,color:T.textFaint,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>⏳ Repos : {fmtRestLabel(exRestSeconds(ex))}</div>
                         )}
                       </div>
                     </div>
@@ -7625,6 +8209,8 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[moveErr,setMoveErr]=React.useState(null);
   const[planSession,setPlanSession]=React.useState(null); // séance en cours de copie/planification
   const[viewSession,setViewSession]=React.useState(null); // séance en cours de consultation (détail exercices)
+  const[viewSessionTab,setViewSessionTab]=React.useState('recap'); // onglet initial du modal (recap/body)
+  const openSessionModal=(sess,tabKey)=>{setViewSessionTab(tabKey||'recap');setViewSession(sess);};
   const movePickerRef=React.useRef(null);
   React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
@@ -7719,7 +8305,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
       {/* Legend */}
@@ -7792,14 +8378,16 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
                 </div>
                 {sess?(
-                  <div onClick={()=>setViewSession(sess)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:34,height:34,borderRadius:10,background:'rgba(44,196,160,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check" size={16} stroke={T.good}/></div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>✓ {sess.name||effectiveDayName}{(sess.muscles||progData?.category)?' · '+(sess.muscles||progData?.category):''}</div>
-                      <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')} kg · {(sess.exercises||[]).length} exercice{(sess.exercises||[]).length>1?'s':''}</div>
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0,padding:'4px 8px',borderRadius:7,background:'rgba(44,196,160,0.12)'}}>
-                      <span style={{fontSize:10,fontWeight:700,color:T.good}}>Voir</span>
-                      <Icon name="chevronRight" size={11} stroke={T.good}/>
+                      <div style={{fontSize:13.5,fontWeight:800,color:'#2CC4A0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sess.name||effectiveDayName}</div>
+                      <div style={{fontSize:10.5,color:T.textFaint,marginTop:2,display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+                        <span><b style={{color:T.textDim,fontWeight:700}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')}</b> kg</span>
+                        <span>· {(sess.exercises||[]).length} exo{(sess.exercises||[]).length>1?'s':''}</span>
+                        {sess.duration>0&&<span>· {sess.duration} min</span>}
+                        {(sess.muscles||progData?.category)&&<span style={{color:T.textFaint}}>· {sess.muscles||progData?.category}</span>}
+                      </div>
                     </div>
                   </div>
                 ):hasProg&&progData?(
@@ -7829,17 +8417,17 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 ):(
                   <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Jour de repos</div>
                 )}
+                {/* Actions pro sur une séance faite : Voir (corps) · Recap (rapport) · Copier · Suppr. */}
+                {sess&&(
+                  <div style={{display:'flex',gap:6,marginTop:10}}>
+                    <button onClick={()=>openSessionModal(sess,'body')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>👀 Voir</button>
+                    <button onClick={()=>openSessionModal(sess,'recap')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📊 Recap</button>
+                    {editable&&<button onClick={()=>setPlanSession(sess)} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📋 Copier</button>}
+                    {editable&&onDeleteSession&&<button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="trash" size={14} stroke={T.danger}/></button>}
+                  </div>
+                )}
                 {editable&&(
-                  sess?(
-                    <div style={{display:'flex',gap:6,marginTop:8}}>
-                      <button onClick={()=>setPlanSession(sess)} style={{flex:1,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📋 Copier cette séance</button>
-                      {onDeleteSession&&(
-                        <button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                          <Icon name="trash" size={13} stroke={T.danger}/>
-                        </button>
-                      )}
-                    </div>
-                  ):movedHere?(
+                  sess?null:movedHere?(
                     <button onClick={()=>cancelMove(sel)} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:'#B85070',fontSize:11,fontWeight:700,cursor:'pointer'}}>↩ Annuler le déplacement</button>
                   ):hasProg?(
                     <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} style={{marginTop:8,height:30,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:11,fontWeight:700,cursor:'pointer'}}>📅 Déplacer cette séance</button>
@@ -8136,22 +8724,32 @@ function CoachPlanSessionModal({athleteId,athleteName,sourceSession,onClose,onDo
   );
 }
 
-function CoachProgramMirror({athleteData,athleteId,athleteName,onSessionSent}){
+function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSessionSent}){
   const programData=athleteData&&athleteData.program&&athleteData.program.data||{};
   const sheetNames=Object.keys(programData);
   const[activeSheet,setActiveSheet]=React.useState(sheetNames[sheetNames.length-1]||null);
-  const[importDay,setImportDay]=React.useState(null); // {dayName, dayData}
+  const[importDay,setImportDay]=React.useState(null);       // {dayName, dayData} — Importer
+  const[viewDay,setViewDay]=React.useState(null);           // {dayName, dayData} — Voir (séance prévue)
+  const[recapSession,setRecapSession]=React.useState(null); // séance réalisée — Récap
+  const[editSession,setEditSession]=React.useState(null);   // séance réalisée — Modifier
   if(sheetNames.length===0)return null;
   const sheet=activeSheet||sheetNames[sheetNames.length-1];
   const days=programData[sheet]||{};
   const DAY_ORDER=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const sortedDays=Object.keys(days).sort((a,b)=>DAY_ORDER.indexOf(a)-DAY_ORDER.indexOf(b));
+  const hist=history||[];
+  // Dernière séance réellement réalisée portant le nom de ce jour → cible de Récap et Modifier.
+  const lastDoneFor=name=>{
+    const m=hist.filter(h=>(h.name||'')===name).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    return m[0]||null;
+  };
+  const reload=()=>onSessionSent&&onSessionSent();
   return(
     <div style={{marginBottom:14}}>
-      {importDay&&<CoachImportSessionModal
-        athleteId={athleteId} athleteName={athleteName}
-        dayName={importDay.dayName} dayData={importDay.dayData}
-        onClose={()=>setImportDay(null)} onDone={onSessionSent}/>}
+      {importDay&&<CoachImportSessionModal athleteId={athleteId} athleteName={athleteName} dayName={importDay.dayName} dayData={importDay.dayData} onClose={()=>setImportDay(null)} onDone={reload}/>}
+      {viewDay&&<CoachDayViewModal dayName={viewDay.dayName} dayData={viewDay.dayData} onClose={()=>setViewDay(null)}/>}
+      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} history={hist} initialTab="recap" onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
+      {editSession&&<CoachEditSessionModal session={editSession} athleteName={athleteName} onClose={()=>setEditSession(null)} onDone={()=>{setEditSession(null);reload();}}/>}
       {sheetNames.length>1&&(
         <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
           {sheetNames.map(name=>(
@@ -8163,32 +8761,264 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,onSessionSent}){
         {sortedDays.map(dayName=>{
           const d=days[dayName];
           const exCount=(d.exercises||[]).length;
+          const name=d.category||dayName;
+          const done=lastDoneFor(name);
+          const mkBtn=(emoji,label,color,onClick,enabled,title)=>(
+            <button onClick={enabled?onClick:undefined} disabled={!enabled} title={title||''}
+              style={{height:34,borderRadius:9,border:'1px solid '+(enabled?color+'55':'rgba(255,255,255,0.07)'),background:enabled?color+'14':'rgba(255,255,255,0.02)',color:enabled?color:T.textFaint,fontSize:11,fontWeight:700,cursor:enabled?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:enabled?1:0.45,whiteSpace:'nowrap',padding:'0 4px'}}>
+              <span style={{fontSize:12}}>{emoji}</span>{label}
+            </button>
+          );
           return(
-            <div key={dayName} style={{borderRadius:11,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border,overflow:'hidden'}}>
-              {/* Header jour — cliquable pour déployer/réduire */}
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'11px 12px'}}>
+            <div key={dayName} style={{borderRadius:12,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border,padding:'11px 12px'}}>
+              {/* En-tête : jour + nom de la séance + état (fait / jamais fait) */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600}}>{dayName}</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.category}</div>
+                  <div style={{fontSize:13.5,fontWeight:800,letterSpacing:0.2}}>{dayName}</div>
+                  <div style={{fontSize:11,color:T.textDim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>
                 </div>
-                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,flexShrink:0,marginRight:6}}>{exCount} exo</div>
-                {/* Bouton import séance */}
-                <button onClick={()=>setImportDay({dayName,dayData:d})}
-                  style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(191,160,96,0.4)',background:'rgba(191,160,96,0.1)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Importer
-                </button>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:10,color:T.textFaint,fontWeight:600}}>{exCount} exo</div>
+                  {done
+                    ?<div style={{fontSize:9.5,color:T.good,fontWeight:700,marginTop:2}}>✓ {new Date(done.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
+                    :<div style={{fontSize:9.5,color:T.textFaint,marginTop:2}}>jamais faite</div>}
+                </div>
               </div>
-              <div style={{padding:'0 12px 10px',display:'flex',flexDirection:'column',gap:3}}>
-                {(d.exercises||[]).slice(0,4).map((ex,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:T.textDim}}>
-                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,background:`${(STYLE_COLORS[ex.style]||T.accent)}18`,color:STYLE_COLORS[ex.style]||T.accent}}>{i+1}</div>
-                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
-                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{(ex.sets||[]).length}×{ex.repsStr||(ex.sets&&ex.sets[0]&&ex.sets[0].target)||'?'}</span>
+              {/* 4 actions pros */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6}}>
+                {mkBtn('📩','Importer',T.accent,()=>setImportDay({dayName,dayData:d}),true,'Envoyer cette séance à '+athleteName)}
+                {mkBtn('✏️','Modifier',T.good,()=>setEditSession(done),!!done,done?'Corriger la dernière séance réalisée':'Aucune séance réalisée à corriger')}
+                {mkBtn('📊','Recap','#C89040',()=>setRecapSession(done),!!done,done?'Bilan de la dernière séance réalisée':'Aucune séance réalisée')}
+                {mkBtn('👀','Voir','#5A8AE0',()=>setViewDay({dayName,dayData:d}),exCount>0,'Voir le contenu prévu')}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Voir : contenu prévu du jour (lecture seule), supersets/trisets et repos préservés.
+function CoachDayViewModal({dayName,dayData,onClose}){
+  const exercises=dayData.exercises||[];
+  const groups=React.useMemo(()=>groupExercisesByType(exercises),[exercises]);
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.bgRaise,borderRadius:'22px 22px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'10px 0 4px'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/></div>
+        <div style={{padding:'4px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexShrink:0}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Séance prévue</div>
+            <div style={{fontSize:18,fontWeight:700,letterSpacing:-0.3}}>{dayName}{dayData.category?' · '+dayData.category:''}</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{exercises.length} exercice{exercises.length>1?'s':''}</div>
+          </div>
+          <button onClick={onClose} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'14px 16px 20px'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {groups.map((g,gi)=>{
+              const isComplex=g.type!=='classic';
+              const ts=EX_GROUP_STYLE[g.type]||EX_GROUP_STYLE.classic;
+              return(
+                <div key={gi} style={{borderRadius:14,border:isComplex?`1px solid ${ts.color}45`:'1px solid rgba(255,255,255,0.08)',background:isComplex?`${ts.color}0d`:'rgba(255,255,255,0.03)',overflow:'hidden'}}>
+                  {isComplex&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:`${ts.color}18`,borderBottom:`1px solid ${ts.color}30`}}><span style={{fontSize:9,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:ts.color}}>{ts.label}</span><span style={{fontSize:9,color:T.textFaint}}>· {g.items.length} exercices</span></div>)}
+                  {g.items.map((e,i)=>{
+                    const reps=e.repsStr||(e.sets&&e.sets[0]&&e.sets[0].target)||'';
+                    const nSets=(e.sets||[]).length;
+                    const rest=exType(e)!=='cardio'&&exRestSeconds(e)>0?fmtRestLabel(exRestSeconds(e)):'';
+                    return(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:i>0?`1px solid ${isComplex?ts.color+'25':'rgba(255,255,255,0.06)'}`:'none'}}>
+                        {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+i)}</div>}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13.5,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
+                          <div style={{fontSize:10,color:T.textFaint,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                            {e.muscle&&<span>{e.muscle}</span>}
+                            {rest&&<span>⏳ {rest}</span>}
+                          </div>
+                        </div>
+                        {(nSets||reps)&&<div style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{nSets||'?'}{reps?' × '+reps:''}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {exercises.length===0&&<div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:24}}>Aucun exercice dans cette séance.</div>}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Modifier : corriger une séance déjà réalisée (poids/reps a posteriori). Copie profonde des
+// exercices → toute la structure (supersets, repos, style, cardio) est préservée ; on ne PATCH
+// que sur clic "Enregistrer". Ne touche pas le programme (template).
+function CoachEditSessionModal({session,athleteName,onClose,onDone}){
+  const[exos,setExos]=React.useState(()=>JSON.parse(JSON.stringify(session.exercises||[])));
+  const[sending,setSending]=React.useState(false);
+  const[msg,setMsg]=React.useState('');
+  const totalVol=exos.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
+  const addExercise=()=>setExos(arr=>[...arr,{name:'',muscle:'',groupType:'classic',sets:[{weight:0,reps:0,done:true}],_new:true}]);
+  const save=async()=>{
+    if(sending)return;
+    // On retire les exercices ajoutés sans nom (formulaire laissé vide) et le drapeau _new.
+    const clean=exos.filter(e=>(e.name||'').trim()).map(({_new,...e})=>e);
+    if(!session?.id)return;
+    setSending(true);setMsg('');
+    const cleanVol=clean.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
+    try{
+      await apiCall('/api/coach/sessions/'+session.id,{method:'PATCH',body:{exercises:clean,totalVolume:cleanVol}});
+      setMsg('✓ Séance corrigée');
+      setTimeout(()=>{onDone&&onDone();},1000);
+    }catch(e){setMsg('✗ '+(e.message||'Erreur'));setSending(false);}
+  };
+  const numStyle={width:52,height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:14,fontWeight:700,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'};
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.bgRaise,borderRadius:'22px 22px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'92vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'10px 0 4px'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/></div>
+        <div style={{padding:'4px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexShrink:0}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,color:T.good,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Corriger la séance</div>
+            <div style={{fontSize:18,fontWeight:700,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.name||'Séance'}</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{session.date?new Date(session.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}):''} · {athleteName}</div>
+          </div>
+          <button onClick={onClose} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'14px 16px 8px'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {exos.length===0&&<div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:24}}>Détails non disponibles.</div>}
+            {exos.map((ex,ei)=>{
+              const isCardio=exType(ex)==='cardio';
+              const isHold=ex.holdSeconds>0;
+              const uni=isUnilateralEx(ex);
+              const updSet=(si,patch)=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
+              const addSet=()=>setExos(arr=>arr.map((e,i)=>{if(i!==ei)return e;const last=e.sets[e.sets.length-1];return{...e,sets:[...e.sets,{weight:last?.weight||0,reps:0,done:true,...(uni?{repsL:0,repsR:0}:{})}]};}));
+              const delLastSet=()=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.slice(0,-1)}));
+              const delEx=()=>{if(ex._new||confirm('Supprimer "'+ex.name+'" de cette séance ?'))setExos(arr=>arr.filter((_,i)=>i!==ei));};
+              const updEx=patch=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,...patch}));
+              return(
+                <div key={ei} style={{borderRadius:14,border:'1px solid '+(ex._new?'rgba(44,196,160,0.35)':'rgba(255,255,255,0.08)'),background:ex._new?'rgba(44,196,160,0.05)':'rgba(255,255,255,0.025)',padding:'10px 12px'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      {ex._new?(<>
+                        <input autoFocus value={ex.name} onChange={e=>updEx({name:e.target.value})} placeholder="Nom de l'exercice"
+                          style={{width:'100%',padding:'7px 10px',borderRadius:9,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:14,fontWeight:700,outline:'none',boxSizing:'border-box'}}/>
+                        <input value={ex.muscle} onChange={e=>updEx({muscle:e.target.value})} placeholder="Muscle (optionnel)"
+                          style={{width:'100%',padding:'5px 10px',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,outline:'none',boxSizing:'border-box',marginTop:5}}/>
+                      </>):(<>
+                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                        {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                      </>)}
+                    </div>
+                    <button onClick={delEx} title="Supprimer cet exercice" style={{width:28,height:28,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:13,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
                   </div>
-                ))}
-                {exCount>4&&<div style={{fontSize:10,color:T.textFaint,paddingLeft:23}}>+{exCount-4} exo</div>}
+                  {isCardio?(
+                    <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Séance cardio — non modifiable ici</div>
+                  ):(<>
+                    {(ex.sets||[]).map((s,si)=>(
+                      <div key={si} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div style={{width:18,fontSize:10,color:T.textFaint,fontWeight:700,flexShrink:0}}>{si+1}</div>
+                        {isHold?(<>
+                          <div style={{fontSize:12,color:T.textDim,flex:1}}>{fmtHoldDuration(ex.holdSeconds)} <span style={{fontSize:9,color:T.textFaint}}>tenues</span></div>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint,width:16}}>kg</span>
+                        </>):uni?(<>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                          <input type="number" value={s.repsL||0} min="0" onChange={e=>updSet(si,{repsL:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                          <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>G</span>
+                          <input type="number" value={s.repsR||0} min="0" onChange={e=>updSet(si,{repsR:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                          <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>D</span>
+                        </>):(<>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                          <input type="number" value={s.reps||0} min="0" onChange={e=>updSet(si,{reps:parseInt(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>reps</span>
+                        </>)}
+                      </div>
+                    ))}
+                    <div style={{display:'flex',gap:8,marginTop:8}}>
+                      <button onClick={addSet} style={{flex:1,height:34,borderRadius:10,border:'1px dashed rgba(191,160,96,0.4)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter une série</button>
+                      {(ex.sets||[]).length>0&&<button onClick={delLastSet} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>− Retirer la dernière</button>}
+                    </div>
+                  </>)}
+                </div>
+              );
+            })}
+            <button onClick={addExercise} style={{height:44,borderRadius:12,border:'1px dashed rgba(90,138,224,0.45)',background:'rgba(90,138,224,0.06)',color:'#5A8AE0',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>＋ Ajouter un exercice</button>
+          </div>
+          <div style={{textAlign:'center',fontSize:12,color:T.textFaint,margin:'14px 0 4px'}}>Volume total : <span style={{color:T.good,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg</span></div>
+        </div>
+        <div style={{padding:'12px 16px max(16px,env(safe-area-inset-bottom))',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+          {msg&&<div style={{textAlign:'center',fontSize:13,fontWeight:700,color:msg.startsWith('✓')?T.good:T.danger,marginBottom:10}}>{msg}</div>}
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={onClose} style={{flex:'0 0 40%',height:50,borderRadius:15,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:13,fontWeight:800,cursor:'pointer'}}>Annuler</button>
+            <button onClick={save} disabled={sending} style={{flex:1,height:50,borderRadius:15,border:'none',background:sending?'rgba(44,196,160,0.3)':'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:13,fontWeight:800,cursor:sending?'default':'pointer',boxShadow:sending?'none':'0 8px 24px rgba(44,196,160,0.35)'}}>{sending?'…':'✅ Enregistrer les corrections'}</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Séances "en attente" créées via "Créer séance" — le coach les reprend pour les planifier
+// (dépose sur le calendrier athlète) ou les valider comme faites.
+function CoachPendingSessions({athleteId,pending,onChange,onFlash}){
+  const[planning,setPlanning]=React.useState(null); // id en cours de planification
+  const[planDate,setPlanDate]=React.useState(()=>{const d=new Date();d.setDate(d.getDate()+1);return ymdKey(d);});
+  const[busy,setBusy]=React.useState(false);
+  if(!pending||!pending.length)return null;
+  const removePending=id=>apiCall('/api/coach/athletes/'+athleteId+'/pending-sessions/'+id,{method:'DELETE'});
+  const validateNow=async s=>{
+    if(busy)return;setBusy(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:s.name,date:new Date().toISOString(),exercises:s.exercises,totalVolume:s.totalVolume,duration:s.duration}});
+      await removePending(s.id);onFlash&&onFlash('✓ Séance validée');onChange&&onChange();
+    }catch(e){onFlash&&onFlash('✗ '+(e.message||'Erreur'));setBusy(false);}
+  };
+  const planNow=async s=>{
+    if(busy||!planDate)return;setBusy(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/planned-sessions',{method:'POST',body:{date:planDate,session:{name:s.name,muscles:s.muscles||'',exercises:s.exercises,totalVolume:s.totalVolume}}});
+      await removePending(s.id);onFlash&&onFlash('✓ Séance planifiée');setPlanning(null);onChange&&onChange();
+    }catch(e){onFlash&&onFlash('✗ '+(e.message||'Erreur'));setBusy(false);}
+  };
+  const del=async s=>{if(busy)return;setBusy(true);try{await removePending(s.id);onFlash&&onFlash('✓ Retirée');onChange&&onChange();}catch(e){setBusy(false);}};
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#C89040'}}>⏸️ En attente</span>
+        <span style={{fontSize:10,color:T.textFaint}}>{pending.length} séance{pending.length>1?'s':''}</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {pending.map(s=>{
+          const exCount=(s.exercises||[]).length;
+          return(
+            <div key={s.id} style={{borderRadius:12,background:'rgba(200,144,64,0.06)',border:'1px solid rgba(200,144,64,0.28)',padding:'10px 12px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:800,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg · {exCount} exo{exCount>1?'s':''}{s.muscles?' · '+s.muscles:''}</div>
+                </div>
+                <button onClick={()=>del(s)} disabled={busy} title="Supprimer" style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:12,cursor:'pointer',flexShrink:0}}>🗑</button>
               </div>
+              {planning===s.id?(
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <input type="date" value={planDate} min={ymdKey()} onChange={e=>setPlanDate(e.target.value)} style={{flex:1,height:36,borderRadius:9,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,padding:'0 10px',outline:'none',boxSizing:'border-box'}}/>
+                  <button onClick={()=>planNow(s)} disabled={busy} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:'#5A8AE0',color:'#fff',fontSize:12,fontWeight:800,cursor:busy?'default':'pointer'}}>OK</button>
+                  <button onClick={()=>setPlanning(null)} style={{height:36,padding:'0 11px',borderRadius:9,border:'1px solid '+T.border,background:'transparent',color:T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>✕</button>
+                </div>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <button onClick={()=>setPlanning(s.id)} style={{height:36,borderRadius:9,border:'1px solid rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11.5,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📅 Planifier</button>
+                  <button onClick={()=>validateNow(s)} disabled={busy} style={{height:36,borderRadius:9,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:11.5,fontWeight:800,cursor:busy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>✅ Valider</button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -8796,8 +9626,14 @@ function groupExercisesByType(exercises){
   list.forEach(e=>{
     const type=exType(e);
     const isComplex=type!=='classic';
-    if(isComplex&&e.groupId&&byGroupId.has(e.groupId)){
-      byGroupId.get(e.groupId).items.push(e);
+    // Regroupement par groupId partagé (supersets/trisets des Live Sessions). On rattache dès que
+    // le groupId existe et est déjà connu — MÊME si ce membre-ci est 'classic' — et on PROMEUT le
+    // type du groupe si un membre est complexe. Sans ça, un superset dont le 1er exercice avait
+    // été enregistré en 'classic' (ou selon l'ordre) se cassait et retombait en classique.
+    if(e.groupId&&byGroupId.has(e.groupId)){
+      const g=byGroupId.get(e.groupId);
+      g.items.push(e);
+      if(isComplex&&(g.type==='classic'))g.type=type;
       return;
     }
     const prev=groups[groups.length-1];
@@ -8807,17 +9643,44 @@ function groupExercisesByType(exercises){
       return;
     }
     const g={type:isComplex?type:'classic',items:[e]};
-    if(isComplex&&e.groupId)byGroupId.set(e.groupId,g);
+    // On enregistre TOUT groupId (pas seulement les complexes) : les exercices classiques d'une
+    // Live ont chacun un groupId unique, donc aucun faux regroupement — mais un membre complexe
+    // ajouté ensuite sur le même groupId sera bien rattaché et promu.
+    if(e.groupId)byGroupId.set(e.groupId,g);
     groups.push(g);
   });
   return groups;
 }
 
-function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
+// Temps de repos d'un exercice, tous formats confondus : restSeconds (séances importées Excel)
+// OU le repos saisi par série pendant une Live Session (s.rest). Sans ça, le repos mis en live
+// n'apparaissait nulle part côté athlète (les vues n'affichaient que restSeconds).
+function exRestSeconds(ex){
+  if(!ex)return 0;
+  if(ex.restSeconds>0)return ex.restSeconds;
+  const rs=(ex.sets||[]).map(s=>s&&s.rest||0).filter(r=>r>0);
+  return rs.length?Math.max(...rs):0;
+}
+function fmtRestLabel(s){
+  s=Math.round(s||0);
+  if(s<=0)return '';
+  return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
+}
+
+function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const[tab,setTab]=React.useState(initialTab||'recap');
+  React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
   const exGroups=React.useMemo(()=>groupExercisesByType(s.exercises),[s.exercises]);
+  // Récap de fin de séance : comparaison vs la dernière séance du même nom (comme l'écran de
+  // félicitations côté athlète), calculée à la volée à partir de l'historique de l'athlète.
+  const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[]),[s,history]);
+  const hasVolume=totalVol>0;
+  const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous);
+  const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+  const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
   return(
     <div style={{position:'fixed',inset:0,zIndex:3000,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -8857,9 +9720,114 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
           </div>
         </div>
 
+        {/* Onglets : Récap (rapport de fin de séance) vs Séance (corps : exercices & séries) */}
+        <div style={{display:'flex',gap:8,padding:'12px 20px 0'}}>
+          {[{k:'recap',label:'📊 Récap',c:T.accent},{k:'body',label:'👀 Séance',c:'#5A8AE0'}].map(t=>{
+            const on=tab===t.k;
+            return(
+              <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,height:40,borderRadius:12,border:`1px solid ${on?t.c+'66':'rgba(255,255,255,0.08)'}`,background:on?t.c+'1a':'rgba(255,255,255,0.03)',color:on?t.c:T.textDim,fontSize:13,fontWeight:on?800:600,cursor:'pointer',transition:'all .15s'}}>{t.label}</button>
+            );
+          })}
+        </div>
         {/* Scrollable content */}
         <div style={{flex:1,overflowY:'auto',padding:'16px 20px 24px'}}>
-          {/* Athlete notes */}
+          {/* ── RÉCAP DE FIN DE SÉANCE (comparaison vs dernière séance du même nom) ── */}
+          {tab==='recap'&&(comp||showVolCompare)&&(
+            <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
+              <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
+              {/* Bilan */}
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume})}</div>
+              {/* Alerte régression */}
+              {isRegression&&(
+                <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
+                  <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                  <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{comp&&comp.downCount>0?` — ${comp.downCount} exercice${comp.downCount>1?'s':''} en baisse`:''}. À recadrer avec l'athlète.</div>
+                </div>
+              )}
+              {/* Comparaison volume vs dernière */}
+              {showVolCompare&&(()=>{
+                const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
+                const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
+                const up=delta>0;
+                return(
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:comp?12:0}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</span></div>
+                      <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</span></div>
+                    </div>
+                    <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Détail par exercice — comparaison vs la dernière séance du même nom */}
+              {comp&&comp.exercises.length>0&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                    <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Détail par exercice</div>
+                    {comp.prsCount>0&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'2px 8px',borderRadius:999,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.3)'}}>{comp.prsCount} PR{comp.prsCount>1?'s':''}</span>}
+                  </div>
+                  <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
+                    {comp.exercises.map((ex,i)=>{
+                      const isNew=ex.status==='new';
+                      const up=ex.status==='up',down=ex.status==='down';
+                      const statusColor=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                      const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
+                      const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
+                      return(
+                        <div key={i} style={{padding:'9px 12px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<comp.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <span style={{fontSize:14,width:20,textAlign:'center',flexShrink:0}}>{statusIcon}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                <span style={{fontSize:12.5,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
+                                {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
+                              </div>
+                              <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                                {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
+                                {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                                {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                              </div>
+                            </div>
+                            <div style={{textAlign:'right',flexShrink:0}}>
+                              {vDeltaStr&&<div style={{fontSize:10.5,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
+                              {ex.curVol>0&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Score global */}
+              {comp&&comp.totalExercises>0&&(
+                <div style={{display:'flex',gap:8}}>
+                  {[{count:comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:comp.prsCount,label:comp.prsCount>1?'PR':'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                    <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
+                      <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                      <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Mindset */}
+              <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
+                <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev)}"</div>
+              </div>
+            </div>
+          )}
+          {/* Première séance de ce nom (aucune comparaison possible) */}
+          {tab==='recap'&&!comp&&!showVolCompare&&s.name&&(
+            <div style={{marginBottom:20,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',textAlign:'center'}}>
+              <div style={{fontSize:12,color:T.textDim,lineHeight:1.5}}>Première séance <b style={{color:T.text}}>"{s.name}"</b> pour {firstName} — pas encore de comparaison. Le récap de progression apparaîtra à la prochaine séance du même nom.</div>
+            </div>
+          )}
+          {/* Ressenti athlète — visible dans les deux onglets (contexte utile) */}
           {s.notes&&(
             <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(200,144,64,0.07)',border:'1px solid rgba(200,144,64,0.22)',fontSize:12,color:T.warn,lineHeight:1.5}}>
               <span style={{fontWeight:700,display:'block',marginBottom:2,fontSize:10,textTransform:'uppercase',letterSpacing:0.4}}>Ressenti athlète</span>
@@ -8867,8 +9835,8 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
             </div>
           )}
 
-          {/* Exercises */}
-          {(s.exercises||[]).length>0&&(
+          {/* Exercices (corps de la séance) — onglet Séance */}
+          {tab==='body'&&(s.exercises||[]).length>0&&(
             <div style={{marginBottom:20}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:10}}>Exercices</div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -8921,6 +9889,9 @@ function CoachSessionModal({s,athleteId,onClose,onFeedbackSaved}){
                                   </div>
                                 ))}
                               </div>
+                            )}
+                            {exType(e)!=='cardio'&&exRestSeconds(e)>0&&(
+                              <div style={{padding:'0 14px 10px',fontSize:11,color:T.textFaint,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>⏳ Repos : {fmtRestLabel(exRestSeconds(e))}</div>
                             )}
                           </div>
                         );
@@ -9232,7 +10203,15 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     return[];
   });
   const[elapsed,setElapsed]=React.useState(()=>{
-    if(resumeData){const extra=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);return(resumeData.elapsed||0)+extra;}
+    if(resumeData){
+      // Reprise VOLONTAIRE (bouton "Quitter et reprendre") → séance en pause : le temps d'absence
+      // ne compte pas, on reprend au chrono sauvegardé. Reprise après coupure SUBIE (app fermée /
+      // arrière-plan qui a figé le chrono) → on rattrape le temps écoulé, mais plafonné à 30 min
+      // pour éviter une durée absurde si la séance est rouverte bien plus tard.
+      const away=Math.round((Date.now()-(resumeData.savedAt||Date.now()))/1000);
+      const extra=resumeData.paused?0:Math.min(Math.max(0,away),1800);
+      return(resumeData.elapsed||0)+extra;
+    }
     if(editSession)return(editSession.duration||0)*60;
     return 0;
   });
@@ -9256,17 +10235,76 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const[reviewing,setReviewing]=React.useState(false);
+  // Date proposée pour "Planifier" : demain par défaut (une séance planifiée est à venir).
+  const[planDate,setPlanDate]=React.useState(()=>{const d=new Date();d.setDate(d.getDate()+1);return ymdKey(d);});
   const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||'');
   const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
 
-  React.useEffect(()=>{if(reviewing||editSession)return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[reviewing]);
+  // ── Rest timer countdown ──────────────────────────────────────────────────
+  const[restTimer,setRestTimer]=React.useState(0);
+  const[restTimerTotal,setRestTimerTotal]=React.useState(0);
+  const restTimerRef=React.useRef(null);
+  const startRestTimer=(seconds)=>{
+    if(!seconds||seconds<=0)return;
+    if(restTimerRef.current)clearInterval(restTimerRef.current);
+    setRestTimerTotal(seconds);setRestTimer(seconds);
+    restTimerRef.current=setInterval(()=>{
+      setRestTimer(prev=>{
+        if(prev<=1){
+          clearInterval(restTimerRef.current);restTimerRef.current=null;
+          try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}
+          return 0;
+        }
+        return prev-1;
+      });
+    },1000);
+  };
+  const dismissRestTimer=()=>{
+    if(restTimerRef.current)clearInterval(restTimerRef.current);
+    restTimerRef.current=null;setRestTimer(0);setRestTimerTotal(0);
+  };
+  React.useEffect(()=>()=>{if(restTimerRef.current)clearInterval(restTimerRef.current);},[]);
+
+  // ── Exercise history lookup (last 3 sessions for an exercise) ─────────────
+  const getExHistory=React.useCallback((exName)=>{
+    if(!exName)return[];
+    const n=(exName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const results=[];
+    const sessions=[...(detail?.sessions||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    for(const s of sessions){
+      const match=(s.exercises||[]).find(e=>(e.name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')===n);
+      if(match){
+        results.push({date:s.date,name:s.name,sets:match.sets||[],muscle:match.muscle});
+        if(results.length>=3)break;
+      }
+    }
+    return results;
+  },[detail?.sessions]);
+
+  // editSession DOIT être dans les deps : sans lui, passer en mode édition (ou en sortir) ne
+  // ré-évalue pas le garde `if(reviewing||editSession)return` — l'intervalle continue d'incrémenter
+  // `elapsed` en édition et fausse la durée totale de la séance.
+  // Chrono basé sur l'HORLOGE RÉELLE, pas un compteur +1s : un setInterval est throttlé (voire
+  // gelé) quand l'app passe en arrière-plan ou que l'écran se verrouille, ce qui figeait le temps
+  // affiché. On ancre un instant de départ et on recalcule le temps écoulé à chaque tick ET au
+  // retour au premier plan — même pattern que SessionScreen côté athlète.
+  const startTsRef=React.useRef(0);
+  React.useEffect(()=>{
+    if(reviewing||editSession)return;
+    startTsRef.current=Date.now()-elapsed*1000; // ancrage à l'entrée (reprise/pause du chrono)
+    const tick=()=>setElapsed(Math.max(0,Math.round((Date.now()-startTsRef.current)/1000)));
+    const t=setInterval(tick,1000);
+    const onVis=()=>{if(document.visibilityState==='visible')tick();};
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{clearInterval(t);document.removeEventListener('visibilitychange',onVis);};
+  },[reviewing,editSession]);
   React.useEffect(()=>{if(mode==='pick-exercise')setTimeout(()=>queryInputRef.current?.focus(),120);},[mode]);
   React.useEffect(()=>{
     if(editSession)return;
     if(exercises.length===0&&!sessionName){clearLiveStorage();return;}
     saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName});
-  },[exercises,sessionName]);
+  },[exercises,sessionName,athleteId,athleteName]);
   // Filet de sécurité : re-sauvegarde périodiquement le chrono même sans modif d'exercice.
   // Utilise une ref pour "elapsed" car il change chaque seconde — le mettre en dépendance
   // relancerait l'intervalle à chaque tick et l'empêcherait de jamais se déclencher.
@@ -9276,7 +10314,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     if(editSession||exercises.length===0)return;
     const t=setInterval(()=>saveLiveToStorage({athleteId,athleteName,exercises,elapsed:elapsedRef.current,sessionName}),10000);
     return()=>clearInterval(t);
-  },[exercises,sessionName,editSession]);
+  },[exercises,sessionName,editSession,athleteId,athleteName]);
 
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -9362,6 +10400,8 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     }else{
       setExercises(prev=>prev.map((e,i)=>i!==addingTo.exIdx?e:{...e,sets:[...e.sets,{weight:setW,...uniFields,rest:setRest,done:true}]}));
     }
+    // Lancer le timer de repos après validation d'une nouvelle série (pas en édition)
+    if(!editingSet&&setRest>0)startRestTimer(setRest);
     setMode('session');
   };
 
@@ -9373,20 +10413,64 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
 
   const removeExercise=idx=>setExercises(prev=>prev.filter((_,i)=>i!==idx));
 
-  const handleSave=async()=>{
+  // Construit la charge utile commune aux 3 issues (valider / planifier / mettre en attente).
+  const buildPayload=()=>{
     const valid=exercises.filter(e=>e.sets.length>0);
-    if(!valid.length)return;
+    if(!valid.length)return null;
+    const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+    // Normalise le type de groupe : si plusieurs exercices partagent un groupId et qu'au moins
+    // un est superset/triset/cardio, on aligne TOUT le groupe sur ce type. Évite qu'un superset
+    // retombe en "classique" chez l'athlète si un membre avait gardé groupType 'classic'.
+    const groupTypeById={};
+    valid.forEach(e=>{if(e.groupId&&e.groupType&&e.groupType!=='classic'&&!groupTypeById[e.groupId])groupTypeById[e.groupId]=e.groupType;});
+    const exData=valid.map(e=>{
+      // Persiste aussi le repos au niveau exercice (restSeconds) à partir du repos saisi par
+      // série, pour que TOUTES les vues le reflètent (récap, partage, PDF), pas seulement s.rest.
+      const restSec=e.restSeconds||exRestSeconds(e);
+      const gType=(e.groupId&&groupTypeById[e.groupId])||e.groupType||'classic';
+      return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:gType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
+    });
+    const muscles=[...new Set(valid.map(e=>e.muscle).filter(Boolean))].join(', ');
+    return{exData,totalVolume,muscles,name:sessionName.trim()||'Séance',duration:Math.round(elapsed/60)};
+  };
+
+  // Valider : enregistre directement comme séance réalisée (ou applique l'édition en cours).
+  const handleSave=async()=>{
+    const p=buildPayload();
+    if(!p)return;
     setSaving(true);
     try{
-      const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      const exData=valid.map(e=>({name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:e.groupType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
       if(editSession){
-        await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
+        await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:p.name,exercises:p.exData,totalVolume:p.totalVolume,duration:editSession.duration||p.duration}});
       }else{
-        await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:sessionName.trim()||'Séance Live',date:new Date().toISOString(),exercises:exData,totalVolume,duration:Math.round(elapsed/60)}});
+        await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:p.name,date:new Date().toISOString(),exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration}});
       }
       clearLiveStorage();
-      onSaved();
+      onSaved('done');
+    }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
+  };
+
+  // Planifier : dépose la séance sur le calendrier de l'athlète à la date choisie (il la démarre lui-même).
+  const handlePlan=async()=>{
+    const p=buildPayload();
+    if(!p||!planDate)return;
+    setSaving(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/planned-sessions',{method:'POST',body:{date:planDate,session:{name:p.name,muscles:p.muscles,exercises:p.exData,totalVolume:p.totalVolume}}});
+      clearLiveStorage();
+      onSaved('planned');
+    }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
+  };
+
+  // Mettre en attente : garde la séance de côté (ni datée, ni faite) — le coach la reprend plus tard.
+  const handleHold=async()=>{
+    const p=buildPayload();
+    if(!p)return;
+    setSaving(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/pending-sessions',{method:'POST',body:{session:{name:p.name,muscles:p.muscles,exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration}}});
+      clearLiveStorage();
+      onSaved('pending');
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
@@ -9457,7 +10541,35 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div onClick={e=>e.stopPropagation()} style={{width:'100%',background:'#13131a',borderRadius:'22px 22px 0 0',padding:`20px 24px calc(28px + env(safe-area-inset-bottom)) 24px`,boxShadow:'0 -20px 60px rgba(0,0,0,0.6)',maxHeight:'92vh',overflowY:'auto'}}>
           <div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.12)',margin:'0 auto 18px'}}/>
           <div style={{fontSize:10,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{editingSet?(isCardioMode?'Modifier · Tapis':`Modifier · Série ${setNum}`):(isCardioMode?'Tapis':`Série ${setNum}`)}</div>
-          <div style={{fontSize:18,fontWeight:800,marginBottom:20,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:8,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exName}</div>
+
+          {/* ── Historique des dernières performances ── */}
+          {(()=>{
+            const hist=getExHistory(exName);
+            if(!hist.length)return null;
+            return(
+              <div style={{marginBottom:14,padding:'8px 10px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.18)'}}>
+                <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,color:'#5A8AE0',marginBottom:6}}>📊 Dernières perf.</div>
+                {hist.map((h,hi)=>{
+                  const d=new Date(h.date);
+                  const dateStr=d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+                  const bestSet=h.sets.reduce((best,s)=>(!best||(s.weight||0)>(best.weight||0))?s:best,null);
+                  return(
+                    <div key={hi} style={{display:'flex',alignItems:'center',gap:6,marginBottom:hi<hist.length-1?4:0}}>
+                      <span style={{fontSize:10,color:T.textFaint,fontWeight:600,minWidth:42}}>{dateStr}</span>
+                      <div style={{flex:1,display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                        {h.sets.map((s,si)=>(
+                          <span key={si} style={{fontSize:10,fontWeight:600,color:T.textDim,padding:'1px 5px',borderRadius:5,background:'rgba(255,255,255,0.05)'}}>
+                            {s.weight||0}<span style={{fontSize:8,color:T.textFaint}}>kg</span>×{s.reps||0}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {isNew&&!pendingGroupId&&(
             <div style={{marginBottom:16}}>
@@ -9561,16 +10673,20 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const totalVol=exercises.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
 
   if(confirmingClose){
+    // Quitter en gardant la séance : on sauvegarde une dernière fois l'état puis on ferme SANS
+    // effacer le storage — le coach retrouve la bannière "Séance Live en cours" pour la reprendre.
+    const quitAndKeep=()=>{saveLiveToStorage({athleteId,athleteName,exercises,elapsed,sessionName,paused:true});onClose();};
     return(
       <div style={{position:'fixed',inset:0,zIndex:300,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
-        <div style={{fontSize:40,marginBottom:16}}>⚠️</div>
-        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Abandonner la séance ?</div>
+        <div style={{fontSize:40,marginBottom:16}}>⏸️</div>
+        <div style={{fontSize:18,fontWeight:800,marginBottom:8,textAlign:'center'}}>Quitter la séance ?</div>
         <div style={{fontSize:13,color:T.textFaint,marginBottom:28,textAlign:'center',lineHeight:1.6}}>
-          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''} non enregistrée{totalSets>1?'s':''}
+          {exercises.length} exercice{exercises.length>1?'s':''} · {totalSets} série{totalSets>1?'s':''}<br/>Tu pourras la reprendre là où tu t'es arrêté.
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:300}}>
-          <button onClick={()=>{clearLiveStorage();onClose();}} style={{height:50,borderRadius:14,border:'none',background:'rgba(184,80,112,0.15)',color:'#B85070',fontSize:14,fontWeight:700,cursor:'pointer'}}>Abandonner</button>
+        <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:320}}>
+          <button onClick={quitAndKeep} style={{height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>💾 Quitter et reprendre plus tard</button>
           <button onClick={()=>setConfirmingClose(false)} style={{height:50,borderRadius:14,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:600,cursor:'pointer'}}>Continuer la séance</button>
+          <button onClick={()=>{if(confirm('Abandonner définitivement cette séance ? Tout sera perdu.')){clearLiveStorage();onClose();}}} style={{height:44,borderRadius:14,border:'none',background:'transparent',color:'#B85070',fontSize:12.5,fontWeight:700,cursor:'pointer',marginTop:4}}>Abandonner (tout supprimer)</button>
         </div>
       </div>
     );
@@ -9586,13 +10702,13 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div style={{flex:1,textAlign:'center',minWidth:0}}>
           <div style={{fontSize:10,color:reviewing?T.good:editSession?T.accent:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
             {reviewing?<Icon name="check" size={10} stroke={T.good}/>:editSession?<Icon name="edit" size={10} stroke={T.accent}/>:<span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>}
-            {reviewing?'Récap · ':editSession?'Modifier · ':'Live · '}{athleteName}
+            {reviewing?'Récap · ':editSession?'Modifier · ':'Création · '}{athleteName}
           </div>
           <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
         </div>
-        <button onClick={()=>reviewing?handleSave():setReviewing(true)} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+        {(!reviewing||editSession)&&<button onClick={()=>reviewing?handleSave():setReviewing(true)} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
           {saving?'…':<><Icon name="check" size={14} stroke={totalSets>0?'#fff':T.textFaint}/>{reviewing?'Valider':'Fin'}</>}
-        </button>
+        </button>}
       </div>
 
       {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
@@ -9601,7 +10717,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div style={{padding:'10px 16px',flexShrink:0,background:'rgba(44,196,160,0.07)',borderBottom:'1px solid rgba(44,196,160,0.18)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
             <div style={{flex:1,fontSize:11,color:T.textDim,lineHeight:1.5}}>
-              <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — vérifie la séance puis nomme-la avant de valider.
+              <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — nomme la séance{editSession?' avant de valider.':', puis choisis : valider, planifier ou mettre en attente.'}
             </div>
             <button onClick={()=>setReviewing(false)} style={{height:30,padding:'0 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Reprendre</button>
           </div>
@@ -9611,6 +10727,22 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
             placeholder="Nom de la séance (ex: Push Day A, Jambes…)"
             style={{width:'100%',height:40,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:13,fontWeight:600,padding:'0 12px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
           />
+          {!editSession&&(
+            <div style={{marginTop:10}}>
+              {/* Date utilisée par "Planifier" */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',flexShrink:0}}>Planifier le</span>
+                <input type="date" value={planDate} min={ymdKey()} onChange={e=>setPlanDate(e.target.value)}
+                  style={{flex:1,height:34,borderRadius:9,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,padding:'0 10px',outline:'none',boxSizing:'border-box'}}/>
+              </div>
+              {/* 3 issues */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                <button onClick={handleHold} disabled={saving} title="Garder de côté, sans date ni validation" style={{height:44,borderRadius:11,border:'1px solid rgba(200,144,64,0.4)',background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11.5,fontWeight:800,cursor:saving?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2}}><span style={{fontSize:14}}>⏸️</span>En attente</button>
+                <button onClick={handlePlan} disabled={saving||!planDate} title="Déposer sur le calendrier de l'athlète" style={{height:44,borderRadius:11,border:'1px solid rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11.5,fontWeight:800,cursor:saving||!planDate?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2}}><span style={{fontSize:14}}>📅</span>Planifier</button>
+                <button onClick={handleSave} disabled={saving} title="Enregistrer comme séance réalisée maintenant" style={{height:44,borderRadius:11,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:11.5,fontWeight:800,cursor:saving?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2,boxShadow:'0 6px 18px rgba(44,196,160,0.3)'}}><span style={{fontSize:14}}>✅</span>{saving?'…':'Valider'}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -9710,6 +10842,42 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
           <Icon name="plus" size={18} stroke={T.accent}/>Ajouter un exercice
         </button>
       </div>
+
+      {/* ── Rest Timer Countdown ── */}
+      {restTimer>0&&(
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:10,padding:'0 16px calc(16px + env(safe-area-inset-bottom))',background:'linear-gradient(transparent,rgba(8,8,12,0.95) 20%)'}}>
+          <div style={{borderRadius:18,overflow:'hidden',background:'rgba(20,20,30,0.98)',border:'1px solid rgba(90,138,224,0.35)',boxShadow:'0 -8px 30px rgba(0,0,0,0.5)'}}>
+            {/* Progress bar */}
+            <div style={{height:4,background:'rgba(255,255,255,0.06)'}}>
+              <div style={{height:'100%',width:(restTimer/restTimerTotal*100)+'%',background:restTimer<=5?'#e84040':'linear-gradient(90deg,#5A8AE0,#2CC4A0)',borderRadius:2,transition:'width 1s linear'}}/>
+            </div>
+            <div style={{padding:'14px 18px',display:'flex',alignItems:'center',gap:14}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.8,color:restTimer<=5?'#e84040':'#5A8AE0',marginBottom:2}}>
+                  {restTimer<=5?'⚡ C\'est reparti !':'⏱ Repos'}
+                </div>
+                <div style={{fontSize:28,fontWeight:900,fontFamily:'JetBrains Mono,monospace',letterSpacing:2,color:restTimer<=10?'#e84040':T.text,lineHeight:1}}>
+                  {Math.floor(restTimer/60)>0&&<>{Math.floor(restTimer/60)}:</>}{String(restTimer%60).padStart(2,'0')}
+                </div>
+              </div>
+              <button onClick={dismissRestTimer} style={{width:42,height:42,borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Icon name="x" size={18} stroke={T.textDim}/>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {restTimer===0&&restTimerTotal>0&&(
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:10,padding:'0 16px calc(16px + env(safe-area-inset-bottom))',background:'linear-gradient(transparent,rgba(8,8,12,0.95) 20%)'}}>
+          <button onClick={dismissRestTimer} style={{width:'100%',borderRadius:18,overflow:'hidden',background:'rgba(232,64,64,0.12)',border:'1px solid rgba(232,64,64,0.4)',padding:'16px 18px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,color:T.text,boxShadow:'0 -8px 30px rgba(0,0,0,0.5)'}}>
+            <span style={{fontSize:26}}>🔔</span>
+            <div style={{flex:1,textAlign:'left'}}>
+              <div style={{fontSize:14,fontWeight:800,color:'#e84040'}}>Repos terminé !</div>
+              <div style={{fontSize:11,color:T.textDim,marginTop:2}}>Touche pour reprendre</div>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -10097,7 +11265,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       detail={detail||{}}
       editSession={editingSession}
       resumeData={resumeLive}
-      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab('historique');reloadDetail(selected.id);}flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
+      onSaved={(kind)=>{const wasEdit=!!editingSession;setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab(kind==='done'&&!wasEdit?'historique':'sport');reloadDetail(selected.id);}flash(wasEdit?'✓ Séance modifiée':kind==='planned'?'✓ Séance planifiée':kind==='pending'?'✓ Séance mise en attente':'✓ Séance enregistrée');}}
       onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);}}
     />,
     document.body
@@ -10288,13 +11456,23 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
         {/* ── Tab 2 : Séances / Programme ── */}
         {detailTab==='sport'&&(
           <div style={{padding:'0 18px'}}>
-            {/* Séance Live — barre compacte, CTA principal */}
-            <button onClick={()=>setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
-              <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
-              <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>Séance Live</span>
-              <span style={{fontSize:10,color:T.textFaint}}>Temps réel</span>
-              <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
-            </button>
+            {/* Séance Live — barre compacte, CTA principal. Devient "Reprendre" si une séance
+                Live de CET athlète a été quittée sans être validée (le coach la retrouve ici,
+                pas seulement depuis la liste des athlètes). */}
+            {(()=>{
+              const savedLive=loadLiveFromStorage();
+              const canResume=savedLive&&(savedLive.exercises||[]).length>0&&selected&&savedLive.athleteId===selected.id;
+              return(
+                <button onClick={()=>canResume?setResumeLive(savedLive):setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
+                  <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
+                  <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>{canResume?'Reprendre la séance':'Créer séance'}</span>
+                  <span style={{fontSize:10,color:canResume?'#e84040':T.textFaint,fontWeight:canResume?700:400}}>{canResume?'En pause · '+(savedLive.exercises||[]).length+' ex.':'Valider · planifier · attente'}</span>
+                  <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
+                </button>
+              );
+            })()}
+            {/* Séances en attente (créées via "Créer séance", ni datées ni validées) */}
+            <CoachPendingSessions athleteId={a.id} pending={a.pendingSessions||[]} onChange={()=>reloadDetail(a.id)} onFlash={flash}/>
             {/* Import programme & bibliothèque — regroupés côte à côte pour limiter l'empilement */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <div style={{position:'relative'}}>
@@ -10363,7 +11541,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             />
 
             {/* Programme journalier */}
-            {programDays>0&&<CoachProgramMirror athleteData={a} athleteId={selected.id} athleteName={a.firstName||a.email.split('@')[0]} onSessionSent={()=>{reloadDetail(selected.id);flash('✓ Séance importée');}}/>}
+            {programDays>0&&<CoachProgramMirror athleteData={a} athleteId={selected.id} athleteName={a.firstName||a.email.split('@')[0]} history={sessions} onSessionSent={()=>{reloadDetail(selected.id);flash('✓ Mis à jour');}}/>}
 
             {/* Courbe de volume */}
             {sessions.length>1&&(()=>{
@@ -14436,6 +15614,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
+  const[sessionComparison,setSessionComparison]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
   const[pendingProgramEditId,setPendingProgramEditId]=React.useState(null);
   // Choke point unique pour tous les "Démarrer une séance" (jour de programme, séance live
@@ -14455,11 +15634,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
-    // Comparaison "vs la dernière fois" avec la même séance (même nom, ex: le mardi vs le
-    // mardi précédent), pas juste la toute dernière séance loggée — sinon un mardi juste
-    // après un lundi se compare au volume du lundi, deux séances totalement différentes.
-    const prevSession=history.find(s=>typeof s.totalVolume==='number'&&snapshot.name&&s.name===snapshot.name);
-    setVolumeVsPrev(prevSession&&typeof snapshot.totalVolume==='number'?{current:snapshot.totalVolume,previous:prevSession.totalVolume}:null);
+    // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
+    // (même logique que le récap ouvert au clic sur le calendrier).
+    const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history);
+    setVolumeVsPrev(vvp);
+    setSessionComparison(comp);
     setLastFinishedSession(snapshot);
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
@@ -14629,18 +15808,178 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           </div>
         )}
       </div>
-      {/* Écran félicitations post-séance */}
-      {showCongrats&&(
-        <div onClick={()=>{setShowCongrats(false);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse at 50% 40%, rgba(191,160,96,0.28) 0%, rgba(6,6,10,0.97) 65%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,cursor:'pointer'}}>
-          <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',pointerEvents:'none'}}>
-            <img src="/logo.svg" alt="Prime Athl" style={{width:72,height:72,borderRadius:20,objectFit:'cover',marginBottom:18,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
-            <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:8}}>Séance validée ✓</div>
-            <div style={{fontSize:32,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:8,color:'#fff'}}>Félicitations !</div>
-            <div style={{fontSize:13,color:'rgba(255,255,255,0.55)',marginBottom:28,lineHeight:1.5}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev)}</div>
-            <div style={{fontSize:11,color:'rgba(255,255,255,0.25)',fontWeight:600}}>Appuie n'importe où pour continuer</div>
+      {/* Écran félicitations post-séance — avec comparaison détaillée */}
+      {showCongrats&&(()=>{
+        // Type de séance : une séance cardio / poids du corps a un volume total de 0. On adapte
+        // l'affichage (tuiles, comparaison de volume, message) pour ne pas afficher des « 0 kg »
+        // ni un absurde « ↓ 100% » quand il n'y a tout simplement pas de charge à comparer.
+        const _s=lastFinishedSession;
+        const totalVolume=_s?.totalVolume||0;
+        const hasVolume=totalVolume>0;
+        const totalSets=(_s?.exercises||[]).reduce((a,e)=>a+((e.sets||[]).length),0);
+        const durVal=_s?.duration||0;
+        const exCount=(_s?.exercises||[]).length;
+        // Comparaison de volume affichée seulement si les DEUX séances ont une charge > 0 : compare
+        // 4100 kg à 0 kg (muscu → cardio même nom) n'a aucun sens.
+        const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
+        // Séance en recul : au moins autant d'exercices en baisse qu'en hausse (et ≥1 baisse),
+        // ou, à défaut de comparaison par exercice, un volume total en baisse. On le signale
+        // visuellement en haut du récap — impossible à rater.
+        const _cmp=sessionComparison;
+        const isRegression=(!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>0&&_cmp.downCount>=_cmp.upCount)
+          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
+        const regDown=_cmp?_cmp.downCount:0;
+        const tiles=[];
+        if(hasVolume)tiles.push({val:Math.round(totalVolume).toLocaleString('fr-FR'),unit:'kg',label:'Volume'});
+        else tiles.push({val:totalSets,unit:'',label:totalSets>1?'Séries':'Série'});
+        tiles.push(durVal>0?{val:durVal,unit:'min',label:'Durée'}:{val:'—',unit:'',label:'Durée',dim:true});
+        tiles.push({val:exCount,unit:'',label:exCount>1?'Exercices':'Exercice'});
+        return(
+        <div style={{position:'absolute',inset:0,zIndex:300,background:'radial-gradient(ellipse 92% 52% at 50% 12%, rgba(191,160,96,0.15), rgba(191,160,96,0) 58%), #07070e',display:'flex',flexDirection:'column',overflow:'auto',WebkitOverflowScrolling:'touch'}}>
+          <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',padding:'48px 24px 120px'}}>
+            {/* Header */}
+            <div style={{animation:'celebrationPop 0.55s cubic-bezier(.34,1.56,.64,1)',textAlign:'center',marginBottom:24}}>
+              <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
+              <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
+              <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume})}</div>
+            </div>
+
+            {/* Alerte régression — signalée fort quand la séance est en recul */}
+            {isRegression&&(
+              <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
+                <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en baisse`:''}. Reprends-toi dès la prochaine, pas d'excuse.</div>
+              </div>
+            )}
+
+            {/* Résumé de la séance */}
+            {_s&&(
+              <div style={{width:'100%',maxWidth:380,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
+                {tiles.map((s,i)=>(
+                  <div key={i} style={{textAlign:'center',padding:'12px 8px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div style={{fontSize:19,fontWeight:800,color:s.dim?'rgba(255,255,255,0.4)':'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.val}{s.unit&&<span style={{fontSize:11,color:'rgba(255,255,255,0.4)',fontWeight:600}}> {s.unit}</span>}</div>
+                    <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:600,marginTop:2,textTransform:'uppercase',letterSpacing:0.3}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Comparaison volume global — masquée pour les séances sans charge (cf. showVolCompare) */}
+            {showVolCompare&&(
+              <div style={{width:'100%',maxWidth:380,padding:'14px 16px',borderRadius:16,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)',marginBottom:16}}>
+                <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>Volume total vs dernière "{lastFinishedSession?.name}"</div>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                      <span style={{fontSize:12,color:'rgba(255,255,255,0.45)'}}>Avant</span>
+                      <span style={{fontSize:14,fontWeight:700,color:'rgba(255,255,255,0.55)'}}>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</span>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{fontSize:12,color:'#fff',fontWeight:600}}>Maintenant</span>
+                      <span style={{fontSize:14,fontWeight:700,color:'#fff'}}>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</span>
+                    </div>
+                  </div>
+                  {(()=>{
+                    const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
+                    const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
+                    const up=delta>0;
+                    return(
+                      <div style={{width:64,height:64,flexShrink:0,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                        <div style={{fontSize:16,fontWeight:800,color:delta===0?'rgba(255,255,255,0.5)':up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
+                        <div style={{fontSize:10,fontWeight:700,color:delta===0?'rgba(255,255,255,0.4)':up?T.good:T.danger}}>{pct}%</div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Comparaison exercice par exercice */}
+            {sessionComparison&&sessionComparison.exercises.length>0&&(
+              <div style={{width:'100%',maxWidth:380,marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Détail par exercice</div>
+                  {sessionComparison.prsCount>0&&(
+                    <span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'2px 8px',borderRadius:999,background:'rgba(191,160,96,0.15)',border:'1px solid rgba(191,160,96,0.3)'}}>
+                      {sessionComparison.prsCount} PR{sessionComparison.prsCount>1?'s':''}
+                    </span>
+                  )}
+                </div>
+                <div style={{borderRadius:16,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
+                  {sessionComparison.exercises.map((ex,i)=>{
+                    const isNew=ex.status==='new';
+                    const up=ex.status==='up';
+                    const down=ex.status==='down';
+                    const statusColor=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                    const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
+                    const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
+                    return(
+                      <div key={i} style={{padding:'10px 14px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<sessionComparison.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <span style={{fontSize:14,width:22,textAlign:'center'}}>{statusIcon}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:13,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
+                              {ex.isPR&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
+                            </div>
+                            <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                              {!isNew&&ex.prevMaxW>0&&(
+                                <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>
+                              )}
+                              {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                              {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                              {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                            </div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0}}>
+                            {vDeltaStr&&<div style={{fontSize:11,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
+                            {ex.curVol>0&&<div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Score global */}
+                <div style={{display:'flex',gap:8,marginTop:10}}>
+                  {[
+                    {count:sessionComparison.upCount,label:'en hausse',color:T.good,icon:'↑'},
+                    {count:sessionComparison.downCount,label:'en baisse',color:T.danger,icon:'↓'},
+                    {count:sessionComparison.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},
+                  ].filter(x=>x.count>0).map((x,i)=>(
+                    <div key={i} style={{flex:1,textAlign:'center',padding:'8px 6px',borderRadius:10,background:`${x.color}11`,border:`1px solid ${x.color}33`}}>
+                      <div style={{fontSize:16,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
+                      <div style={{fontSize:9,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pas de comparaison = première séance de ce nom */}
+            {!sessionComparison&&lastFinishedSession&&(
+              <div style={{width:'100%',maxWidth:380,padding:'14px 16px',borderRadius:16,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',marginBottom:16,textAlign:'center'}}>
+                <div style={{fontSize:12,color:'rgba(255,255,255,0.5)',lineHeight:1.5}}>
+                  Première séance <b style={{color:'#fff'}}>"{lastFinishedSession.name}"</b> enregistrée.<br/>La prochaine fois, tu verras ta progression exercice par exercice.
+                </div>
+              </div>
+            )}
+
+            {/* Phrase de motivation / développement personnel */}
+            <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev)}"</div>
+            </div>
+
+            {/* Bouton continuer */}
+            <button onClick={()=>{setShowCongrats(false);setSessionComparison(null);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{width:'100%',maxWidth:380,height:52,borderRadius:14,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:15,fontWeight:700,cursor:'pointer',marginTop:8}}>
+              Continuer
+            </button>
           </div>
         </div>
-      )}
+        );
+      })()}
       {showAddToProgramme&&lastFinishedSession&&(
         <div style={{position:'absolute',inset:0,zIndex:310,background:'rgba(0,0,0,0.8)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget){setShowAddToProgramme(false);setLastFinishedSession(null);}}}>
           <div style={{width:'100%',maxWidth:480,background:'linear-gradient(180deg,#16162a,#0d0d14)',border:'1px solid rgba(224,112,32,0.25)',borderRadius:'24px 24px 0 0',padding:'28px 24px 48px',animation:'celebrationPop 0.3s ease'}} onClick={e=>e.stopPropagation()}>
