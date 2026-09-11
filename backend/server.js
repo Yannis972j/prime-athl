@@ -167,7 +167,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, pendingSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -413,6 +413,7 @@ setInterval(() => {
       // orphelines indéfiniment une fois l'utilisateur supprimé (aucune autre route ne
       // les nettoie après coup).
       delete DATA.plannedSessions[u.id];
+      delete DATA.pendingSessions?.[u.id];
       delete DATA.nutritionPrograms[u.id];
       delete DATA.scheduleMoves[u.id];
       delete DATA.nutritionLogs?.[u.id];
@@ -1279,6 +1280,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
+    pendingSessions: DATA.pendingSessions[u.id] || [],
   });
 });
 
@@ -1308,6 +1310,7 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.myLibrary?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
   purgeUserPurchases(u.id);
@@ -1896,6 +1899,43 @@ app.delete('/api/coach/athletes/:athleteId/planned-sessions/:date/:index', authR
   res.json({ ok: true, plannedSessions: athletePlanned });
 });
 
+// ── Coach: séances "en attente" (créées mais ni validées ni planifiées) ──────────
+// Le coach construit une séance (via "Créer séance") et la met de côté sans lui donner de date
+// ni la marquer comme faite : il la retrouve dans la fiche athlète pour la planifier ou la
+// valider plus tard. Stockage à plat par athlète (pas de clé date, contrairement à
+// plannedSessions), chaque entrée porte son propre id.
+app.post('/api/coach/athletes/:athleteId/pending-sessions', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const { session } = req.body || {};
+  if (!session || !Array.isArray(session.exercises)) return res.status(400).json({ error: 'missing_fields' });
+  if (!DATA.pendingSessions[req.params.athleteId]) DATA.pendingSessions[req.params.athleteId] = [];
+  const entry = {
+    id: 'pend-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    name: (typeof session.name === 'string' && session.name.trim() ? session.name : 'Séance').slice(0, 120),
+    muscles: typeof session.muscles === 'string' ? session.muscles.slice(0, 80) : '',
+    exercises: session.exercises.slice(0, 50).map(sanitizeCoachExercise),
+    totalVolume: Math.max(0, Math.min(1e7, parseFloat(session.totalVolume) || 0)),
+    duration: Math.max(0, parseInt(session.duration) || 0),
+    createdAt: Date.now(),
+  };
+  DATA.pendingSessions[req.params.athleteId].push(entry);
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] });
+});
+
+app.delete('/api/coach/athletes/:athleteId/pending-sessions/:id', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const list = DATA.pendingSessions[req.params.athleteId] || [];
+  const idx = list.findIndex(s => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  list.splice(idx, 1);
+  if (list.length === 0) delete DATA.pendingSessions[req.params.athleteId];
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] || [] });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
@@ -2419,6 +2459,7 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.freeFoodLogs?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
   purgeUserPurchases(u.id);

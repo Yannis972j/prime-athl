@@ -8966,6 +8966,67 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
   );
 }
 
+// Séances "en attente" créées via "Créer séance" — le coach les reprend pour les planifier
+// (dépose sur le calendrier athlète) ou les valider comme faites.
+function CoachPendingSessions({athleteId,pending,onChange,onFlash}){
+  const[planning,setPlanning]=React.useState(null); // id en cours de planification
+  const[planDate,setPlanDate]=React.useState(()=>{const d=new Date();d.setDate(d.getDate()+1);return ymdKey(d);});
+  const[busy,setBusy]=React.useState(false);
+  if(!pending||!pending.length)return null;
+  const removePending=id=>apiCall('/api/coach/athletes/'+athleteId+'/pending-sessions/'+id,{method:'DELETE'});
+  const validateNow=async s=>{
+    if(busy)return;setBusy(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:s.name,date:new Date().toISOString(),exercises:s.exercises,totalVolume:s.totalVolume,duration:s.duration}});
+      await removePending(s.id);onFlash&&onFlash('✓ Séance validée');onChange&&onChange();
+    }catch(e){onFlash&&onFlash('✗ '+(e.message||'Erreur'));setBusy(false);}
+  };
+  const planNow=async s=>{
+    if(busy||!planDate)return;setBusy(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/planned-sessions',{method:'POST',body:{date:planDate,session:{name:s.name,muscles:s.muscles||'',exercises:s.exercises,totalVolume:s.totalVolume}}});
+      await removePending(s.id);onFlash&&onFlash('✓ Séance planifiée');setPlanning(null);onChange&&onChange();
+    }catch(e){onFlash&&onFlash('✗ '+(e.message||'Erreur'));setBusy(false);}
+  };
+  const del=async s=>{if(busy)return;setBusy(true);try{await removePending(s.id);onFlash&&onFlash('✓ Retirée');onChange&&onChange();}catch(e){setBusy(false);}};
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#C89040'}}>⏸️ En attente</span>
+        <span style={{fontSize:10,color:T.textFaint}}>{pending.length} séance{pending.length>1?'s':''}</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {pending.map(s=>{
+          const exCount=(s.exercises||[]).length;
+          return(
+            <div key={s.id} style={{borderRadius:12,background:'rgba(200,144,64,0.06)',border:'1px solid rgba(200,144,64,0.28)',padding:'10px 12px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:800,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{Math.round(s.totalVolume||0).toLocaleString('fr-FR')} kg · {exCount} exo{exCount>1?'s':''}{s.muscles?' · '+s.muscles:''}</div>
+                </div>
+                <button onClick={()=>del(s)} disabled={busy} title="Supprimer" style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:12,cursor:'pointer',flexShrink:0}}>🗑</button>
+              </div>
+              {planning===s.id?(
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <input type="date" value={planDate} min={ymdKey()} onChange={e=>setPlanDate(e.target.value)} style={{flex:1,height:36,borderRadius:9,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,padding:'0 10px',outline:'none',boxSizing:'border-box'}}/>
+                  <button onClick={()=>planNow(s)} disabled={busy} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:'#5A8AE0',color:'#fff',fontSize:12,fontWeight:800,cursor:busy?'default':'pointer'}}>OK</button>
+                  <button onClick={()=>setPlanning(null)} style={{height:36,padding:'0 11px',borderRadius:9,border:'1px solid '+T.border,background:'transparent',color:T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>✕</button>
+                </div>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <button onClick={()=>setPlanning(s.id)} style={{height:36,borderRadius:9,border:'1px solid rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11.5,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📅 Planifier</button>
+                  <button onClick={()=>validateNow(s)} disabled={busy} style={{height:36,borderRadius:9,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:11.5,fontWeight:800,cursor:busy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>✅ Valider</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
   const[data,setData]=React.useState(null);
   const[viewDay,setViewDay]=React.useState(()=>todayDayName());
@@ -10174,6 +10235,8 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[saveError,setSaveError]=React.useState(null);
   const[confirmingClose,setConfirmingClose]=React.useState(false);
   const[reviewing,setReviewing]=React.useState(false);
+  // Date proposée pour "Planifier" : demain par défaut (une séance planifiée est à venir).
+  const[planDate,setPlanDate]=React.useState(()=>{const d=new Date();d.setDate(d.getDate()+1);return ymdKey(d);});
   const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||'');
   const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
@@ -10350,32 +10413,64 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
 
   const removeExercise=idx=>setExercises(prev=>prev.filter((_,i)=>i!==idx));
 
-  const handleSave=async()=>{
+  // Construit la charge utile commune aux 3 issues (valider / planifier / mettre en attente).
+  const buildPayload=()=>{
     const valid=exercises.filter(e=>e.sets.length>0);
-    if(!valid.length)return;
+    if(!valid.length)return null;
+    const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
+    // Normalise le type de groupe : si plusieurs exercices partagent un groupId et qu'au moins
+    // un est superset/triset/cardio, on aligne TOUT le groupe sur ce type. Évite qu'un superset
+    // retombe en "classique" chez l'athlète si un membre avait gardé groupType 'classic'.
+    const groupTypeById={};
+    valid.forEach(e=>{if(e.groupId&&e.groupType&&e.groupType!=='classic'&&!groupTypeById[e.groupId])groupTypeById[e.groupId]=e.groupType;});
+    const exData=valid.map(e=>{
+      // Persiste aussi le repos au niveau exercice (restSeconds) à partir du repos saisi par
+      // série, pour que TOUTES les vues le reflètent (récap, partage, PDF), pas seulement s.rest.
+      const restSec=e.restSeconds||exRestSeconds(e);
+      const gType=(e.groupId&&groupTypeById[e.groupId])||e.groupType||'classic';
+      return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:gType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
+    });
+    const muscles=[...new Set(valid.map(e=>e.muscle).filter(Boolean))].join(', ');
+    return{exData,totalVolume,muscles,name:sessionName.trim()||'Séance',duration:Math.round(elapsed/60)};
+  };
+
+  // Valider : enregistre directement comme séance réalisée (ou applique l'édition en cours).
+  const handleSave=async()=>{
+    const p=buildPayload();
+    if(!p)return;
     setSaving(true);
     try{
-      const totalVolume=valid.reduce((s,e)=>s+e.sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
-      // Normalise le type de groupe : si plusieurs exercices partagent un groupId et qu'au moins
-      // un est superset/triset/cardio, on aligne TOUT le groupe sur ce type. Évite qu'un superset
-      // retombe en "classique" chez l'athlète si un membre avait gardé groupType 'classic'.
-      const groupTypeById={};
-      valid.forEach(e=>{if(e.groupId&&e.groupType&&e.groupType!=='classic'&&!groupTypeById[e.groupId])groupTypeById[e.groupId]=e.groupType;});
-      const exData=valid.map(e=>{
-        // Persiste aussi le repos au niveau exercice (restSeconds) à partir du repos saisi par
-        // série pendant la Live, pour que TOUTES les vues le reflètent (récap, partage, PDF),
-        // pas seulement celles qui lisent s.rest.
-        const restSec=e.restSeconds||exRestSeconds(e);
-        const gType=(e.groupId&&groupTypeById[e.groupId])||e.groupType||'classic';
-        return{name:e.name,muscle:e.muscle,brand:e.brand,groupId:e.groupId,groupType:gType,cardio:e.cardio||null,sets:e.sets,...(e.style?{style:e.style}:{}),...(isUnilateralEx(e)?{unilateral:true}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(restSec>0?{restSeconds:restSec}:{})};
-      });
       if(editSession){
-        await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:sessionName.trim()||'Séance Live',exercises:exData,totalVolume,duration:editSession.duration||Math.round(elapsed/60)}});
+        await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:p.name,exercises:p.exData,totalVolume:p.totalVolume,duration:editSession.duration||p.duration}});
       }else{
-        await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:sessionName.trim()||'Séance Live',date:new Date().toISOString(),exercises:exData,totalVolume,duration:Math.round(elapsed/60)}});
+        await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:p.name,date:new Date().toISOString(),exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration}});
       }
       clearLiveStorage();
-      onSaved();
+      onSaved('done');
+    }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
+  };
+
+  // Planifier : dépose la séance sur le calendrier de l'athlète à la date choisie (il la démarre lui-même).
+  const handlePlan=async()=>{
+    const p=buildPayload();
+    if(!p||!planDate)return;
+    setSaving(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/planned-sessions',{method:'POST',body:{date:planDate,session:{name:p.name,muscles:p.muscles,exercises:p.exData,totalVolume:p.totalVolume}}});
+      clearLiveStorage();
+      onSaved('planned');
+    }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
+  };
+
+  // Mettre en attente : garde la séance de côté (ni datée, ni faite) — le coach la reprend plus tard.
+  const handleHold=async()=>{
+    const p=buildPayload();
+    if(!p)return;
+    setSaving(true);
+    try{
+      await apiCall('/api/coach/athletes/'+athleteId+'/pending-sessions',{method:'POST',body:{session:{name:p.name,muscles:p.muscles,exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration}}});
+      clearLiveStorage();
+      onSaved('pending');
     }catch(e){setSaving(false);setSaveError(e.message||'Erreur réseau');}
   };
 
@@ -10607,13 +10702,13 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div style={{flex:1,textAlign:'center',minWidth:0}}>
           <div style={{fontSize:10,color:reviewing?T.good:editSession?T.accent:'#e84040',fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'center',gap:5,marginBottom:1}}>
             {reviewing?<Icon name="check" size={10} stroke={T.good}/>:editSession?<Icon name="edit" size={10} stroke={T.accent}/>:<span style={{width:6,height:6,borderRadius:3,background:'#e84040',display:'inline-block',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/>}
-            {reviewing?'Récap · ':editSession?'Modifier · ':'Live · '}{athleteName}
+            {reviewing?'Récap · ':editSession?'Modifier · ':'Création · '}{athleteName}
           </div>
           <div style={{fontSize:24,fontWeight:800,letterSpacing:3,color:T.text,fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>{fmt(elapsed)}</div>
         </div>
-        <button onClick={()=>reviewing?handleSave():setReviewing(true)} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+        {(!reviewing||editSession)&&<button onClick={()=>reviewing?handleSave():setReviewing(true)} disabled={saving||totalSets===0} style={{height:36,padding:'0 14px',borderRadius:18,border:'none',background:totalSets>0&&!saving?'linear-gradient(135deg,#2CC4A0,#5A8AE0)':'rgba(255,255,255,0.06)',color:totalSets>0&&!saving?'#fff':T.textFaint,cursor:totalSets>0&&!saving?'pointer':'default',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
           {saving?'…':<><Icon name="check" size={14} stroke={totalSets>0?'#fff':T.textFaint}/>{reviewing?'Valider':'Fin'}</>}
-        </button>
+        </button>}
       </div>
 
       {saveError&&<div onClick={()=>setSaveError(null)} style={{padding:'9px 16px',background:'rgba(184,80,112,0.15)',borderBottom:'1px solid rgba(184,80,112,0.3)',color:'#e07090',fontSize:12,fontWeight:600,flexShrink:0,cursor:'pointer',textAlign:'center'}}>✗ {saveError} — touche pour fermer</div>}
@@ -10622,7 +10717,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
         <div style={{padding:'10px 16px',flexShrink:0,background:'rgba(44,196,160,0.07)',borderBottom:'1px solid rgba(44,196,160,0.18)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
             <div style={{flex:1,fontSize:11,color:T.textDim,lineHeight:1.5}}>
-              <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — vérifie la séance puis nomme-la avant de valider.
+              <span style={{fontWeight:700,color:T.good}}>Récapitulatif</span> — nomme la séance{editSession?' avant de valider.':', puis choisis : valider, planifier ou mettre en attente.'}
             </div>
             <button onClick={()=>setReviewing(false)} style={{height:30,padding:'0 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>Reprendre</button>
           </div>
@@ -10632,6 +10727,22 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
             placeholder="Nom de la séance (ex: Push Day A, Jambes…)"
             style={{width:'100%',height:40,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(255,255,255,0.06)',color:T.text,fontSize:13,fontWeight:600,padding:'0 12px',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}
           />
+          {!editSession&&(
+            <div style={{marginTop:10}}>
+              {/* Date utilisée par "Planifier" */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',flexShrink:0}}>Planifier le</span>
+                <input type="date" value={planDate} min={ymdKey()} onChange={e=>setPlanDate(e.target.value)}
+                  style={{flex:1,height:34,borderRadius:9,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,padding:'0 10px',outline:'none',boxSizing:'border-box'}}/>
+              </div>
+              {/* 3 issues */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                <button onClick={handleHold} disabled={saving} title="Garder de côté, sans date ni validation" style={{height:44,borderRadius:11,border:'1px solid rgba(200,144,64,0.4)',background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11.5,fontWeight:800,cursor:saving?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2}}><span style={{fontSize:14}}>⏸️</span>En attente</button>
+                <button onClick={handlePlan} disabled={saving||!planDate} title="Déposer sur le calendrier de l'athlète" style={{height:44,borderRadius:11,border:'1px solid rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.1)',color:'#5A8AE0',fontSize:11.5,fontWeight:800,cursor:saving||!planDate?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2}}><span style={{fontSize:14}}>📅</span>Planifier</button>
+                <button onClick={handleSave} disabled={saving} title="Enregistrer comme séance réalisée maintenant" style={{height:44,borderRadius:11,border:'none',background:'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:11.5,fontWeight:800,cursor:saving?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',lineHeight:1.2,boxShadow:'0 6px 18px rgba(44,196,160,0.3)'}}><span style={{fontSize:14}}>✅</span>{saving?'…':'Valider'}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -11154,7 +11265,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       detail={detail||{}}
       editSession={editingSession}
       resumeData={resumeLive}
-      onSaved={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab('historique');reloadDetail(selected.id);}flash(editingSession?'✓ Séance modifiée':'✓ Séance enregistrée');}}
+      onSaved={(kind)=>{const wasEdit=!!editingSession;setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab(kind==='done'&&!wasEdit?'historique':'sport');reloadDetail(selected.id);}flash(wasEdit?'✓ Séance modifiée':kind==='planned'?'✓ Séance planifiée':kind==='pending'?'✓ Séance mise en attente':'✓ Séance enregistrée');}}
       onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);}}
     />,
     document.body
@@ -11354,12 +11465,14 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               return(
                 <button onClick={()=>canResume?setResumeLive(savedLive):setShowLiveSession(true)} style={{width:'100%',height:46,padding:'0 14px',borderRadius:13,border:'1px solid rgba(232,64,64,0.35)',background:'linear-gradient(135deg,rgba(232,64,64,0.1),rgba(184,80,112,0.05))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',marginBottom:8}}>
                   <span style={{fontSize:15,position:'relative'}}>🔴<span style={{position:'absolute',top:-1,right:-4,width:6,height:6,borderRadius:3,background:'#e84040',animation:'fadeIn 1s ease infinite alternate',willChange:'opacity'}}/></span>
-                  <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>{canResume?'Reprendre la séance Live':'Séance Live'}</span>
-                  <span style={{fontSize:10,color:canResume?'#e84040':T.textFaint,fontWeight:canResume?700:400}}>{canResume?'En pause · '+(savedLive.exercises||[]).length+' ex.':'Temps réel'}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:700,letterSpacing:0.1}}>{canResume?'Reprendre la séance':'Créer séance'}</span>
+                  <span style={{fontSize:10,color:canResume?'#e84040':T.textFaint,fontWeight:canResume?700:400}}>{canResume?'En pause · '+(savedLive.exercises||[]).length+' ex.':'Valider · planifier · attente'}</span>
                   <Icon name="chevronRight" size={15} stroke="rgba(232,64,64,0.6)"/>
                 </button>
               );
             })()}
+            {/* Séances en attente (créées via "Créer séance", ni datées ni validées) */}
+            <CoachPendingSessions athleteId={a.id} pending={a.pendingSessions||[]} onChange={()=>reloadDetail(a.id)} onFlash={flash}/>
             {/* Import programme & bibliothèque — regroupés côte à côte pour limiter l'empilement */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <div style={{position:'relative'}}>
