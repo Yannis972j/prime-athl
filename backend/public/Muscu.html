@@ -8724,22 +8724,32 @@ function CoachPlanSessionModal({athleteId,athleteName,sourceSession,onClose,onDo
   );
 }
 
-function CoachProgramMirror({athleteData,athleteId,athleteName,onSessionSent}){
+function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSessionSent}){
   const programData=athleteData&&athleteData.program&&athleteData.program.data||{};
   const sheetNames=Object.keys(programData);
   const[activeSheet,setActiveSheet]=React.useState(sheetNames[sheetNames.length-1]||null);
-  const[importDay,setImportDay]=React.useState(null); // {dayName, dayData}
+  const[importDay,setImportDay]=React.useState(null);       // {dayName, dayData} — Importer
+  const[viewDay,setViewDay]=React.useState(null);           // {dayName, dayData} — Voir (séance prévue)
+  const[recapSession,setRecapSession]=React.useState(null); // séance réalisée — Récap
+  const[editSession,setEditSession]=React.useState(null);   // séance réalisée — Modifier
   if(sheetNames.length===0)return null;
   const sheet=activeSheet||sheetNames[sheetNames.length-1];
   const days=programData[sheet]||{};
   const DAY_ORDER=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const sortedDays=Object.keys(days).sort((a,b)=>DAY_ORDER.indexOf(a)-DAY_ORDER.indexOf(b));
+  const hist=history||[];
+  // Dernière séance réellement réalisée portant le nom de ce jour → cible de Récap et Modifier.
+  const lastDoneFor=name=>{
+    const m=hist.filter(h=>(h.name||'')===name).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    return m[0]||null;
+  };
+  const reload=()=>onSessionSent&&onSessionSent();
   return(
     <div style={{marginBottom:14}}>
-      {importDay&&<CoachImportSessionModal
-        athleteId={athleteId} athleteName={athleteName}
-        dayName={importDay.dayName} dayData={importDay.dayData}
-        onClose={()=>setImportDay(null)} onDone={onSessionSent}/>}
+      {importDay&&<CoachImportSessionModal athleteId={athleteId} athleteName={athleteName} dayName={importDay.dayName} dayData={importDay.dayData} onClose={()=>setImportDay(null)} onDone={reload}/>}
+      {viewDay&&<CoachDayViewModal dayName={viewDay.dayName} dayData={viewDay.dayData} onClose={()=>setViewDay(null)}/>}
+      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} history={hist} initialTab="recap" onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
+      {editSession&&<CoachEditSessionModal session={editSession} athleteName={athleteName} onClose={()=>setEditSession(null)} onDone={()=>{setEditSession(null);reload();}}/>}
       {sheetNames.length>1&&(
         <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
           {sheetNames.map(name=>(
@@ -8751,37 +8761,194 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,onSessionSent}){
         {sortedDays.map(dayName=>{
           const d=days[dayName];
           const exCount=(d.exercises||[]).length;
+          const name=d.category||dayName;
+          const done=lastDoneFor(name);
+          const mkBtn=(emoji,label,color,onClick,enabled,title)=>(
+            <button onClick={enabled?onClick:undefined} disabled={!enabled} title={title||''}
+              style={{height:34,borderRadius:9,border:'1px solid '+(enabled?color+'55':'rgba(255,255,255,0.07)'),background:enabled?color+'14':'rgba(255,255,255,0.02)',color:enabled?color:T.textFaint,fontSize:11,fontWeight:700,cursor:enabled?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:enabled?1:0.45,whiteSpace:'nowrap',padding:'0 4px'}}>
+              <span style={{fontSize:12}}>{emoji}</span>{label}
+            </button>
+          );
           return(
-            <div key={dayName} style={{borderRadius:11,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border,overflow:'hidden'}}>
-              {/* Header jour — cliquable pour déployer/réduire */}
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'11px 12px'}}>
+            <div key={dayName} style={{borderRadius:12,background:'rgba(255,255,255,0.025)',border:'1px solid '+T.border,padding:'11px 12px'}}>
+              {/* En-tête : jour + nom de la séance + état (fait / jamais fait) */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600}}>{dayName}</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.category}</div>
+                  <div style={{fontSize:13.5,fontWeight:800,letterSpacing:0.2}}>{dayName}</div>
+                  <div style={{fontSize:11,color:T.textDim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>
                 </div>
-                <div style={{fontSize:10,color:T.textFaint,fontWeight:600,flexShrink:0,marginRight:6}}>{exCount} exo</div>
-                {/* Bouton import séance */}
-                <button onClick={()=>setImportDay({dayName,dayData:d})}
-                  style={{height:28,padding:'0 10px',borderRadius:8,border:'1px solid rgba(191,160,96,0.4)',background:'rgba(191,160,96,0.1)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Importer
-                </button>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:10,color:T.textFaint,fontWeight:600}}>{exCount} exo</div>
+                  {done
+                    ?<div style={{fontSize:9.5,color:T.good,fontWeight:700,marginTop:2}}>✓ {new Date(done.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
+                    :<div style={{fontSize:9.5,color:T.textFaint,marginTop:2}}>jamais faite</div>}
+                </div>
               </div>
-              <div style={{padding:'0 12px 10px',display:'flex',flexDirection:'column',gap:3}}>
-                {(d.exercises||[]).slice(0,4).map((ex,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:T.textDim}}>
-                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,background:`${(STYLE_COLORS[ex.style]||T.accent)}18`,color:STYLE_COLORS[ex.style]||T.accent}}>{i+1}</div>
-                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
-                    <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{(ex.sets||[]).length}×{ex.repsStr||(ex.sets&&ex.sets[0]&&ex.sets[0].target)||'?'}</span>
-                  </div>
-                ))}
-                {exCount>4&&<div style={{fontSize:10,color:T.textFaint,paddingLeft:23}}>+{exCount-4} exo</div>}
+              {/* 4 actions pros */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6}}>
+                {mkBtn('📩','Importer',T.accent,()=>setImportDay({dayName,dayData:d}),true,'Envoyer cette séance à '+athleteName)}
+                {mkBtn('✏️','Modifier',T.good,()=>setEditSession(done),!!done,done?'Corriger la dernière séance réalisée':'Aucune séance réalisée à corriger')}
+                {mkBtn('📊','Recap','#C89040',()=>setRecapSession(done),!!done,done?'Bilan de la dernière séance réalisée':'Aucune séance réalisée')}
+                {mkBtn('👀','Voir','#5A8AE0',()=>setViewDay({dayName,dayData:d}),exCount>0,'Voir le contenu prévu')}
               </div>
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+// Voir : contenu prévu du jour (lecture seule), supersets/trisets et repos préservés.
+function CoachDayViewModal({dayName,dayData,onClose}){
+  const exercises=dayData.exercises||[];
+  const groups=React.useMemo(()=>groupExercisesByType(exercises),[exercises]);
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.bgRaise,borderRadius:'22px 22px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'10px 0 4px'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/></div>
+        <div style={{padding:'4px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexShrink:0}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Séance prévue</div>
+            <div style={{fontSize:18,fontWeight:700,letterSpacing:-0.3}}>{dayName}{dayData.category?' · '+dayData.category:''}</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{exercises.length} exercice{exercises.length>1?'s':''}</div>
+          </div>
+          <button onClick={onClose} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'14px 16px 20px'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {groups.map((g,gi)=>{
+              const isComplex=g.type!=='classic';
+              const ts=EX_GROUP_STYLE[g.type]||EX_GROUP_STYLE.classic;
+              return(
+                <div key={gi} style={{borderRadius:14,border:isComplex?`1px solid ${ts.color}45`:'1px solid rgba(255,255,255,0.08)',background:isComplex?`${ts.color}0d`:'rgba(255,255,255,0.03)',overflow:'hidden'}}>
+                  {isComplex&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:`${ts.color}18`,borderBottom:`1px solid ${ts.color}30`}}><span style={{fontSize:9,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:ts.color}}>{ts.label}</span><span style={{fontSize:9,color:T.textFaint}}>· {g.items.length} exercices</span></div>)}
+                  {g.items.map((e,i)=>{
+                    const reps=e.repsStr||(e.sets&&e.sets[0]&&e.sets[0].target)||'';
+                    const nSets=(e.sets||[]).length;
+                    const rest=exType(e)!=='cardio'&&exRestSeconds(e)>0?fmtRestLabel(exRestSeconds(e)):'';
+                    return(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:i>0?`1px solid ${isComplex?ts.color+'25':'rgba(255,255,255,0.06)'}`:'none'}}>
+                        {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+i)}</div>}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13.5,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
+                          <div style={{fontSize:10,color:T.textFaint,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                            {e.muscle&&<span>{e.muscle}</span>}
+                            {rest&&<span>⏳ {rest}</span>}
+                          </div>
+                        </div>
+                        {(nSets||reps)&&<div style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{nSets||'?'}{reps?' × '+reps:''}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {exercises.length===0&&<div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:24}}>Aucun exercice dans cette séance.</div>}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Modifier : corriger une séance déjà réalisée (poids/reps a posteriori). Copie profonde des
+// exercices → toute la structure (supersets, repos, style, cardio) est préservée ; on ne PATCH
+// que sur clic "Enregistrer". Ne touche pas le programme (template).
+function CoachEditSessionModal({session,athleteName,onClose,onDone}){
+  const[exos,setExos]=React.useState(()=>JSON.parse(JSON.stringify(session.exercises||[])));
+  const[sending,setSending]=React.useState(false);
+  const[msg,setMsg]=React.useState('');
+  const totalVol=exos.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
+  const save=async()=>{
+    if(!session?.id||sending)return;
+    setSending(true);setMsg('');
+    try{
+      await apiCall('/api/coach/sessions/'+session.id,{method:'PATCH',body:{exercises:exos,totalVolume:totalVol}});
+      setMsg('✓ Séance corrigée');
+      setTimeout(()=>{onDone&&onDone();},1000);
+    }catch(e){setMsg('✗ '+(e.message||'Erreur'));setSending(false);}
+  };
+  const numStyle={width:52,height:32,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,color:T.text,fontSize:14,fontWeight:700,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums'};
+  return ReactDOM.createPortal(
+    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.bgRaise,borderRadius:'22px 22px 0 0',border:'1px solid rgba(255,255,255,0.09)',maxHeight:'92vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',justifyContent:'center',padding:'10px 0 4px'}}><div style={{width:36,height:4,borderRadius:2,background:'rgba(255,255,255,0.15)'}}/></div>
+        <div style={{padding:'4px 18px 14px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexShrink:0}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,color:T.good,fontWeight:700,textTransform:'uppercase',letterSpacing:0.6,marginBottom:3}}>Corriger la séance</div>
+            <div style={{fontSize:18,fontWeight:700,letterSpacing:-0.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{session.name||'Séance'}</div>
+            <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{session.date?new Date(session.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}):''} · {athleteName}</div>
+          </div>
+          <button onClick={onClose} style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'14px 16px 8px'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {exos.length===0&&<div style={{textAlign:'center',color:T.textFaint,fontSize:13,padding:24}}>Détails non disponibles.</div>}
+            {exos.map((ex,ei)=>{
+              const isCardio=exType(ex)==='cardio';
+              const isHold=ex.holdSeconds>0;
+              const uni=isUnilateralEx(ex);
+              const updSet=(si,patch)=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,...patch})}));
+              const addSet=()=>setExos(arr=>arr.map((e,i)=>{if(i!==ei)return e;const last=e.sets[e.sets.length-1];return{...e,sets:[...e.sets,{weight:last?.weight||0,reps:0,done:true,...(uni?{repsL:0,repsR:0}:{})}]};}));
+              const delLastSet=()=>setExos(arr=>arr.map((e,i)=>i!==ei?e:{...e,sets:e.sets.slice(0,-1)}));
+              const delEx=()=>{if(confirm('Supprimer "'+ex.name+'" de cette séance ?'))setExos(arr=>arr.filter((_,i)=>i!==ei));};
+              return(
+                <div key={ei} style={{borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.025)',padding:'10px 12px'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                      {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
+                    </div>
+                    <button onClick={delEx} title="Supprimer cet exercice" style={{width:28,height:28,borderRadius:9,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',color:T.danger,fontSize:13,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
+                  </div>
+                  {isCardio?(
+                    <div style={{fontSize:11,color:T.textFaint,fontStyle:'italic'}}>Séance cardio — non modifiable ici</div>
+                  ):(<>
+                    {(ex.sets||[]).map((s,si)=>(
+                      <div key={si} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div style={{width:18,fontSize:10,color:T.textFaint,fontWeight:700,flexShrink:0}}>{si+1}</div>
+                        {isHold?(<>
+                          <div style={{fontSize:12,color:T.textDim,flex:1}}>{fmtHoldDuration(ex.holdSeconds)} <span style={{fontSize:9,color:T.textFaint}}>tenues</span></div>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint,width:16}}>kg</span>
+                        </>):uni?(<>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                          <input type="number" value={s.repsL||0} min="0" onChange={e=>updSet(si,{repsL:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                          <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>G</span>
+                          <input type="number" value={s.repsR||0} min="0" onChange={e=>updSet(si,{repsR:parseInt(e.target.value)||0})} style={{...numStyle,width:44}}/>
+                          <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700}}>D</span>
+                        </>):(<>
+                          <input type="number" value={s.weight||0} step="0.5" min="0" onChange={e=>updSet(si,{weight:parseFloat(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>kg</span>
+                          <input type="number" value={s.reps||0} min="0" onChange={e=>updSet(si,{reps:parseInt(e.target.value)||0})} style={numStyle}/>
+                          <span style={{fontSize:9,color:T.textFaint}}>reps</span>
+                        </>)}
+                      </div>
+                    ))}
+                    <div style={{display:'flex',gap:8,marginTop:8}}>
+                      <button onClick={addSet} style={{flex:1,height:34,borderRadius:10,border:'1px dashed rgba(191,160,96,0.4)',background:'rgba(191,160,96,0.06)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Ajouter une série</button>
+                      {(ex.sets||[]).length>0&&<button onClick={delLastSet} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>− Retirer la dernière</button>}
+                    </div>
+                  </>)}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{textAlign:'center',fontSize:12,color:T.textFaint,margin:'14px 0 4px'}}>Volume total : <span style={{color:T.good,fontWeight:700}}>{Math.round(totalVol).toLocaleString('fr-FR')} kg</span></div>
+        </div>
+        <div style={{padding:'12px 16px max(16px,env(safe-area-inset-bottom))',borderTop:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+          {msg&&<div style={{textAlign:'center',fontSize:13,fontWeight:700,color:msg.startsWith('✓')?T.good:T.danger,marginBottom:10}}>{msg}</div>}
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={onClose} style={{flex:'0 0 40%',height:50,borderRadius:15,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:13,fontWeight:800,cursor:'pointer'}}>Annuler</button>
+            <button onClick={save} disabled={sending} style={{flex:1,height:50,borderRadius:15,border:'none',background:sending?'rgba(44,196,160,0.3)':'linear-gradient(135deg,#2CC4A0,#0d9488)',color:'#fff',fontSize:13,fontWeight:800,cursor:sending?'default':'pointer',boxShadow:sending?'none':'0 8px 24px rgba(44,196,160,0.35)'}}>{sending?'…':'✅ Enregistrer les corrections'}</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -11247,7 +11414,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             />
 
             {/* Programme journalier */}
-            {programDays>0&&<CoachProgramMirror athleteData={a} athleteId={selected.id} athleteName={a.firstName||a.email.split('@')[0]} onSessionSent={()=>{reloadDetail(selected.id);flash('✓ Séance importée');}}/>}
+            {programDays>0&&<CoachProgramMirror athleteData={a} athleteId={selected.id} athleteName={a.firstName||a.email.split('@')[0]} history={sessions} onSessionSent={()=>{reloadDetail(selected.id);flash('✓ Mis à jour');}}/>}
 
             {/* Courbe de volume */}
             {sessions.length>1&&(()=>{
