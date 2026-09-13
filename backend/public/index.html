@@ -166,22 +166,52 @@ img{display:block;max-width:100%}
 .feat-tag{display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;margin-top:14px;position:relative}
 
 /* ═══════════════════════════════
-   4. PREUVE SOCIALE
+   4. APERÇU DE L'APP
    ═══════════════════════════════ */
 .social-bg{background:linear-gradient(180deg,var(--bg) 0%,rgba(16,16,26,0.5) 50%,var(--bg) 100%)}
-.social-stats{display:flex;justify-content:center;gap:60px;margin-bottom:64px;flex-wrap:wrap}
-.social-stat{text-align:center}
-.social-stat strong{display:block;font-size:clamp(36px,5vw,52px);font-weight:800;letter-spacing:-2px;background:var(--grad);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shift 10s linear infinite}
-.social-stat span{font-size:13px;color:var(--faint);font-weight:600;letter-spacing:.3px;text-transform:uppercase;margin-top:4px;display:block}
-.testimonials{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-@media(max-width:800px){.testimonials{grid-template-columns:1fr}}
-.testimonial{padding:28px;border-radius:20px;background:rgba(14,14,22,0.7);border:1px solid var(--line);transition:all .3s}
-.testimonial:hover{border-color:rgba(200,160,80,0.2)}
-.testi-stars{color:var(--accent);font-size:14px;letter-spacing:2px;margin-bottom:14px}
-.testi-text{font-size:14.5px;color:var(--dim);line-height:1.65;margin-bottom:18px;font-style:italic}
-.testi-author{display:flex;align-items:center;gap:12px}
-.testi-avatar{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff}
-.testi-info{font-size:14px;font-weight:600}.testi-info span{display:block;font-size:12px;color:var(--faint);font-weight:500;margin-top:2px}
+.showcase{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media(max-width:860px){.showcase{grid-template-columns:1fr;max-width:420px;margin:0 auto}}
+.show-card{border-radius:22px;background:rgba(14,14,22,0.85);border:1px solid var(--line);padding:18px 18px 22px;transition:transform .3s,border-color .3s}
+.show-card:hover{transform:translateY(-4px);border-color:rgba(200,160,80,0.22)}
+.show-screen{background:linear-gradient(160deg,#161420,#0a0a0e);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:16px;min-height:200px;margin-bottom:16px}
+.show-cap h3{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:6px}
+.show-cap p{font-size:13.5px;color:var(--dim);line-height:1.55}
+
+/* Calendrier */
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.cal-title{font-size:13px;font-weight:800;color:#fff}
+.cal-legend{display:flex;gap:10px}
+.cal-legend span{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--faint);font-weight:600}
+.cal-legend i{width:6px;height:6px;border-radius:2px;display:inline-block}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-dow{font-size:8px;color:var(--faint);text-align:center;font-weight:700;padding-bottom:2px}
+.cal-cell{aspect-ratio:1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--faint);background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05)}
+.cal-cell.done{background:rgba(44,196,160,0.14);border-color:rgba(44,196,160,0.35);color:var(--sage);font-weight:700}
+.cal-cell.plan{background:rgba(200,160,80,0.12);border-color:rgba(200,160,80,0.30);color:var(--accent);font-weight:700}
+.cal-cell.today{background:rgba(200,160,80,0.20);border-color:var(--accent);color:#fff;font-weight:800}
+
+/* Stats */
+.stat-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.stat-tile{padding:10px 12px;border-radius:11px;background:color-mix(in srgb,var(--tc) 8%,transparent);border:1px solid color-mix(in srgb,var(--tc) 22%,transparent)}
+.stat-tile strong{display:block;font-size:20px;font-weight:800;letter-spacing:-.6px;color:var(--tc)}
+.stat-tile span{font-size:9.5px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.stat-chart-label{font-size:9px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.stat-chart{width:100%;height:80px;display:block}
+
+/* Récap */
+.rc-label{font-size:10px;color:var(--accent);font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px}
+.rc-compare{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);margin-bottom:10px}
+.rc-lines{flex:1}
+.rc-line{display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
+.rc-line b{color:var(--dim);font-weight:700}
+.rc-line.strong{margin-top:3px;color:var(--text)}.rc-line.strong b{color:#fff}
+.rc-badge{width:50px;height:50px;flex-shrink:0;border-radius:13px;background:rgba(44,196,160,0.14);border:1px solid rgba(44,196,160,0.32);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--sage)}
+.rc-ex{display:flex;align-items:center;gap:9px;padding:8px 4px;border-top:1px solid rgba(255,255,255,0.05)}
+.rc-ic{width:18px;height:18px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.rc-ic.up{background:rgba(44,196,160,0.16);color:var(--sage)}
+.rc-ic.pr{background:rgba(200,160,80,0.18);color:var(--accent)}
+.rc-n{flex:1;font-size:12px;font-weight:600;color:var(--text)}
+.rc-v{font-size:11px;font-weight:700;color:var(--dim)}
 
 /* ═══════════════════════════════
    5. POURQUOI NOUS
@@ -277,7 +307,6 @@ img{display:block;max-width:100%}
   .cta-final-btns .btn,.cta-final-btns .btn-outline{justify-content:center}
   .ftr-bot{flex-direction:column;gap:4px}
   .trust-items{gap:24px}
-  .social-stats{gap:32px}
 }
 </style>
 </head>
@@ -290,7 +319,7 @@ img{display:block;max-width:100%}
     <nav class="hdr-nav">
       <a href="#benefices">Avantages</a>
       <a href="#fonctions">Fonctionnalités</a>
-      <a href="#avis">Avis</a>
+      <a href="#apercu">Aperçu</a>
       <a class="btn-outline btn-sm" href="#tarifs">Voir l'offre</a>
       <a class="btn btn-sm" href="/Muscu.html">Commencer gratuitement</a>
     </nav>
@@ -310,11 +339,11 @@ img{display:block;max-width:100%}
           <a class="btn-outline" href="#fonctions">Découvrir les programmes</a>
         </div>
         <div class="hero-trust">
-          <div><span class="hero-trust-stars">★★★★★</span></div>
-          <div class="hero-trust-sep"></div>
-          <span>4.9/5 &middot; 500+ utilisateurs</span>
-          <div class="hero-trust-sep"></div>
           <span>Essai gratuit 7 jours</span>
+          <div class="hero-trust-sep"></div>
+          <span>Sans carte bancaire</span>
+          <div class="hero-trust-sep"></div>
+          <span>iOS · Android · PC</span>
         </div>
       </div>
 
@@ -431,44 +460,65 @@ img{display:block;max-width:100%}
   </div>
 </section>
 
-<!-- ═══ 4. PREUVE SOCIALE ═══ -->
-<section class="sec social-bg" id="avis">
+<!-- ═══ 4. APERÇU DE L'APP ═══ -->
+<section class="sec social-bg" id="apercu">
   <div class="ctn">
     <div class="sh reveal">
-      <div class="eyebrow">Ils nous font confiance</div>
-      <h2>Rejoins une communauté<br><span class="grad">qui progresse.</span></h2>
+      <div class="eyebrow">Dans l'app</div>
+      <h2>Regarde de<br><span class="grad">plus près.</span></h2>
+      <p>Calendrier, statistiques de progression, récap de fin de séance — tout est clair, et synchronisé en temps réel avec ton coach.</p>
     </div>
-    <div class="social-stats reveal">
-      <div class="social-stat"><strong>500+</strong><span>Utilisateurs actifs</span></div>
-      <div class="social-stat"><strong>4.9/5</strong><span>Note moyenne</span></div>
-      <div class="social-stat"><strong>12 000+</strong><span>Séances complétées</span></div>
-      <div class="social-stat"><strong>95%</strong><span>Taux de satisfaction</span></div>
-    </div>
-    <div class="testimonials">
-      <div class="testimonial reveal">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"En 3 mois j'ai pris 4kg de muscle. La surcharge progressive automatique change tout — je ne réfléchis plus, je soulève."</p>
-        <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#C8A050,#C89040)">K</div>
-          <div class="testi-info">Kevin M.<span>Prise de masse &middot; 3 mois</span></div>
+    <div class="showcase">
+
+      <!-- Calendrier -->
+      <div class="show-card reveal">
+        <div class="show-screen">
+          <div class="cal-head"><div class="cal-title">Septembre</div><div class="cal-legend"><span><i style="background:var(--sage)"></i>Fait</span><span><i style="background:var(--accent)"></i>Prévu</span></div></div>
+          <div class="cal-grid">
+            <div class="cal-dow">L</div><div class="cal-dow">M</div><div class="cal-dow">M</div><div class="cal-dow">J</div><div class="cal-dow">V</div><div class="cal-dow">S</div><div class="cal-dow">D</div>
+            <div class="cal-cell">1</div><div class="cal-cell done">2</div><div class="cal-cell done">3</div><div class="cal-cell">4</div><div class="cal-cell done">5</div><div class="cal-cell">6</div><div class="cal-cell">7</div>
+            <div class="cal-cell">8</div><div class="cal-cell done">9</div><div class="cal-cell today">10</div><div class="cal-cell plan">11</div><div class="cal-cell">12</div><div class="cal-cell plan">13</div><div class="cal-cell">14</div>
+            <div class="cal-cell">15</div><div class="cal-cell plan">16</div><div class="cal-cell">17</div><div class="cal-cell plan">18</div><div class="cal-cell">19</div><div class="cal-cell">20</div><div class="cal-cell">21</div>
+          </div>
         </div>
+        <div class="show-cap"><h3>📅 Calendrier</h3><p>Séances faites, planifiées et à venir — d'un seul coup d'œil.</p></div>
       </div>
-      <div class="testimonial reveal">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"Le suivi en temps réel avec mon coach, c'est un game changer. Il voit mes séances, ajuste mon programme, je progresse 2x plus vite."</p>
-        <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#5A8AE0,#8B5CF6)">S</div>
-          <div class="testi-info">Sarah L.<span>Coaching &middot; 6 mois</span></div>
+
+      <!-- Progression / stats -->
+      <div class="show-card reveal">
+        <div class="show-screen">
+          <div class="stat-tiles">
+            <div class="stat-tile" style="--tc:var(--accent)"><strong>+18 %</strong><span>Volume · 8 sem.</span></div>
+            <div class="stat-tile" style="--tc:var(--sage)"><strong>7</strong><span>PR ce mois</span></div>
+          </div>
+          <div class="stat-chart-label">Volume hebdomadaire</div>
+          <svg class="stat-chart" viewBox="0 0 300 96" preserveAspectRatio="none">
+            <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C8A050" stop-opacity="0.30"/><stop offset="100%" stop-color="#C8A050" stop-opacity="0"/></linearGradient></defs>
+            <path d="M6,74 L48,66 L90,70 L132,52 L174,44 L216,30 L258,34 L294,16 L294,96 L6,96 Z" fill="url(#vg)"/>
+            <path d="M6,74 L48,66 L90,70 L132,52 L174,44 L216,30 L258,34 L294,16" fill="none" stroke="#C8A050" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="294" cy="16" r="4" fill="#C8A050"/>
+          </svg>
         </div>
+        <div class="show-cap"><h3>📊 Statistiques</h3><p>Courbe de volume, PR, 1RM estimé. Ta progression, semaine après semaine.</p></div>
       </div>
-      <div class="testimonial reveal">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-text">"La nutrition IA m'a fait gagner un temps fou. Plan sur 7 jours en 10 secondes, adapté à mes macros. Plus besoin de calculer."</p>
-        <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#2CC4A0,#0d9488)">T</div>
-          <div class="testi-info">Thomas R.<span>Sèche &middot; 2 mois</span></div>
+
+      <!-- Récap de séance -->
+      <div class="show-card reveal">
+        <div class="show-screen">
+          <div class="rc-label">🏁 Récap de séance</div>
+          <div class="rc-compare">
+            <div class="rc-lines">
+              <div class="rc-line"><span>Dernière fois</span><b>3 960 kg</b></div>
+              <div class="rc-line strong"><span>Cette séance</span><b>4 210 kg</b></div>
+            </div>
+            <div class="rc-badge">↑ 6%</div>
+          </div>
+          <div class="rc-ex"><span class="rc-ic up">↑</span><span class="rc-n">Pendulum Squat</span><span class="rc-v">+250 kg</span></div>
+          <div class="rc-ex"><span class="rc-ic pr">★</span><span class="rc-n">Presse à cuisses</span><span class="rc-v">PR</span></div>
         </div>
+        <div class="show-cap"><h3>🏁 Récap de fin de séance</h3><p>Comparé à la dernière fois : ce qui monte, ce qui bloque, exercice par exercice.</p></div>
       </div>
+
     </div>
   </div>
 </section>
@@ -656,7 +706,7 @@ img{display:block;max-width:100%}
           <a href="#benefices">Avantages</a>
           <a href="#fonctions">Fonctionnalités</a>
           <a href="#tarifs">Tarifs</a>
-          <a href="#avis">Avis</a>
+          <a href="#apercu">Aperçu</a>
         </div>
         <div class="ftr-col">
           <h5>Application</h5>
