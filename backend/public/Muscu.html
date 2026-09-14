@@ -4727,12 +4727,16 @@ function sessionVolumeOf(sess){
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
 function buildSessionComparison(target,history){
   if(!target)return{comp:null,volumeVsPrev:null};
-  const tName=target.name;
+  // Comparaison des NOMS DE SÉANCE insensible à la casse/espaces/accents (même normalisation que
+  // les exercices) : sinon "PUSH · POITRINE / FORCE" et "Push · Poitrine / Force", ou un simple
+  // espace en trop laissé par un import Excel, comptent comme deux séances différentes et la
+  // comparaison "vs la dernière fois" ne se déclenche jamais (faux "Première séance").
+  const tKey=normExerciseName(target.name||'');
   const tTime=new Date(target.date||0).getTime();
   // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
   // elle-même (par id, ou par référence si pas d'id).
   const prev=(history||[])
-    .filter(s=>s&&s!==target&&tName&&s.name===tName&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
+    .filter(s=>s&&s!==target&&tKey&&normExerciseName(s.name||'')===tKey&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
     .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime())[0]||null;
   const curVolTotal=sessionVolumeOf(target);
   const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
