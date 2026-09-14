@@ -269,6 +269,13 @@ img{display:block;max-width:100%}
 .plan-cta.ghost:hover{background:color-mix(in srgb,var(--pc) 10%,transparent)}
 .pricing-note{text-align:center;font-size:13px;color:var(--faint);margin-top:40px;line-height:1.7}
 .pricing-note b{color:var(--dim);font-weight:600}
+.addons{display:flex;flex-direction:column;gap:10px}
+.addon{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:16px;background:color-mix(in srgb,var(--pc) 5%,transparent);border:1px solid color-mix(in srgb,var(--pc) 22%,transparent)}
+.addon-emoji{width:44px;height:44px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:color-mix(in srgb,var(--pc) 12%,transparent)}
+.addon-txt{flex:1;min-width:0}
+.addon-txt h4{font-size:15px;font-weight:700;letter-spacing:-.2px}
+.addon-txt p{font-size:13px;color:var(--dim);margin-top:2px}
+.addon-price{font-size:16px;font-weight:800;color:var(--pc);flex-shrink:0;white-space:nowrap}
 
 /* ═══════════════════════════════
    8. CONFIANCE
@@ -586,13 +593,13 @@ img{display:block;max-width:100%}
     <div class="sh reveal">
       <div class="eyebrow">L'offre</div>
       <h2>Une formule pour<br><span class="grad">chaque objectif.</span></h2>
-      <p>En solo avec l'app, ou accompagné par ton coach. 7 jours d'essai gratuit sur toutes les formules.</p>
+      <p>S'entraîner seul avec l'app, ou accompagné par ton coach. 7 jours d'essai gratuit sur les abonnements.</p>
     </div>
 
-    <!-- En solo -->
+    <!-- S'entraîner seul -->
     <div class="pricing-group reveal">
       <div class="pricing-group-head">
-        <h3>En solo</h3><div class="line"></div><div class="hint">Sans engagement</div>
+        <h3>S'entraîner seul</h3><div class="line"></div><div class="hint">Sans engagement</div>
       </div>
       <div class="plans">
         <div class="plan" style="--pc:#0d9488">
@@ -624,10 +631,10 @@ img{display:block;max-width:100%}
       </div>
     </div>
 
-    <!-- Avec ton coach -->
+    <!-- Coaching personnalisé -->
     <div class="pricing-group reveal">
       <div class="pricing-group-head">
-        <h3>Avec ton coach</h3><div class="line"></div><div class="hint">Suivi humain</div>
+        <h3>Coaching personnalisé</h3><div class="line"></div><div class="hint">Suivi humain</div>
       </div>
       <div class="plans">
         <div class="plan popular" style="--pc:#BFA060">
@@ -655,6 +662,30 @@ img{display:block;max-width:100%}
             <li>Correction posture &amp; technique</li>
           </ul>
           <a class="plan-cta ghost" href="/Muscu.html">Choisir cette formule</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- En complément -->
+    <div class="pricing-group reveal">
+      <div class="pricing-group-head">
+        <h3>En complément</h3><div class="line"></div><div class="hint">À la carte</div>
+      </div>
+      <div class="addons">
+        <div class="addon" style="--pc:#E07020">
+          <div class="addon-emoji">📋</div>
+          <div class="addon-txt"><h4>Catalogue</h4><p>Programmes multi-semaines · achat unique</p></div>
+          <div class="addon-price">9,99 — 499 €</div>
+        </div>
+        <div class="addon" style="--pc:#BFA060">
+          <div class="addon-emoji">🥗</div>
+          <div class="addon-txt"><h4>Plan nutritionnel sur mesure</h4><p>Par ton coach</p></div>
+          <div class="addon-price">100 €</div>
+        </div>
+        <div class="addon" style="--pc:#6366f1">
+          <div class="addon-emoji">💪</div>
+          <div class="addon-txt"><h4>Séance supplémentaire</h4><p>Présentiel avec coach</p></div>
+          <div class="addon-price">30 €</div>
         </div>
       </div>
     </div>
