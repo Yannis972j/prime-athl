@@ -16159,7 +16159,16 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
     }catch(e){setApplyState(s=>({...s,[item.id]:null}));}
   };
 
-  // Grouper les séances du coach par sheetName (phase/mois)
+  // Grouper les séances du coach par sheetName (feuille Excel = un "programme" ouvrable).
+  // Chaque feuille du fichier importé devient un bloc repliable ; l'ordre d'import est conservé.
+  const coachGroups=React.useMemo(()=>{
+    const m=new Map();
+    coachSessions.forEach(s=>{const k=(s.sheetName||'').trim()||'Séances';if(!m.has(k))m.set(k,[]);m.get(k).push(s);});
+    return [...m.entries()];
+  },[coachSessions]);
+  const[openSheets,setOpenSheets]=React.useState({});
+  const toggleSheet=k=>setOpenSheets(o=>({...o,[k]:!(o[k]??false)}));
+  const isSheetOpen=k=>openSheets[k]??(coachGroups.length===1); // 1 seul programme → ouvert d'office
 
   // ── Aperçu d'une séance ────────────────────────────────────────────────
   if(preview){
@@ -16452,17 +16461,37 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
           {coachSessions.length>0&&(
             <div style={{marginBottom:20}}>
               {mySessions.length>0&&<div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Bibliothèque du coach</div>}
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {coachSessions.map((s,ci)=>(
-                  <button key={s.id||ci} onClick={()=>setPreview({...s,source:'coach'})} style={{width:'100%',textAlign:'left',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💪</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                      <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {s.exercises.length} exercices</div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {coachGroups.map(([sheet,sess])=>{
+                  const open=isSheetOpen(sheet);
+                  return(
+                    <div key={sheet} style={{borderRadius:16,border:'1px solid rgba(90,138,224,0.22)',background:'rgba(90,138,224,0.04)',overflow:'hidden'}}>
+                      {/* En-tête programme (feuille) — cliquable pour déplier/replier */}
+                      <button onClick={()=>toggleSheet(sheet)} style={{width:'100%',textAlign:'left',padding:'13px 14px',background:'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                        <div style={{width:42,height:42,borderRadius:12,background:'linear-gradient(135deg,rgba(90,138,224,0.28),rgba(144,144,196,0.16))',border:'1px solid rgba(90,138,224,0.32)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>📂</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14.5,fontWeight:800,letterSpacing:-0.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sheet}</div>
+                          <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{sess.length} séance{sess.length>1?'s':''}</div>
+                        </div>
+                        <span style={{fontSize:14,color:'#5A8AE0',flexShrink:0,transition:'transform .15s',transform:open?'rotate(0deg)':'none'}}>{open?'▾':'▸'}</span>
+                      </button>
+                      {open&&(
+                        <div style={{display:'flex',flexDirection:'column',gap:8,padding:'0 12px 12px'}}>
+                          {sess.map((s,ci)=>(
+                            <button key={s.id||ci} onClick={()=>setPreview({...s,source:'coach'})} style={{width:'100%',textAlign:'left',padding:'12px 14px',borderRadius:13,border:'1px solid rgba(90,138,224,0.2)',background:'rgba(90,138,224,0.06)',cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                              <div style={{width:38,height:38,borderRadius:11,background:'linear-gradient(135deg,rgba(90,138,224,0.25),rgba(144,144,196,0.15))',border:'1px solid rgba(90,138,224,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>💪</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13.5,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                                <div style={{fontSize:11,color:T.textFaint,marginTop:2}}>{s.category||'Musculation'} · {(s.exercises||[]).length} exercices</div>
+                              </div>
+                              <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <Icon name="chevronRight" size={16} stroke={T.textFaint}/>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
