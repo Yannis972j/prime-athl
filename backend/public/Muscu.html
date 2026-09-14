@@ -744,6 +744,10 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         let lastSeriesCount = 3;
         let lastExplicitStyle = 'CLASSIQUE';
         let lastRestStr = '';
+        // Fourchette de répétitions courante ("10-12"), héritée sur les lignes dont la cellule
+        // Répétitions est vide — typiquement le 2e exercice d'un SUPERSET/TRISET (cellule
+        // fusionnée ou laissée vide) : il reprend la fourchette du 1er, comme SERIES/REPOS/STYLE.
+        let lastRepsTxt = '';
         // Muscle courant, hérité sur les lignes vides d'un même bloc — la colonne Muscle est
         // souvent une cellule fusionnée (ex: "JAMBES" couvrant tout un circuit), donc seule la
         // 1ère ligne du bloc porte la valeur ; sans héritage, les suivantes retombaient sur le
@@ -756,7 +760,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         rows.forEach((row, rowIdx) => {
           if (!row || row.every(c => !String(c||'').trim())) return;
           if (isHeaderRow(row)) { detectCols(row); return; }
-          if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); lastMuscle = ''; lastBlockLabel = null; return; }
+          if (isCategoryRow(row, colJour)) { currentCategory = String(row[0]).trim(); lastMuscle = ''; lastBlockLabel = null; lastRepsTxt = ''; return; }
 
           // Lit le texte d'une cellule cardio en gérant les plages "4-5" auto-converties
           // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
@@ -778,7 +782,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
-          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; lastMuscle = ''; }
+          if (DAYS.includes(dayRaw)) { currentDay = dayRaw; lastSeriesCount = 3; lastExplicitStyle = 'CLASSIQUE'; lastRestStr = ''; lastBlockLabel = null; lastMuscle = ''; lastRepsTxt = ''; }
 
           // Circuits numérotés ("CIRCUIT 1", "CIRCUIT 2"…) et échauffement : reconnus comme des
           // blocs de circuit DISTINCTS (chaînés comme un ABDOS, mais jamais fusionnés entre eux),
@@ -838,7 +842,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // → 4 mai) — déjà géré pour les colonnes cardio via cellText, il fallait la même
           // reconstitution ici, sinon la cellule redevient un simple nombre de série (ex: 46146)
           // que le filet >200 écrasait silencieusement en "10" au lieu de la vraie valeur voulue.
-          const repsTxt = cellText(colReps);
+          // Cellule Répétitions vide dans un bloc (2e exercice d'un superset/triset, cellule
+          // fusionnée…) → on hérite de la dernière fourchette explicite, comme SERIES/REPOS.
+          // Jamais pour un exercice en gainage (la colonne y sert de durée, pas de reps).
+          const repsCell = cellText(colReps);
+          const repsTxt = (!isHold && !repsCell) ? lastRepsTxt : repsCell;
+          if (!isHold && repsCell) lastRepsTxt = repsCell;
           // Durée renseignée → durée du compte à rebours prise dessus (convention secondes).
           // Sinon (ancien format sans colonne Durée, ex: "Gainage" détecté par le nom seul) on
           // retombe sur la cellule Répétitions, qui contenait alors du texte libre ("1min", "45s").
