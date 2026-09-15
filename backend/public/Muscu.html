@@ -626,6 +626,22 @@ function isUnilateralEx(ex) {
 function normExerciseName(name) {
   return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
 }
+// Nom d'une séance à partir de sa source (jour de programme, bloc Excel, séance de biblio).
+// Base = le TITRE explicite du tableau Excel (colonne/bloc = category, sinon name). On n'utilise
+// JAMAIS le jour de la semaine comme nom : deux séances différentes toutes nommées "MARDI" se
+// comparaient entre elles et cassaient le récap de progression ("première séance" alors qu'une
+// séance du même contenu existait sous un autre nom). Sans titre, on dérive des muscles ciblés
+// pour que deux séances identiques portent quand même le même nom (donc se comparent). Le jour
+// de la semaine n'est plus qu'un ultime recours si rien d'autre n'est disponible.
+function sessionTitleFrom(src, dayName) {
+  const DOW = ['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+  const isDay = s => DOW.includes(String(s || '').trim().toUpperCase());
+  const title = String((src && (src.category || src.name)) || '').trim();
+  if (title && !isDay(title)) return title;
+  const muscles = [...new Set(((src && src.exercises) || []).map(e => String(e.muscle || '').trim()).filter(Boolean))];
+  if (muscles.length) return muscles.slice(0, 3).join(' / ');
+  return dayName || 'Séance';
+}
 function fmtHoldDuration(secs) {
   secs = Math.max(0, Math.round(secs || 0));
   if (secs % 60 === 0) return `${secs / 60}min`;
@@ -5282,7 +5298,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     const d=(dateStr?daysForDate(dateStr):days)[dayName];
     if(!d)return;
     onStartWorkout({
-      name:d.category||dayName,
+      name:sessionTitleFrom(d,dayName),
       muscles:d.category||'',
       exercises:d.exercises.map(ex=>{
         const src=applyDeload(ex);
@@ -8510,7 +8526,7 @@ function CoachImportSessionModal({athleteId,athleteName,dayName,dayData,onClose,
     setSending(true);setMsg('');
     try{
       await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{
-        name:dayData.category||dayName,
+        name:sessionTitleFrom(dayData,dayName),
         date:date+'T12:00:00.000Z',
         exercises:exos,
         totalVolume:totalVol,
@@ -8774,7 +8790,7 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
         {sortedDays.map(dayName=>{
           const d=days[dayName];
           const exCount=(d.exercises||[]).length;
-          const name=d.category||dayName;
+          const name=sessionTitleFrom(d,dayName);
           const done=lastDoneFor(name);
           const mkBtn=(emoji,label,color,onClick,enabled,title)=>(
             <button onClick={enabled?onClick:undefined} disabled={!enabled} title={title||''}
@@ -15732,7 +15748,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     if(!editingDayKey)return null;
     const d=importedPrograms[editingDayKey.sheet]&&importedPrograms[editingDayKey.sheet][editingDayKey.day];
     if(!d)return null;
-    return{name:d.category||editingDayKey.day,muscles:d.category||'',exercises:d.exercises||[]};
+    return{name:sessionTitleFrom(d,editingDayKey.day),muscles:d.category||'',exercises:d.exercises||[]};
   })();
   const saveDayChanges=w=>{
     if(!editingDayKey)return;
