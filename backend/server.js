@@ -167,7 +167,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, pendingSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -363,6 +363,17 @@ if (USE_PG) {
   setTimeout(runBackup, 5 * 60 * 1000); // 1er backup 5 min après le boot (le temps que le serveur soit stable)
 }
 
+// DATA.userPurchasedPrograms est indexé par purchaseId (uid), PAS par userId — un
+// `delete DATA.userPurchasedPrograms[userId]` est donc un no-op silencieux qui laissait les achats
+// orphelins s'accumuler à chaque suppression d'utilisateur. Ce helper purge par userId correctement.
+function purgeUserPurchases(userId) {
+  const store = DATA.userPurchasedPrograms;
+  if (!store) return;
+  for (const pid of Object.keys(store)) {
+    if (store[pid]?.userId === userId) delete store[pid];
+  }
+}
+
 // ── Nettoyage mémoire périodique ─────────────────────
 setInterval(() => {
   const mb = v => Math.round(v / 1024 / 1024);
@@ -402,6 +413,7 @@ setInterval(() => {
       // orphelines indéfiniment une fois l'utilisateur supprimé (aucune autre route ne
       // les nettoie après coup).
       delete DATA.plannedSessions[u.id];
+      delete DATA.pendingSessions?.[u.id];
       delete DATA.nutritionPrograms[u.id];
       delete DATA.scheduleMoves[u.id];
       delete DATA.nutritionLogs?.[u.id];
@@ -411,7 +423,7 @@ setInterval(() => {
       delete DATA.sessionLibrary?.[u.id];
       delete DATA.pushSubscriptions?.[u.id];
       delete DATA.messageReads?.[u.id];
-      delete DATA.userPurchasedPrograms?.[u.id];
+      purgeUserPurchases(u.id);
       for (const chatId of Object.keys(DATA.messages || {})) {
         if (chatId.includes(u.id)) delete DATA.messages[chatId];
       }
@@ -443,7 +455,7 @@ setInterval(() => {
   }
   if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
 
-  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0) persist();
+  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0 || removedFreeFoodLogs > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 // Vérifie aussi une fois au démarrage — sinon un programme dont la date d'activation est
 // passée pendant que le serveur était éteint attendrait jusqu'à 1h avant de s'activer
@@ -468,10 +480,12 @@ const MOTIVATION_MESSAGES = [
   "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];
-// Heure Paris (0-23) — facile à ajuster si Yannis veut un autre créneau.
+// Heure Martinique (0-23) — fuseau America/Martinique, UTC-4 toute l'année (pas de
+// changement d'heure). Facile à ajuster si Yannis veut un autre créneau.
+const MOTIVATION_TZ = 'America/Martinique';
 const MOTIVATION_HOUR = 5;
 const MOTIVATION_MINUTE = 0;
-// 'YYYY-MM-DD' (Europe/Paris) du dernier envoi — évite un double envoi si la minute cible est
+// 'YYYY-MM-DD' (heure Martinique) du dernier envoi — évite un double envoi si la minute cible est
 // revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
 // seulement (pas persisté) : au pire un redémarrage pile sur ce créneau saute un jour, pas plus.
 let lastMotivationSentDate = null;
@@ -489,10 +503,10 @@ function sendDailyMotivation() {
 }
 
 setInterval(() => {
-  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure de Paris
+  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure Martinique
   // (le serveur tourne en UTC sur Render, l'heure locale du navigateur n'entre pas en jeu ici).
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: MOTIVATION_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date());
   const get = t => parts.find(p => p.type === t)?.value;
@@ -507,7 +521,9 @@ setInterval(() => {
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);
-const inviteCode = () => 'PA-' + crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+// 5 octets aléatoires = 40 bits d'entropie (10 caractères hex), au lieu de 24 bits auparavant
+// (4 octets tronqués à 6 caractères) — rend le brute-force/collision négligeable.
+const inviteCode = () => 'PA-' + crypto.randomBytes(5).toString('hex').toUpperCase();
 
 // Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
 // objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
@@ -894,10 +910,16 @@ if (!process.env.UNLOCK_SECRET) {
   console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET.slice(0, 6)}…`);
   console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
+// Comparaison à temps constant qui ne fuite pas la longueur du secret : on hash les deux côtés en
+// SHA-256 (toujours 32 octets) avant timingSafeEqual. Sans ça, le court-circuit `a.length===b.length`
+// révèle la longueur exacte du secret par mesure du temps de réponse.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
-  const provided = Buffer.from(String(req.query.secret || ''));
-  const expected = Buffer.from(UNLOCK_SECRET);
-  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  const match = safeEqual(String(req.query.secret || ''), UNLOCK_SECRET);
   if (!match) return res.status(403).json({ error: 'forbidden' });
   const main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
   if (!main) return res.status(404).json({ error: 'main_coach_not_found' });
@@ -1258,6 +1280,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
+    pendingSessions: DATA.pendingSessions[u.id] || [],
   });
 });
 
@@ -1287,9 +1310,10 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.myLibrary?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   // Supprimer les messages des conversations où l'athlète participe
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
@@ -1875,6 +1899,43 @@ app.delete('/api/coach/athletes/:athleteId/planned-sessions/:date/:index', authR
   res.json({ ok: true, plannedSessions: athletePlanned });
 });
 
+// ── Coach: séances "en attente" (créées mais ni validées ni planifiées) ──────────
+// Le coach construit une séance (via "Créer séance") et la met de côté sans lui donner de date
+// ni la marquer comme faite : il la retrouve dans la fiche athlète pour la planifier ou la
+// valider plus tard. Stockage à plat par athlète (pas de clé date, contrairement à
+// plannedSessions), chaque entrée porte son propre id.
+app.post('/api/coach/athletes/:athleteId/pending-sessions', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const { session } = req.body || {};
+  if (!session || !Array.isArray(session.exercises)) return res.status(400).json({ error: 'missing_fields' });
+  if (!DATA.pendingSessions[req.params.athleteId]) DATA.pendingSessions[req.params.athleteId] = [];
+  const entry = {
+    id: 'pend-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    name: (typeof session.name === 'string' && session.name.trim() ? session.name : 'Séance').slice(0, 120),
+    muscles: typeof session.muscles === 'string' ? session.muscles.slice(0, 80) : '',
+    exercises: session.exercises.slice(0, 50).map(sanitizeCoachExercise),
+    totalVolume: Math.max(0, Math.min(1e7, parseFloat(session.totalVolume) || 0)),
+    duration: Math.max(0, parseInt(session.duration) || 0),
+    createdAt: Date.now(),
+  };
+  DATA.pendingSessions[req.params.athleteId].push(entry);
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] });
+});
+
+app.delete('/api/coach/athletes/:athleteId/pending-sessions/:id', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const list = DATA.pendingSessions[req.params.athleteId] || [];
+  const idx = list.findIndex(s => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  list.splice(idx, 1);
+  if (list.length === 0) delete DATA.pendingSessions[req.params.athleteId];
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] || [] });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
@@ -2210,8 +2271,22 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const athleteName = athlete.firstName || 'L\'athlète';
   const fmtDate = ds => new Date(ds).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  pushToUser(athlete.id, { title: '🏋️ Nouvelle séance', body: `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`, url: '/Muscu.html' });
+  // Notification enrichie : séance live = résumé volume + durée ; sinon message standard
+  const exCount = (session.exercises || []).length;
+  const vol = session.totalVolume || 0;
+  const dur = session.duration || 0;
+  const isLive = session.createdByCoach && dur > 0;
+  // Notification athlète
+  const athletePushBody = isLive
+    ? `${coachName} a validé ta séance "${session.name}" — ${exCount} exo${exCount > 1 ? 's' : ''}, ${vol > 0 ? Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''}${dur > 0 ? (vol > 0 ? ', ' : '') + dur + ' min' : ''} 💪`
+    : `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`;
+  pushToUser(athlete.id, { title: isLive ? '🔴 Séance Live terminée !' : '🏋️ Nouvelle séance', body: athletePushBody, url: '/Muscu.html' });
+  // Notification coach : pour les séances live, prévenir le coach que l'athlète a terminé
+  if (isLive) {
+    pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: `${athleteName} a terminé sa séance "${session.name}"`, url: '/Muscu.html' });
+  }
   res.json({ ok: true, id });
 });
 
@@ -2384,9 +2459,10 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.freeFoodLogs?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
   }
@@ -2985,6 +3061,13 @@ app.post('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =
   const { url, dataUrl, note, date, isVideo } = req.body || {};
   const src = url || dataUrl;
   if (!src) return res.status(400).json({ error: 'url_required' });
+  // Même validation de schéma que l'endpoint athlète (POST /api/photos) : sans elle, un coach
+  // pouvait stocker une URL javascript: / data:text/html dans les photos d'un athlète (XSS stocké
+  // si le front l'injecte dans un href/src). Seuls https://, http:// et data:image//data:video/
+  // (le coach peut ajouter des vidéos) sont acceptés.
+  if (!(/^https?:\/\//i.test(src) || /^data:(image|video)\//i.test(src))) {
+    return res.status(400).json({ error: 'invalid_url', detail: 'URL https:// ou data:image//data:video/ uniquement.' });
+  }
   if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[u.id]) DATA.progressPhotos[u.id] = [];
   if (DATA.progressPhotos[u.id].length >= MAX_PHOTOS_PER_USER) {
@@ -3518,12 +3601,8 @@ app.post('/api/premium/unlock', authRequired, premiumUnlockLimiter, (req, res) =
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
   if (u.premium) return res.json({ ok: true, already: true });
-  // Vérifier code valide via comparaison timing-safe (anti timing-attack)
-  const provided = Buffer.from(String(code));
-  const found = rawCodes.find(c => {
-    const expected = Buffer.from(c);
-    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-  });
+  // Vérifier code valide via comparaison timing-safe (anti timing-attack), sans fuiter la longueur
+  const found = rawCodes.find(c => safeEqual(String(code), c));
   if (!found) return res.status(400).json({ error: 'invalid_code' });
   const used = DATA.premiumCodes || {};
   if (used[found]) return res.status(400).json({ error: 'code_already_used' });
