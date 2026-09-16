@@ -1419,6 +1419,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
           name:e.name,muscle:e.muscle,
+          // Fourchette de reps cible conservée (ex: "10-12") : sert au récap à détecter la
+          // surcharge progressive (l'athlète a-t-il atteint le haut de la fourchette ?).
+          ...(e.repsStr?{repsStr:e.repsStr}:{}),
           ...(e.style&&e.style!=='CLASSIQUE'?{style:e.style}:{}),
           ...(isUnilateralEx(e)?{unilateral:true}:{}),
           ...(e.style==='CARDIO'&&e.cardio?{cardio:e.cardio}:{}),
@@ -4654,17 +4657,17 @@ const VOLUME_UP_MESSAGES=[
   (name,kg)=>`Encore plus lourd qu'à ta dernière séance (+${kg}kg), ${name}. Respect.`,
   (name,kg)=>`${name}, tu as soulevé ${kg}kg de plus que la dernière fois. Continue comme ça !`,
 ];
-// Baisse légère (<15%) : recadrage, pas de complaisance mais pas dramatique non plus.
+// Baisse légère (<15%) : honnête mais léger et drôle — on garde la motivation intacte.
 const VOLUME_DOWN_MILD_MESSAGES=[
-  (name,kg)=>`${kg}kg de moins qu'à ta dernière séance, ${name}. Reste concentré, la prochaine doit être meilleure.`,
-  (name,kg)=>`${name}, ${kg}kg de moins que la dernière fois. Fais plus d'effort la prochaine séance.`,
-  (name,kg)=>`Séance en retrait par rapport à la dernière (-${kg}kg), ${name}. Il va falloir hausser le niveau.`,
+  (name,kg)=>`${kg}kg de moins que la dernière fois, ${name}. Rien de grave — même les machines ont leurs jours "off" 😅 La prochaine a ton nom dessus.`,
+  (name,kg)=>`Petit coup de mou (-${kg}kg), ${name} ? Ça arrive. L'important, c'est que t'étais là. La prochaine, tu reprends le lead 💪`,
+  (name,kg)=>`${name}, -${kg}kg aujourd'hui. Ton canapé a dû te manquer 😏 On se rattrape la prochaine, tranquille.`,
 ];
-// Baisse significative (≥15%) : dur, sans détour, on recadre.
+// Baisse significative (≥15%) : honnête mais avec humour — on dédramatise et on relance.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
-  (name,kg)=>`${name}, -${kg}kg par rapport à la dernière fois. C'est une régression, pas un accident. Continue comme ça et tu n'atteindras jamais tes objectifs.`,
-  (name,kg)=>`${kg}kg de MOINS qu'à ta dernière séance, ${name}. Très loin de ce dont t'es capable. La prochaine, tu te reprends — pas de demi-mesure.`,
-  (name,kg)=>`Grosse baisse, ${name} (-${kg}kg). Une séance comme ça, ça efface des semaines de progrès. Remets-toi en question, maintenant.`,
+  (name,kg)=>`-${kg}kg, ${name}... Bon. On va appeler ça une séance "récupération active" 😅 La prochaine, on efface l'ardoise et on repart fort.`,
+  (name,kg)=>`${kg}kg de moins, ${name} ! Soit les poids ont pris du muscle, soit c'était pas ton jour. Je parie sur le 2e — on se rattrape 💪`,
+  (name,kg)=>`Grosse baisse (-${kg}kg), ${name}. Même les champions ont des lundis 😴 Ce qui compte, c'est la prochaine — et là, t'as un truc à prouver 😉`,
 ];
 const VOLUME_SAME_MESSAGES=[
   name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
@@ -4688,19 +4691,19 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     // Majorité en hausse → booster
     if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
     if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
-    // Majorité en baisse → recadrage dur, on ne laisse rien passer
-    if(downRatio>=0.7)return `${name}, ${downCount} exercices sur ${totalExercises} en BAISSE. Là c'est un recul, pas un entraînement. Reprends-toi sérieusement, sinon tu régresses — point.`;
-    if(downRatio>=0.5)return `La moitié de tes exos en recul, ${name}. À ton niveau c'est inacceptable. La prochaine séance, tu remets les compteurs à l'endroit, pas de négociation.`;
+    // Majorité en baisse → honnête mais léger, on relance sans casser la motivation
+    if(downRatio>=0.7)return `${name}, ${downCount} exos sur ${totalExercises} en baisse. Journée sans, ça arrive même aux meilleurs 😅 La prochaine, on remet les pendules à l'heure.`;
+    if(downRatio>=0.5)return `La moitié de tes exos en repli, ${name}. Ton corps t'a demandé une pause aujourd'hui — la prochaine, c'est reprise en force 💪`;
     // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
     if(upCount===0&&downCount===0){
       return hasVolume
         ? `Même niveau qu'à ta dernière "${sn}", ${name}. Stable c'est déjà tenir — maintenant viens chercher plus.`
         : `Séance "${sn}" bouclée, ${name}. Pas de charge à battre ici, mais la régularité sur ce travail-là, c'est ça qui paie.`;
     }
-    // Mix avec régression au moins équivalente aux hausses → on pointe la baisse fermement
-    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Le compte n'y est pas. Regarde ce qui a chuté et corrige-le — pas d'excuse.`;
-    // Mix net positif mais avec des baisses → féliciter ET rappeler à l'ordre sur les reculs
-    if(downCount>0)return `${upCount} en hausse mais ${downCount} en baisse, ${name}. Laisse rien filer : sur ${downCount>1?'ces exos-là':'cet exo-là'}, tu dois revenir plus fort la prochaine fois.`;
+    // Mix avec régression au moins équivalente aux hausses → léger, on lance la revanche
+    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Match nul aujourd'hui — la revanche, c'est la prochaine séance 😏`;
+    // Mix net positif mais avec des baisses → féliciter et pointer gentiment les reculs
+    if(downCount>0)return `${upCount} en hausse, ${downCount} en baisse, ${name}. Globalement ça pousse ! Reste juste ${downCount>1?'ces exos-là':'cet exo-là'} à convaincre la prochaine fois 😉`;
     // Que des hausses partielles
     return `${upCount} exo${upCount>1?'s':''} en hausse, ${name}. Continue de pousser, mais va chercher les autres aussi.`;
   }
@@ -4737,18 +4740,18 @@ const MOTIVATION_GOOD=[
   "La différence entre toi et quelqu'un qui stagne ? Toi, tu te pointes même quand c'est dur.",
 ];
 const MOTIVATION_PIQUE=[
-  "T'as le potentiel, c'est un fait. Mais le potentiel sans l'intensité, ça reste une promesse. La prochaine séance, prouve-le.",
-  "Les chiffres mentent pas. Si t'es honnête avec toi-même, tu sais que t'avais plus à donner aujourd'hui.",
-  "Une mauvaise séance, c'est un test. La vraie question : tu vas répondre quoi la prochaine fois ?",
-  "Le confort, c'est l'ennemi du progrès. Si c'était facile, tout le monde serait affûté. Remets-toi en question.",
+  "T'avais un peu plus dans le réservoir aujourd'hui, on le sait tous les deux 😏 La prochaine, tu vides le tank.",
+  "Les chiffres mentent pas, mais ils pardonnent. La prochaine séance, montre-leur qui commande.",
+  "Séance correcte. Mais 'correct', c'est pas pour ça que t'as installé l'app, si ? 😉",
+  "Le confort t'a fait un câlin aujourd'hui. La prochaine, tu lui dis poliment non. 💪",
 ];
-// Régression franche → ton dur, rappel à l'ordre sans complaisance
+// Régression franche → honnête mais drôle, on dédramatise et on relance
 const MOTIVATION_HARD=[
-  "Là c'est un recul, pas une séance. Personne va t'attendre : soit tu te reprends, soit tu régresses. À toi de choisir.",
-  "Tes chiffres ont baissé. Pas de filtre, pas d'excuse : c'est le résultat de tes choix cette semaine. Change-les.",
-  "Une séance en dessous, ça arrive. Deux, c'est une tendance. Trois, c'est ton nouveau niveau. Coupe ça maintenant.",
-  "T'es pas venu ici pour reculer. Cette séance, tu la ranges dans la case 'plus jamais' et tu reviens affamé.",
-  "Le corps oublie vite le confort mais retient chaque abandon. Fais en sorte que la prochaine efface celle-là.",
+  "Séance en dessous ? Même Rocky prenait des tartes avant de gagner 🥊 Relève-toi, la suite s'écrit maintenant.",
+  "Tes chiffres ont fait une petite sieste aujourd'hui 😴 Réveille-les à la prochaine, ils comptent sur toi.",
+  "Une séance moyenne, c'est pas un drame, c'est un teaser. La vraie suite, c'est la prochaine fois. 🎬",
+  "Aujourd'hui c'était l'échauffement de ton comeback. On se revoit très vite 🔥",
+  "Le corps a le droit à un jour de repos. Toi, t'as le droit de le faire payer à la prochaine séance 😅",
 ];
 const MOTIVATION_NEUTRAL=[
   "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
@@ -4821,6 +4824,9 @@ function buildSessionComparison(target,history){
   // volume total, lui, comptait ces séries. On aligne donc le détail sur le volume, et de manière
   // symétrique entre séance courante et précédente.
   const isLoggedSet=s=>(s.reps||0)>0||(s.repsL||0)>0||(s.repsR||0)>0||s.done===true;
+  // Haut de la fourchette de reps cible (ex: "10-12" → 12). Sert à repérer la surcharge :
+  // toutes les séries de travail au plafond → prêt à monter la charge la prochaine fois.
+  const topReps=ex=>{const str=String(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target||'');const n=str.match(/\d+/g);return n&&n.length?Math.max(...n.map(Number)):null;};
   let prsCount=0,upCount=0,downCount=0,sameCount=0;
   target.exercises.forEach(ex=>{
     if(!ex.name)return;
@@ -4829,7 +4835,11 @@ function buildSessionComparison(target,history){
     const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
     const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
-    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
+    // Surcharge : exercice classique dont TOUTES les séries faites atteignent le haut de la
+    // fourchette de reps → à monter la prochaine fois. Cardio / gainage / unilatéral exclus.
+    const top=topReps(ex);
+    const atCap=!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral&&curSets.length>0&&curSets.every(s=>(s.reps||0)>=top);
+    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top});return;}
     const pSets=(p.sets||[]).filter(isLoggedSet);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
     const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
@@ -4840,10 +4850,12 @@ function buildSessionComparison(target,history){
     if(isPR)prsCount++;
     const status=vDelta>0?'up':vDelta<0?'down':'same';
     if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps});
+    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,atCap,topReps:top});
   });
   comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
   comp.totalExercises=comp.exercises.length;
+  comp.overloadCount=comp.exercises.filter(e=>e.atCap).length;
+  comp.overloadNames=comp.exercises.filter(e=>e.atCap).map(e=>e.name);
   return{comp,volumeVsPrev};
 }
 
@@ -9793,7 +9805,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   // félicitations côté athlète), calculée à la volée à partir de l'historique de l'athlète.
   const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[]),[s,history]);
   const hasVolume=totalVol>0;
-  const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous);
+  const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92);
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
   const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
@@ -9856,7 +9868,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {isRegression&&(
                 <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                   <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
-                  <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{comp&&comp.downCount>0?` — ${comp.downCount} exercice${comp.downCount>1?'s':''} en baisse`:''}. À recadrer avec l'athlète.</div>
+                  <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en retrait{comp&&comp.downCount>0?` — ${comp.downCount} exercice${comp.downCount>1?'s':''} en baisse`:''}. À checker avec l'athlète (fatigue, sommeil, nutrition ?).</div>
                 </div>
               )}
               {/* Comparaison volume vs dernière */}
@@ -9905,6 +9917,8 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                 {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                                 {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                 {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                                {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                               </div>
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
@@ -9927,6 +9941,21 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                       <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
                     </div>
                   ))}
+                </div>
+              )}
+              {/* Surcharge progressive — exercices au plafond, à valider pour la prochaine séance */}
+              {comp&&comp.overloadCount>0&&(
+                <div style={{marginTop:12,padding:'12px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.3)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <span style={{fontSize:15}}>⬆</span>
+                    <span style={{fontSize:11.5,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Surcharge — {comp.overloadCount} exercice{comp.overloadCount>1?'s':''} au plafond</span>
+                  </div>
+                  <div style={{fontSize:11,color:T.textDim,lineHeight:1.5,marginBottom:comp.overloadNames.length?8:0}}>{firstName} a atteint le haut de la fourchette. À valider pour monter la charge à la prochaine séance.</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {comp.overloadNames.map((n,i)=>(
+                      <span key={i} style={{fontSize:11,fontWeight:700,color:'#A78BFA',background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.3)',borderRadius:999,padding:'3px 10px'}}>{n}</span>
+                    ))}
+                  </div>
                 </div>
               )}
               {/* Mindset */}
@@ -15939,8 +15968,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         // ou, à défaut de comparaison par exercice, un volume total en baisse. On le signale
         // visuellement en haut du récap — impossible à rater.
         const _cmp=sessionComparison;
-        const isRegression=(!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>0&&_cmp.downCount>=_cmp.upCount)
-          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
+        // Régression = signalée seulement quand c'est NET : la baisse domine strictement les
+        // hausses ET les stables, ou une chute de volume > 8 %. Évite l'alerte injustifiée sur
+        // une séance globalement stable (1 baisse / 1 hausse / 3 stables) ou un -2 % de bruit.
+        const isRegression=(!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
+          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92);
         const regDown=_cmp?_cmp.downCount:0;
         const tiles=[];
         if(hasVolume)tiles.push({val:Math.round(totalVolume).toLocaleString('fr-FR'),unit:'kg',label:'Volume'});
@@ -15962,7 +15994,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {isRegression&&(
               <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
                 <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
-                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en baisse`:''}. Reprends-toi dès la prochaine, pas d'excuse.</div>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Petit coup de mou{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en baisse`:''}. Ça arrive à tout le monde 😅 La prochaine, tu reprends le lead.</div>
               </div>
             )}
 
@@ -16043,6 +16075,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                               {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                               {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                               {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                              {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                              {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                             </div>
                           </div>
                           <div style={{textAlign:'right',flexShrink:0}}>
@@ -16067,6 +16101,21 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                     </div>
                   ))}
                 </div>
+                {/* Surcharge progressive — exercices dont la fourchette est au max, prêts à monter */}
+                {sessionComparison.overloadCount>0&&(
+                  <div style={{marginTop:12,padding:'12px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.3)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <span style={{fontSize:15}}>⬆</span>
+                      <span style={{fontSize:12,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Prêt à monter la charge — {sessionComparison.overloadCount} exercice{sessionComparison.overloadCount>1?'s':''}</span>
+                    </div>
+                    <div style={{fontSize:11.5,color:'rgba(255,255,255,0.62)',lineHeight:1.5,marginBottom:sessionComparison.overloadNames.length?8:0}}>Tu as fait le haut de la fourchette partout 💪 Ton coach validera la montée pour ta prochaine séance.</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                      {sessionComparison.overloadNames.map((n,i)=>(
+                        <span key={i} style={{fontSize:11,fontWeight:700,color:'#A78BFA',background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.3)',borderRadius:999,padding:'3px 10px'}}>{n}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
