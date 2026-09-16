@@ -1512,6 +1512,27 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return map;
   },[history]);
 
+  // ── Surcharge progressive (signal violet) ──────────────────────────────────
+  // Un exercice est "en surcharge" quand, à sa DERNIÈRE séance, l'athlète a atteint le HAUT de
+  // la fourchette de reps sur TOUTES ses séries de travail → il est prêt à monter la charge, on
+  // le signale en violet sur l'écran de séance. Cardio / gainage / unilatéral exclus (fourchette
+  // par côté ambiguë). Aucune donnée serveur nécessaire : calculé depuis l'historique local.
+  const VIOLET='#A78BFA';
+  const overloadTopReps=(ex)=>{
+    const str=String((ex&&(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target))||'');
+    const nums=str.match(/\d+/g);
+    return nums&&nums.length?Math.max(...nums.map(Number)):null;
+  };
+  const overloadDue=(ex)=>{
+    if(!ex||ex.style==='CARDIO'||ex.holdSeconds>0||isUnilateralEx(ex))return false;
+    const top=overloadTopReps(ex);
+    if(!top)return false;
+    const prev=lastExData[normExerciseName(ex.name)];
+    const sets=(prev?.allSets||[]).filter(s=>(s.reps||0)>0);
+    if(!sets.length)return false;
+    return sets.every(s=>(s.reps||0)>=top);
+  };
+
   // ── Remplacement d'exercice en cours de séance (ex: machine prise) ─────────
   // Catalogue fusionné (Excel importé + historique + séance en cours), comme dans l'éditeur de séance.
   const[showSwapPicker,setShowSwapPicker]=React.useState(false);
@@ -2044,6 +2065,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           <div style={{textAlign:'center',marginBottom:24}}>
             <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Exercice {currentEx+1}/{exercises.length} · {ex.muscle||''}</div>
             <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:14}}>{ex.name}</div>
+            {overloadDue(ex)&&(
+              <div title="Tu as atteint le haut de la fourchette la dernière fois — prêt à monter la charge" style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',borderRadius:999,background:`${VIOLET}22`,border:`1px solid ${VIOLET}66`,marginBottom:12}}>
+                <span style={{fontSize:13}}>⬆</span>
+                <span style={{fontSize:11,color:VIOLET,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase'}}>Surcharge</span>
+              </div>
+            )}
             {!allExDone&&(
               <div style={{display:'inline-flex',alignItems:'center',gap:8,padding:'8px 18px',borderRadius:999,background:'rgba(191,160,96,0.12)',border:'1px solid rgba(191,160,96,0.35)'}}>
                 <span style={{fontSize:11,color:T.accent,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase'}}>Série</span>
@@ -2229,7 +2256,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             </div>
           </div>
         ):null;})()}
-        <div style={{position:'relative',borderRadius:18,marginBottom:10,background:'linear-gradient(180deg,rgba(14,14,20,0.78),rgba(14,14,20,0.92))',backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 -8px 28px rgba(0,0,0,0.4),0 12px 30px rgba(0,0,0,0.4)',overflow:'hidden'}}>
+        <div style={{position:'relative',borderRadius:18,marginBottom:10,background:'linear-gradient(180deg,rgba(14,14,20,0.78),rgba(14,14,20,0.92))',backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',border:overloadDue(ex)?`1px solid ${VIOLET}88`:'1px solid rgba(255,255,255,0.08)',boxShadow:overloadDue(ex)?`0 -8px 28px rgba(0,0,0,0.4),0 12px 30px rgba(0,0,0,0.4),0 0 0 1px ${VIOLET}33,0 0 24px -6px ${VIOLET}99`:'0 -8px 28px rgba(0,0,0,0.4),0 12px 30px rgba(0,0,0,0.4)',overflow:'hidden'}}>
           <div style={{padding:'12px 14px 14px',position:'relative'}}>
             <div style={{position:'relative'}}>
               {(ex.style==='SUPERSET'||ex.style==='TRISET'||ex.style==='ABDOS'||ex.style==='CARDIO')&&(()=>{
@@ -2250,6 +2277,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               })()}
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4,flexWrap:'wrap'}}>
                 <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,flex:1,minWidth:0}}>{ex.name}</div>
+                {overloadDue(ex)&&(
+                  <div title="Tu as atteint le haut de la fourchette la dernière fois — prêt à monter la charge" style={{display:'inline-flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:999,background:`${VIOLET}22`,border:`1px solid ${VIOLET}66`,flexShrink:0}}>
+                    <span style={{fontSize:12}}>⬆</span>
+                    <span style={{fontSize:10,color:VIOLET,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase'}}>Surcharge</span>
+                  </div>
+                )}
                 <button onClick={()=>{setShowSwapPicker(true);setSwapQuery('');}} title="Remplacer cet exercice" style={{width:34,height:34,borderRadius:11,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <Icon name="refresh" size={15} stroke={T.textDim}/>
                 </button>
@@ -2573,6 +2606,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   const isDone=e.sets.every(s=>s.done);const isActive=i===currentEx;
                   const chargeStr=e.weightStr&&e.weightStr!=='0'?e.weightStr+'kg':'';
                   const repsStr=e.repsStr||e.sets[0]?.targetStr||e.sets[0]?.target||'?';
+                  const exOverload=overloadDue(e);
 
                   if(group.style==='CARDIO'){
                     const c=e.cardio||{};
@@ -2596,11 +2630,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         {isDone?<Icon name="check" size={12} stroke="#000" strokeWidth={2.8}/>:i+1}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none'}}>{e.name}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:isDone?T.textDim:T.text,textDecoration:isDone?'line-through':'none',display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</span>
+                          {exOverload&&!isDone&&<span title="Surcharge : prêt à monter la charge" style={{fontSize:8,fontWeight:800,color:VIOLET,background:`${VIOLET}22`,border:`1px solid ${VIOLET}55`,borderRadius:999,padding:'1px 6px',letterSpacing:0.3,flexShrink:0}}>⬆ SURCHARGE</span>}
+                        </div>
                         <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{e.muscle}</div>
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        {chargeStr&&<div style={{fontSize:11,fontWeight:700,color:color}}>{chargeStr}</div>}
+                        {chargeStr&&<div style={{fontSize:11,fontWeight:700,color:exOverload&&!isDone?VIOLET:color}}>{chargeStr}</div>}
                         <div style={{fontSize:10,color:T.textFaint}}>{e.sets.length}×{repsStr}</div>
                       </div>
                       {isActive&&<Pill color={color} style={{flexShrink:0}}>NOW</Pill>}
