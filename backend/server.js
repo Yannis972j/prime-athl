@@ -2002,14 +2002,26 @@ function sanitizeCoachExercise(e) {
     ...(e.unilateral ? { unilateral: true } : {}),
     ...(!isCardio && e.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(e.restSeconds) || 0)) } : {}),
     ...(!isCardio && e.holdSeconds ? { holdSeconds: Math.max(0, Math.min(600, parseInt(e.holdSeconds) || 0)) } : {}),
-    sets: (e.sets || []).map(s => ({
-      weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
-      // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
-      // reps ci-dessus reste la somme des deux, pour que le volume/les stats existants
-      // continuent de fonctionner sans rien changer ailleurs.
-      ...(e.unilateral ? { repsL: Math.max(0, Math.min(200, parseInt(s.repsL) || 0)), repsR: Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) } : {}),
-      ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
-    })),
+    sets: (e.sets || []).map(s => {
+      const repsL = e.unilateral ? Math.max(0, Math.min(200, parseInt(s.repsL) || 0)) : 0;
+      const repsR = e.unilateral ? Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) : 0;
+      // Une séance créée/importée/corrigée par le coach représente un travail RÉALISÉ, pas un
+      // template : chaque série renseignée (charge, reps, ou G/D en unilatéral) doit compter comme
+      // « faite » (done:true), sinon toutes les surfaces qui filtrent sur `done` (récap, stats,
+      // comparatif entre séances de même nom) l'ignorent et affichent « 0 kg / 0 série » alors
+      // que le volume total est correct. On honore un `done` déjà présent, sinon on le déduit des
+      // données saisies ; une série totalement vide (placeholder) reste non faite.
+      const logged = s.done === true || (+s.reps || 0) > 0 || (+s.weight || 0) > 0 || repsL > 0 || repsR > 0;
+      return {
+        weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
+        // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
+        // reps ci-dessus reste la somme des deux, pour que le volume/les stats existants
+        // continuent de fonctionner sans rien changer ailleurs.
+        ...(e.unilateral ? { repsL, repsR } : {}),
+        ...(logged ? { done: true } : {}),
+        ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
+      };
+    }),
     cardio: isCardio && e.cardio ? {
       vitesse: String(e.cardio.vitesse ?? '').slice(0, 20),
       inclinaison: String(e.cardio.inclinaison ?? '').slice(0, 20),
