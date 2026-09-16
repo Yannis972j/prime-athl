@@ -4769,16 +4769,23 @@ function buildSessionComparison(target,history){
   const comp={prevDate:prev.date,exercises:[]};
   const prevExMap={};
   (prev.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
+  // Une série "compte" si elle a été RÉELLEMENT faite (reps saisis), pas selon le drapeau `done`
+  // — celui-ci est posé de façon incohérente selon le mode de création (séance créée côté coach,
+  // import, live…) : certaines séances valides portent des séries done:false AVEC des reps réels,
+  // ce qui affichait un détail par exercice à 0 (« Charge max 90→0kg, 4→0 série ») alors que le
+  // volume total, lui, comptait ces séries. On aligne donc le détail sur le volume, et de manière
+  // symétrique entre séance courante et précédente.
+  const isLoggedSet=s=>(s.reps||0)>0||(s.repsL||0)>0||(s.repsR||0)>0||s.done===true;
   let prsCount=0,upCount=0,downCount=0,sameCount=0;
   target.exercises.forEach(ex=>{
     if(!ex.name)return;
     const p=prevExMap[normExerciseName(ex.name)];
-    const curSets=(ex.sets||[]).filter(s=>s.done!==false);
+    const curSets=(ex.sets||[]).filter(isLoggedSet);
     const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
     const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
     if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps});return;}
-    const pSets=p.sets||[];
+    const pSets=(p.sets||[]).filter(isLoggedSet);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
     const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const prevTotalReps=pSets.reduce((a,s)=>a+(s.reps||0),0);
