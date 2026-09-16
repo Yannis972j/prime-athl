@@ -4843,6 +4843,10 @@ function buildSessionComparison(target,history){
   // Haut de la fourchette de reps cible (ex: "10-12" → 12). Sert à repérer la surcharge :
   // toutes les séries de travail au plafond → prêt à monter la charge la prochaine fois.
   const topReps=ex=>{const str=String(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target||'');const n=str.match(/\d+/g);return n&&n.length?Math.max(...n.map(Number)):null;};
+  // 1RM estimé (formule d'Epley : charge × (1 + reps/30)) — la meilleure mesure de progression
+  // quand charge ET reps bougent en même temps. On prend la meilleure série (estimation la plus
+  // haute). Non pertinent en cardio / gainage / unilatéral (reps = somme des deux côtés).
+  const e1rmOf=sets=>Math.round(Math.max(0,...sets.map(s=>(s.weight||0)*(1+(s.reps||0)/30))));
   let prsCount=0,upCount=0,downCount=0,sameCount=0;
   target.exercises.forEach(ex=>{
     if(!ex.name)return;
@@ -4851,22 +4855,25 @@ function buildSessionComparison(target,history){
     const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
     const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
+    const e1Eligible=ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral;
+    const curE1RM=e1Eligible?e1rmOf(curSets):0;
     // Surcharge : exercice classique dont TOUTES les séries faites atteignent le haut de la
     // fourchette de reps → à monter la prochaine fois. Cardio / gainage / unilatéral exclus.
     const top=topReps(ex);
     const atCap=!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral&&curSets.length>0&&curSets.every(s=>(s.reps||0)>=top);
-    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top});return;}
+    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0});return;}
     const pSets=(p.sets||[]).filter(isLoggedSet);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
     const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const prevTotalReps=pSets.reduce((a,s)=>a+(s.reps||0),0);
+    const prevE1RM=e1Eligible?e1rmOf(pSets):0;
     const wDelta=curMaxW-prevMaxW;
     const vDelta=curVol-prevVol;
     const isPR=curMaxW>0&&wDelta>0;
     if(isPR)prsCount++;
     const status=vDelta>0?'up':vDelta<0?'down':'same';
     if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,atCap,topReps:top});
+    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,atCap,topReps:top,curE1RM,prevE1RM,e1Delta:curE1RM-prevE1RM});
   });
   comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
   comp.totalExercises=comp.exercises.length;
@@ -9950,7 +9957,16 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                 <span style={{fontSize:12.5,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:'0 1 auto'}}>{ex.name}</span>
                                 {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
                               </div>
-                              <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                              {/* 1RM estimé — mesure de progression phare côté coach, en tête */}
+                              {!isNew&&ex.curE1RM>0&&(
+                                <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:ex.e1Delta>0?T.good:ex.e1Delta<0?T.danger:'rgba(255,255,255,0.65)'}}>
+                                  <span style={{fontWeight:700,color:T.textFaint}}>Force est. </span>{ex.prevE1RM}→{ex.curE1RM} kg{ex.e1Delta!==0?` (${ex.e1Delta>0?'+':''}${ex.e1Delta})`:''}
+                                </div>
+                              )}
+                              {isNew&&ex.curE1RM>0&&(
+                                <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:'rgba(255,255,255,0.65)'}}><span style={{fontWeight:700,color:T.textFaint}}>Force est. </span>{ex.curE1RM} kg</div>
+                              )}
+                              <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:3,display:'flex',gap:8,flexWrap:'wrap'}}>
                                 {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
                                 {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                                 {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
