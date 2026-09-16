@@ -4663,11 +4663,11 @@ const VOLUME_DOWN_MILD_MESSAGES=[
   (name,kg)=>`Petit coup de mou (-${kg}kg), ${name} ? Ça arrive. L'important, c'est que t'étais là. La prochaine, tu reprends le lead 💪`,
   (name,kg)=>`${name}, -${kg}kg aujourd'hui. Ton canapé a dû te manquer 😏 On se rattrape la prochaine, tranquille.`,
 ];
-// Baisse significative (≥15%) : honnête mais avec humour — on dédramatise et on relance.
+// Baisse NETTE (≥8%) : ton sérieux, ferme, SANS humour — c'est un vrai recul, pas un jour sans.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
-  (name,kg)=>`-${kg}kg, ${name}... Bon. On va appeler ça une séance "récupération active" 😅 La prochaine, on efface l'ardoise et on repart fort.`,
-  (name,kg)=>`${kg}kg de moins, ${name} ! Soit les poids ont pris du muscle, soit c'était pas ton jour. Je parie sur le 2e — on se rattrape 💪`,
-  (name,kg)=>`Grosse baisse (-${kg}kg), ${name}. Même les champions ont des lundis 😴 Ce qui compte, c'est la prochaine — et là, t'as un truc à prouver 😉`,
+  (name,kg)=>`-${kg}kg par rapport à ta dernière séance, ${name}. Ce n'est pas un jour sans : tu n'as pas donné ce qu'il fallait. La prochaine, tu reviens avec l'intention de bosser.`,
+  (name,kg)=>`${kg}kg de moins, ${name}. Une baisse comme ça, ça se voit et ça se paie. Pas d'arrangement avec toi-même : la prochaine efface celle-là.`,
+  (name,kg)=>`Nette baisse (-${kg}kg), ${name}. Le corps suit la tête, et aujourd'hui la tête n'y était pas. Reprends-toi sérieusement.`,
 ];
 const VOLUME_SAME_MESSAGES=[
   name=>`Volume stable par rapport à ta dernière séance, ${name} — la régularité, c'est déjà une victoire.`,
@@ -4679,6 +4679,11 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   const sn=sessionName||'séance';
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
+  // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) : ton sérieux, sans humour, PRIORITAIRE sur
+  // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
+  if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
+    return pick(VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
+  }
   // Si on a une comparaison complète, message basé sur la vraie performance
   if(comp&&comp.totalExercises>0){
     const {prsCount,upCount,downCount,totalExercises}=comp;
@@ -4693,9 +4698,9 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     // Majorité en hausse → booster
     if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
     if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
-    // Majorité en baisse → honnête mais léger, on relance sans casser la motivation
-    if(downRatio>=0.7)return `${name}, ${downCount} exos sur ${totalExercises} en baisse. Journée sans, ça arrive même aux meilleurs 😅 La prochaine, on remet les pendules à l'heure.`;
-    if(downRatio>=0.5)return `La moitié de tes exos en repli, ${name}. Ton corps t'a demandé une pause aujourd'hui — la prochaine, c'est reprise en force 💪`;
+    // Majorité en baisse → recul réel : ton sérieux, sans humour.
+    if(downRatio>=0.7)return `${name}, ${downCount} exos sur ${totalExercises} en baisse. Ce n'est pas un entraînement, c'est un recul. Reprends-toi sérieusement dès la prochaine.`;
+    if(downRatio>=0.5)return `La moitié de tes exos en baisse, ${name}. Tu es passé à côté de ta séance. La prochaine, tu remets le niveau là où il doit être.`;
     // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
     if(upCount===0&&downCount===0){
       return hasVolume
@@ -4747,13 +4752,13 @@ const MOTIVATION_PIQUE=[
   "Séance correcte. Mais 'correct', c'est pas pour ça que t'as installé l'app, si ? 😉",
   "Le confort t'a fait un câlin aujourd'hui. La prochaine, tu lui dis poliment non. 💪",
 ];
-// Régression franche → honnête mais drôle, on dédramatise et on relance
+// Régression franche (baisse nette) → ton sérieux, ferme, SANS humour. On ne félicite pas un recul.
 const MOTIVATION_HARD=[
-  "Séance en dessous ? Même Rocky prenait des tartes avant de gagner 🥊 Relève-toi, la suite s'écrit maintenant.",
-  "Tes chiffres ont fait une petite sieste aujourd'hui 😴 Réveille-les à la prochaine, ils comptent sur toi.",
-  "Une séance moyenne, c'est pas un drame, c'est un teaser. La vraie suite, c'est la prochaine fois. 🎬",
-  "Aujourd'hui c'était l'échauffement de ton comeback. On se revoit très vite 🔥",
-  "Le corps a le droit à un jour de repos. Toi, t'as le droit de le faire payer à la prochaine séance 😅",
+  "Une séance en dessous, c'est un choix — conscient ou pas. La prochaine, fais le bon.",
+  "Les chiffres ne mentent pas : tu avais plus à donner aujourd'hui. Assume-le et reviens affûté.",
+  "Reculer arrive. S'en contenter, non. Range cette séance dans les erreurs à ne pas répéter.",
+  "Le niveau ne se maintient pas tout seul. Ce que tu n'entretiens pas, tu le perds — ne gâche pas ce que tu as construit.",
+  "Tu n'es pas venu cocher une case, tu es venu progresser. Aujourd'hui ce n'était pas le cas. La prochaine, tu le prouves.",
 ];
 const MOTIVATION_NEUTRAL=[
   "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
@@ -4775,6 +4780,8 @@ function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.leng
 function motivationQuote(comp,volumeVsPrev,seed){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
+  // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) → ton sérieux prioritaire, sans humour.
+  if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)return pick(MOTIVATION_HARD);
   if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
   if(comp&&comp.totalExercises>0){
     const {prsCount,upCount,downCount,totalExercises}=comp;
@@ -16003,7 +16010,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {isRegression&&(
               <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
                 <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
-                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Petit coup de mou{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en baisse`:''}. Ça arrive à tout le monde 😅 La prochaine, tu reprends le lead.</div>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en baisse{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en recul`:''}. Là il faut se reprendre : la prochaine, tu donnes tout.</div>
               </div>
             )}
 
