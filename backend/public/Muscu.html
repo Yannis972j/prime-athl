@@ -9825,6 +9825,28 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
   const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
+  // ── Surcharge progressive : le coach valide (ou ajuste) les montées de charge ──────────────
+  // Exercices dont la fourchette a été atteinte → poids proposé = charge max faite + 2,5 kg.
+  const overloadExs=React.useMemo(()=>(comp?.exercises||[]).filter(e=>e.atCap),[comp]);
+  const[ovWeights,setOvWeights]=React.useState({});
+  const[ovSkip,setOvSkip]=React.useState({});
+  const[ovSaving,setOvSaving]=React.useState(false);
+  const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
+  React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
+  React.useEffect(()=>{const init={};overloadExs.forEach(e=>{init[e.name]=Math.round(((e.curMaxW||0)+2.5)*2)/2;});setOvWeights(init);setOvSkip({});},[overloadExs]);
+  const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.round(val*2)/2)}));
+  const applyOverload=async()=>{
+    const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name]}));
+    if(!updates.length){setOvDone(true);return;}
+    setOvSaving(true);
+    try{
+      await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates}});
+      setOvDone(true);
+      onFeedbackSaved&&onFeedbackSaved();
+    }catch(e){console.error('overload',e);alert('Impossible d\'appliquer la montée. Réessaie.');}
+    setOvSaving(false);
+  };
+
   return(
     <div style={{position:'fixed',inset:0,zIndex:3000,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
       <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)'}}/>
@@ -9959,19 +9981,47 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                   ))}
                 </div>
               )}
-              {/* Surcharge progressive — exercices au plafond, à valider pour la prochaine séance */}
-              {comp&&comp.overloadCount>0&&(
-                <div style={{marginTop:12,padding:'12px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.3)'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+              {/* Surcharge progressive — le coach valide (ou ajuste) les montées de charge */}
+              {overloadExs.length>0&&(
+                <div style={{marginTop:12,padding:'13px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.32)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:ovDone?0:10}}>
                     <span style={{fontSize:15}}>⬆</span>
-                    <span style={{fontSize:11.5,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Surcharge — {comp.overloadCount} exercice{comp.overloadCount>1?'s':''} au plafond</span>
+                    <span style={{fontSize:11.5,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Surcharge — {overloadExs.length} exercice{overloadExs.length>1?'s':''} au plafond</span>
                   </div>
-                  <div style={{fontSize:11,color:T.textDim,lineHeight:1.5,marginBottom:comp.overloadNames.length?8:0}}>{firstName} a atteint le haut de la fourchette. À valider pour monter la charge à la prochaine séance.</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                    {comp.overloadNames.map((n,i)=>(
-                      <span key={i} style={{fontSize:11,fontWeight:700,color:'#A78BFA',background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.3)',borderRadius:999,padding:'3px 10px'}}>{n}</span>
-                    ))}
-                  </div>
+                  {ovDone?(
+                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.good,fontWeight:600,lineHeight:1.4}}>
+                      <span style={{fontSize:15}}>✓</span><span>Montées appliquées — le poids est mis à jour pour la prochaine séance de {firstName}.</span>
+                    </div>
+                  ):(<>
+                    <div style={{fontSize:11,color:T.textDim,lineHeight:1.5,marginBottom:10}}>{firstName} a atteint le haut de la fourchette. Valide (ou ajuste) la nouvelle charge — elle partira dans sa prochaine séance.</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      {overloadExs.map((e,i)=>{
+                        const skip=!!ovSkip[e.name];const w=ovWeights[e.name]??((e.curMaxW||0)+2.5);
+                        return(
+                          <div key={i} style={{padding:'9px 11px',borderRadius:11,background:skip?'rgba(255,255,255,0.02)':'rgba(167,139,250,0.06)',border:`1px solid ${skip?'rgba(255,255,255,0.07)':'rgba(167,139,250,0.22)'}`,opacity:skip?0.55:1}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:skip?0:8}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:700,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
+                                <div style={{fontSize:9.5,color:T.textFaint,marginTop:1}}>fait {e.curMaxW||0} kg au max{skip?' · maintenu':''}</div>
+                              </div>
+                              <button onClick={()=>setOvSkip(sk=>({...sk,[e.name]:!skip}))} style={{fontSize:9.5,fontWeight:800,padding:'4px 9px',borderRadius:8,cursor:'pointer',border:`1px solid ${skip?'rgba(167,139,250,0.4)':'rgba(255,255,255,0.12)'}`,background:skip?'rgba(167,139,250,0.12)':'rgba(255,255,255,0.04)',color:skip?'#A78BFA':T.textDim,flexShrink:0}}>{skip?'Monter':'Garder'}</button>
+                            </div>
+                            {!skip&&(
+                              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{fontSize:10.5,color:T.textFaint}}>{e.curMaxW||0} kg →</span>
+                                <div style={{display:'flex',alignItems:'center',marginLeft:'auto',border:'1px solid rgba(167,139,250,0.3)',borderRadius:9,overflow:'hidden',background:'rgba(167,139,250,0.05)'}}>
+                                  <button onClick={()=>setOvW(e.name,w-2.5)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>−</button>
+                                  <span style={{minWidth:58,textAlign:'center',fontSize:14,fontWeight:800,color:'#A78BFA'}}>{w}<span style={{fontSize:9,color:T.textDim,fontWeight:600}}> kg</span></span>
+                                  <button onClick={()=>setOvW(e.name,w+2.5)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button onClick={applyOverload} disabled={ovSaving} style={{width:'100%',marginTop:10,height:44,borderRadius:11,border:'none',background:ovSaving?'rgba(167,139,250,0.4)':'linear-gradient(135deg,#A78BFA,#7C5CD6)',color:'#0c0c12',fontSize:13,fontWeight:800,cursor:ovSaving?'default':'pointer'}}>{ovSaving?'Application…':'✓ Valider · mettre à jour la prochaine séance'}</button>
+                  </>)}
                 </div>
               )}
               {/* Mindset */}

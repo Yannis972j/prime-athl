@@ -2254,6 +2254,68 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   res.json({ ok: true, session: s });
 });
 
+// ── Surcharge progressive : le coach valide une montée de charge ─────────────────────────────
+// Met à jour de façon CIBLÉE le poids d'exercices dans le programme de l'athlète, en place — sans
+// archiver l'ancien programme ni notifier "nouveau programme" (ce que ferait applyProgramToAthlete).
+// Cible le jour dont le titre correspond au nom de la séance (sinon repli sur tout le programme),
+// et marque la séance (overloadApplied) pour ne jamais re-proposer la même montée (double bump).
+app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+  const sessionName = String(req.body?.sessionName || '');
+  const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
+  if (!updates.length) return res.status(400).json({ error: 'no_updates' });
+  const prog = DATA.programs[req.params.athleteId];
+  if (!prog || !prog.data) return res.status(404).json({ error: 'no_program' });
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const wByName = {};
+  for (const u of updates) { const n = norm(u.name); if (n) wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); }
+  const data = prog.data;
+  const snKey = norm(sessionName);
+  const bump = (day, restrictName) => {
+    let n = 0;
+    for (const ex of (day.exercises || [])) {
+      const k = norm(ex.name);
+      if (restrictName && !(k in wByName)) continue;
+      if (!(k in wByName)) continue;
+      const w = wByName[k];
+      ex.weightStr = String(w);
+      ex.sets = (ex.sets || []).map(s => ({ ...s, weight: w }));
+      n++;
+    }
+    return n;
+  };
+  let applied = 0;
+  // 1) Jour(s) dont le titre correspond au nom de la séance.
+  for (const sheet of Object.keys(data)) {
+    const days = data[sheet] || {};
+    for (const dayKey of Object.keys(days)) {
+      const day = days[dayKey] || {};
+      if (snKey && norm(day.category || day.name || dayKey) !== snKey) continue;
+      applied += bump(day, true);
+    }
+  }
+  // 2) Repli : aucun jour ne correspond → on applique par nom sur l'ensemble du programme.
+  if (applied === 0) {
+    for (const sheet of Object.keys(data)) {
+      const days = data[sheet] || {};
+      for (const dayKey of Object.keys(days)) applied += bump(days[dayKey] || {}, true);
+    }
+  }
+  if (!applied) return res.status(404).json({ error: 'no_match' });
+  prog.assignedAt = Date.now();
+  if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
+    DATA.sessions[sessionId].overloadApplied = true;
+  }
+  persist();
+  io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: prog.assignedAt });
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
+  pushToUser(req.params.athleteId, { title: '⬆ Charge augmentée', body: `${coachName} a monté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`, url: '/Muscu.html' });
+  res.json({ ok: true, applied, data });
+});
+
 // Coach crée une séance pour un athlète (import à l'unité)
 app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res) => {
   const athlete = DATA.users[req.params.id];
