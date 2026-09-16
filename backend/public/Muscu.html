@@ -4675,8 +4675,10 @@ const VOLUME_SAME_MESSAGES=[
 ];
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null}=opts||{};
   const sn=sessionName||'séance';
+  // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
+  const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Si on a une comparaison complète, message basé sur la vraie performance
   if(comp&&comp.totalExercises>0){
     const {prsCount,upCount,downCount,totalExercises}=comp;
@@ -4710,17 +4712,17 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // Fallback volume simple — uniquement pour les séances avec charge (sinon message générique)
   if(volumeVsPrev&&hasVolume){
     const delta=Math.round(volumeVsPrev.current-volumeVsPrev.previous);
-    if(delta>0){const list=VOLUME_UP_MESSAGES;return list[Math.floor(Math.random()*list.length)](name,delta);}
+    if(delta>0){return pick(VOLUME_UP_MESSAGES)(name,delta);}
     if(delta<0){
       const kg=Math.abs(delta);
       const pct=volumeVsPrev.previous>0?kg/volumeVsPrev.previous*100:0;
       const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
-      return list[Math.floor(Math.random()*list.length)](name,kg);
+      return pick(list)(name,kg);
     }
-    const list=VOLUME_SAME_MESSAGES;return list[Math.floor(Math.random()*list.length)](name);
+    return pick(VOLUME_SAME_MESSAGES)(name);
   }
   // Première séance de ce nom — message générique
-  return CONGRATS_MESSAGES[Math.floor(Math.random()*CONGRATS_MESSAGES.length)](name);
+  return pick(CONGRATS_MESSAGES)(name);
 }
 
 // Phrase de motivation / développement personnel en fin de récap
@@ -4764,8 +4766,15 @@ const MOTIVATION_FIRST=[
   "Y'a pas de comparaison encore, mais y'a un point de départ. Et la seule direction qui compte, c'est vers le haut.",
   "Le plus dur c'est de commencer. C'est fait. Maintenant, la seule règle : revenir.",
 ];
-function motivationQuote(comp,volumeVsPrev){
-  const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+// Hash déterministe d'une chaîne (petit FNV-like) → index stable. Sert à figer une citation/
+// un message par séance : sans ça, le tirage aléatoire change à chaque rendu (re-render au
+// clic, à la frappe du feedback, en rouvrant la fiche…), ce qui donnait l'impression que la
+// phrase de mindset « bougeait » toute seule.
+function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
+
+function motivationQuote(comp,volumeVsPrev,seed){
+  // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
+  const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
   if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
   if(comp&&comp.totalExercises>0){
     const {prsCount,upCount,downCount,totalExercises}=comp;
@@ -5581,7 +5590,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume})}</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date})}</div>
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                       <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
@@ -5655,7 +5664,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev)}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date)}"</div>
                   </div>
                 </div>
               )}
@@ -9863,7 +9872,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date})}</div>
               {/* Alerte régression */}
               {isRegression&&(
                 <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
@@ -9961,7 +9970,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date)}"</div>
               </div>
             </div>
           )}
@@ -15987,7 +15996,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date})}</div>
             </div>
 
             {/* Alerte régression — signalée fort quand la séance est en recul */}
@@ -16131,7 +16140,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev)}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date)}"</div>
             </div>
 
             {/* Bouton continuer */}
