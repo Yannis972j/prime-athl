@@ -117,7 +117,7 @@ const STRIPE_SECRET_KEY      = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
 const STRIPE_PRICE_EXPLORER          = process.env.STRIPE_PRICE_EXPLORER || '';          // 4,99€/mois
 const STRIPE_PRICE_IA                = process.env.STRIPE_PRICE_IA || '';                // 14,99€/mois
-const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 149€/mois  (Coaching Online)
+const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 150€/mois  (Coaching Online)
 const STRIPE_PRICE_COACHING_COMPLET  = process.env.STRIPE_PRICE_COACHING_COMPLET || '';  // 249€/mois  (Coaching Complet)
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
 if (!STRIPE_SECRET_KEY) {

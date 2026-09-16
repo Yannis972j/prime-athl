@@ -4346,7 +4346,7 @@ function SubscriptionCard({profile,onShowPricing}){
   const inTrial=profile.createdAt&&Date.now()<(profile.createdAt+7*24*3600*1000);
   const trialDaysLeft=inTrial?Math.ceil(((profile.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const isActive=profile.stripeStatus==='active';
-  const PLAN_LABELS={explorer:'Explorer — 4,99€/mois',ia:'IA Programme — 14,99€/mois',coaching:'Coaching Online — 149€/mois',coaching_complet:'Coaching Complet — 249€/mois'};
+  const PLAN_LABELS={explorer:'Explorer — 4,99€/mois',ia:'IA Programme — 14,99€/mois',coaching:'Coaching Online — 150€/mois',coaching_complet:'Coaching Complet — 249€/mois'};
   const PLAN_COLORS={explorer:'#0d9488',ia:'#6366f1',coaching:'#BFA060',coaching_complet:'#D4883A'};
   const planColor=PLAN_COLORS[profile.stripePlan]||'#6366f1';
   const openPortal=async()=>{
@@ -12575,7 +12575,7 @@ function PricingScreen({onBack,currentUser}){
       section:'solo',
     },
     {
-      id:'coaching',price:'149€',period:'/mois',label:'Coaching Online',emoji:'💬',tag:'100 % distanciel · suivi complet',
+      id:'coaching',price:'150€',period:'/mois',label:'Coaching Online',emoji:'💬',tag:'100 % distanciel · suivi complet',
       color:'#BFA060',glow:'rgba(191,160,96,0.4)',bg:'rgba(191,160,96,0.07)',border:'rgba(191,160,96,0.3)',
       features:['Programme d\'entraînement perso','Chat direct avec ton coach','Ajustements hebdomadaires','Accès complet à l\'application'],
       popular:true,section:'coaching',
