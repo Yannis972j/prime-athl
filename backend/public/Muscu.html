@@ -851,8 +851,16 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           const numSets = cardio ? 1 : (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
           if (!isNaN(seriesNum) && seriesNum > 0 && !cardio) lastSeriesCount = numSets;
 
-          const weight = parseWeight(row[colCharge]);
-          const weightStr = String(row[colCharge]||'').trim();
+          // Même piège que la colonne Répétitions : une plage tapée dans la colonne Charge
+          // (ex. "15-4") est auto-convertie par Excel en numéro de série de date (ex. 46149),
+          // qui s'affichait tel quel ("46149 kg") et servait même de poids initial des séries.
+          // Quand la cellule est un serial de date, on passe par cellText (qui reconstitue la
+          // notation "j-m") ; sinon on garde la valeur brute pour ne pas casser un poids normal
+          // comme "52,5" (dont parseWeight sur le nombre brut préserve la décimale).
+          const chargeRawVal = row[colCharge];
+          const chargeIsDateSerial = typeof chargeRawVal === 'number' && Number.isInteger(chargeRawVal) && chargeRawVal > 30000 && chargeRawVal < 80000;
+          const weight = chargeIsDateSerial ? parseWeight(cellText(colCharge)) : parseWeight(chargeRawVal);
+          const weightStr = chargeIsDateSerial ? cellText(colCharge) : String(chargeRawVal||'').trim();
           // cellText (pas row[colReps] brut) : une fourchette tapée "4-5" ou "10-12" dans la
           // colonne Répétitions est parfois auto-convertie en date par Excel côté source ("4-5"
           // → 4 mai) — déjà géré pour les colonnes cardio via cellText, il fallait la même
