@@ -506,7 +506,7 @@ function useSocket(authKey,handlers){
     // authKey n'est plus un JWT (le cookie httpOnly pa_token porte l'authentification via
     // withCredentials) : c'est juste un identifiant pour savoir quand (re)connecter le socket.
     if(!authKey||typeof io==='undefined')return;
-    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling'],reconnectionDelay:500,reconnectionDelayMax:2000,timeout:8000});
     const wrap={};
     Object.keys(handlersRef.current||{}).forEach(ev=>{
       wrap[ev]=(...a)=>handlersRef.current[ev]&&handlersRef.current[ev](...a);
@@ -3007,8 +3007,9 @@ function MessagesScreen({authUser}){
   // Own socket connection for real-time messages
   React.useEffect(()=>{
     if(typeof io==='undefined'||!authUser)return;
-    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling']});
-    s.on('connect',()=>setConnected(true));
+    const s=io(API_BASE||undefined,{withCredentials:true,transports:['websocket','polling'],reconnectionDelay:500,reconnectionDelayMax:2000,timeout:8000});
+    let firstConn=true;
+    s.on('connect',()=>{setConnected(true);if(!firstConn){loadSummary();}firstConn=false;});
     s.on('disconnect',()=>setConnected(false));
     s.on('new-message',({from,msg})=>{
       const sel=selectedRef.current;
@@ -11245,7 +11246,11 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   };
 
   // Realtime: refresh athletes when sessions/profile/nutrition come in
+  const coachSockReady=React.useRef(false);
   useSocket(authToken,{
+    // Reconnexion socket → on rattrape instantanément (nouvelles séances validées, etc.) au lieu
+    // d'attendre un poll. 1er connect ignoré (la liste est déjà chargée au montage).
+    'connect':()=>{ if(coachSockReady.current){load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);} coachSockReady.current=true; },
     'session-added':()=>{load(true);if(selected)reloadDetail(selected.id);setCalRefreshKey(k=>k+1);},
     // Idem pour une séance déplacée/modifiée ou supprimée : sans ça, "Mes athlètes" garde un
     // sessionCount/lastSessionAt périmé après une action du coach lui-même (le serveur émet
@@ -11298,6 +11303,14 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
       if(selectedRef.current?.id===id)flash('✗ Chargement impossible, réessaie');
     }
   };
+  // Retour au premier plan côté coach → rafraîchissement immédiat de la liste + de la fiche
+  // ouverte (voir instantanément une séance validée par un athlète sans attendre un poll).
+  React.useEffect(()=>{
+    const onVis=()=>{ if(document.visibilityState==='visible'){ load(true); if(selectedRef.current)reloadDetail(selectedRef.current.id); } };
+    document.addEventListener('visibilitychange',onVis);
+    window.addEventListener('focus',onVis);
+    return()=>{document.removeEventListener('visibilitychange',onVis);window.removeEventListener('focus',onVis);};
+  },[]);
 
   const flash=t=>{setMsg(t);setTimeout(()=>setMsg(null),2500);};
 
@@ -15691,8 +15704,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[nutriRefreshKey,setNutriRefreshKey]=React.useState(0);
 
   const[refreshing,setRefreshing]=React.useState(false);
-  const refreshAll=React.useCallback(async()=>{
-    setRefreshing(true);
+  const refreshAll=React.useCallback(async(silent)=>{
+    if(!silent)setRefreshing(true);
     try{
       const[me,prog,sess,lib]=await Promise.all([
         apiCall('/api/me'),
@@ -15709,7 +15722,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       setNutriRefreshKey(k=>k+1); // force NutritionScreen reload
       triggerSave();
     }catch(e){console.error('refresh',e);}
-    setRefreshing(false);
+    if(!silent)setRefreshing(false);
   },[setUser,triggerSave]);
 
   // Initial load
@@ -15723,6 +15736,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/session-library').then(lib=>setSessionLibrary(lib||{sessions:[],assignedAt:null})).catch(()=>{});
   },[]);
 
+  // Retour au premier plan (app rouverte / téléphone réveillé) → rafraîchissement SILENCIEUX
+  // immédiat. C'est le plus gros gain de réactivité sur mobile : sans ça, un programme assigné ou
+  // une montée de charge validée pendant que l'app était en arrière-plan n'apparaissait qu'au
+  // prochain poll de 20 s.
+  React.useEffect(()=>{
+    const onVis=()=>{ if(document.visibilityState==='visible') refreshAll(true); };
+    document.addEventListener('visibilitychange',onVis);
+    window.addEventListener('focus',onVis);
+    return()=>{document.removeEventListener('visibilitychange',onVis);window.removeEventListener('focus',onVis);};
+  },[refreshAll]);
+
   React.useEffect(()=>{
     const onResize=()=>setIsMobile(window.innerWidth<768);
     window.addEventListener('resize',onResize);
@@ -15733,7 +15757,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showPricing,setShowPricing]=React.useState(false);
 
   // Realtime: program / profile / nutrition mis à jour par coach
+  const socketReadyRef=React.useRef(false);
   useSocket(authToken,{
+    // À la RE-connexion du socket (après une coupure réseau / mise en veille), on rattrape
+    // instantanément tout ce qui a pu être manqué pendant la déconnexion — au lieu d'attendre
+    // le prochain poll de 20 s. Le premier connect (au chargement) est ignoré : l'app charge
+    // déjà ses données au montage.
+    'connect':()=>{ if(socketReadyRef.current) refreshAll(true); socketReadyRef.current=true; },
     'program-updated':({data,assignedAt})=>{
       setImportedPrograms(data||{});
       setProgramMeta(m=>({...m,assignedAt}));
