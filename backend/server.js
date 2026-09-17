@@ -1997,6 +1997,8 @@ function sanitizeCoachExercise(e) {
     groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
     groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',
     ...(style ? { style } : {}),
+    // Fourchette de reps cible conservée (comme POST /api/sessions) pour la détection de surcharge.
+    ...(e.repsStr ? { repsStr: String(e.repsStr).slice(0, 20) } : {}),
     // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
     // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
     ...(e.unilateral ? { unilateral: true } : {}),
@@ -2046,6 +2048,10 @@ app.post('/api/sessions', authRequired, (req, res) => {
       name: String(ex.name || '').slice(0, 100),
       muscle: String(ex.muscle || '').slice(0, 50),
       ...(style ? { style } : {}),
+      // Fourchette de reps cible (ex: "10-12") conservée : sert au récap à détecter la surcharge
+      // progressive (l'athlète a-t-il atteint le haut de la fourchette ?). Sans ça, la fourchette
+      // n'existe que dans le programme et disparaît de la séance enregistrée.
+      ...(ex.repsStr ? { repsStr: String(ex.repsStr).slice(0, 20) } : {}),
       // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
       // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
       ...(ex.unilateral ? { unilateral: true } : {}),
