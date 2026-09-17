@@ -4813,8 +4813,19 @@ function sessionVolumeOf(sess){
 }
 // Construit la comparaison complète d'une séance vs la dernière séance du MÊME nom qui la précède.
 // Réutilisé par saveSession (fin de séance) ET par le récap ouvert au clic sur le calendrier.
+// Map { nom d'exercice normalisé → haut de la fourchette de reps } depuis un programme importé
+// (structure {feuille:{jour:{exercises:[...]}}}). Source de vérité pour fiabiliser la détection
+// de surcharge même quand la séance n'a pas enregistré sa fourchette.
+function programRangeMap(programData){
+  const map={};
+  const note=(name,str)=>{const n=normExerciseName(name);if(!n||map[n]!=null)return;const nums=String(str||'').match(/\d+/g);if(nums&&nums.length)map[n]=Math.max(...nums.map(Number));};
+  Object.values(programData||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day&&day.exercises||[]).forEach(e=>note(e.name,e.repsStr||e.sets?.[0]?.targetStr))));
+  return map;
+}
+
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
-function buildSessionComparison(target,history){
+// `extraRange` (optionnel) = map nom normalisé → haut de fourchette, issue du PROGRAMME.
+function buildSessionComparison(target,history,extraRange){
   if(!target)return{comp:null,volumeVsPrev:null};
   // Comparaison des NOMS DE SÉANCE insensible à la casse/espaces/accents (même normalisation que
   // les exercices) : sinon "PUSH · POITRINE / FORCE" et "Push · Poitrine / Force", ou un simple
@@ -4840,9 +4851,15 @@ function buildSessionComparison(target,history){
   // volume total, lui, comptait ces séries. On aligne donc le détail sur le volume, et de manière
   // symétrique entre séance courante et précédente.
   const isLoggedSet=s=>(s.reps||0)>0||(s.repsL||0)>0||(s.repsR||0)>0||s.done===true;
-  // Haut de la fourchette de reps cible (ex: "10-12" → 12). Sert à repérer la surcharge :
-  // toutes les séries de travail au plafond → prêt à monter la charge la prochaine fois.
-  const topReps=ex=>{const str=String(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target||'');const n=str.match(/\d+/g);return n&&n.length?Math.max(...n.map(Number)):null;};
+  // Fourchette de reps par exercice, avec repli en cascade pour la détection de surcharge :
+  // (1) la séance elle-même, (2) une séance passée qui l'a stockée, (3) le programme (extraRange).
+  const rangeMap={};
+  const noteRange=(name,str)=>{const n=normExerciseName(name);if(!n||rangeMap[n]!=null)return;const nums=String(str||'').match(/\d+/g);if(nums&&nums.length)rangeMap[n]=Math.max(...nums.map(Number));};
+  (history||[]).forEach(h=>(h.exercises||[]).forEach(e=>{if(e.repsStr)noteRange(e.name,e.repsStr);}));
+  if(extraRange)Object.keys(extraRange).forEach(n=>{if(rangeMap[n]==null)rangeMap[n]=extraRange[n];});
+  // Haut de la fourchette de reps cible (ex: "10-12" → 12). Toutes les séries de travail au
+  // plafond → prêt à monter la charge la prochaine fois.
+  const topReps=ex=>{const str=String(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target||'');const n=str.match(/\d+/g);if(n&&n.length)return Math.max(...n.map(Number));return rangeMap[normExerciseName(ex.name)]??null;};
   // 1RM estimé (formule d'Epley : charge × (1 + reps/30)) — la meilleure mesure de progression
   // quand charge ET reps bougent en même temps. On prend la meilleure série (estimation la plus
   // haute). Non pertinent en cardio / gainage / unilatéral (reps = somme des deux côtés).
@@ -5175,7 +5192,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // en rouvrant une séance passée depuis son calendrier.
   const histRecap=React.useMemo(()=>{
     if(!viewHistSession)return null;
-    const{comp,volumeVsPrev}=buildSessionComparison(viewHistSession,history||[]);
+    const{comp,volumeVsPrev}=buildSessionComparison(viewHistSession,history||[],programRangeMap(importedPrograms));
     const hasVolume=sessionVolumeOf(viewHistSession)>0;
     const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
     const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
@@ -8842,6 +8859,9 @@ function CoachPlanSessionModal({athleteId,athleteName,sourceSession,onClose,onDo
 
 function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSessionSent}){
   const programData=athleteData&&athleteData.program&&athleteData.program.data||{};
+  // Fourchettes de reps du programme → fiabilise la détection de surcharge dans le récap même si
+  // la séance n'a pas enregistré sa fourchette.
+  const progRange=React.useMemo(()=>programRangeMap(programData),[programData]);
   const sheetNames=Object.keys(programData);
   const[activeSheet,setActiveSheet]=React.useState(sheetNames[sheetNames.length-1]||null);
   const[importDay,setImportDay]=React.useState(null);       // {dayName, dayData} — Importer
@@ -8864,7 +8884,7 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
     <div style={{marginBottom:14}}>
       {importDay&&<CoachImportSessionModal athleteId={athleteId} athleteName={athleteName} dayName={importDay.dayName} dayData={importDay.dayData} onClose={()=>setImportDay(null)} onDone={reload}/>}
       {viewDay&&<CoachDayViewModal dayName={viewDay.dayName} dayData={viewDay.dayData} onClose={()=>setViewDay(null)}/>}
-      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} history={hist} initialTab="recap" onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
+      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} history={hist} initialTab="recap" repsRange={progRange} onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
       {editSession&&<CoachEditSessionModal session={editSession} athleteName={athleteName} onClose={()=>setEditSession(null)} onDone={()=>{setEditSession(null);reload();}}/>}
       {sheetNames.length>1&&(
         <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
@@ -9817,7 +9837,7 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
-function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab}){
+function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab,repsRange}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
@@ -9826,7 +9846,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const exGroups=React.useMemo(()=>groupExercisesByType(s.exercises),[s.exercises]);
   // Récap de fin de séance : comparaison vs la dernière séance du même nom (comme l'écran de
   // félicitations côté athlète), calculée à la volée à partir de l'historique de l'athlète.
-  const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[]),[s,history]);
+  const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[],repsRange),[s,history,repsRange]);
   const hasVolume=totalVol>0;
   const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92);
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
@@ -15865,7 +15885,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     if(!snapshot)return;
     // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
     // (même logique que le récap ouvert au clic sur le calendrier).
-    const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history);
+    const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history,programRangeMap(importedPrograms));
     setVolumeVsPrev(vvp);
     setSessionComparison(comp);
     setLastFinishedSession(snapshot);
