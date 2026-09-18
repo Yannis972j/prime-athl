@@ -11367,10 +11367,12 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
   const removeAthlete=a=>{
     setConfirmAction({msg:`Supprimer définitivement ${a.firstName||a.email} ? Irréversible.`,onConfirm:async()=>{
-      await apiCall('/api/coach/athletes/'+a.id,{method:'DELETE'});
-      if(selected?.id===a.id){setSelected(null);setDetail(null);}
-      flash('✓ Athlète supprimé');
-      load();
+      try{
+        await apiCall('/api/coach/athletes/'+a.id,{method:'DELETE'});
+        if(selected?.id===a.id){setSelected(null);setDetail(null);}
+        flash('✓ Athlète supprimé');
+        load();
+      }catch(e){flash('✗ '+(e.message||'Erreur suppression'));}
     }});
   };
 
@@ -15660,7 +15662,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 
   // Local-only: workout in progress
   const EMPTY_WORKOUT={name:'Ma séance',muscles:'',exercises:[]};
-  const[workout,setWorkout]=useLocalState('pa_workout_'+authUser.id,EMPTY_WORKOUT,triggerSave);
+  const[rawWorkout,setWorkout]=useLocalState('pa_workout_'+authUser.id,EMPTY_WORKOUT,triggerSave);
+  const workout=React.useMemo(()=>rawWorkout&&Array.isArray(rawWorkout.exercises)?rawWorkout:{...EMPTY_WORKOUT,...rawWorkout,exercises:Array.isArray(rawWorkout?.exercises)?rawWorkout.exercises:[]},[rawWorkout]);
 
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});

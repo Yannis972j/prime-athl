@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v12'; // v12 : push multi-device + test notif + logging
+const CACHE = 'prime-athl-v13'; // v13 : offline fallback + bug fixes
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -35,7 +35,7 @@ self.addEventListener('fetch', e => {
   // On compare le pathname seul (pas l'URL complète) pour ignorer le ?t=token de share.html.
   const path = new URL(e.request.url).pathname;
   if (NEVER_CACHE_SUFFIXES.some(s => path === s)) {
-    e.respondWith(fetch(e.request));
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request).then(c => c || new Response('Hors ligne — reconnecte-toi pour accéder à Prime Athl.', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }))));
     return;
   }
   // Autres assets statiques : cache d'abord, réseau en fallback

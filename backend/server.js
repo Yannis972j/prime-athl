@@ -1051,22 +1051,26 @@ async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
 
 // Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
 app.post('/api/auth/forgot-password', forgotLimiter, async (req, res) => {
-  const email = (req.body?.email || '').toLowerCase().trim();
-  if (!email) return res.status(400).json({ error: 'email_required' });
-  const u = findUserByEmail(email);
-  if (u) {
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    u.resetTokenHash = hashToken(rawToken);
-    u.resetTokenExpiry = Date.now() + RESET_TTL_MS;
-    persist();
-    const link = `${PUBLIC_URL}/Muscu.html?reset=${rawToken}`;
-    const r = await sendResetEmail(u.email, link);
-    console.log(`[reset] generated for ${u.email} sent=${r.sent}`);
-  } else {
-    // Délai constant pour ne pas révéler l'existence du compte
-    await new Promise(r => setTimeout(r, 250));
+  try {
+    const email = (req.body?.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'email_required' });
+    const u = findUserByEmail(email);
+    if (u) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      u.resetTokenHash = hashToken(rawToken);
+      u.resetTokenExpiry = Date.now() + RESET_TTL_MS;
+      persist();
+      const link = `${PUBLIC_URL}/Muscu.html?reset=${rawToken}`;
+      const r = await sendResetEmail(u.email, link);
+      console.log(`[reset] generated for ${u.email} sent=${r.sent}`);
+    } else {
+      await new Promise(r => setTimeout(r, 250));
+    }
+    res.json({ ok: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
+  } catch (err) {
+    console.error('[forgot-password] error', err);
+    res.status(500).json({ error: 'server_error' });
   }
-  res.json({ ok: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
 });
 
 // Application du nouveau mot de passe
@@ -2382,19 +2386,24 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
 
 // ── Test email (main coach only) ────────────────────
 app.post('/api/admin/test-email', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
-  const u = DATA.users[req.user.id];
-  const to = String(req.body?.to || '').trim().toLowerCase() || u.email;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'invalid_email' });
-  const result = await sendEmail({
-    to,
-    subject: 'Prime Athl — Test email ✅',
-    html: emailBase(`
-      <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
-      <p>Ton serveur d'emails Resend est correctement configuré.</p>
-      <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Destinataire : <strong>${to}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
-    `),
-  });
-  res.json({ ...result, to });
+  try {
+    const u = DATA.users[req.user.id];
+    const to = String(req.body?.to || '').trim().toLowerCase() || u.email;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'invalid_email' });
+    const result = await sendEmail({
+      to,
+      subject: 'Prime Athl — Test email ✅',
+      html: emailBase(`
+        <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
+        <p>Ton serveur d'emails Resend est correctement configuré.</p>
+        <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Destinataire : <strong>${to}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
+      `),
+    });
+    res.json({ ...result, to });
+  } catch (err) {
+    console.error('[test-email] error', err);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ── Backup / Restore (main coach only) ──────────────
@@ -2868,19 +2877,21 @@ app.post('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, 
 
 // Coach retire le document attaché (sans toucher au reste du plan)
 app.delete('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, async (req, res) => {
-  const a = DATA.users[req.params.id];
-  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
-  const existing = DATA.nutritionPrograms[a.id];
-  const doc = existing?.document;
-  if (doc) {
-    delete existing.document;
-    persist();
-    io.to('user:' + a.id).emit('nutrition-updated', { plan: existing, assignedAt: existing.assignedAt });
-    if (process.env.CLOUDINARY_URL && doc.publicId) {
-      cloudinary.uploader.destroy(doc.publicId, { resource_type: 'raw' }).catch(() => {});
+  try {
+    const a = DATA.users[req.params.id];
+    if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+    const existing = DATA.nutritionPrograms[a.id];
+    const doc = existing?.document;
+    if (doc) {
+      delete existing.document;
+      persist();
+      io.to('user:' + a.id).emit('nutrition-updated', { plan: existing, assignedAt: existing.assignedAt });
+      if (process.env.CLOUDINARY_URL && doc.publicId) {
+        cloudinary.uploader.destroy(doc.publicId, { resource_type: 'raw' }).catch(() => {});
+      }
     }
-  }
-  res.json({ ok: true });
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'delete_failed' }); }
 });
 
 // Coach validates and notifies athlete of nutrition plan
@@ -3306,12 +3317,13 @@ function pushToUser(userId, payload) {
       .catch(e => {
         console.error('[push] ✗ error', userId, e.statusCode, e.message, sub.endpoint?.slice(0, 50));
         if (e.statusCode === 410 || e.statusCode === 404) {
-          // Subscription expirée — marquer pour nettoyage différé
-          if (entry.devices) {
-            const d = entry.devices.find(d => d.endpoint === sub.endpoint);
+          const fresh = DATA.pushSubscriptions[userId];
+          if (!fresh) return;
+          if (fresh.devices) {
+            const d = fresh.devices.find(d => d.endpoint === sub.endpoint);
             if (d) { d.invalidatedAt = Date.now(); persist(); }
-          } else {
-            DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
+          } else if (fresh.endpoint === sub.endpoint) {
+            DATA.pushSubscriptions[userId] = { ...fresh, invalidatedAt: Date.now() };
             persist();
           }
         }
@@ -3563,7 +3575,14 @@ app.post('/api/push/subscribe', authRequired, (req, res) => {
 });
 
 app.delete('/api/push/subscribe', authRequired, (req, res) => {
-  delete DATA.pushSubscriptions[req.user.id];
+  const endpoint = req.body?.endpoint;
+  const entry = DATA.pushSubscriptions[req.user.id];
+  if (endpoint && entry?.devices) {
+    entry.devices = entry.devices.filter(d => d.endpoint !== endpoint);
+    if (!entry.devices.length) delete DATA.pushSubscriptions[req.user.id];
+  } else {
+    delete DATA.pushSubscriptions[req.user.id];
+  }
   persist();
   res.json({ ok: true });
 });
