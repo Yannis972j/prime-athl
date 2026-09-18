@@ -1711,13 +1711,17 @@ app.delete('/api/coach/athletes/:athleteId/schedule-moves/:date', authRequired, 
 // ajoutées à la suite.
 function mergeLibrarySessions(existing, incoming) {
   const normName = s => String(s || '').trim().toLowerCase();
-  const byName = new Map((existing || []).map(s => [normName(s.name), s]));
+  // Clé composite nom + sheetName : deux séances de feuilles différentes avec le même nom
+  // (ex: "HAUT DU CORPS : DOS" dans "AOUT" ET dans "SEPTEMBRE") sont des séances distinctes,
+  // pas des doublons — sans le sheetName, la 2e écrasait la 1re et l'athlète perdait une séance.
+  const mergeKey = s => normName(s.name) + '|||' + (s.sheetName || '').trim().toLowerCase();
+  const byKey = new Map((existing || []).map(s => [mergeKey(s), s]));
   for (const s of incoming) {
-    const key = normName(s.name);
-    const old = byName.get(key);
-    byName.set(key, old ? { ...old, name: s.name, sheetName: s.sheetName, category: s.category, exercises: s.exercises } : s);
+    const key = mergeKey(s);
+    const old = byKey.get(key);
+    byKey.set(key, old ? { ...old, name: s.name, sheetName: s.sheetName, category: s.category, exercises: s.exercises } : s);
   }
-  return [...byName.values()];
+  return [...byKey.values()];
 }
 
 app.put('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, res) => {
