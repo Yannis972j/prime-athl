@@ -447,8 +447,14 @@ setInterval(() => {
   // Elles sont marquées .invalidatedAt lors d'une erreur 410/404 webpush
   const PUSH_STALE_TTL = 7 * 24 * 60 * 60 * 1000;
   let removedPush = 0;
-  for (const [userId, sub] of Object.entries(DATA.pushSubscriptions || {})) {
-    if (sub && sub.invalidatedAt && Date.now() - sub.invalidatedAt > PUSH_STALE_TTL) {
+  for (const [userId, entry] of Object.entries(DATA.pushSubscriptions || {})) {
+    if (entry?.devices) {
+      // Multi-device : purger les appareils expirés
+      const before = entry.devices.length;
+      entry.devices = entry.devices.filter(d => !d.invalidatedAt || Date.now() - d.invalidatedAt < PUSH_STALE_TTL);
+      removedPush += before - entry.devices.length;
+      if (!entry.devices.length) delete DATA.pushSubscriptions[userId];
+    } else if (entry && entry.invalidatedAt && Date.now() - entry.invalidatedAt > PUSH_STALE_TTL) {
       delete DATA.pushSubscriptions[userId];
       removedPush++;
     }
@@ -3268,27 +3274,10 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   io.to('user:' + partner).emit('new-message', { from: me, msg });
   io.to('user:' + me).emit('new-message', { from: me, msg });
   // Push notification to partner if subscribed
-  const sub = DATA.pushSubscriptions[partner];
-  console.log('[push-msg] partner=', partner, 'hasSub=', !!sub, 'hasVapid=', !!VAPID_PUBLIC_KEY);
-  if (sub && !sub.invalidatedAt && VAPID_PUBLIC_KEY) {
-    const sender = DATA.users[me];
-    const name = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
-    webpush.sendNotification(sub, JSON.stringify({
-      title: `💬 ${name}`,
-      body: text.trim().slice(0, 100),
-      tag: `msg-${me}`,
-      icon: PUSH_ICON,
-      badge: PUSH_BADGE,
-      url: '/Muscu.html'
-    }), PUSH_OPTS).then(() => console.log('[push-msg] sent OK'))
-      .catch(e => {
-        console.error('[push-msg] error:', e.statusCode, e.message);
-        if (e.statusCode === 410 || e.statusCode === 404) {
-          const old = DATA.pushSubscriptions[partner];
-          if (old) { DATA.pushSubscriptions[partner] = { ...old, invalidatedAt: Date.now() }; persist(); }
-        }
-      });
-  }
+  // Push notification — utilise pushToUser (multi-device + logging unifié)
+  const sender = DATA.users[me];
+  const senderName = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
+  pushToUser(partner, { title: `💬 ${senderName}`, body: text.trim().slice(0, 100), tag: `msg-${me}`, url: '/Muscu.html' });
   res.json({ ok: true, msg });
 });
 
@@ -3303,18 +3292,31 @@ const PUSH_BADGE = '/notif-badge.png';
 // est brièvement hors-ligne la notif est encore délivrée à la reconnexion, sans être périmée.
 const PUSH_OPTS = { TTL: 4 * 3600, urgency: 'high' };
 function pushToUser(userId, payload) {
-  if (!VAPID_PUBLIC_KEY) return;
-  const sub = DATA.pushSubscriptions[userId];
-  if (!sub || sub.invalidatedAt) return;
+  if (!VAPID_PUBLIC_KEY) { console.log('[push] skip (no VAPID)', userId, payload.title); return; }
+  const entry = DATA.pushSubscriptions[userId];
+  if (!entry) { console.log('[push] skip (no sub)', userId, payload.title); return; }
+  // Support multi-appareils : entry = subscription OU { devices: [sub, ...] }
+  const subs = entry.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry.invalidatedAt ? [] : [entry]);
+  if (!subs.length) { console.log('[push] skip (all invalidated)', userId); return; }
   const enriched = { icon: PUSH_ICON, badge: PUSH_BADGE, ...payload };
-  webpush.sendNotification(sub, JSON.stringify(enriched), PUSH_OPTS)
-    .catch(e => {
-      if (e.statusCode === 410 || e.statusCode === 404) {
-        // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
-        DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
-        persist();
-      }
-    });
+  const body = JSON.stringify(enriched);
+  for (const sub of subs) {
+    webpush.sendNotification(sub, body, PUSH_OPTS)
+      .then(() => console.log('[push] ✓ sent', userId, payload.title, sub.endpoint?.slice(0, 50)))
+      .catch(e => {
+        console.error('[push] ✗ error', userId, e.statusCode, e.message, sub.endpoint?.slice(0, 50));
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          // Subscription expirée — marquer pour nettoyage différé
+          if (entry.devices) {
+            const d = entry.devices.find(d => d.endpoint === sub.endpoint);
+            if (d) { d.invalidatedAt = Date.now(); persist(); }
+          } else {
+            DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
+            persist();
+          }
+        }
+      });
+  }
 }
 
 // ── IA — Nutrition helpers ───────────────────────────
@@ -3526,15 +3528,37 @@ app.get('/api/push/vapid-public-key', (req, res) => {
 });
 
 app.get('/api/push/status', authRequired, (req, res) => {
-  const sub = DATA.pushSubscriptions[req.user.id];
-  res.json({ subscribed: !!sub, endpoint: sub?.endpoint?.slice(0, 50) || null, vapidConfigured: !!VAPID_PUBLIC_KEY });
+  const entry = DATA.pushSubscriptions[req.user.id];
+  const devices = entry?.devices || (entry ? [entry] : []);
+  const active = devices.filter(d => !d.invalidatedAt);
+  res.json({
+    subscribed: active.length > 0,
+    deviceCount: active.length,
+    endpoints: active.map(d => d.endpoint?.slice(0, 60)),
+    vapidConfigured: !!VAPID_PUBLIC_KEY,
+    invalidated: devices.filter(d => d.invalidatedAt).length,
+  });
 });
 
 app.post('/api/push/subscribe', authRequired, (req, res) => {
   const { subscription } = req.body || {};
   if (!subscription) return res.status(400).json({ error: 'subscription_required' });
-  DATA.pushSubscriptions[req.user.id] = subscription;
+  const entry = DATA.pushSubscriptions[req.user.id];
+  // Multi-appareil : ajouter la subscription sans écraser les autres
+  if (entry?.devices) {
+    // Remplacer si même endpoint, sinon ajouter (max 5 appareils)
+    const idx = entry.devices.findIndex(d => d.endpoint === subscription.endpoint);
+    if (idx >= 0) entry.devices[idx] = subscription;
+    else { entry.devices.push(subscription); if (entry.devices.length > 5) entry.devices.shift(); }
+  } else if (entry && entry.endpoint && entry.endpoint !== subscription.endpoint) {
+    // Migration : ancienne sub unique → multi-appareils
+    DATA.pushSubscriptions[req.user.id] = { devices: [entry.invalidatedAt ? subscription : entry, subscription].filter((v,i,a) => a.findIndex(x=>x.endpoint===v.endpoint)===i) };
+  } else {
+    // Première inscription ou même endpoint → objet simple (rétrocompatible)
+    DATA.pushSubscriptions[req.user.id] = subscription;
+  }
   persist();
+  console.log('[push] subscribe', req.user.id, subscription.endpoint?.slice(0, 60));
   res.json({ ok: true });
 });
 
@@ -3542,6 +3566,16 @@ app.delete('/api/push/subscribe', authRequired, (req, res) => {
   delete DATA.pushSubscriptions[req.user.id];
   persist();
   res.json({ ok: true });
+});
+
+// ── Test push — envoie une vraie notif pour vérifier que la chaîne fonctionne ──
+app.post('/api/push/test', authRequired, (req, res) => {
+  if (!VAPID_PUBLIC_KEY) return res.json({ ok: false, reason: 'VAPID non configuré sur le serveur' });
+  const entry = DATA.pushSubscriptions[req.user.id];
+  const subs = entry?.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry && !entry.invalidatedAt ? [entry] : []);
+  if (!subs.length) return res.json({ ok: false, reason: 'Aucun appareil enregistré — active les notifications dans ton profil' });
+  pushToUser(req.user.id, { title: '🔔 Test Prime Athl', body: 'Si tu vois ceci, les notifications fonctionnent !', url: '/Muscu.html' });
+  res.json({ ok: true, deviceCount: subs.length });
 });
 
 // ── Alarme "repos terminé" ──────────────────────────

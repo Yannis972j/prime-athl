@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v11'; // v11 : badge de notification (logo monochrome barre d'état)
+const CACHE = 'prime-athl-v12'; // v12 : push multi-device + test notif + logging
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
