@@ -3276,7 +3276,7 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
       icon: PUSH_ICON,
       badge: PUSH_BADGE,
       url: '/Muscu.html'
-    })).then(() => console.log('[push-msg] sent OK'))
+    }), PUSH_OPTS).then(() => console.log('[push-msg] sent OK'))
       .catch(e => {
         console.error('[push-msg] error:', e.statusCode, e.message);
         if (e.statusCode === 410 || e.statusCode === 404) {
@@ -3294,12 +3294,16 @@ const PUSH_ICON = '/push-icon.webp';
 // (Android n'en garde que la silhouette via l'alpha). icon-192.png a un fond noir opaque → rendu
 // en carré blanc. notif-badge.png est le logo Prime Athl blanc sur fond transparent.
 const PUSH_BADGE = '/notif-badge.png';
+// Options d'envoi web-push : urgence HAUTE → FCM/APNS livrent immédiatement (réveil de l'appareil)
+// au lieu de temporiser/regrouper comme avec l'urgence "normale" par défaut. TTL 4h → si l'appareil
+// est brièvement hors-ligne la notif est encore délivrée à la reconnexion, sans être périmée.
+const PUSH_OPTS = { TTL: 4 * 3600, urgency: 'high' };
 function pushToUser(userId, payload) {
   if (!VAPID_PUBLIC_KEY) return;
   const sub = DATA.pushSubscriptions[userId];
   if (!sub || sub.invalidatedAt) return;
   const enriched = { icon: PUSH_ICON, badge: PUSH_BADGE, ...payload };
-  webpush.sendNotification(sub, JSON.stringify(enriched))
+  webpush.sendNotification(sub, JSON.stringify(enriched), PUSH_OPTS)
     .catch(e => {
       if (e.statusCode === 410 || e.statusCode === 404) {
         // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
