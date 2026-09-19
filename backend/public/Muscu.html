@@ -2107,10 +2107,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               <div style={{flex:1,padding:'16px 8px',borderRadius:18,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',textAlign:'center'}}>
                 <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>Poids</div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
-                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:Math.max(0,(parseFloat(set.weight)||0)-2.5)})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>−</button>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:Math.max(0,(parseFloat(set.weight)||0)-1)})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>−</button>
                   <NumField value={set.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,nextSetIdx,{weight:v})}
                     style={{width:110,height:52,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:13,color:'#fff',fontSize:28,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0,letterSpacing:1}}/>
-                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:(parseFloat(set.weight)||0)+2.5})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>+</button>
+                  <button onClick={()=>updSet(currentEx,nextSetIdx,{weight:(parseFloat(set.weight)||0)+1})} style={{width:48,height:52,borderRadius:13,border:'none',background:'rgba(255,255,255,0.07)',color:T.text,fontSize:26,fontWeight:600,cursor:'pointer',flexShrink:0}}>+</button>
                 </div>
                 <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:6}}>kg</div>
               </div>
@@ -2418,12 +2418,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                               <div style={{width:20,height:20,borderRadius:6,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff'}}>{i+1}</div>
                               {targetLabel&&<span style={{fontSize:7,color:T.textFaint,fontWeight:600,marginTop:1}}>{targetLabel}r</span>}
                             </div>
-                            <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                            <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-1)})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                             <div style={{textAlign:'center',width:54,flexShrink:0}}>
                               <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:26,background:'transparent',border:'none',color:'#fff',fontSize:17,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                               <div style={{fontSize:7,color:T.textFaint,letterSpacing:0.4,fontWeight:700,marginTop:-1}}>KG</div>
                             </div>
-                            <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                            <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+1})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                             <button onClick={()=>validateSet(i)} style={{flex:1,height:38,borderRadius:11,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2,boxShadow:'0 3px 10px rgba(191,160,96,0.35)',gap:6,fontSize:12,fontWeight:800}} onMouseDown={e=>e.currentTarget.style.transform='scale(0.97)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
                               <Icon name="check" size={16} stroke="#fff" strokeWidth={3}/> VALIDER
                             </button>
@@ -2451,12 +2451,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           {targetLabel&&<span style={{fontSize:7,color:T.textFaint,fontWeight:600,marginTop:1}}>{targetLabel}r</span>}
                         </div>
                         {/* − KG + */}
-                        <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-2.5)})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                        <button onClick={()=>updSet(currentEx,i,{weight:Math.max(0,(parseFloat(s.weight)||0)-1)})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
                         <div style={{textAlign:'center',width:54,flexShrink:0}}>
                           <NumField value={s.weight||0} decimal placeholder="0" onCommit={v=>updSet(currentEx,i,{weight:v})} style={{width:'100%',height:26,background:'transparent',border:'none',color:'#fff',fontSize:17,fontWeight:800,textAlign:'center',outline:'none',fontVariantNumeric:'tabular-nums',padding:0}}/>
                           <div style={{fontSize:7,color:T.textFaint,letterSpacing:0.4,fontWeight:700,marginTop:-1}}>KG</div>
                         </div>
-                        <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+2.5})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                        <button onClick={()=>updSet(currentEx,i,{weight:(parseFloat(s.weight)||0)+1})} style={{width:26,height:26,borderRadius:7,border:'none',background:'rgba(255,255,255,0.08)',color:T.text,fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
                         <span style={{fontSize:10,color:'rgba(255,255,255,0.2)',flexShrink:0,margin:'0 1px'}}>×</span>
                         {/* Gainage/planche : pas de reps, un bouton qui déclenche le compte à
                             rebours de la durée à tenir (valide la série tout seul à la fin) */}
@@ -9875,8 +9875,8 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const[ovSaving,setOvSaving]=React.useState(false);
   const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
   React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
-  React.useEffect(()=>{const initW={},initSkip={};overloadExs.forEach(e=>{initW[e.name]=Math.round(((e.curMaxW||0)+2.5)*2)/2;initSkip[e.name]=!e.atCap;});setOvWeights(initW);setOvSkip(initSkip);},[overloadExs]);
-  const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.round(val*2)/2)}));
+  React.useEffect(()=>{const initW={},initSkip={};overloadExs.forEach(e=>{initW[e.name]=(e.curMaxW||0)+1;initSkip[e.name]=!e.atCap;});setOvWeights(initW);setOvSkip(initSkip);},[overloadExs]);
+  const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.round(val))}));
   const applyOverload=async()=>{
     const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name]}));
     if(!updates.length){setOvDone(true);return;}
@@ -10047,7 +10047,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                     <div style={{fontSize:11,color:T.textDim,lineHeight:1.5,marginBottom:10}}>{readyCount>0?<>{readyCount} exercice{readyCount>1?'s':''} <b style={{color:'#A78BFA'}}>prêt{readyCount>1?'s':''}</b> (fourchette au max, pré-coché{readyCount>1?'s':''}). Tu peux monter n'importe quel exercice — c'est toi qui décides.</>:'Aucun exercice au plafond de la fourchette. Tu peux quand même monter la charge où tu le juges utile.'}</div>
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
                       {overloadExs.map((e,i)=>{
-                        const skip=!!ovSkip[e.name];const w=ovWeights[e.name]??((e.curMaxW||0)+2.5);
+                        const skip=!!ovSkip[e.name];const w=ovWeights[e.name]??((e.curMaxW||0)+1);
                         return(
                           <div key={i} style={{padding:'9px 11px',borderRadius:11,background:skip?'rgba(255,255,255,0.02)':'rgba(167,139,250,0.06)',border:`1px solid ${skip?'rgba(255,255,255,0.07)':'rgba(167,139,250,0.22)'}`,opacity:skip?0.6:1}}>
                             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:skip?0:8}}>
@@ -10064,9 +10064,9 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                               <div style={{display:'flex',alignItems:'center',gap:8}}>
                                 <span style={{fontSize:10.5,color:T.textFaint}}>{e.curMaxW||0} kg →</span>
                                 <div style={{display:'flex',alignItems:'center',marginLeft:'auto',border:'1px solid rgba(167,139,250,0.3)',borderRadius:9,overflow:'hidden',background:'rgba(167,139,250,0.05)'}}>
-                                  <button onClick={()=>setOvW(e.name,w-2.5)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>−</button>
+                                  <button onClick={()=>setOvW(e.name,w-1)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>−</button>
                                   <span style={{minWidth:58,textAlign:'center',fontSize:14,fontWeight:800,color:'#A78BFA'}}>{w}<span style={{fontSize:9,color:T.textDim,fontWeight:600}}> kg</span></span>
-                                  <button onClick={()=>setOvW(e.name,w+2.5)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
+                                  <button onClick={()=>setOvW(e.name,w+1)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
                                 </div>
                               </div>
                             )}
