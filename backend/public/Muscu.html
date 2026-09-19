@@ -1517,9 +1517,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   // ── Surcharge progressive (signal violet) ──────────────────────────────────
   // Un exercice est "en surcharge" quand, à sa DERNIÈRE séance, l'athlète a atteint le HAUT de
-  // la fourchette de reps sur TOUTES ses séries de travail → il est prêt à monter la charge, on
-  // le signale en violet sur l'écran de séance. Cardio / gainage / unilatéral exclus (fourchette
-  // par côté ambiguë). Aucune donnée serveur nécessaire : calculé depuis l'historique local.
+  // la fourchette de reps sur TOUTES ses séries de travail → il est prêt à monter la charge.
+  // Pour les unilatéraux : les DEUX côtés (G et D) doivent atteindre le haut.
   const VIOLET='#A78BFA';
   const overloadTopReps=(ex)=>{
     const str=String((ex&&(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target))||'');
@@ -1527,12 +1526,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return nums&&nums.length?Math.max(...nums.map(Number)):null;
   };
   const overloadDue=(ex)=>{
-    if(!ex||ex.style==='CARDIO'||ex.holdSeconds>0||isUnilateralEx(ex))return false;
+    if(!ex||ex.style==='CARDIO'||ex.holdSeconds>0)return false;
     const top=overloadTopReps(ex);
     if(!top)return false;
     const prev=lastExData[normExerciseName(ex.name)];
-    const sets=(prev?.allSets||[]).filter(s=>(s.reps||0)>0);
+    const sets=(prev?.allSets||[]).filter(s=>(s.reps||0)>0||(s.repsL||0)>0||(s.repsR||0)>0);
     if(!sets.length)return false;
+    if(isUnilateralEx(ex))return sets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top);
     return sets.every(s=>(s.reps||0)>=top);
   };
 
@@ -4887,10 +4887,9 @@ function buildSessionComparison(target,history,extraRange){
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
     const e1Eligible=ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral;
     const curE1RM=e1Eligible?e1rmOf(curSets):0;
-    // Surcharge : exercice classique dont TOUTES les séries faites atteignent le haut de la
-    // fourchette de reps → à monter la prochaine fois. Cardio / gainage / unilatéral exclus.
     const top=topReps(ex);
-    const atCap=!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral&&curSets.length>0&&curSets.every(s=>(s.reps||0)>=top);
+    const uni=isUnilateralEx(ex);
+    const atCap=!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
     if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0});return;}
     const pSets=(p.sets||[]).filter(isLoggedSet);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
