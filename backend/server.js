@@ -2332,7 +2332,13 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: prog.assignedAt });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
-  pushToUser(req.params.athleteId, { title: '⬆ Charge augmentée', body: `${coachName} a monté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`, url: '/Muscu.html' });
+  const allAssisted = updates.every(u => u.assisted);
+  const someAssisted = updates.some(u => u.assisted);
+  const pushTitle = allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
+  const pushBody = allAssisted
+    ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
+    : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
+  pushToUser(req.params.athleteId, { title: pushTitle, body: pushBody, url: '/Muscu.html' });
   res.json({ ok: true, applied, data });
 });
 
