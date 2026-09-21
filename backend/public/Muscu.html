@@ -1570,7 +1570,11 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // fois" disparaît silencieusement dès que la même variante n'est pas retapée à l'identique.
   const lastExData=React.useMemo(()=>{
     const map={};
-    const sorted=[...(history||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    // On IGNORE les séances de décharge : la référence "dernière fois" (poids affiché en vert
+    // sous chaque série, suggestion d'auto-remplissage, signal de surcharge) doit toujours
+    // pointer vers la dernière séance NORMALE — jamais vers une semaine allégée, sinon on
+    // proposerait 60 % du poids comme cible et l'athlète croirait avoir régressé.
+    const sorted=[...(history||[])].filter(h=>!h.deload).sort((a,b)=>new Date(b.date)-new Date(a.date));
     for(const h of sorted){
       for(const he of (h.exercises||[])){
         const k=normExerciseName(he.name);
