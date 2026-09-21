@@ -5516,11 +5516,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // l'aperçu du jour sélectionné, pour que l'athlète voie déjà les poids allégés avant de lancer.
   const applyDeload=ex=>{
     if(!deloadMode)return ex;
-    // Priorité au poids RÉEL de travail de l'athlète (60 % de ce qu'il soulève vraiment) — c'est
-    // la source la plus fiable. À défaut, feuille DECHARGE importée (compat anciens fichiers),
-    // puis calcul depuis le poids programme. Évite qu'une décharge tombe au-dessus du poids réel.
-    const ref=lastWorkWeight[normExerciseName(ex.name)];
-    const d=(ref!=null)?computeDeload(ex,ref):(ex.deload||computeDeload(ex));
+    // La décharge est TOUJOURS calculée par l'app : 60 % du poids RÉELLEMENT soulevé par l'athlète
+    // (lastWorkWeight), sinon 60 % du poids programme à défaut d'historique. On n'utilise PLUS la
+    // feuille DECHARGE importée (ex.deload) : ses exercices, souvent dans un ordre/nom différent
+    // de la feuille principale, étaient appariés par position et pouvaient coller à un exercice la
+    // valeur de décharge d'un AUTRE (ex: un incliné à 42 kg réels qui héritait de 60 kg d'ailleurs).
+    const d=computeDeload(ex,lastWorkWeight[normExerciseName(ex.name)]);
     return {...ex,weightStr:d.weightStr,repsStr:d.repsStr,restSeconds:d.restSeconds,holdSeconds:d.holdSeconds,cardio:d.cardio,sets:d.sets};
   };
 
