@@ -630,30 +630,28 @@ function isAssistedEx(ex) {
 // simplement ces deux constantes pour changer l'intensité de la décharge.
 const DELOAD_WEIGHT_PCT = 0.6; // charges à 60 % du poids normal
 const DELOAD_SETS_PCT = 0.6;   // nombre de séries à 60 % (soit −40 %)
-// Calcule le jeu de valeurs de décharge d'un exercice. La charge de référence est, par ordre de
-// priorité : (1) refWeight = le poids RÉELLEMENT soulevé par l'athlète en dernier (hors décharge),
-// (2) à défaut, le poids prescrit par le programme. C'est essentiel : le programme peut prescrire
-// une charge plus élevée que ce que l'athlète soulève vraiment — sans refWeight, la décharge
-// tomberait au-dessus de son poids de travail réel (ex: prescrit 100 → 60 %=60, alors que
-// l'athlète travaille à 42). Séries −40 %. Reps/repos/cardio inchangés. "PDC"/vide reste tel quel.
-function computeDeload(ex, refWeight) {
+// Arrondi au pas de 2,5 kg (les plaques de salle). Reproduit EXACTEMENT la feuille DECHARGE du
+// coach ("Charges = 60 % du poids SEPTEMBRE") : 120→72,5 · 44→27,5 · 42→25 · 15→10 · 30→17,5.
+const roundPlate = v => Math.round(v / 2.5) * 2.5;
+// Calcule le jeu de valeurs de décharge d'un exercice à partir du poids PROGRAMME : chaque charge
+// ×60 %, arrondie à 2,5 kg. Séries −40 %. Reps/repos/cardio inchangés. "PDC"/vide reste tel quel.
+// On ne se base PAS sur une feuille DECHARGE importée (appariement par position peu fiable) ni sur
+// l'historique : le poids programme est la source directe, comme la feuille du coach.
+function computeDeload(ex) {
   const scaleWeight = str => {
     const s = String(str == null ? '' : str);
     if (!s || !/\d/.test(s)) return s;
-    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(Math.round(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
+    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
   };
   const sets = ex.sets || [];
   const nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
-  // Poids de décharge unique quand on connaît le vrai poids de travail : 60 % de CE poids-là,
-  // jamais plus. Sinon on retombe sur le repli programme (scaleWeight / poids de chaque série).
-  const dw = (refWeight != null && refWeight > 0) ? Math.round(refWeight * DELOAD_WEIGHT_PCT) : null;
   return {
-    weightStr: dw != null ? String(dw) : scaleWeight(ex.weightStr),
+    weightStr: scaleWeight(ex.weightStr),
     repsStr: ex.repsStr,
     restSeconds: ex.restSeconds,
     holdSeconds: ex.holdSeconds,
     cardio: ex.cardio,
-    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: dw != null ? dw : Math.round((s.weight || 0) * DELOAD_WEIGHT_PCT) })),
+    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: roundPlate((s.weight || 0) * DELOAD_WEIGHT_PCT) })),
   };
 }
 // Messages de récap SPÉCIFIQUES à une séance de décharge : ton neutre/bienveillant, jamais
@@ -5245,18 +5243,6 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const scheduledSheetData=programMeta?.scheduledProgram?.data||null;
   const scheduledDays=scheduledSheetData?(Object.values(scheduledSheetData)[0]||{}):{};
   const daysForDate=dateStr=>(scheduledActivateOn&&scheduledSheetData&&dateStr>=scheduledActivateOn)?scheduledDays:days;
-  // Poids RÉEL de travail par exercice = charge la plus lourde soulevée à la dernière séance
-  // NORMALE (hors décharge). Sert de base au calcul de décharge : 60 % de ce que l'athlète
-  // soulève vraiment, jamais 60 % d'un poids programme parfois plus élevé que sa réalité.
-  const lastWorkWeight=React.useMemo(()=>{
-    const map={};
-    const sorted=[...(history||[])].filter(h=>!h.deload).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    for(const h of sorted)for(const he of (h.exercises||[])){
-      const k=normExerciseName(he.name);
-      if(k&&map[k]==null){const top=Math.max(0,...(he.sets||[]).map(s=>s.weight||0));if(top>0)map[k]=top;}
-    }
-    return map;
-  },[history]);
   // Semaine de décharge : bascule TOUT le programme (les 5-6 jours) sur les valeurs allégées
   // importées depuis la feuille "DECHARGE"/"DELOAD" du fichier Excel (cf. parseYannisExcel qui
   // les a fusionnées en ex.deload sur chaque exercice). Persisté par programme (localStorage),
@@ -5516,12 +5502,11 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // l'aperçu du jour sélectionné, pour que l'athlète voie déjà les poids allégés avant de lancer.
   const applyDeload=ex=>{
     if(!deloadMode)return ex;
-    // La décharge est TOUJOURS calculée par l'app : 60 % du poids RÉELLEMENT soulevé par l'athlète
-    // (lastWorkWeight), sinon 60 % du poids programme à défaut d'historique. On n'utilise PLUS la
-    // feuille DECHARGE importée (ex.deload) : ses exercices, souvent dans un ordre/nom différent
-    // de la feuille principale, étaient appariés par position et pouvaient coller à un exercice la
-    // valeur de décharge d'un AUTRE (ex: un incliné à 42 kg réels qui héritait de 60 kg d'ailleurs).
-    const d=computeDeload(ex,lastWorkWeight[normExerciseName(ex.name)]);
+    // Décharge TOUJOURS calculée par l'app (60 % du poids programme, arrondi 2,5). On n'utilise
+    // PLUS la feuille DECHARGE importée : ses exercices, souvent dans un ordre/nom différent de la
+    // feuille principale, étaient appariés par position et collaient à un exercice la valeur d'un
+    // AUTRE (ex: dips à 44 kg qui héritait de 15, ou incliné à 42 qui héritait de 60).
+    const d=computeDeload(ex);
     return {...ex,weightStr:d.weightStr,repsStr:d.repsStr,restSeconds:d.restSeconds,holdSeconds:d.holdSeconds,cardio:d.cardio,sets:d.sets};
   };
 
