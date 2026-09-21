@@ -625,6 +625,54 @@ function isAssistedName(name) {
 function isAssistedEx(ex) {
   return !!(ex && (ex.assisted || isAssistedName(ex.name)));
 }
+// ── Semaine de décharge (deload) : l'app calcule elle-même les valeurs allégées à partir des
+// valeurs normales du programme, sans dépendre d'une feuille "DECHARGE" dans l'Excel. Ajuste
+// simplement ces deux constantes pour changer l'intensité de la décharge.
+const DELOAD_WEIGHT_PCT = 0.6; // charges à 60 % du poids normal
+const DELOAD_SETS_PCT = 0.6;   // nombre de séries à 60 % (soit −40 %)
+// Calcule le jeu de valeurs de décharge d'un exercice à partir de ses valeurs normales :
+// poids ×60 % (chaque nombre du weightStr et de chaque série), séries −40 %. La fourchette de
+// reps, le repos et le cardio restent inchangés. "PDC"/vide (sans chiffre) est laissé tel quel.
+function computeDeload(ex) {
+  const scaleWeight = str => {
+    const s = String(str == null ? '' : str);
+    if (!s || !/\d/.test(s)) return s;
+    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(Math.round(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
+  };
+  const sets = ex.sets || [];
+  const nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
+  return {
+    weightStr: scaleWeight(ex.weightStr),
+    repsStr: ex.repsStr,
+    restSeconds: ex.restSeconds,
+    holdSeconds: ex.holdSeconds,
+    cardio: ex.cardio,
+    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: Math.round((s.weight || 0) * DELOAD_WEIGHT_PCT) })),
+  };
+}
+// Messages de récap SPÉCIFIQUES à une séance de décharge : ton neutre/bienveillant, jamais
+// punitif — une baisse de charge en décharge est voulue, pas un recul à sanctionner.
+const DELOAD_CONGRATS = [
+  name => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — ton corps récupère et surcompense. C'est exactement ce qu'il faut faire cette semaine.`,
+  name => `Décharge validée, ${name}. Cette semaine, l'objectif c'est de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
+];
+const DELOAD_MINDSET = [
+  "La décharge n'est pas du temps perdu : c'est là que le corps transforme le travail des semaines dures en muscle et en force. Léger, mais sérieux.",
+  "Reculer d'un pas pour mieux sauter. La semaine prochaine tu repars sur tes vrais poids, plus frais et plus fort.",
+];
+// Bandeau de récap affiché à la place de l'alerte de régression quand la séance est une décharge.
+function DeloadRecapBanner({ coach }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 13px', borderRadius: 11, background: 'rgba(90,138,224,0.13)', border: '1px solid rgba(90,138,224,0.4)', marginBottom: 12 }}>
+      <span style={{ fontSize: 17, flexShrink: 0 }}>🌊</span>
+      <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
+        {coach
+          ? <>Semaine de décharge — charges allégées comme prévu. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est planifiée, pas un recul. Comparaison de perf en pause.</>
+          : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : ton corps récupère et surcompense.</>}
+      </div>
+    </div>
+  );
+}
 // Regroupement "même exercice" à travers l'historique/les stats : une variante de casse ou
 // d'espaces (import Excel en MAJUSCULES, saisie manuelle, un espace de trop laissé dans une
 // cellule Excel — ex: "GAINAGE " vu dans un vrai fichier importé cette session) ne doit pas
@@ -1431,6 +1479,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         // locale ("⚠ séance non synchronisée") sans jamais atteindre le coach, silencieusement.
         name:workout.name||'Séance',
         muscles:workout.muscles||'',
+        // Marqueur "semaine de décharge" : le récap (buildSessionComparison + affichages) s'en
+        // sert pour NE PAS pénaliser l'athlète (poids allégés = baisse normale et voulue).
+        ...(workout.deload?{deload:true}:{}),
         totalVolume,
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
@@ -1543,6 +1594,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     return nums&&nums.length?Math.max(...nums.map(Number)):null;
   };
   const overloadDue=(ex)=>{
+    if(workout&&workout.deload)return false; // pas de signal de surcharge en semaine de décharge
     if(!ex||ex.style==='CARDIO'||ex.holdSeconds>0)return false;
     const top=overloadTopReps(ex);
     if(!top)return false;
@@ -4705,10 +4757,12 @@ const VOLUME_SAME_MESSAGES=[
 ];
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false}=opts||{};
   const sn=sessionName||'séance';
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
+  // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
+  if(isDeload)return pick(DELOAD_CONGRATS)(name);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) : ton sérieux, sans humour, PRIORITAIRE sur
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
@@ -4807,9 +4861,11 @@ const MOTIVATION_FIRST=[
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
+  // Séance de décharge : mindset dédié, jamais un message de recul/pique.
+  if(isDeload)return pick(DELOAD_MINDSET);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) → ton sérieux prioritaire, sans humour.
   if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)return pick(MOTIVATION_HARD);
   if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
@@ -4865,8 +4921,11 @@ function buildSessionComparison(target,history,extraRange){
   const tTime=new Date(target.date||0).getTime();
   // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
   // elle-même (par id, ou par référence si pas d'id).
+  // On EXCLUT les séances de décharge de la référence : une semaine normale ne doit jamais se
+  // comparer à une semaine allégée (sinon fausse explosion de PR au retour), et une décharge ne
+  // se compare qu'à la dernière semaine NORMALE (la baisse est ensuite neutralisée à l'affichage).
   const prev=(history||[])
-    .filter(s=>s&&s!==target&&tKey&&normExerciseName(s.name||'')===tKey&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
+    .filter(s=>s&&s!==target&&!s.deload&&tKey&&normExerciseName(s.name||'')===tKey&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
     .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime())[0]||null;
   const curVolTotal=sessionVolumeOf(target);
   const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
@@ -4907,7 +4966,9 @@ function buildSessionComparison(target,history,extraRange){
     const top=topReps(ex);
     const uni=isUnilateralEx(ex);
     const assisted=isAssistedEx(ex);
-    const atCap=!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
+    // En décharge, jamais de signal de surcharge : les reps atteignent facilement le haut de la
+    // fourchette avec des charges allégées, ce qui déclencherait de fausses propositions de montée.
+    const atCap=!target.deload&&!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
     if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0,assisted});return;}
     const pSets=(p.sets||[]).filter(isLoggedSet);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
@@ -4924,6 +4985,7 @@ function buildSessionComparison(target,history,extraRange){
   });
   comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
   comp.totalExercises=comp.exercises.length;
+  comp.isDeload=!!target.deload;
   comp.overloadCount=comp.exercises.filter(e=>e.atCap).length;
   comp.overloadNames=comp.exercises.filter(e=>e.atCap).map(e=>e.name);
   return{comp,volumeVsPrev};
@@ -5181,7 +5243,10 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // seulement l'actif) : un programme importé via "📅 Programmer" pour une date future — cf.
   // "Programme prévu" — a bien ses données deload dès l'import, mais ne devient "days" qu'à son
   // activation ; sans ce 2e check le bouton restait invisible jusque-là.
-  const hasDeloadIn=obj=>Object.values(obj||{}).some(d=>(d.exercises||[]).some(e=>e.deload));
+  // Le bouton DÉCHARGE s'affiche dès qu'il y a du travail à alléger : soit une feuille DECHARGE
+  // importée (ancien mécanisme, ex.deload), soit — désormais — n'importe quel exercice chargé,
+  // puisque l'app calcule elle-même les 60 % (computeDeload). Marche pour tous les programmes.
+  const hasDeloadIn=obj=>Object.values(obj||{}).some(d=>(d.exercises||[]).some(e=>e.deload||(e.sets||[]).some(s=>(s.weight||0)>0)||/\d/.test(String(e.weightStr||''))));
   const hasDeload=React.useMemo(()=>hasDeloadIn(days)||hasDeloadIn(scheduledDays),[days,scheduledDays]);
   const[deloadMode,setDeloadModeState]=React.useState(false);
   React.useEffect(()=>{
@@ -5225,8 +5290,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     const{comp,volumeVsPrev}=buildSessionComparison(viewHistSession,history||[],programRangeMap(importedPrograms));
     const hasVolume=sessionVolumeOf(viewHistSession)>0;
     const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
-    const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous);
-    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression};
+    const isDeload=!!viewHistSession.deload;
+    const isRegression=!isDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous));
+    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression,isDeload};
   },[viewHistSession,history]);
   // Édition d'une séance déjà validée (ex: ajouter une série oubliée, corriger un poids après
   // coup) — editHistExercises est un brouillon local (copie profonde) modifié librement, envoyé
@@ -5426,7 +5492,13 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // s'il en a un — sinon (exercice absent de la feuille décharge) reste sur les valeurs
   // normales plutôt que de planter/tout vider. Utilisé à la fois pour démarrer la séance ET pour
   // l'aperçu du jour sélectionné, pour que l'athlète voie déjà les poids allégés avant de lancer.
-  const applyDeload=ex=>(deloadMode&&ex.deload)?{...ex,weightStr:ex.deload.weightStr,repsStr:ex.deload.repsStr,restSeconds:ex.deload.restSeconds,holdSeconds:ex.deload.holdSeconds,cardio:ex.deload.cardio,sets:ex.deload.sets}:ex;
+  const applyDeload=ex=>{
+    if(!deloadMode)return ex;
+    // Priorité à une feuille DECHARGE importée si elle existe (compat anciens fichiers) ; sinon
+    // l'app calcule les valeurs allégées (60 % du poids, −40 % de séries) à partir du normal.
+    const d=ex.deload||computeDeload(ex);
+    return {...ex,weightStr:d.weightStr,repsStr:d.repsStr,restSeconds:d.restSeconds,holdSeconds:d.holdSeconds,cardio:d.cardio,sets:d.sets};
+  };
 
   const startDay=(dayName,dateStr)=>{
     const d=(dateStr?daysForDate(dateStr):days)[dayName];
@@ -5434,6 +5506,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     onStartWorkout({
       name:sessionTitleFrom(d,dayName),
       muscles:d.category||'',
+      // La séance hérite du mode décharge actif → le récap saura qu'il ne faut pas pénaliser.
+      ...(deloadMode?{deload:true}:{}),
       exercises:d.exercises.map(ex=>{
         const src=applyDeload(ex);
         return{...src,id:uid(),sets:src.sets.map(s=>({...s,reps:0,done:false}))};
@@ -5651,7 +5725,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date})}</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload})}</div>
+                  {histRecap.isDeload&&<DeloadRecapBanner/>}
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                       <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
@@ -5725,7 +5800,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date)}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload)}"</div>
                   </div>
                 </div>
               )}
@@ -5948,14 +6023,14 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
         </div>
       )}
 
-      {/* Bouton DELOAD : bascule tout le programme (tous les jours) sur les valeurs allégées
-          importées depuis la feuille "DECHARGE"/"DELOAD" du fichier Excel. Réversible — retaper
-          dessus revient aux valeurs normales, rien n'est perdu. N'apparaît que si le programme
-          actif contient effectivement des données de décharge. */}
+      {/* Bouton DÉCHARGE : bascule tout le programme (tous les jours) sur des valeurs allégées —
+          l'app calcule 60 % du poids et −40 % de séries à la volée (computeDeload), sans dépendre
+          d'une feuille "DECHARGE" dans l'Excel. Réversible — retaper dessus revient aux valeurs
+          normales, rien n'est perdu. Les séances validées en décharge ne pénalisent pas le récap. */}
       {hasDeload&&(
         <button onClick={toggleDeload} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',height:44,marginBottom:14,borderRadius:14,border:deloadMode?'1px solid rgba(90,138,224,0.5)':'1px solid rgba(255,255,255,0.1)',background:deloadMode?'linear-gradient(135deg,#5A8AE0,#8AADEE)':'rgba(255,255,255,0.04)',color:deloadMode?'#fff':T.textDim,fontSize:13,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:deloadMode?'0 6px 18px rgba(90,138,224,0.4)':'none',transition:'background 0.2s,border-color 0.2s'}}>
           <span style={{width:9,height:9,borderRadius:5,background:deloadMode?'#fff':'rgba(255,255,255,0.2)',flexShrink:0}}/>
-          DELOAD {deloadMode?'· ACTIVÉ (poids allégés)':'· semaine de décharge'}
+          DÉCHARGE {deloadMode?'· ACTIVÉE (poids à 60 %)':'· semaine allégée'}
         </button>
       )}
 
@@ -9878,14 +9953,15 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   // félicitations côté athlète), calculée à la volée à partir de l'historique de l'athlète.
   const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[],repsRange),[s,history,repsRange]);
   const hasVolume=totalVol>0;
-  const isRegression=(!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92);
+  const isDeload=!!s.deload;
+  const isRegression=!isDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
   const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
   // ── Surcharge progressive (Modèle B) : contrôle de montée dispo sur CHAQUE exercice avec charge.
   // Poids proposé = charge max faite + 2,5 kg. Les exercices "prêts" (fourchette de reps au max)
   // sont pré-cochés (indice violet) ; les autres sont sur "Garder" mais le coach peut les monter.
-  const overloadExs=React.useMemo(()=>(comp?.exercises||[]).filter(e=>(e.curMaxW||0)>0),[comp]);
+  const overloadExs=React.useMemo(()=>s.deload?[]:(comp?.exercises||[]).filter(e=>(e.curMaxW||0)>0),[comp,s.deload]);
   const readyCount=React.useMemo(()=>overloadExs.filter(e=>e.atCap).length,[overloadExs]);
   const[ovWeights,setOvWeights]=React.useState({});
   const[ovSkip,setOvSkip]=React.useState({});
@@ -9960,7 +10036,9 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload})}</div>
+              {/* Semaine de décharge : bandeau neutre à la place de l'alerte de régression */}
+              {isDeload&&<DeloadRecapBanner coach/>}
               {/* Alerte régression */}
               {isRegression&&(
                 <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
@@ -10099,7 +10177,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload)}"</div>
               </div>
             </div>
           )}
@@ -16141,8 +16219,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         // Régression = signalée seulement quand c'est NET : la baisse domine strictement les
         // hausses ET les stables, ou une chute de volume > 8 %. Évite l'alerte injustifiée sur
         // une séance globalement stable (1 baisse / 1 hausse / 3 stables) ou un -2 % de bruit.
-        const isRegression=(!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
-          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92);
+        const isDeloadSession=!!_s?.deload;
+        const isRegression=!isDeloadSession&&((!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
+          ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
         const regDown=_cmp?_cmp.downCount:0;
         const tiles=[];
         if(hasVolume)tiles.push({val:Math.round(totalVolume).toLocaleString('fr-FR'),unit:'kg',label:'Volume'});
@@ -16157,8 +16236,15 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession})}</div>
             </div>
+
+            {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
+            {isDeloadSession&&(
+              <div style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}}>
+                <DeloadRecapBanner/>
+              </div>
+            )}
 
             {/* Alerte régression — signalée fort quand la séance est en recul */}
             {isRegression&&(
@@ -16301,7 +16387,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date)}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession)}"</div>
             </div>
 
             {/* Bouton continuer */}

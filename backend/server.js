@@ -2049,7 +2049,7 @@ function sanitizeCoachExercise(e) {
 
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
-  const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
+  const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
   // Un nom par défaut plutôt qu'un rejet pur : une séance sans nom (programme généré par l'IA
   // sans champ "name", etc.) n'a aucune raison de se perdre silencieusement. Avant ce correctif,
   // le 400 ici faisait échouer la sauvegarde à chaque tentative (retries + resync inclus) sans
@@ -2103,6 +2103,9 @@ app.post('/api/sessions', authRequired, (req, res) => {
   if (rpe != null && !isNaN(parseFloat(rpe))) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
   if (notes) session.notes = String(notes).slice(0, 500);
   if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
+  // Semaine de décharge : le récap (côté athlète et coach) neutralise la comparaison de perf
+  // pour ne pas pénaliser une baisse de charge volontaire.
+  if (deload) session.deload = true;
   DATA.sessions[id] = session;
   // Garder max 200 sessions par utilisateur (FIFO sur les plus vieilles)
   const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === req.user.id);
