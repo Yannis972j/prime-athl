@@ -1055,8 +1055,17 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // 2e passe (repli) : lignes dont le nom diffère légèrement entre les deux feuilles
           // (ex: "Développé incliné à la barre guidée" vs "Développé incliné barre guidée") —
           // appariées par position parmi les lignes restantes non déjà matchées, dans l'ordre.
+          // SÉCURITÉ : on n'apparie par position QUE si le nombre de restants correspond des deux
+          // côtés. Sinon (ex: la feuille DECHARGE a plus/moins d'exercices que la principale ce
+          // jour-là), l'appariement par position collerait une valeur sur le mauvais exercice —
+          // c'est ce qui faisait apparaître un poids aberrant (ex: 15 kg sur les dips). Dans ce
+          // cas ambigu, on laisse ces exercices sans ex.deload → l'app calcule 60 % en repli.
           const leftoverTargets = tEntries.map((ex, i) => ({ex, i})).filter(({i}) => !usedTargets.has(i));
-          unmatchedDeload.forEach((dEx, k) => { if (leftoverTargets[k]) applyDeload(leftoverTargets[k].ex, dEx); });
+          if (unmatchedDeload.length && unmatchedDeload.length === leftoverTargets.length) {
+            unmatchedDeload.forEach((dEx, k) => applyDeload(leftoverTargets[k].ex, dEx));
+          } else if (unmatchedDeload.length) {
+            warnings.push(`Décharge "${day}" : ${unmatchedDeload.length} exercice(s) non appariés (noms/ordre différents) — 60 % auto appliqué pour ceux-là.`);
+          }
         });
         delete programs[deloadName];
       });
@@ -5502,11 +5511,14 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // l'aperçu du jour sélectionné, pour que l'athlète voie déjà les poids allégés avant de lancer.
   const applyDeload=ex=>{
     if(!deloadMode)return ex;
-    // Décharge TOUJOURS calculée par l'app (60 % du poids programme, arrondi 2,5). On n'utilise
-    // PLUS la feuille DECHARGE importée : ses exercices, souvent dans un ordre/nom différent de la
-    // feuille principale, étaient appariés par position et collaient à un exercice la valeur d'un
-    // AUTRE (ex: dips à 44 kg qui héritait de 15, ou incliné à 42 qui héritait de 60).
-    const d=computeDeload(ex);
+    // Priorité aux valeurs EXACTES de la feuille DECHARGE (ex.deload) quand une charge y est
+    // renseignée pour cet exercice → tes choix manuels sont respectés tels quels (ex: "PDC" sur
+    // les tractions, un poids gardé volontairement identique, une série en moins…). Repli sur le
+    // calcul auto (60 % du poids normal, arrondi 2,5) UNIQUEMENT là où la feuille ne dit rien
+    // (cellule vide) ou quand le programme n'a pas de feuille DECHARGE du tout.
+    const dl=ex.deload;
+    const hasVal=dl&&String(dl.weightStr==null?'':dl.weightStr).trim()!=='';
+    const d=hasVal?dl:computeDeload(ex);
     return {...ex,weightStr:d.weightStr,repsStr:d.repsStr,restSeconds:d.restSeconds,holdSeconds:d.holdSeconds,cardio:d.cardio,sets:d.sets};
   };
 
