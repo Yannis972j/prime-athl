@@ -10000,7 +10000,18 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
       await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates}});
       setOvDone(true);
       onFeedbackSaved&&onFeedbackSaved();
-    }catch(e){console.error('overload',e);alert('Impossible d\'appliquer l\'ajustement. Réessaie.');}
+    }catch(e){
+      console.error('overload',e);
+      // Message spécifique selon la vraie cause renvoyée par le serveur (e.message = code d'erreur),
+      // au lieu d'un « Réessaie » générique qui n'aide personne à comprendre pourquoi ça bloque.
+      const msgs={
+        no_program:"Cet athlète n'a pas de programme assigné. La montée de charge s'applique au programme assigné — une séance lancée depuis la Bibliothèque n'en fait pas partie.",
+        no_match:"Ces exercices ne sont pas dans le programme assigné de l'athlète (séance de Bibliothèque ou programme différent). La charge ne peut donc pas être reportée.",
+        athlete_not_found:"Athlète introuvable ou non rattaché à ton compte coach.",
+        no_updates:"Aucun exercice sélectionné à monter.",
+      };
+      alert(msgs[e&&e.message]||("Impossible d'appliquer l'ajustement ("+((e&&e.message)||'erreur')+"). Réessaie."));
+    }
     setOvSaving(false);
   };
 
