@@ -10569,7 +10569,7 @@ function saveLiveToStorage(data){try{localStorage.setItem(LIVE_STORAGE_KEY,JSON.
 function loadLiveFromStorage(){try{const d=localStorage.getItem(LIVE_STORAGE_KEY);return d?JSON.parse(d):null;}catch(e){return null;}}
 function clearLiveStorage(){try{localStorage.removeItem(LIVE_STORAGE_KEY);}catch(e){}}
 
-function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession,resumeData,prefillSession}){
+function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession,resumeData}){
   const uid=()=>Math.random().toString(36).slice(2);
 
   const catalog=React.useMemo(()=>{
@@ -10593,13 +10593,6 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
     // propres à l'athlète) et la note par série — sinon éditer une séance qui les portait les
     // efface silencieusement et définitivement à la sauvegarde (superset/gainage/cardio perdus).
     if(editSession)return(editSession.exercises||[]).map(e=>({id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',cardio:e.cardio||null,sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:s.reps||0,rest:s.rest||0,done:true,...(s.note?{note:s.note}:{})})),groupId:e.groupId||uid(),groupType:e.groupType||(e.style?exType(e):'classic'),...(e.style?{style:e.style}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})}));
-    // Pré-remplissage depuis une séance de la Bibliothèque de l'athlète : le coach démarre la
-    // séance déjà chargée (exercices, séries, charges cibles) puis ajuste et valide — la séance
-    // est ensuite ENREGISTRÉE POUR L'ATHLÈTE (editSession null → POST /coach/athletes/:id/sessions).
-    if(prefillSession)return(prefillSession.exercises||[]).map(e=>{
-      const tgt=parseInt((String(e.repsStr||'').match(/\d+/)||[])[0]||'')||0;
-      return{id:uid(),name:e.name,muscle:e.muscle||'',brand:e.brand||'',cardio:e.cardio||null,sets:(e.sets||[]).map(s=>({weight:s.weight||0,reps:(s.reps>0?s.reps:tgt),rest:s.rest||e.restSeconds||0,done:true})),groupId:e.groupId||uid(),groupType:e.groupType||(e.style?exType(e):'classic'),...(e.style?{style:e.style}:{}),...(e.holdSeconds?{holdSeconds:e.holdSeconds}:{}),...(e.restSeconds?{restSeconds:e.restSeconds}:{})};
-    });
     return[];
   });
   const[elapsed,setElapsed]=React.useState(()=>{
@@ -10637,7 +10630,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
   const[reviewing,setReviewing]=React.useState(false);
   // Date proposée pour "Planifier" : demain par défaut (une séance planifiée est à venir).
   const[planDate,setPlanDate]=React.useState(()=>{const d=new Date();d.setDate(d.getDate()+1);return ymdKey(d);});
-  const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||prefillSession?.name||'');
+  const[sessionName,setSessionName]=React.useState(resumeData?.sessionName||editSession?.name||'');
   const[editingSet,setEditingSet]=React.useState(null);
   const queryInputRef=React.useRef(null);
 
@@ -11302,7 +11295,7 @@ function CoachProfileField({label,value,onCommit,suffix,type='text'}){
   );
 }
 
-function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit,onStartWorkout}){
+function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit,onStartWorkout,onStartWorkoutForAthlete}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
   const[selected,setSelected]=React.useState(null);
@@ -11318,8 +11311,6 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[showLiveSession,setShowLiveSession]=React.useState(false);
   const[editingSession,setEditingSession]=React.useState(null);
   const[resumeLive,setResumeLive]=React.useState(null);
-  // Séance de bibliothèque à démarrer en live pour l'athlète (pré-remplit CoachLiveSessionScreen).
-  const[livePrefill,setLivePrefill]=React.useState(null);
   const[confirmAction,setConfirmAction]=React.useState(null); // {msg,onConfirm}
   const[calRefreshKey,setCalRefreshKey]=React.useState(0);
 
@@ -11674,16 +11665,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   };
 
   // ── Live session overlay — rendu via portal pour échapper au willChange:transform du gestureRef
-  const liveSessionEl=(showLiveSession||editingSession||resumeLive||livePrefill)&&(selected||resumeLive)?ReactDOM.createPortal(
+  const liveSessionEl=(showLiveSession||editingSession||resumeLive)&&(selected||resumeLive)?ReactDOM.createPortal(
     <CoachLiveSessionScreen
       athleteId={resumeLive?resumeLive.athleteId:selected.id}
       athleteName={resumeLive?resumeLive.athleteName:(detail||selected).firstName||selected.email.split('@')[0]}
       detail={detail||{}}
       editSession={editingSession}
       resumeData={resumeLive}
-      prefillSession={livePrefill}
-      onSaved={(kind)=>{const wasEdit=!!editingSession;setShowLiveSession(false);setEditingSession(null);setResumeLive(null);setLivePrefill(null);if(selected){setDetailTab(kind==='done'&&!wasEdit?'historique':'sport');reloadDetail(selected.id);}flash(wasEdit?'✓ Séance modifiée':kind==='planned'?'✓ Séance planifiée':kind==='pending'?'✓ Séance mise en attente':'✓ Séance enregistrée');}}
-      onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);setLivePrefill(null);}}
+      onSaved={(kind)=>{const wasEdit=!!editingSession;setShowLiveSession(false);setEditingSession(null);setResumeLive(null);if(selected){setDetailTab(kind==='done'&&!wasEdit?'historique':'sport');reloadDetail(selected.id);}flash(wasEdit?'✓ Séance modifiée':kind==='planned'?'✓ Séance planifiée':kind==='pending'?'✓ Séance mise en attente':'✓ Séance enregistrée');}}
+      onClose={()=>{setShowLiveSession(false);setEditingSession(null);setResumeLive(null);}}
     />,
     document.body
   ):null;
@@ -12123,7 +12113,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                       );
                     })}
                   </div>
-                  <button onClick={()=>{setCoachBiblioPreview(null);setLivePrefill(s);}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
+                  <button onClick={()=>{setCoachBiblioPreview(null);onStartWorkoutForAthlete&&onStartWorkoutForAthlete(s,a.id,a.firstName||a.email.split('@')[0],sessions);}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
                     ▶️ Démarrer et valider pour {a.firstName||a.email.split('@')[0]}
                   </button>
                   <button onClick={()=>setPlanFromBiblio(s)} style={{width:'100%',height:50,borderRadius:15,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,boxShadow:'0 8px 22px rgba(191,160,96,0.3)'}}>
@@ -16068,8 +16058,30 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setWorkout({...w,exercises});setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');
   };
 
+  // Le coach joue une séance POUR un athlète depuis sa fiche, dans le MÊME écran que l'athlète
+  // (SessionScreen : validation série par série, "Dernière fois", etc.). La séance validée est
+  // enregistrée côté athlète (POST /coach/athletes/:id/sessions), pas dans l'historique du coach.
+  const[coachSessionTarget,setCoachSessionTarget]=React.useState(null); // null | {athleteId,athleteName,history}
+  const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory)=>{
+    setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[]});
+    startWorkout(w);
+  };
+
   const saveSession=async snapshot=>{
     if(!snapshot)return;
+    // Séance jouée par le coach pour un athlète → enregistrée CÔTÉ ATHLÈTE, jamais dans
+    // l'historique du coach. On calcule quand même le récap (vs l'historique de l'athlète)
+    // pour l'écran de félicitations.
+    if(coachSessionTarget){
+      const tgt=coachSessionTarget;
+      const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,tgt.history||[],programRangeMap(importedPrograms));
+      setVolumeVsPrev(vvp);setSessionComparison(comp);setLastFinishedSession(snapshot);
+      setCoachSessionTarget(null);
+      try{
+        await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||''}});
+      }catch(e){console.error('coach session save',e);alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
+      return;
+    }
     // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
     // (même logique que le récap ouvert au clic sur le calendrier).
     const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history,programRangeMap(importedPrograms));
@@ -16186,7 +16198,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={history} firstName={profile.firstName} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
@@ -16239,7 +16251,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             )}
             {tab==='stats'&&<div style={{flex:1,overflow:'auto'}}><StatsScreen history={history} profile={profile}/></div>}
             {tab==='profile'&&<div style={{flex:1,overflow:'auto'}}><ProfileScreen profile={profile} onChange={setProfileCloud} onLogout={onLogout} onShowPricing={()=>{setTab('univers');setActiveUniverse(null);setShowPricing(true);}}/></div>}
-            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser} initialCoachView={pendingProgramEditId?'programs':undefined} initialProgramEditId={pendingProgramEditId} onConsumedInitialProgramEdit={()=>setPendingProgramEditId(null)} onStartWorkout={w=>{startWorkout(w);setScreen('session');}}/></div>}
+            {tab==='coach'&&(isCreator||authUser.role==='coach')&&<div style={{flex:1,overflow:'auto'}}><CoachScreen authToken={authToken} authUser={authUser} initialCoachView={pendingProgramEditId?'programs':undefined} initialProgramEditId={pendingProgramEditId} onConsumedInitialProgramEdit={()=>setPendingProgramEditId(null)} onStartWorkout={w=>{startWorkout(w);setScreen('session');}} onStartWorkoutForAthlete={startWorkoutForAthlete}/></div>}
             {tab==='messages'&&<div style={{flex:1,overflow:'auto'}}><MessagesScreen authUser={authUser}/></div>}
           </div>
         )}
