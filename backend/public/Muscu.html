@@ -657,7 +657,7 @@ function computeDeload(ex) {
 // Messages de récap SPÉCIFIQUES à une séance de décharge : ton neutre/bienveillant, jamais
 // punitif — une baisse de charge en décharge est voulue, pas un recul à sanctionner.
 const DELOAD_CONGRATS = [
-  name => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — ton corps récupère et surcompense. C'est exactement ce qu'il faut faire cette semaine.`,
+  name => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus fort. C'est exactement ce qu'il faut faire cette semaine.`,
   name => `Décharge validée, ${name}. Cette semaine, l'objectif c'est de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
 ];
 const DELOAD_MINDSET = [
@@ -672,7 +672,7 @@ function DeloadRecapBanner({ coach }) {
       <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
         {coach
           ? <>Semaine de décharge — charges allégées comme prévu. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est planifiée, pas un recul. Comparaison de perf en pause.</>
-          : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : ton corps récupère et surcompense.</>}
+          : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : tu laisses ton corps récupérer pour revenir plus fort.</>}
       </div>
     </div>
   );
