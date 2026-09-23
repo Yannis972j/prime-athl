@@ -1192,6 +1192,8 @@ app.get('/api/program', authRequired, (req, res) => {
   const sched = DATA.scheduledPrograms[req.user.id];
   res.json({
     ...(p || { data: {}, assignedAt: null, assignedBy: null }),
+    // Charges cibles hors programme (surcharge posée par le coach sur des exos de Bibliothèque).
+    targets: DATA.users[req.user.id]?.exerciseTargets || {},
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
     // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
     // séances du programme en attente sur les jours à venir, avant même son activation.
@@ -2047,6 +2049,24 @@ function sanitizeCoachExercise(e) {
   };
 }
 
+// Normalisation d'un nom d'exercice pour comparer/mapper indépendamment de la casse et des accents.
+const normExName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+// Cibles de charge posées par le coach pour des exercices HORS programme assigné (séances lancées
+// depuis la Bibliothèque, ou athlète sans programme) : a.exerciseTargets = { normName: { name,
+// weight, assisted, sessionName, updatedAt } }. Elles pré-remplissent la prochaine séance de
+// l'athlète contenant cet exercice, quelle qu'en soit la source, puis sont consommées dès qu'une
+// nouvelle séance enregistre cet exercice (la cible a été vue et jouée).
+function consumeExerciseTargets(userId, exercises) {
+  const u = DATA.users[userId];
+  if (!u || !u.exerciseTargets) return false;
+  let changed = false;
+  for (const ex of (Array.isArray(exercises) ? exercises : [])) {
+    const k = normExName(ex && ex.name);
+    if (k && u.exerciseTargets[k]) { delete u.exerciseTargets[k]; changed = true; }
+  }
+  return changed;
+}
+
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
   const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
@@ -2107,6 +2127,9 @@ app.post('/api/sessions', authRequired, (req, res) => {
   // pour ne pas pénaliser une baisse de charge volontaire.
   if (deload) session.deload = true;
   DATA.sessions[id] = session;
+  // Une charge cible posée par le coach est « consommée » dès que l'athlète enregistre une séance
+  // avec cet exercice : elle a joué son rôle de pré-remplissage, on ne la re-propose pas ensuite.
+  consumeExerciseTargets(req.user.id, safeExercises);
   // Garder max 200 sessions par utilisateur (FIFO sur les plus vieilles)
   const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === req.user.id);
   if (userSids.length > 200) {
@@ -2282,6 +2305,9 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
 // archiver l'ancien programme ni notifier "nouveau programme" (ce que ferait applyProgramToAthlete).
 // Cible le jour dont le titre correspond au nom de la séance (sinon repli sur tout le programme),
 // et marque la séance (overloadApplied) pour ne jamais re-proposer la même montée (double bump).
+// Les exercices absents du programme (séance de Bibliothèque, programme différent, ou aucun
+// programme assigné) ne sont plus une erreur : leur charge cible est mémorisée par exercice
+// (a.exerciseTargets) et pré-remplira la prochaine séance de l'athlète qui les contient.
 app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
@@ -2289,50 +2315,56 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   const sessionName = String(req.body?.sessionName || '');
   const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
   if (!updates.length) return res.status(400).json({ error: 'no_updates' });
+  const norm = normExName;
+  const wByName = {}, assistedByName = {};
+  for (const u of updates) { const n = norm(u.name); if (n) { wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); assistedByName[n] = !!u.assisted; } }
   const prog = DATA.programs[req.params.athleteId];
-  if (!prog || !prog.data) return res.status(404).json({ error: 'no_program' });
-  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
-  const wByName = {};
-  for (const u of updates) { const n = norm(u.name); if (n) wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); }
-  const data = prog.data;
-  const snKey = norm(sessionName);
-  const bump = (day, restrictName) => {
-    let n = 0;
-    for (const ex of (day.exercises || [])) {
-      const k = norm(ex.name);
-      if (restrictName && !(k in wByName)) continue;
-      if (!(k in wByName)) continue;
-      const w = wByName[k];
-      ex.weightStr = String(w);
-      ex.sets = (ex.sets || []).map(s => ({ ...s, weight: w }));
-      n++;
-    }
-    return n;
-  };
-  let applied = 0;
-  // 1) Jour(s) dont le titre correspond au nom de la séance.
-  for (const sheet of Object.keys(data)) {
-    const days = data[sheet] || {};
-    for (const dayKey of Object.keys(days)) {
-      const day = days[dayKey] || {};
-      if (snKey && norm(day.category || day.name || dayKey) !== snKey) continue;
-      applied += bump(day, true);
-    }
-  }
-  // 2) Repli : aucun jour ne correspond → on applique par nom sur l'ensemble du programme.
-  if (applied === 0) {
+  const data = prog && prog.data ? prog.data : null;
+  const applied = new Set(); // clés d'exos effectivement montées DANS le programme
+  if (data) {
+    const snKey = norm(sessionName);
+    const bump = (day) => {
+      for (const ex of (day.exercises || [])) {
+        const k = norm(ex.name);
+        if (!(k in wByName)) continue;
+        const w = wByName[k];
+        ex.weightStr = String(w);
+        ex.sets = (ex.sets || []).map(s => ({ ...s, weight: w }));
+        applied.add(k);
+      }
+    };
+    // 1) Jour(s) dont le titre correspond au nom de la séance.
     for (const sheet of Object.keys(data)) {
       const days = data[sheet] || {};
-      for (const dayKey of Object.keys(days)) applied += bump(days[dayKey] || {}, true);
+      for (const dayKey of Object.keys(days)) {
+        const day = days[dayKey] || {};
+        if (snKey && norm(day.category || day.name || dayKey) !== snKey) continue;
+        bump(day);
+      }
+    }
+    // 2) Repli : aucun jour ne correspond → on applique par nom sur l'ensemble du programme.
+    if (applied.size === 0) {
+      for (const sheet of Object.keys(data)) {
+        const days = data[sheet] || {};
+        for (const dayKey of Object.keys(days)) bump(days[dayKey] || {});
+      }
     }
   }
-  if (!applied) return res.status(404).json({ error: 'no_match' });
-  prog.assignedAt = Date.now();
+  // Exos non trouvés dans le programme → charge cible mémorisée par exercice.
+  if (!a.exerciseTargets) a.exerciseTargets = {};
+  let targetsWritten = 0;
+  for (const u of updates) {
+    const k = norm(u.name);
+    if (!k || applied.has(k)) continue;
+    a.exerciseTargets[k] = { name: String(u.name || '').slice(0, 100), weight: wByName[k], assisted: assistedByName[k], sessionName: sessionName.slice(0, 100), updatedAt: Date.now() };
+    targetsWritten++;
+  }
+  if (data && applied.size) prog.assignedAt = Date.now();
   if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
     DATA.sessions[sessionId].overloadApplied = true;
   }
   persist();
-  io.to('user:' + req.params.athleteId).emit('program-updated', { data, assignedAt: prog.assignedAt });
+  io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
   const allAssisted = updates.every(u => u.assisted);
@@ -2342,7 +2374,7 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
     ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
     : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
   pushToUser(req.params.athleteId, { title: pushTitle, body: pushBody, url: '/Muscu.html' });
-  res.json({ ok: true, applied, data });
+  res.json({ ok: true, applied: applied.size, targets: targetsWritten, data: data || {} });
 });
 
 // Coach crée une séance pour un athlète (import à l'unité)
@@ -2370,6 +2402,8 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     createdAt: Date.now(),
   };
   DATA.sessions[id] = session;
+  // La séance enregistrée consomme les charges cibles posées sur ces exercices (cf. /overload).
+  consumeExerciseTargets(athlete.id, session.exercises);
   persist();
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });

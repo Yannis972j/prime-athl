@@ -1475,7 +1475,7 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
 // ── Session Screen ────────────────────────────────────────
 
-function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,importedPrograms,onRestUpdate}){
+function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,targets={},importedPrograms,onRestUpdate}){
   const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
   const[perfOpenFor,setPerfOpenFor]=React.useState(null); // nom d'exo dont l'historique "dernières perf" est déplié
@@ -1743,21 +1743,27 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     </BottomSheet>
   );
 
-  // Auto-fill weights from history for sets with weight=0
+  // Auto-remplissage des poids pour les séries à 0. Priorité à la charge CIBLE posée par le coach
+  // (surcharge d'un exo hors programme / de Bibliothèque) : elle prime sur la dernière perf, car
+  // c'est justement la montée que le coach veut voir appliquée. À défaut, on reprend l'historique.
   const prefilled=React.useRef(false);
   React.useEffect(()=>{
     if(prefilled.current)return;
-    if(!Object.keys(lastExData).length)return;
+    if(!Object.keys(lastExData).length&&!Object.keys(targets||{}).length)return;
     prefilled.current=true;
     setExercises(prev=>{
       let anyChange=false;
       const next=prev.map(ex=>{
-        const hist=lastExData[normExerciseName(ex.name)];
-        if(!hist)return ex;
+        const nk=normExerciseName(ex.name);
+        const hist=lastExData[nk];
+        const tgt=targets&&targets[nk];
+        const tgtW=tgt&&tgt.weight>0?tgt.weight:0;
+        if(!hist&&!tgtW)return ex;
         let exChanged=false;
         const newSets=ex.sets.map((s,si)=>{
           if(s.done||(s.weight&&s.weight>0))return s;
-          const hSet=hist.allSets?.[si]||hist.allSets?.[0];
+          if(tgtW){exChanged=true;return{...s,weight:tgtW};}
+          const hSet=hist&&(hist.allSets?.[si]||hist.allSets?.[0]);
           if(hSet&&hSet.weight>0){exChanged=true;return{...s,weight:hSet.weight};}
           return s;
         });
@@ -1766,7 +1772,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       });
       return anyChange?next:prev;
     });
-  },[lastExData]);
+  },[lastExData,targets]);
   React.useEffect(()=>{const tick=()=>setSessionTime(Math.floor((Date.now()-sessionStartRef.current)/1000));const t=setInterval(tick,1000);const onVis=()=>{if(document.visibilityState==='visible')tick();};document.addEventListener('visibilitychange',onVis);return()=>{clearInterval(t);document.removeEventListener('visibilitychange',onVis);};},[]);
   React.useEffect(()=>{if(restSeconds<=0){restEndRef.current=0;return;}if(!restEndRef.current){restEndRef.current=Date.now()+restSeconds*1000;}else{const exp=Math.max(0,Math.ceil((restEndRef.current-Date.now())/1000));if(Math.abs(restSeconds-exp)>2)restEndRef.current=Date.now()+restSeconds*1000;}const t=setInterval(()=>{const r=Math.max(0,Math.ceil((restEndRef.current-Date.now())/1000));setRestSeconds(r);if(r<=0){restEndRef.current=0;clearInterval(t);}},500);return()=>clearInterval(t);},[restSeconds]);
   React.useEffect(()=>{if(setTimerSecs<=0){setTimerEndRef.current=0;return;}if(!setTimerEndRef.current){setTimerEndRef.current=Date.now()+setTimerSecs*1000;}else{const exp=Math.max(0,Math.ceil((setTimerEndRef.current-Date.now())/1000));if(Math.abs(setTimerSecs-exp)>2)setTimerEndRef.current=Date.now()+setTimerSecs*1000;}const t=setInterval(()=>{const r=Math.max(0,Math.ceil((setTimerEndRef.current-Date.now())/1000));setSetTimerSecs(r);if(r<=0){setTimerEndRef.current=0;clearInterval(t);}},500);return()=>clearInterval(t);},[setTimerSecs]);
@@ -10061,9 +10067,9 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
       console.error('overload',e);
       // Message spécifique selon la vraie cause renvoyée par le serveur (e.message = code d'erreur),
       // au lieu d'un « Réessaie » générique qui n'aide personne à comprendre pourquoi ça bloque.
+      // no_program / no_match n'existent plus : un exo hors programme (Bibliothèque) est désormais
+      // mémorisé comme charge cible côté serveur au lieu d'échouer.
       const msgs={
-        no_program:"Cet athlète n'a pas de programme assigné. La montée de charge s'applique au programme assigné — une séance lancée depuis la Bibliothèque n'en fait pas partie.",
-        no_match:"Ces exercices ne sont pas dans le programme assigné de l'athlète (séance de Bibliothèque ou programme différent). La charge ne peut donc pas être reportée.",
         athlete_not_found:"Athlète introuvable ou non rattaché à ton compte coach.",
         no_updates:"Aucun exercice sélectionné à monter.",
       };
@@ -15857,6 +15863,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Cloud-synced state
   const[importedPrograms,setImportedPrograms]=React.useState({});
   const[programMeta,setProgramMeta]=React.useState({assignedAt:null,assignedBy:null,scheduledProgram:null});
+  // Charges cibles posées par le coach sur des exos HORS programme (séances Bibliothèque) — { normName:{name,weight,assisted,...} }.
+  // Elles pré-remplissent la prochaine séance de l'athlète qui contient l'exercice.
+  const[exerciseTargets,setExerciseTargets]=React.useState({});
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -15919,6 +15928,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       ]);
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
+      setExerciseTargets(prog.targets||{});
       setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy,scheduledProgram:prog.scheduledProgram||null});
       setScheduleMoves(prog.scheduleMoves||{});
       setHistory(sess);
@@ -15933,6 +15943,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   React.useEffect(()=>{
     apiCall('/api/program').then(p=>{
       setImportedPrograms(p.data||{});
+      setExerciseTargets(p.targets||{});
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy,scheduledProgram:p.scheduledProgram||null});
       setScheduleMoves(p.scheduleMoves||{});
     }).catch(()=>{});
@@ -15968,8 +15979,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // le prochain poll de 20 s. Le premier connect (au chargement) est ignoré : l'app charge
     // déjà ses données au montage.
     'connect':()=>{ if(socketReadyRef.current) refreshAll(true); socketReadyRef.current=true; },
-    'program-updated':({data,assignedAt})=>{
+    'program-updated':({data,assignedAt,targets})=>{
       setImportedPrograms(data||{});
+      if(targets!==undefined)setExerciseTargets(targets||{});
       setProgramMeta(m=>({...m,assignedAt}));
       triggerSave();
     },
@@ -16255,7 +16267,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
