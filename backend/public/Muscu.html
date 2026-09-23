@@ -5821,15 +5821,16 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   {histRecap.showVolCompare&&(()=>{
                     const vp=histRecap.volumeVsPrev,delta=Math.round(vp.current-vp.previous);
                     const pct=vp.previous>0?Math.round(Math.abs(delta)/vp.previous*100):0,up=delta>0;
+                    const DOWN=histRecap.isDeload?'#5A8AE0':T.danger; // décharge : baisse voulue → bleu
                     return(
                       <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:histRecap.comp?12:0}}>
                         <div style={{flex:1}}>
                           <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(vp.previous).toLocaleString('fr-FR')} kg</span></div>
                           <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(vp.current).toLocaleString('fr-FR')} kg</span></div>
                         </div>
-                        <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                          <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
-                          <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                        <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':histRecap.isDeload?'rgba(90,138,224,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':histRecap.isDeload?'rgba(90,138,224,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                          <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:DOWN}}>{delta===0?'=':up?'↑':'↓'}</div>
+                          <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:DOWN}}>{pct}%</div>
                         </div>
                       </div>
                     );
@@ -5843,7 +5844,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                       <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.06)'}}>
                         {histRecap.comp.exercises.map((ex,i)=>{
                           const isNew=ex.status==='new',up=ex.status==='up',down=ex.status==='down';
-                          const sc=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                          const DOWN=histRecap.isDeload?'#5A8AE0':T.danger; // décharge : baisse voulue → bleu
+                          const sc=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
                           const si=isNew?'🆕':up?'↑':down?'↓':'=';
                           const vd=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                           return(
@@ -5856,7 +5858,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                     {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
                                   </div>
                                   <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
-                                    {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
+                                    {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
                                     {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                                     {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                     {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
@@ -5875,7 +5877,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   {histRecap.comp&&histRecap.comp.totalExercises>0&&(
                     <div style={{display:'flex',gap:8}}>
-                      {[{count:histRecap.comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:histRecap.comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:histRecap.comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:histRecap.comp.prsCount,label:'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                      {[{count:histRecap.comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:histRecap.comp.downCount,label:'en baisse',color:histRecap.isDeload?'#5A8AE0':T.danger,icon:'↓'},{count:histRecap.comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:histRecap.comp.prsCount,label:'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
                         <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
                           <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
                           <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
@@ -10039,6 +10041,8 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[],repsRange),[s,history,repsRange]);
   const hasVolume=totalVol>0;
   const isDeload=!!s.deload;
+  // Décharge : écarts négatifs en BLEU neutre (baisse voulue) plutôt qu'en rouge (recul).
+  const DOWN=isDeload?'#5A8AE0':T.danger;
   const isRegression=!isDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
   const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
@@ -10153,9 +10157,9 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:11,color:T.textDim}}>Dernière fois</span><span style={{fontSize:13,fontWeight:700,color:T.textDim}}>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</span></div>
                       <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:11,color:T.text,fontWeight:600}}>Cette séance</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</span></div>
                     </div>
-                    <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                      <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
-                      <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:T.danger}}>{pct}%</div>
+                    <div style={{width:56,height:56,flexShrink:0,borderRadius:14,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':isDeload?'rgba(90,138,224,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':isDeload?'rgba(90,138,224,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{fontSize:15,fontWeight:800,color:delta===0?T.textFaint:up?T.good:DOWN}}>{delta===0?'=':up?'↑':'↓'}</div>
+                      <div style={{fontSize:10,fontWeight:700,color:delta===0?T.textFaint:up?T.good:DOWN}}>{pct}%</div>
                     </div>
                   </div>
                 );
@@ -10171,7 +10175,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                     {comp.exercises.map((ex,i)=>{
                       const isNew=ex.status==='new';
                       const up=ex.status==='up',down=ex.status==='down';
-                      const statusColor=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                      const statusColor=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
                       const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
                       const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                       return(
@@ -10185,7 +10189,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                               </div>
                               {/* 1RM estimé — mesure de progression phare côté coach, en tête */}
                               {!isNew&&ex.curE1RM>0&&(
-                                <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:ex.e1Delta>0?T.good:ex.e1Delta<0?T.danger:'rgba(255,255,255,0.65)'}}>
+                                <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:ex.e1Delta>0?T.good:ex.e1Delta<0?DOWN:'rgba(255,255,255,0.65)'}}>
                                   <span style={{fontWeight:700,color:T.textFaint}}>Force est. </span>{ex.prevE1RM}→{ex.curE1RM} kg{ex.e1Delta!==0?` (${ex.e1Delta>0?'+':''}${ex.e1Delta})`:''}
                                 </div>
                               )}
@@ -10193,11 +10197,11 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                 <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:'rgba(255,255,255,0.65)'}}><span style={{fontWeight:700,color:T.textFaint}}>Force est. </span>{ex.curE1RM} kg</div>
                               )}
                               <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:3,display:'flex',gap:8,flexWrap:'wrap'}}>
-                                {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
+                                {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
                                 {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                                 {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                 {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
-                                {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                                {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                                 {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                               </div>
                             </div>
@@ -10215,7 +10219,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {/* Score global */}
               {comp&&comp.totalExercises>0&&(
                 <div style={{display:'flex',gap:8}}>
-                  {[{count:comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:comp.downCount,label:'en baisse',color:T.danger,icon:'↓'},{count:comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:comp.prsCount,label:comp.prsCount>1?'PR':'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
+                  {[{count:comp.upCount,label:'en hausse',color:T.good,icon:'↑'},{count:comp.downCount,label:'en baisse',color:DOWN,icon:'↓'},{count:comp.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},{count:comp.prsCount,label:comp.prsCount>1?'PR':'PR',color:T.accent,icon:'★'}].filter(x=>x.count>0).map((x,i)=>(
                     <div key={i} style={{flex:1,textAlign:'center',padding:'7px 4px',borderRadius:10,background:`${x.color}14`,border:`1px solid ${x.color}33`}}>
                       <div style={{fontSize:14,fontWeight:800,color:x.color}}>{x.icon} {x.count}</div>
                       <div style={{fontSize:8.5,color:x.color,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3,marginTop:1}}>{x.label}</div>
@@ -16350,6 +16354,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         const isRegression=!isDeloadSession&&((!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
           ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
         const regDown=_cmp?_cmp.downCount:0;
+        // En semaine de décharge, la baisse est voulue : on affiche les écarts négatifs en BLEU
+        // neutre (récupération) plutôt qu'en rouge (recul), pour ne pas envoyer un signal d'échec.
+        const DOWN=isDeloadSession?'#5A8AE0':T.danger;
         const tiles=[];
         if(hasVolume)tiles.push({val:Math.round(totalVolume).toLocaleString('fr-FR'),unit:'kg',label:'Volume'});
         else tiles.push({val:totalSets,unit:'',label:totalSets>1?'Séries':'Série'});
@@ -16413,9 +16420,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                     const pct=volumeVsPrev.previous>0?Math.round(Math.abs(delta)/volumeVsPrev.previous*100):0;
                     const up=delta>0;
                     return(
-                      <div style={{width:64,height:64,flexShrink:0,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-                        <div style={{fontSize:16,fontWeight:800,color:delta===0?'rgba(255,255,255,0.5)':up?T.good:T.danger}}>{delta===0?'=':up?'↑':'↓'}</div>
-                        <div style={{fontSize:10,fontWeight:700,color:delta===0?'rgba(255,255,255,0.4)':up?T.good:T.danger}}>{pct}%</div>
+                      <div style={{width:64,height:64,flexShrink:0,borderRadius:16,background:delta===0?'rgba(255,255,255,0.06)':up?'rgba(44,196,160,0.12)':isDeloadSession?'rgba(90,138,224,0.12)':'rgba(184,80,112,0.12)',border:`1px solid ${delta===0?'rgba(255,255,255,0.1)':up?'rgba(44,196,160,0.3)':isDeloadSession?'rgba(90,138,224,0.3)':'rgba(184,80,112,0.3)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                        <div style={{fontSize:16,fontWeight:800,color:delta===0?'rgba(255,255,255,0.5)':up?T.good:DOWN}}>{delta===0?'=':up?'↑':'↓'}</div>
+                        <div style={{fontSize:10,fontWeight:700,color:delta===0?'rgba(255,255,255,0.4)':up?T.good:DOWN}}>{pct}%</div>
                       </div>
                     );
                   })()}
@@ -16439,7 +16446,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                     const isNew=ex.status==='new';
                     const up=ex.status==='up';
                     const down=ex.status==='down';
-                    const statusColor=isNew?'#5A8AE0':up?T.good:down?T.danger:'rgba(255,255,255,0.4)';
+                    const statusColor=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
                     const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
                     const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                     return(
@@ -16453,12 +16460,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                             </div>
                             <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
                               {!isNew&&ex.prevMaxW>0&&(
-                                <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:T.danger}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>
+                                <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>
                               )}
                               {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
                               {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                               {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
-                              {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?T.danger:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                              {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                               {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                             </div>
                           </div>
@@ -16475,7 +16482,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                 <div style={{display:'flex',gap:8,marginTop:10}}>
                   {[
                     {count:sessionComparison.upCount,label:'en hausse',color:T.good,icon:'↑'},
-                    {count:sessionComparison.downCount,label:'en baisse',color:T.danger,icon:'↓'},
+                    {count:sessionComparison.downCount,label:'en baisse',color:DOWN,icon:'↓'},
                     {count:sessionComparison.sameCount,label:'stable',color:'rgba(255,255,255,0.4)',icon:'='},
                   ].filter(x=>x.count>0).map((x,i)=>(
                     <div key={i} style={{flex:1,textAlign:'center',padding:'8px 6px',borderRadius:10,background:`${x.color}11`,border:`1px solid ${x.color}33`}}>
