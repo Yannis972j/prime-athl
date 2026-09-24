@@ -2382,7 +2382,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   const athlete = DATA.users[req.params.id];
   if (!athlete) return res.status(404).json({ error: 'not_found' });
   if (athlete.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
-  const { name, date, exercises, totalVolume, duration, notes } = req.body || {};
+  const { name, date, exercises, totalVolume, duration, notes, deload } = req.body || {};
   if (!Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
   // Même filet que POST /api/sessions : un nom par défaut plutôt qu'un rejet silencieux (cf.
   // commentaire là-bas — le client le garde déjà côté CoachLiveSessionScreen, mais mieux vaut
@@ -2400,6 +2400,8 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     notes: notes ? String(notes).slice(0, 500) : '',
     createdByCoach: true,
     createdAt: Date.now(),
+    // Séance de décharge : le récap ne pénalise pas la baisse volontaire (même drapeau que /api/sessions).
+    ...(deload ? { deload: true } : {}),
   };
   DATA.sessions[id] = session;
   // La séance enregistrée consomme les charges cibles posées sur ces exercices (cf. /overload).

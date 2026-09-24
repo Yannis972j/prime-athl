@@ -6217,6 +6217,10 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               onStartWorkout({
                 name:histSession.name||selectedDay.dayName,
                 muscles:histSession.muscles||'',
+                // Refaire une séance de décharge reste une décharge : on garde le drapeau pour que
+                // le récap ne pénalise pas la baisse volontaire (sinon la re-jouer la faisait passer
+                // pour une séance normale, donc « en recul »).
+                ...(histSession.deload?{deload:true}:{}),
                 exercises:(histSession.exercises||[]).map(ex=>({...ex,id:uid(),sets:(ex.sets||[]).map(s=>({...s,reps:0,done:false}))})),
               });
             };
@@ -16151,7 +16155,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       setVolumeVsPrev(vvp);setSessionComparison(comp);setLastFinishedSession(snapshot);
       setCoachSessionTarget(null);
       try{
-        await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||''}});
+        await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload}});
       }catch(e){console.error('coach session save',e);alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
       return;
     }
