@@ -1244,12 +1244,12 @@ function RangeField({value,onCommit,placeholder,style}){
 // inclinaison, durée) qui viennent souvent d'Excel sous forme de texte libre ("30'", "8-11"...)
 // et ne servent à aucun calcul, juste à l'affichage : pas besoin (et pas souhaitable) de les
 // contraindre à un format numérique strict comme NumField/RangeField.
-function FreeTextField({value,onCommit,placeholder,style}){
+function FreeTextField({value,onCommit,placeholder,style,inputMode}){
   const[buf,setBuf]=React.useState(null);
   const display=buf!==null?buf:(value||'');
   return(
     <input
-      type="text" enterKeyHint="done"
+      type="text" enterKeyHint="done" inputMode={inputMode}
       value={display} placeholder={placeholder}
       onFocus={e=>{const el=e.currentTarget;setBuf(value||'');requestAnimationFrame(()=>{try{el.select();}catch(_){}});}}
       onChange={e=>{setBuf(e.target.value);onCommit(e.target.value);}}
@@ -10063,7 +10063,8 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
   React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
   React.useEffect(()=>{const initW={},initSkip={};overloadExs.forEach(e=>{initW[e.name]=e.assisted?Math.max(0,(e.curMaxW||0)-1):(e.curMaxW||0)+1;initSkip[e.name]=!e.atCap;});setOvWeights(initW);setOvSkip(initSkip);},[overloadExs]);
-  const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.round(val))}));
+  // Pas d'arrondi à l'entier : la saisie manuelle doit garder les demi-plaques (ex: 92,5 kg).
+  const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.min(500,Math.round(val*2)/2))}));
   const applyOverload=async()=>{
     // from:e.curMaxW → permet au pop-up athlète d'afficher "ancien → nouveau" (ex: 40 → 42,5 kg).
     const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name],from:e.curMaxW||0,assisted:!!e.assisted}));
@@ -10269,7 +10270,13 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                 <span style={{fontSize:10.5,color:T.textFaint}}>{e.curMaxW||0} kg →</span>
                                 <div style={{display:'flex',alignItems:'center',marginLeft:'auto',border:'1px solid rgba(167,139,250,0.3)',borderRadius:9,overflow:'hidden',background:'rgba(167,139,250,0.05)'}}>
                                   <button onClick={()=>setOvW(e.name,w-1)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>−</button>
-                                  <span style={{minWidth:58,textAlign:'center',fontSize:14,fontWeight:800,color:'#A78BFA'}}>{w}<span style={{fontSize:9,color:T.textDim,fontWeight:600}}> kg</span></span>
+                                  {/* Valeur saisissable directement (tape le poids voulu, ex: 92,5) — le −/+ reste dispo. */}
+                                  <div style={{display:'flex',alignItems:'baseline',justifyContent:'center',minWidth:58}}>
+                                    <FreeTextField value={String(w)} inputMode="decimal"
+                                      onCommit={val=>{const n=parseFloat(String(val).replace(',','.'));if(!isNaN(n))setOvW(e.name,n);}}
+                                      style={{width:36,textAlign:'right',border:'none',background:'transparent',color:'#A78BFA',fontSize:14,fontWeight:800,outline:'none',fontFamily:'inherit',padding:0}}/>
+                                    <span style={{fontSize:9,color:T.textDim,fontWeight:600,marginLeft:2}}>kg</span>
+                                  </div>
                                   <button onClick={()=>setOvW(e.name,w+1)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
                                 </div>
                               </div>
