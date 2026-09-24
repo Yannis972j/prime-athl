@@ -234,6 +234,8 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
     creditCard:<><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></>,
     eye:<><path d="M1 12S4 4 12 4s11 8 11 8-3 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
     eyeOff:<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></>,
+    calendar:<><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 2v4"/><path d="M16 2v4"/></>,
+    copy:<><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></>,
   };
   return <svg {...p}>{paths[name]||null}</svg>;
 }
@@ -8758,10 +8760,10 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                 {/* Séance réalisée — toutes les actions réunies : Voir · Recap · Corriger · Copier · Suppr. */}
                 {sess&&(
                   <div style={{display:'flex',gap:6,marginTop:10}}>
-                    <button onClick={()=>openSessionModal(sess,'body')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>👀 Voir</button>
-                    <button onClick={()=>openSessionModal(sess,'recap')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📊 Recap</button>
-                    {editable&&<button onClick={()=>setEditDoneSession(sess)} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>✏️ Corriger</button>}
-                    {editable&&<button onClick={()=>setPlanSession(sess)} title="Copier cette séance vers une autre date" style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(140,160,220,0.3)',background:'rgba(140,160,220,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>📋</button>}
+                    <button onClick={()=>openSessionModal(sess,'body')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><Icon name="eye" size={13}/>Voir</button>
+                    <button onClick={()=>openSessionModal(sess,'recap')} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.35)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><Icon name="chart" size={13}/>Recap</button>
+                    {editable&&<button onClick={()=>setEditDoneSession(sess)} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><Icon name="edit" size={13}/>Corriger</button>}
+                    {editable&&<button onClick={()=>setPlanSession(sess)} title="Copier cette séance vers une autre date" style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(140,160,220,0.3)',background:'rgba(140,160,220,0.08)',color:'#8CA0DC',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="copy" size={15}/></button>}
                     {editable&&onDeleteSession&&<button onClick={()=>{if(confirm('Supprimer cette séance de l\'historique ?'))onDeleteSession(sess.id,athleteId);}} style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.08)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="trash" size={14} stroke={T.danger}/></button>}
                   </div>
                 )}
@@ -8771,9 +8773,9 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   ):hasProg&&progData?(
                     /* Jour du programme non encore réalisé — Assigner (envoyer à l'athlète) · Voir (contenu prévu) · Déplacer. */
                     <div style={{display:'flex',gap:6,marginTop:10}}>
-                      <button onClick={()=>setAssignDay({dayName:effectiveDayName,dayData:progData})} style={{flex:1,height:38,borderRadius:11,border:'1px solid '+T.accent+'55',background:T.accent+'14',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>📩 Assigner</button>
-                      <button onClick={()=>setViewProgDay({dayName:effectiveDayName,dayData:progData})} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>👀 Voir</button>
-                      <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} title="Déplacer cette séance à une autre date" style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',fontSize:14,fontWeight:700,cursor:'pointer',flexShrink:0}}>📅</button>
+                      <button onClick={()=>setAssignDay({dayName:effectiveDayName,dayData:progData})} style={{flex:1,height:38,borderRadius:11,border:'1px solid '+T.accent+'55',background:T.accent+'14',color:T.accent,fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><Icon name="download" size={13}/>Assigner</button>
+                      <button onClick={()=>setViewProgDay({dayName:effectiveDayName,dayData:progData})} style={{flex:1,height:38,borderRadius:11,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#5A8AE0',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><Icon name="eye" size={13}/>Voir</button>
+                      <button onClick={()=>{setMoveFrom(sel);setMoveTarget(sel);setMoveErr(null);}} title="Déplacer cette séance à une autre date" style={{width:38,height:38,borderRadius:11,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.06)',color:'#BFA060',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="calendar" size={15}/></button>
                     </div>
                   ):null
                 )}
