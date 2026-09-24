@@ -53,6 +53,25 @@ test('la fourchette de reps (repsStr) est conservée à la sauvegarde', async ()
   assert.equal(sess.exercises[0].repsStr, '10-12', 'la fourchette de reps doit survivre au sanitizer serveur');
 });
 
+// Régression : le drapeau `deload` était persisté mais ABSENT du sérialiseur de GET /api/sessions,
+// donc l'historique relu croyait à une semaine normale et affichait une alerte de recul au lieu du
+// bandeau neutre de décharge. Il doit faire l'aller-retour.
+test('le drapeau deload survit à l\'aller-retour serveur', async () => {
+  await api(srv.baseUrl, 'POST', '/api/sessions', { token, body: { ...sessionBody(), name: 'DELOAD ROUNDTRIP', deload: true } });
+  const get = await api(srv.baseUrl, 'GET', '/api/sessions', { token });
+  const sess = (get.body || []).find(s => s.name === 'DELOAD ROUNDTRIP');
+  assert.ok(sess, 'séance de décharge présente');
+  assert.equal(sess.deload, true, 'GET /api/sessions doit renvoyer deload:true (sinon le récap la traite comme une semaine normale)');
+});
+
+test('une séance normale ne porte pas deload à la relecture', async () => {
+  await api(srv.baseUrl, 'POST', '/api/sessions', { token, body: { ...sessionBody(), name: 'NORMALE ROUNDTRIP' } });
+  const get = await api(srv.baseUrl, 'GET', '/api/sessions', { token });
+  const sess = (get.body || []).find(s => s.name === 'NORMALE ROUNDTRIP');
+  assert.ok(sess, 'séance présente');
+  assert.equal(sess.deload, false, 'une séance non-décharge doit revenir deload:false');
+});
+
 test('éditer une séance validée conserve la fourchette et met à jour la séance', async () => {
   const s2 = await startServer();
   try {

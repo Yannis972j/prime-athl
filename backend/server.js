@@ -1289,7 +1289,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
     pendingSessions: DATA.pendingSessions[u.id] || [],
@@ -1990,7 +1990,10 @@ app.get('/api/sessions', authRequired, (req, res) => {
     .filter(s => s.userId === target)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500)
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach }));
+    // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
+    // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
+    // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied }));
   res.json(list);
 });
 
