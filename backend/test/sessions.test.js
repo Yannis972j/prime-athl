@@ -104,3 +104,38 @@ test('éditer une séance validée conserve la fourchette et met à jour la séa
     await s2.stop();
   }
 });
+
+// Message pop-up du coach : validé avec une montée de charge, il doit être livré à l'athlète via
+// /api/program (coachNote), avec le récap ancien→nouveau, puis effacé une fois acquitté (ack).
+test('le message pop-up du coach est livré à l\'athlète puis acquitté', async () => {
+  const s = await startServer();
+  try {
+    const cl = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: MAIN_COACH_EMAIL, password: MAIN_COACH_PASSWORD } });
+    const coachToken = cl.body.token;
+    const created = await api(s.baseUrl, 'POST', '/api/coach/create-athlete', { token: coachToken, body: { email: 'notes-athlete@test.local', password: 'longenough1' } });
+    const athleteId = created.body?.athlete?.id || created.body?.id || created.body?.user?.id;
+    assert.ok(athleteId, 'athlète créé');
+    const al = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: 'notes-athlete@test.local', password: 'longenough1' } });
+    const athleteToken = al.body.token;
+
+    const ov = await api(s.baseUrl, 'POST', `/api/coach/athletes/${athleteId}/overload`, { token: coachToken, body: {
+      sessionName: 'HAUT DU CORPS : DOS',
+      updates: [{ name: 'Tirage vertical', weight: 42.5, from: 40 }],
+      note: 'Beau boulot, on monte le tirage cette semaine.',
+    }});
+    assert.equal(ov.status, 200, 'overload avec note doit répondre 200');
+
+    const prog = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
+    assert.ok(prog.body.coachNote, 'la note doit être livrée à l\'athlète');
+    assert.equal(prog.body.coachNote.message, 'Beau boulot, on monte le tirage cette semaine.');
+    assert.equal(prog.body.coachNote.updates[0].from, 40, 'ancienne charge présente');
+    assert.equal(prog.body.coachNote.updates[0].to, 42.5, 'nouvelle charge présente');
+
+    const ack = await api(s.baseUrl, 'POST', '/api/my-coach-note/ack', { token: athleteToken });
+    assert.equal(ack.status, 200);
+    const prog2 = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
+    assert.equal(prog2.body.coachNote, null, 'après ack la note ne revient plus');
+  } finally {
+    await s.stop();
+  }
+});

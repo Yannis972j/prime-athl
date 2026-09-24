@@ -10059,16 +10059,20 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const[ovWeights,setOvWeights]=React.useState({});
   const[ovSkip,setOvSkip]=React.useState({});
   const[ovSaving,setOvSaving]=React.useState(false);
+  const[ovNote,setOvNote]=React.useState(''); // message pop-up facultatif pour l'athlète
   const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
   React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
   React.useEffect(()=>{const initW={},initSkip={};overloadExs.forEach(e=>{initW[e.name]=e.assisted?Math.max(0,(e.curMaxW||0)-1):(e.curMaxW||0)+1;initSkip[e.name]=!e.atCap;});setOvWeights(initW);setOvSkip(initSkip);},[overloadExs]);
   const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.round(val))}));
   const applyOverload=async()=>{
-    const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name],assisted:!!e.assisted}));
-    if(!updates.length){setOvDone(true);return;}
+    // from:e.curMaxW → permet au pop-up athlète d'afficher "ancien → nouveau" (ex: 40 → 42,5 kg).
+    const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name],from:e.curMaxW||0,assisted:!!e.assisted}));
+    const note=ovNote.trim();
+    // Rien à envoyer que si aucune charge montée ET aucun message écrit.
+    if(!updates.length&&!note){setOvDone(true);return;}
     setOvSaving(true);
     try{
-      await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates}});
+      await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates,note}});
       setOvDone(true);
       onFeedbackSaved&&onFeedbackSaved();
     }catch(e){
@@ -10273,6 +10277,13 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                           </div>
                         );
                       })}
+                    </div>
+                    {/* Message pop-up facultatif : s'affichera à l'athlète au lancement de sa
+                        prochaine séance (consignes + récap des charges montées). */}
+                    <div style={{marginTop:12,padding:'11px 12px',borderRadius:12,background:'rgba(90,138,224,0.07)',border:'1px solid rgba(90,138,224,0.28)'}}>
+                      <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#7FA8EE',marginBottom:6}}>✍️ Message pour {firstName} <span style={{color:T.textFaint,fontWeight:600,textTransform:'none',letterSpacing:0}}>· optionnel</span></div>
+                      <textarea value={ovNote} onChange={e=>setOvNote(e.target.value.slice(0,600))} placeholder={`Consignes, corrections, encouragement… (ex: "On monte le tirage cette semaine, concentre-toi sur la contraction en fin de mouvement.")`} rows={3} style={{width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,color:'#fff',fontSize:12.5,fontFamily:'inherit',padding:'9px 10px',lineHeight:1.45,resize:'vertical',outline:'none'}}/>
+                      <div style={{fontSize:9.5,color:T.textFaint,marginTop:5,lineHeight:1.4}}>📣 Si tu écris un message, {firstName} recevra un pop-up avec tes consignes + ses nouvelles charges en ouvrant sa prochaine séance.</div>
                     </div>
                     <button onClick={applyOverload} disabled={ovSaving} style={{width:'100%',marginTop:10,height:44,borderRadius:11,border:'none',background:ovSaving?'rgba(167,139,250,0.4)':'linear-gradient(135deg,#A78BFA,#7C5CD6)',color:'#0c0c12',fontSize:13,fontWeight:800,cursor:ovSaving?'default':'pointer'}}>{ovSaving?'Application…':'✓ Valider · mettre à jour la prochaine séance'}</button>
                   </>)}
@@ -15874,6 +15885,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Charges cibles posées par le coach sur des exos HORS programme (séances Bibliothèque) — { normName:{name,weight,assisted,...} }.
   // Elles pré-remplissent la prochaine séance de l'athlète qui contient l'exercice.
   const[exerciseTargets,setExerciseTargets]=React.useState({});
+  // Message pop-up du coach (consignes + charges) : coachNote = en attente côté données ;
+  // pendingCoachNote = affiché à l'écran (déclenché au lancement d'une séance).
+  const[coachNote,setCoachNote]=React.useState(null);
+  const[pendingCoachNote,setPendingCoachNote]=React.useState(null);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -15937,6 +15952,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
       setExerciseTargets(prog.targets||{});
+      setCoachNote(prog.coachNote||null);
       setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy,scheduledProgram:prog.scheduledProgram||null});
       setScheduleMoves(prog.scheduleMoves||{});
       setHistory(sess);
@@ -15952,6 +15968,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/program').then(p=>{
       setImportedPrograms(p.data||{});
       setExerciseTargets(p.targets||{});
+      setCoachNote(p.coachNote||null);
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy,scheduledProgram:p.scheduledProgram||null});
       setScheduleMoves(p.scheduleMoves||{});
     }).catch(()=>{});
@@ -15987,9 +16004,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // le prochain poll de 20 s. Le premier connect (au chargement) est ignoré : l'app charge
     // déjà ses données au montage.
     'connect':()=>{ if(socketReadyRef.current) refreshAll(true); socketReadyRef.current=true; },
-    'program-updated':({data,assignedAt,targets})=>{
+    'program-updated':({data,assignedAt,targets,coachNote})=>{
       setImportedPrograms(data||{});
       if(targets!==undefined)setExerciseTargets(targets||{});
+      if(coachNote!==undefined)setCoachNote(coachNote||null);
       setProgramMeta(m=>({...m,assignedAt}));
       triggerSave();
     },
@@ -16133,6 +16151,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // pendant l'entraînement quelle que soit l'origine (programme Excel, Live rejouée, planifiée...).
     const exercises=w.exercises.map(ex=>ex.style?ex:{...ex,style:STYLE_FROM_TYPE[exType(ex)]||'CLASSIQUE'});
     setWorkout({...w,exercises});setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');
+    // Message du coach en attente → pop-up au lancement de la séance (une seule fois). On ne
+    // l'affiche pas quand le coach joue POUR un athlète (coachSessionTarget) : ce serait sa propre note.
+    if(coachNote&&!coachSessionTarget)setPendingCoachNote(coachNote);
   };
 
   // Le coach joue une séance POUR un athlète depuis sa fiche, dans le MÊME écran que l'athlète
@@ -16142,6 +16163,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory)=>{
     setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[]});
     startWorkout(w);
+  };
+  // L'athlète a lu le message pop-up de son coach (« Compris ») → on l'efface localement + serveur
+  // pour qu'il ne réapparaisse plus au prochain lancement de séance.
+  const ackCoachNote=async()=>{
+    setPendingCoachNote(null);setCoachNote(null);
+    try{await apiCall('/api/my-coach-note/ack',{method:'POST'});}catch(e){console.error('ack coach note',e);}
   };
 
   const saveSession=async snapshot=>{
@@ -16276,6 +16303,36 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
           {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
+          {/* Pop-up « Message de ton coach » — s'affiche au lancement de la séance quand une note
+              du coach est en attente (consignes + récap des charges montées). À usage unique. */}
+          {pendingCoachNote&&(
+            <div style={{position:'fixed',inset:0,zIndex:9500,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+              <div onClick={ackCoachNote} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
+              <div style={{position:'relative',background:'linear-gradient(180deg,#17141f,#0d0d14)',border:'1px solid rgba(167,139,250,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+                <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
+                <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:'rgba(167,139,250,0.15)',border:'1px solid rgba(167,139,250,0.4)',marginBottom:13}}>
+                  <span style={{fontSize:10,fontWeight:800,color:'#C4B5FD',letterSpacing:0.5,textTransform:'uppercase'}}>📣 Message de {pendingCoachNote.coachName||'ton coach'}</span>
+                </div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:21,fontWeight:800,marginBottom:12,color:'#fff'}}>Nouvelles consignes 💪</div>
+                <div style={{fontSize:14,lineHeight:1.55,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #A78BFA',borderRadius:'0 12px 12px 0',padding:'12px 14px',marginBottom:pendingCoachNote.updates&&pendingCoachNote.updates.length?18:0,whiteSpace:'pre-wrap'}}>{pendingCoachNote.message}</div>
+                {pendingCoachNote.updates&&pendingCoachNote.updates.length>0&&(<>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',color:'#8FB4F5',marginBottom:9,display:'flex',alignItems:'center',gap:6}}>⬆ Charges mises à jour</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                    {pendingCoachNote.updates.map((u,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)'}}>
+                        <span style={{fontSize:13,fontWeight:600,color:'#fff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</span>
+                        <span style={{fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
+                          {u.from>0&&<span style={{color:T.textFaint,textDecoration:'line-through',fontSize:12,marginRight:5}}>{u.from}</span>}
+                          <span style={{color:T.good}}>{u.to} kg</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>)}
+                <button onClick={ackCoachNote} style={{width:'100%',marginTop:20,height:52,borderRadius:15,border:'none',background:'linear-gradient(135deg,#A78BFA,#7C5CD6)',color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>Compris, c'est parti 💪</button>
+              </div>
+            </div>
+          )}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
