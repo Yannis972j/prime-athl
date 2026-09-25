@@ -16190,9 +16190,15 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // Message du coach en attente → pop-up au lancement de la séance (une seule fois). On ne
     // l'affiche pas quand le coach joue POUR un athlète (coachSessionTarget) : ce serait sa propre note.
     if(coachNote&&!coachSessionTarget)setPendingCoachNote(coachNote);
-    // Feedback du coach sur la précédente séance → pop-up au lancement (peu importe la séance
-    // démarrée : programme, Bibliothèque, planifiée, refaire…). Une seule fois, jusqu'à ack.
-    if(pendingCoachFeedback&&!coachSessionTarget)setActiveCoachFeedback(pendingCoachFeedback);
+    // Feedback du coach sur la précédente séance → pop-up au lancement UNIQUEMENT si l'athlète
+    // démarre une séance du MÊME NOM que celle sur laquelle le coach a laissé son feedback.
+    // Comparaison insensible à la casse/accents/espaces (ex: "LEGS · FESSIERS" == "Legs fessiers").
+    // Marche pour toute origine (programme, Bibliothèque, planifiée, refaire…) tant que le nom colle.
+    if(pendingCoachFeedback&&!coachSessionTarget){
+      const wn=normExerciseName(w.name);
+      const fn=normExerciseName(pendingCoachFeedback.sessionName);
+      if(wn&&fn&&wn===fn)setActiveCoachFeedback(pendingCoachFeedback);
+    }
   };
 
   // Le coach joue une séance POUR un athlète depuis sa fiche, dans le MÊME écran que l'athlète
