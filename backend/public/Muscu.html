@@ -16179,8 +16179,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // ne pas dépendre de chacun d'eux : sans exercice, SessionScreen déréférence ex.name et
   // plante toute l'appli (un seul ErrorBoundary racine, pas de récupération par écran).
   const STYLE_FROM_TYPE={superset:'SUPERSET',triset:'TRISET',cardio:'CARDIO',abdos:'ABDOS',classic:'CLASSIQUE'};
-  const startWorkout=w=>{
+  const startWorkout=(w,opts={})=>{
     if(!w||!Array.isArray(w.exercises)||w.exercises.length===0){alert('Cette séance ne contient aucun exercice.');return;}
+    // Défensif : toute séance démarrée par un chemin CLASSIQUE (pas startWorkoutForAthlete) doit
+    // repartir sur une cible NULLE — sinon une cible coach-pour-athlète oubliée (session cancel,
+    // reload…) attribuerait cette nouvelle séance à l'ancien athlète.
+    if(!opts.keepCoachTarget&&coachSessionTarget)setCoachSessionTarget(null);
     // L'écran de séance en cours (groupExercises, détection CARDIO) ne comprend que ex.style —
     // les séances "Live" du coach utilisent ex.groupType/groupId à la place (2 schémas coexistent,
     // cf. exType()). On normalise ici une bonne fois pour que superset/triset/cardio fonctionnent
@@ -16204,10 +16208,23 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Le coach joue une séance POUR un athlète depuis sa fiche, dans le MÊME écran que l'athlète
   // (SessionScreen : validation série par série, "Dernière fois", etc.). La séance validée est
   // enregistrée côté athlète (POST /coach/athletes/:id/sessions), pas dans l'historique du coach.
-  const[coachSessionTarget,setCoachSessionTarget]=React.useState(null); // null | {athleteId,athleteName,history}
+  // PERSISTÉ en localStorage : sans ça, un simple verrouillage d'écran / mise en arrière-plan
+  // pendant la séance efface la cible mémoire, la séance restaurée depuis pa_session_snap est
+  // alors sauvegardée sur le compte DU COACH (avec son prénom au lieu de celui de l'athlète) —
+  // exactement le bug qu'on corrige ici.
+  const COACH_TARGET_KEY='pa_coach_target_'+authUser.id;
+  const[coachSessionTarget,setCoachSessionTargetRaw]=React.useState(()=>{
+    try{const v=localStorage.getItem(COACH_TARGET_KEY);return v?JSON.parse(v):null;}catch{return null;}
+  });
+  const setCoachSessionTarget=React.useCallback(t=>{
+    setCoachSessionTargetRaw(t);
+    try{if(t)localStorage.setItem(COACH_TARGET_KEY,JSON.stringify(t));else localStorage.removeItem(COACH_TARGET_KEY);}catch{}
+  },[COACH_TARGET_KEY]);
   const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory)=>{
+    // Ordre important : on POSE la cible AVANT startWorkout, pour que le SessionScreen se
+    // monte déjà avec le bon athleteName (sinon 1er render = prénom du coach).
     setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[]});
-    startWorkout(w);
+    startWorkout(w,{keepCoachTarget:true});
   };
   // L'athlète a lu le message pop-up de son coach (« Compris ») → on l'efface localement + serveur
   // pour qu'il ne réapparaisse plus au prochain lancement de séance.
@@ -16372,7 +16389,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         )}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
           {/* Pop-up « Message de ton coach » — s'affiche au lancement de la séance quand une note
               du coach est en attente (consignes + récap des charges montées). À usage unique. */}
           {pendingCoachNote&&(
