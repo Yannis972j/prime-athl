@@ -139,3 +139,51 @@ test('le message pop-up du coach est livré à l\'athlète puis acquitté', asyn
     await s.stop();
   }
 });
+
+// Feedback coach : quand le coach envoie un feedback sur une séance de l'athlète, il doit être
+// livré comme pop-up en attente via /api/program (pendingCoachFeedback), avec le texte et la
+// séance ciblée. L'ack l'efface (mais le feedback lui-même reste sur la séance).
+test('le feedback coach est livré comme pop-up puis acquitté', async () => {
+  const s = await startServer();
+  try {
+    const cl = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: MAIN_COACH_EMAIL, password: MAIN_COACH_PASSWORD } });
+    const coachToken = cl.body.token;
+    const created = await api(s.baseUrl, 'POST', '/api/coach/create-athlete', { token: coachToken, body: { email: 'feedback-athlete@test.local', password: 'longenough1' } });
+    const athleteId = created.body?.athlete?.id || created.body?.id || created.body?.user?.id;
+    assert.ok(athleteId, 'athlète créé');
+    const al = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: 'feedback-athlete@test.local', password: 'longenough1' } });
+    const athleteToken = al.body.token;
+
+    // L'athlète enregistre une séance.
+    await api(s.baseUrl, 'POST', '/api/sessions', { token: athleteToken, body: { ...sessionBody(), name: 'LEGS FESSIERS' } });
+    const list = await api(s.baseUrl, 'GET', '/api/sessions', { token: athleteToken });
+    const sid = list.body[0].id;
+
+    // Le coach envoie un feedback dessus.
+    const fb = await api(s.baseUrl, 'POST', `/api/coach/sessions/${sid}/feedback`, { token: coachToken, body: { feedback: 'Beau boulot sur les hip thrust, garde la contraction en haut.' } });
+    assert.equal(fb.status, 200);
+
+    // L'athlète reçoit le pop-up en attente via /api/program.
+    const prog = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
+    assert.ok(prog.body.pendingCoachFeedback, 'feedback en attente livré');
+    assert.equal(prog.body.pendingCoachFeedback.sessionId, sid);
+    assert.equal(prog.body.pendingCoachFeedback.feedback, 'Beau boulot sur les hip thrust, garde la contraction en haut.');
+    assert.equal(prog.body.pendingCoachFeedback.sessionName, 'LEGS FESSIERS');
+
+    // Le feedback est aussi sur la séance dans l'historique.
+    const list2 = await api(s.baseUrl, 'GET', '/api/sessions', { token: athleteToken });
+    const sess = list2.body.find(x => x.id === sid);
+    assert.equal(sess.coachFeedback, 'Beau boulot sur les hip thrust, garde la contraction en haut.');
+
+    // L'athlète acquitte le pop-up → il disparaît, mais le feedback reste dans la séance.
+    const ack = await api(s.baseUrl, 'POST', '/api/my-coach-feedback/ack', { token: athleteToken });
+    assert.equal(ack.status, 200);
+    const prog2 = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
+    assert.equal(prog2.body.pendingCoachFeedback, null, 'après ack, plus de pop-up en attente');
+    const list3 = await api(s.baseUrl, 'GET', '/api/sessions', { token: athleteToken });
+    const sess2 = list3.body.find(x => x.id === sid);
+    assert.equal(sess2.coachFeedback, 'Beau boulot sur les hip thrust, garde la contraction en haut.', 'le feedback reste dans la séance');
+  } finally {
+    await s.stop();
+  }
+});

@@ -1196,6 +1196,8 @@ app.get('/api/program', authRequired, (req, res) => {
     targets: DATA.users[req.user.id]?.exerciseTargets || {},
     // Message pop-up en attente (consignes du coach à afficher au lancement de la prochaine séance).
     coachNote: DATA.users[req.user.id]?.coachSessionNote || null,
+    // Feedback en attente (bilan écrit du coach sur une séance passée).
+    pendingCoachFeedback: DATA.users[req.user.id]?.pendingCoachFeedback || null,
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
     // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
     // séances du programme en attente sur les jours à venir, avant même son activation.
@@ -2280,8 +2282,41 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   s.coachFeedback = typeof req.body.feedback === 'string' ? req.body.feedback.slice(0, 500) : '';
   s.coachFeedbackAt = Date.now();
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  // Feedback en attente sur l'athlète : affiché en pop-up dès son prochain accès à l'app, puis
+  // acquitté (ack) et effacé. Sans ça, il restait enfoui dans une séance passée que l'athlète
+  // n'ouvrait jamais.
+  if (s.coachFeedback) {
+    a.pendingCoachFeedback = {
+      sessionId: s.id,
+      sessionName: s.name || 'Séance',
+      sessionDate: s.date,
+      feedback: s.coachFeedback,
+      coachName,
+      createdAt: Date.now(),
+    };
+  } else {
+    // Suppression du feedback → on efface aussi le pop-up en attente.
+    if (a.pendingCoachFeedback && a.pendingCoachFeedback.sessionId === s.id) delete a.pendingCoachFeedback;
+  }
   persist();
-  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback });
+  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback, pendingCoachFeedback: a.pendingCoachFeedback || null });
+  // Notification push : indispensable pour que l'athlète soit prévenu qu'un feedback l'attend.
+  if (s.coachFeedback) {
+    pushToUser(s.userId, {
+      title: '💬 Feedback de ' + coachName,
+      body: (s.name ? `Sur ta séance « ${s.name} » : ` : '') + (s.coachFeedback.length > 120 ? s.coachFeedback.slice(0, 117) + '…' : s.coachFeedback),
+      url: '/Muscu.html',
+    });
+  }
+  res.json({ ok: true });
+});
+
+// L'athlète acquitte le pop-up de feedback (bouton « Compris ») → on l'efface. Le feedback lui-même
+// reste sur la séance (visible dans son historique), on ne supprime que la notification.
+app.post('/api/my-coach-feedback/ack', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (u && u.pendingCoachFeedback) { delete u.pendingCoachFeedback; persist(); }
   res.json({ ok: true });
 });
 
