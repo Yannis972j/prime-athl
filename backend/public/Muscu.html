@@ -5305,7 +5305,7 @@ function exportAIProgramPDF(program){
   savePdfCompat(doc,fname);
 }
 
-function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession,onUpdateSession,pendingCoachFeedback,onOpenHistSession}){
+function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession,onUpdateSession}){
   const sheetNames=Object.keys(importedPrograms||{});
   const[activeSheet,setActiveSheet]=React.useState(null);
   const sheet=activeSheet||sheetNames[sheetNames.length-1]||null;
@@ -5432,9 +5432,6 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     }catch(e){setShareState('error');}
   };
   React.useEffect(()=>{setShareState(null);setShareCopied(false);setPdfDownloads(null);setEditingHist(false);setEditHistExercises(null);},[viewHistSession?.id]);
-  // Ouvrir une séance = signaler à l'App qu'il y a peut-être un pop-up feedback à afficher si
-  // cette séance est celle ciblée par le feedback en attente. L'App fait le rapprochement (id).
-  React.useEffect(()=>{if(viewHistSession&&onOpenHistSession)onOpenHistSession(viewHistSession);},[viewHistSession?.id,onOpenHistSession]);
 
   // Séances planifiées (via Biblio/Live ou par le coach) — affichées sur ce calendrier
   const[planned,setPlanned]=React.useState({});
@@ -15915,16 +15912,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Feedback pop-up : bilan écrit du coach sur une séance passée. Deux états :
   //  · pendingCoachFeedback = donnée du serveur (silencieuse, en attente),
   //  · activeCoachFeedback = pop-up réellement affiché à l'écran.
-  // Déclencheur : l'athlète OUVRE la séance liée au feedback (dans son historique/calendrier).
-  // Sans ça, le pop-up sauterait au visage à chaque ouverture d'app même en pleine autre séance.
+  // Déclencheur : l'athlète clique sur « Démarrer une séance » (n'importe laquelle : programme,
+  // Bibliothèque, planifiée, refaire…). Le contexte est bon — il s'apprête à s'entraîner, il
+  // reçoit d'abord les consignes du coach sur sa précédente séance avant de démarrer.
   const[pendingCoachFeedback,setPendingCoachFeedback]=React.useState(null);
   const[activeCoachFeedback,setActiveCoachFeedback]=React.useState(null);
-  // Appelé par HomeScreen quand l'athlète ouvre une séance de l'historique — on affiche le pop-up
-  // uniquement si c'est la séance ciblée par le feedback en attente.
-  const showCoachFeedbackIfMatches=React.useCallback((session)=>{
-    if(!session||!pendingCoachFeedback)return;
-    if(session.id&&session.id===pendingCoachFeedback.sessionId)setActiveCoachFeedback(pendingCoachFeedback);
-  },[pendingCoachFeedback]);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -16198,6 +16190,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // Message du coach en attente → pop-up au lancement de la séance (une seule fois). On ne
     // l'affiche pas quand le coach joue POUR un athlète (coachSessionTarget) : ce serait sa propre note.
     if(coachNote&&!coachSessionTarget)setPendingCoachNote(coachNote);
+    // Feedback du coach sur la précédente séance → pop-up au lancement (peu importe la séance
+    // démarrée : programme, Bibliothèque, planifiée, refaire…). Une seule fois, jusqu'à ack.
+    if(pendingCoachFeedback&&!coachSessionTarget)setActiveCoachFeedback(pendingCoachFeedback);
   };
 
   // Le coach joue une séance POUR un athlète depuis sa fiche, dans le MÊME écran que l'athlète
@@ -16434,7 +16429,6 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
                   authToken={authToken} nutriRefreshKey={nutriRefreshKey}
                   onDeleteSession={deleteSession} onUpdateSession={updateSession} sessionLibrary={sessionLibrary}
-                  pendingCoachFeedback={pendingCoachFeedback} onOpenHistSession={showCoachFeedbackIfMatches}
                 />
               </UniverseShell>
             )}
@@ -17390,7 +17384,7 @@ function LiveSessionsView({sessions,onStartWorkout}){
 }
 
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,onUpdateSession,sessionLibrary,pendingCoachFeedback,onOpenHistSession}){
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,onUpdateSession,sessionLibrary}){
   const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
@@ -17423,7 +17417,6 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
           onEditDay={onEditDay} profile={profile} programMeta={programMeta}
           onRefresh={onRefresh} refreshing={refreshing} history={history} onRefreshHistory={onRefreshHistory}
           onDeleteSession={onDeleteSession} onUpdateSession={onUpdateSession}
-          pendingCoachFeedback={pendingCoachFeedback} onOpenHistSession={onOpenHistSession}
         />}
         {sub==='live'&&<LiveSessionsView sessions={liveSessions} onStartWorkout={onStartWorkout}/>}
         {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} onDeleteSession={onDeleteSession} />}
