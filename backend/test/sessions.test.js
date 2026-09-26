@@ -105,36 +105,49 @@ test('éditer une séance validée conserve la fourchette et met à jour la séa
   }
 });
 
-// Message pop-up du coach : validé avec une montée de charge, il doit être livré à l'athlète via
-// /api/program (coachNote), avec le récap ancien→nouveau, puis effacé une fois acquitté (ack).
-test('le message pop-up du coach est livré à l\'athlète puis acquitté', async () => {
+// Fusion feedback + charges montées : quand le coach valide une montée puis laisse un feedback sur
+// la même séance, le pop-up feedback livre le texte ET le récap des charges (ancien → nouveau).
+// L'ancien mécanisme coach-note séparé a été retiré.
+test('le feedback pop-up embarque les charges montées sur la séance', async () => {
   const s = await startServer();
   try {
     const cl = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: MAIN_COACH_EMAIL, password: MAIN_COACH_PASSWORD } });
     const coachToken = cl.body.token;
-    const created = await api(s.baseUrl, 'POST', '/api/coach/create-athlete', { token: coachToken, body: { email: 'notes-athlete@test.local', password: 'longenough1' } });
+    const created = await api(s.baseUrl, 'POST', '/api/coach/create-athlete', { token: coachToken, body: { email: 'fusion-athlete@test.local', password: 'longenough1' } });
     const athleteId = created.body?.athlete?.id || created.body?.id || created.body?.user?.id;
     assert.ok(athleteId, 'athlète créé');
-    const al = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: 'notes-athlete@test.local', password: 'longenough1' } });
+    const al = await api(s.baseUrl, 'POST', '/api/auth/login', { body: { email: 'fusion-athlete@test.local', password: 'longenough1' } });
     const athleteToken = al.body.token;
 
+    // L'athlète enregistre une séance.
+    await api(s.baseUrl, 'POST', '/api/sessions', { token: athleteToken, body: { ...sessionBody(), name: 'HAUT DU CORPS : DOS' } });
+    const list = await api(s.baseUrl, 'GET', '/api/sessions', { token: athleteToken });
+    const sid = list.body[0].id;
+
+    // Le coach monte le tirage — /overload stocke overloadUpdates sur la séance.
     const ov = await api(s.baseUrl, 'POST', `/api/coach/athletes/${athleteId}/overload`, { token: coachToken, body: {
+      sessionId: sid,
       sessionName: 'HAUT DU CORPS : DOS',
       updates: [{ name: 'Tirage vertical', weight: 42.5, from: 40 }],
-      note: 'Beau boulot, on monte le tirage cette semaine.',
     }});
-    assert.equal(ov.status, 200, 'overload avec note doit répondre 200');
+    assert.equal(ov.status, 200, 'overload sans note doit répondre 200');
 
+    // Puis il laisse un feedback sur la même séance.
+    const fb = await api(s.baseUrl, 'POST', `/api/coach/sessions/${sid}/feedback`, { token: coachToken, body: { feedback: 'Beau boulot, on monte le tirage cette semaine.' } });
+    assert.equal(fb.status, 200);
+
+    // Le pop-up feedback livre le texte ET les charges — plus besoin de deux pop-ups distincts.
     const prog = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
-    assert.ok(prog.body.coachNote, 'la note doit être livrée à l\'athlète');
-    assert.equal(prog.body.coachNote.message, 'Beau boulot, on monte le tirage cette semaine.');
-    assert.equal(prog.body.coachNote.updates[0].from, 40, 'ancienne charge présente');
-    assert.equal(prog.body.coachNote.updates[0].to, 42.5, 'nouvelle charge présente');
+    assert.ok(prog.body.pendingCoachFeedback, 'feedback en attente livré');
+    assert.equal(prog.body.pendingCoachFeedback.feedback, 'Beau boulot, on monte le tirage cette semaine.');
+    assert.ok(Array.isArray(prog.body.pendingCoachFeedback.updates), 'updates présent dans le pop-up feedback');
+    assert.equal(prog.body.pendingCoachFeedback.updates[0].from, 40, 'ancienne charge présente');
+    assert.equal(prog.body.pendingCoachFeedback.updates[0].to, 42.5, 'nouvelle charge présente');
 
-    const ack = await api(s.baseUrl, 'POST', '/api/my-coach-note/ack', { token: athleteToken });
-    assert.equal(ack.status, 200);
-    const prog2 = await api(s.baseUrl, 'GET', '/api/program', { token: athleteToken });
-    assert.equal(prog2.body.coachNote, null, 'après ack la note ne revient plus');
+    // L'ancien coachNote et son endpoint /ack ne sont plus servis.
+    assert.equal(prog.body.coachNote, undefined, 'ancien coachNote retiré du payload');
+    const oldAck = await api(s.baseUrl, 'POST', '/api/my-coach-note/ack', { token: athleteToken });
+    assert.equal(oldAck.status, 404, 'ancien endpoint /api/my-coach-note/ack retiré');
   } finally {
     await s.stop();
   }

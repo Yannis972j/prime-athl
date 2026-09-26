@@ -1194,23 +1194,14 @@ app.get('/api/program', authRequired, (req, res) => {
     ...(p || { data: {}, assignedAt: null, assignedBy: null }),
     // Charges cibles hors programme (surcharge posée par le coach sur des exos de Bibliothèque).
     targets: DATA.users[req.user.id]?.exerciseTargets || {},
-    // Message pop-up en attente (consignes du coach à afficher au lancement de la prochaine séance).
-    coachNote: DATA.users[req.user.id]?.coachSessionNote || null,
-    // Feedback en attente (bilan écrit du coach sur une séance passée).
+    // Feedback en attente (bilan écrit du coach sur une séance passée) — inclut les charges
+    // montées dans son .updates depuis la fusion des deux mécaniques.
     pendingCoachFeedback: DATA.users[req.user.id]?.pendingCoachFeedback || null,
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
     // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
     // séances du programme en attente sur les jours à venir, avant même son activation.
     scheduledProgram: sched ? { activateOn: sched.activateOn, data: sched.data } : null,
   });
-});
-
-// L'athlète acquitte le message pop-up de son coach (bouton « Compris ») → on l'efface pour qu'il
-// ne réapparaisse plus. À usage unique : une fois lu, il ne revient pas.
-app.post('/api/my-coach-note/ack', authRequired, (req, res) => {
-  const u = DATA.users[req.user.id];
-  if (u && u.coachSessionNote) { delete u.coachSessionNote; persist(); }
-  res.json({ ok: true });
 });
 
 // Athlete uploads their own program (Excel import or manual)
@@ -2293,6 +2284,10 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
       sessionDate: s.date,
       feedback: s.coachFeedback,
       coachName,
+      // Charges montées sur cette séance (récap ancien → nouveau) — récupérées de l'endpoint
+      // /overload. Le pop-up feedback les affiche pour que l'athlète voie d'un coup d'œil ce
+      // qui a changé pour sa prochaine séance.
+      updates: Array.isArray(s.overloadUpdates) ? s.overloadUpdates : [],
       createdAt: Date.now(),
     };
   } else {
@@ -2362,10 +2357,7 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
   const sessionName = String(req.body?.sessionName || '');
   const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
-  // Message pop-up facultatif que le coach joint à la validation : il s'affichera à l'athlète au
-  // lancement de sa prochaine séance (consignes + récap des charges montées).
-  const noteMsg = String(req.body?.note || '').slice(0, 600).trim();
-  if (!updates.length && !noteMsg) return res.status(400).json({ error: 'no_updates' });
+  if (!updates.length) return res.status(400).json({ error: 'no_updates' });
   const norm = normExName;
   const wByName = {}, assistedByName = {};
   for (const u of updates) { const n = norm(u.name); if (n) { wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); assistedByName[n] = !!u.assisted; } }
@@ -2411,32 +2403,24 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
     targetsWritten++;
   }
   if (data && applied.size) prog.assignedAt = Date.now();
+  // Récap des charges montées attaché à la séance : c'est ce que le pop-up « feedback » injectera
+  // dans son affichage (ancien → nouveau). Remplace l'ancien mécanisme a.coachSessionNote qui
+  // faisait doublon avec le feedback — voir fusion #.
+  const overloadRecap = updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)], assisted: !!u.assisted })).filter(u => u.name && u.to != null);
   if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
     DATA.sessions[sessionId].overloadApplied = true;
+    DATA.sessions[sessionId].overloadUpdates = overloadRecap;
   }
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
-  // Note pop-up : mémorisée sur l'athlète, avec le récap des charges montées (ancien → nouveau).
-  // Affichée une seule fois au lancement de sa prochaine séance, puis acquittée (ack) et effacée.
-  if (noteMsg) {
-    a.coachSessionNote = {
-      message: noteMsg,
-      coachName,
-      sessionName: sessionName.slice(0, 100),
-      updates: updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)] })).filter(u => u.name && u.to != null),
-      createdAt: Date.now(),
-    };
-  }
   persist();
-  io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets, coachNote: a.coachSessionNote || null });
+  io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets });
   const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
-  const allAssisted = updates.length > 0 && updates.every(u => u.assisted);
+  const allAssisted = updates.every(u => u.assisted);
   const someAssisted = updates.some(u => u.assisted);
-  const pushTitle = !updates.length ? '📣 Message de ton coach' : allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
-  const pushBody = !updates.length
-    ? `${coachName} t'a laissé des consignes pour ta prochaine séance.`
-    : allAssisted
-      ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
-      : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
+  const pushTitle = allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
+  const pushBody = allAssisted
+    ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
+    : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
   pushToUser(req.params.athleteId, { title: pushTitle, body: pushBody, url: '/Muscu.html' });
   res.json({ ok: true, applied: applied.size, targets: targetsWritten, data: data || {} });
 });
