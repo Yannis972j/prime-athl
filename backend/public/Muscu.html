@@ -10366,25 +10366,54 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                                 {cardioHasVal(e.cardio?.inclinaison)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {fixCardioVal(e.cardio.inclinaison)}%</div>}
                                 {cardioHasVal(e.cardio?.duree)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {fixCardioDuree(e.cardio.duree)} min</div>}
                               </div>
-                            ):(e.sets||[]).length>0&&(
+                            ):(e.sets||[]).length>0&&(()=>{
+                              // Fourchette de reps prescrite par le coach (ex: "8-12") : sert à juger
+                              // d'un coup d'œil si l'athlète a atteint le haut, s'il a stagné en bas,
+                              // ou s'il a explosé la cible → décide de la prochaine montée de charge.
+                              const rangeStr=e.repsStr||e.sets?.[0]?.targetStr||(e.sets?.[0]?.target?String(e.sets[0].target):'');
+                              const nums=rangeStr?String(rangeStr).match(/\d+/g):null;
+                              const rangeMin=nums&&nums.length?Math.min(...nums.map(Number)):null;
+                              const rangeMax=nums&&nums.length?Math.max(...nums.map(Number)):null;
+                              const hasRange=rangeMin!=null&&rangeMax!=null&&rangeMax>0;
+                              const uni=isUnilateralEx(e);
+                              const repColor=r=>{
+                                // Pas de fourchette connue → on garde le bleu pour l'unilatéral
+                                // (indice visuel G/D existant), sinon couleur neutre.
+                                if(!hasRange||!r)return uni?'#5A8AE0':T.text;
+                                if(r>=rangeMax)return T.good;       // haut atteint ou dépassé
+                                if(r<rangeMin)return '#B85070';     // en dessous du bas de fourchette
+                                return T.text;
+                              };
+                              return(
                               <div style={{padding:'8px 14px'}}>
+                                {hasRange&&(
+                                  <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:6,fontSize:9.5,color:T.textFaint,fontWeight:600}}>
+                                    <span style={{letterSpacing:0.3}}>OBJ. REPS</span>
+                                    <span style={{color:T.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{rangeStr}</span>
+                                  </div>
+                                )}
                                 <div style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
                                   {['Série','Poids','Reps','Volume'].map(h=>(
                                     <div key={h} style={{fontSize:9,color:T.textFaint,fontWeight:700,textTransform:'uppercase',letterSpacing:0.3}}>{h}</div>
                                   ))}
                                 </div>
-                                {(e.sets||[]).map((st,si)=>(
+                                {(e.sets||[]).map((st,si)=>{
+                                  // Pour unilatéral : on considère l'atteinte de la cible côté par côté (le plus faible fait foi).
+                                  const repMin=uni?Math.min(st.repsL||0,st.repsR||0):(st.reps||0);
+                                  const c=repColor(repMin);
+                                return(
                                   <div key={si} style={{display:'grid',gridTemplateColumns:'40px 1fr 1fr 1fr',gap:4,padding:'5px 0',borderTop:si>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
                                     <div style={{fontSize:12,color:T.textFaint}}>#{si+1}</div>
                                     <div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{st.weight}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> kg</span></div>
-                                    <div style={{fontSize:isUnilateralEx(e)?11:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>
-                                      {isUnilateralEx(e)?(<><span style={{color:'#5A8AE0'}}>G{st.repsL||0}</span> <span style={{color:'#5A8AE0'}}>D{st.repsR||0}</span></>):(<>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></>)}
+                                    <div style={{fontSize:uni?11:13,fontWeight:600,fontVariantNumeric:'tabular-nums',color:c}}>
+                                      {uni?(<><span>G{st.repsL||0}</span> <span>D{st.repsR||0}</span></>):(<>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></>)}
                                     </div>
                                     <div style={{fontSize:12,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{Math.round((st.weight||0)*(st.reps||0))}</div>
                                   </div>
-                                ))}
+                                );})}
                               </div>
-                            )}
+                              );
+                            })()}
                             {exType(e)!=='cardio'&&exRestSeconds(e)>0&&(
                               <div style={{padding:'0 14px 10px',fontSize:11,color:T.textFaint,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>⏳ Repos : {fmtRestLabel(exRestSeconds(e))}</div>
                             )}
