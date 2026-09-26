@@ -117,7 +117,7 @@ const STRIPE_SECRET_KEY      = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET || '';
 const STRIPE_PRICE_EXPLORER          = process.env.STRIPE_PRICE_EXPLORER || '';          // 4,99€/mois
 const STRIPE_PRICE_IA                = process.env.STRIPE_PRICE_IA || '';                // 14,99€/mois
-const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 149€/mois  (Coaching Online)
+const STRIPE_PRICE_COACHING          = process.env.STRIPE_PRICE_COACHING || '';          // 150€/mois  (Coaching Online)
 const STRIPE_PRICE_COACHING_COMPLET  = process.env.STRIPE_PRICE_COACHING_COMPLET || '';  // 249€/mois  (Coaching Complet)
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
 if (!STRIPE_SECRET_KEY) {
@@ -167,7 +167,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
+const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, pendingSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -363,6 +363,17 @@ if (USE_PG) {
   setTimeout(runBackup, 5 * 60 * 1000); // 1er backup 5 min après le boot (le temps que le serveur soit stable)
 }
 
+// DATA.userPurchasedPrograms est indexé par purchaseId (uid), PAS par userId — un
+// `delete DATA.userPurchasedPrograms[userId]` est donc un no-op silencieux qui laissait les achats
+// orphelins s'accumuler à chaque suppression d'utilisateur. Ce helper purge par userId correctement.
+function purgeUserPurchases(userId) {
+  const store = DATA.userPurchasedPrograms;
+  if (!store) return;
+  for (const pid of Object.keys(store)) {
+    if (store[pid]?.userId === userId) delete store[pid];
+  }
+}
+
 // ── Nettoyage mémoire périodique ─────────────────────
 setInterval(() => {
   const mb = v => Math.round(v / 1024 / 1024);
@@ -402,6 +413,7 @@ setInterval(() => {
       // orphelines indéfiniment une fois l'utilisateur supprimé (aucune autre route ne
       // les nettoie après coup).
       delete DATA.plannedSessions[u.id];
+      delete DATA.pendingSessions?.[u.id];
       delete DATA.nutritionPrograms[u.id];
       delete DATA.scheduleMoves[u.id];
       delete DATA.nutritionLogs?.[u.id];
@@ -411,7 +423,7 @@ setInterval(() => {
       delete DATA.sessionLibrary?.[u.id];
       delete DATA.pushSubscriptions?.[u.id];
       delete DATA.messageReads?.[u.id];
-      delete DATA.userPurchasedPrograms?.[u.id];
+      purgeUserPurchases(u.id);
       for (const chatId of Object.keys(DATA.messages || {})) {
         if (chatId.includes(u.id)) delete DATA.messages[chatId];
       }
@@ -435,15 +447,21 @@ setInterval(() => {
   // Elles sont marquées .invalidatedAt lors d'une erreur 410/404 webpush
   const PUSH_STALE_TTL = 7 * 24 * 60 * 60 * 1000;
   let removedPush = 0;
-  for (const [userId, sub] of Object.entries(DATA.pushSubscriptions || {})) {
-    if (sub && sub.invalidatedAt && Date.now() - sub.invalidatedAt > PUSH_STALE_TTL) {
+  for (const [userId, entry] of Object.entries(DATA.pushSubscriptions || {})) {
+    if (entry?.devices) {
+      // Multi-device : purger les appareils expirés
+      const before = entry.devices.length;
+      entry.devices = entry.devices.filter(d => !d.invalidatedAt || Date.now() - d.invalidatedAt < PUSH_STALE_TTL);
+      removedPush += before - entry.devices.length;
+      if (!entry.devices.length) delete DATA.pushSubscriptions[userId];
+    } else if (entry && entry.invalidatedAt && Date.now() - entry.invalidatedAt > PUSH_STALE_TTL) {
       delete DATA.pushSubscriptions[userId];
       removedPush++;
     }
   }
   if (removedPush > 0) console.log(`[cleanup] ${removedPush} push subscription(s) expirées supprimées`);
 
-  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0) persist();
+  if (removedPending > 0 || removedPush > 0 || removedNutrition > 0 || removedFreeFoodLogs > 0) persist();
 }, 60 * 60 * 1000); // toutes les heures
 // Vérifie aussi une fois au démarrage — sinon un programme dont la date d'activation est
 // passée pendant que le serveur était éteint attendrait jusqu'à 1h avant de s'activer
@@ -468,10 +486,12 @@ const MOTIVATION_MESSAGES = [
   "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];
-// Heure Paris (0-23) — facile à ajuster si Yannis veut un autre créneau.
+// Heure Martinique (0-23) — fuseau America/Martinique, UTC-4 toute l'année (pas de
+// changement d'heure). Facile à ajuster si Yannis veut un autre créneau.
+const MOTIVATION_TZ = 'America/Martinique';
 const MOTIVATION_HOUR = 5;
 const MOTIVATION_MINUTE = 0;
-// 'YYYY-MM-DD' (Europe/Paris) du dernier envoi — évite un double envoi si la minute cible est
+// 'YYYY-MM-DD' (heure Martinique) du dernier envoi — évite un double envoi si la minute cible est
 // revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
 // seulement (pas persisté) : au pire un redémarrage pile sur ce créneau saute un jour, pas plus.
 let lastMotivationSentDate = null;
@@ -489,10 +509,10 @@ function sendDailyMotivation() {
 }
 
 setInterval(() => {
-  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure de Paris
+  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure Martinique
   // (le serveur tourne en UTC sur Render, l'heure locale du navigateur n'entre pas en jeu ici).
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: MOTIVATION_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date());
   const get = t => parts.find(p => p.type === t)?.value;
@@ -507,7 +527,9 @@ setInterval(() => {
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);
-const inviteCode = () => 'PA-' + crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+// 5 octets aléatoires = 40 bits d'entropie (10 caractères hex), au lieu de 24 bits auparavant
+// (4 octets tronqués à 6 caractères) — rend le brute-force/collision négligeable.
+const inviteCode = () => 'PA-' + crypto.randomBytes(5).toString('hex').toUpperCase();
 
 // Empêche la pollution de prototype : refuse toute clé destinée à indexer dynamiquement un
 // objet DATA.xxx[userId][CLEF_UTILISATEUR] (ex: DATA.freeFoodLogs[u.id][date][mealId] = ...).
@@ -894,10 +916,16 @@ if (!process.env.UNLOCK_SECRET) {
   console.warn(`[SECURITY] UNLOCK_SECRET non défini — secret temporaire généré pour ce démarrage : ${UNLOCK_SECRET.slice(0, 6)}…`);
   console.warn('[SECURITY] Ce secret change à chaque redémarrage. Définis UNLOCK_SECRET dans les variables d\'environnement pour un accès stable et sécurisé.');
 }
+// Comparaison à temps constant qui ne fuite pas la longueur du secret : on hash les deux côtés en
+// SHA-256 (toujours 32 octets) avant timingSafeEqual. Sans ça, le court-circuit `a.length===b.length`
+// révèle la longueur exacte du secret par mesure du temps de réponse.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 app.get('/api/auth/unlock-main-coach', authLimiter, (req, res) => {
-  const provided = Buffer.from(String(req.query.secret || ''));
-  const expected = Buffer.from(UNLOCK_SECRET);
-  const match = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  const match = safeEqual(String(req.query.secret || ''), UNLOCK_SECRET);
   if (!match) return res.status(403).json({ error: 'forbidden' });
   const main = Object.values(DATA.users).find(u => (u.email || '').toLowerCase() === MAIN_COACH_EMAIL);
   if (!main) return res.status(404).json({ error: 'main_coach_not_found' });
@@ -1023,22 +1051,26 @@ async function sendCoachNewAthleteEmail(coachEmail, athleteEmail, athleteName) {
 
 // Demande de réinitialisation — toujours réponse 200 pour éviter l'énumération d'emails
 app.post('/api/auth/forgot-password', forgotLimiter, async (req, res) => {
-  const email = (req.body?.email || '').toLowerCase().trim();
-  if (!email) return res.status(400).json({ error: 'email_required' });
-  const u = findUserByEmail(email);
-  if (u) {
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    u.resetTokenHash = hashToken(rawToken);
-    u.resetTokenExpiry = Date.now() + RESET_TTL_MS;
-    persist();
-    const link = `${PUBLIC_URL}/Muscu.html?reset=${rawToken}`;
-    const r = await sendResetEmail(u.email, link);
-    console.log(`[reset] generated for ${u.email} sent=${r.sent}`);
-  } else {
-    // Délai constant pour ne pas révéler l'existence du compte
-    await new Promise(r => setTimeout(r, 250));
+  try {
+    const email = (req.body?.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'email_required' });
+    const u = findUserByEmail(email);
+    if (u) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      u.resetTokenHash = hashToken(rawToken);
+      u.resetTokenExpiry = Date.now() + RESET_TTL_MS;
+      persist();
+      const link = `${PUBLIC_URL}/Muscu.html?reset=${rawToken}`;
+      const r = await sendResetEmail(u.email, link);
+      console.log(`[reset] generated for ${u.email} sent=${r.sent}`);
+    } else {
+      await new Promise(r => setTimeout(r, 250));
+    }
+    res.json({ ok: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
+  } catch (err) {
+    console.error('[forgot-password] error', err);
+    res.status(500).json({ error: 'server_error' });
   }
-  res.json({ ok: true, message: 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.' });
 });
 
 // Application du nouveau mot de passe
@@ -1160,6 +1192,11 @@ app.get('/api/program', authRequired, (req, res) => {
   const sched = DATA.scheduledPrograms[req.user.id];
   res.json({
     ...(p || { data: {}, assignedAt: null, assignedBy: null }),
+    // Charges cibles hors programme (surcharge posée par le coach sur des exos de Bibliothèque).
+    targets: DATA.users[req.user.id]?.exerciseTargets || {},
+    // Feedback en attente (bilan écrit du coach sur une séance passée) — inclut les charges
+    // montées dans son .updates depuis la fusion des deux mécaniques.
+    pendingCoachFeedback: DATA.users[req.user.id]?.pendingCoachFeedback || null,
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
     // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
     // séances du programme en attente sur les jours à venir, avant même son activation.
@@ -1255,9 +1292,10 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
+    pendingSessions: DATA.pendingSessions[u.id] || [],
   });
 });
 
@@ -1287,9 +1325,10 @@ app.delete('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
   delete DATA.myLibrary?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   // Supprimer les messages des conversations où l'athlète participe
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
@@ -1687,13 +1726,17 @@ app.delete('/api/coach/athletes/:athleteId/schedule-moves/:date', authRequired, 
 // ajoutées à la suite.
 function mergeLibrarySessions(existing, incoming) {
   const normName = s => String(s || '').trim().toLowerCase();
-  const byName = new Map((existing || []).map(s => [normName(s.name), s]));
+  // Clé composite nom + sheetName : deux séances de feuilles différentes avec le même nom
+  // (ex: "HAUT DU CORPS : DOS" dans "AOUT" ET dans "SEPTEMBRE") sont des séances distinctes,
+  // pas des doublons — sans le sheetName, la 2e écrasait la 1re et l'athlète perdait une séance.
+  const mergeKey = s => normName(s.name) + '|||' + (s.sheetName || '').trim().toLowerCase();
+  const byKey = new Map((existing || []).map(s => [mergeKey(s), s]));
   for (const s of incoming) {
-    const key = normName(s.name);
-    const old = byName.get(key);
-    byName.set(key, old ? { ...old, name: s.name, sheetName: s.sheetName, category: s.category, exercises: s.exercises } : s);
+    const key = mergeKey(s);
+    const old = byKey.get(key);
+    byKey.set(key, old ? { ...old, name: s.name, sheetName: s.sheetName, category: s.category, exercises: s.exercises } : s);
   }
-  return [...byName.values()];
+  return [...byKey.values()];
 }
 
 app.put('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, res) => {
@@ -1875,6 +1918,43 @@ app.delete('/api/coach/athletes/:athleteId/planned-sessions/:date/:index', authR
   res.json({ ok: true, plannedSessions: athletePlanned });
 });
 
+// ── Coach: séances "en attente" (créées mais ni validées ni planifiées) ──────────
+// Le coach construit une séance (via "Créer séance") et la met de côté sans lui donner de date
+// ni la marquer comme faite : il la retrouve dans la fiche athlète pour la planifier ou la
+// valider plus tard. Stockage à plat par athlète (pas de clé date, contrairement à
+// plannedSessions), chaque entrée porte son propre id.
+app.post('/api/coach/athletes/:athleteId/pending-sessions', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const { session } = req.body || {};
+  if (!session || !Array.isArray(session.exercises)) return res.status(400).json({ error: 'missing_fields' });
+  if (!DATA.pendingSessions[req.params.athleteId]) DATA.pendingSessions[req.params.athleteId] = [];
+  const entry = {
+    id: 'pend-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    name: (typeof session.name === 'string' && session.name.trim() ? session.name : 'Séance').slice(0, 120),
+    muscles: typeof session.muscles === 'string' ? session.muscles.slice(0, 80) : '',
+    exercises: session.exercises.slice(0, 50).map(sanitizeCoachExercise),
+    totalVolume: Math.max(0, Math.min(1e7, parseFloat(session.totalVolume) || 0)),
+    duration: Math.max(0, parseInt(session.duration) || 0),
+    createdAt: Date.now(),
+  };
+  DATA.pendingSessions[req.params.athleteId].push(entry);
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] });
+});
+
+app.delete('/api/coach/athletes/:athleteId/pending-sessions/:id', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const list = DATA.pendingSessions[req.params.athleteId] || [];
+  const idx = list.findIndex(s => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  list.splice(idx, 1);
+  if (list.length === 0) delete DATA.pendingSessions[req.params.athleteId];
+  persist();
+  res.json({ ok: true, pendingSessions: DATA.pendingSessions[req.params.athleteId] || [] });
+});
+
 // ── Coach: invites ──────────────────────────────────
 app.post('/api/coach/invites', authRequired, coachOnly, (req, res) => {
   const code = inviteCode();
@@ -1913,7 +1993,10 @@ app.get('/api/sessions', authRequired, (req, res) => {
     .filter(s => s.userId === target)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 500)
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach }));
+    // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
+    // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
+    // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied }));
   res.json(list);
 });
 
@@ -1936,19 +2019,33 @@ function sanitizeCoachExercise(e) {
     groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
     groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',
     ...(style ? { style } : {}),
+    // Fourchette de reps cible conservée (comme POST /api/sessions) pour la détection de surcharge.
+    ...(e.repsStr ? { repsStr: String(e.repsStr).slice(0, 20) } : {}),
     // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
     // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
     ...(e.unilateral ? { unilateral: true } : {}),
     ...(!isCardio && e.restSeconds ? { restSeconds: Math.max(0, Math.min(1200, parseInt(e.restSeconds) || 0)) } : {}),
     ...(!isCardio && e.holdSeconds ? { holdSeconds: Math.max(0, Math.min(600, parseInt(e.holdSeconds) || 0)) } : {}),
-    sets: (e.sets || []).map(s => ({
-      weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
-      // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
-      // reps ci-dessus reste la somme des deux, pour que le volume/les stats existants
-      // continuent de fonctionner sans rien changer ailleurs.
-      ...(e.unilateral ? { repsL: Math.max(0, Math.min(200, parseInt(s.repsL) || 0)), repsR: Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) } : {}),
-      ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
-    })),
+    sets: (e.sets || []).map(s => {
+      const repsL = e.unilateral ? Math.max(0, Math.min(200, parseInt(s.repsL) || 0)) : 0;
+      const repsR = e.unilateral ? Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) : 0;
+      // Une séance créée/importée/corrigée par le coach représente un travail RÉALISÉ, pas un
+      // template : chaque série renseignée (charge, reps, ou G/D en unilatéral) doit compter comme
+      // « faite » (done:true), sinon toutes les surfaces qui filtrent sur `done` (récap, stats,
+      // comparatif entre séances de même nom) l'ignorent et affichent « 0 kg / 0 série » alors
+      // que le volume total est correct. On honore un `done` déjà présent, sinon on le déduit des
+      // données saisies ; une série totalement vide (placeholder) reste non faite.
+      const logged = s.done === true || (+s.reps || 0) > 0 || (+s.weight || 0) > 0 || repsL > 0 || repsR > 0;
+      return {
+        weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
+        // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
+        // reps ci-dessus reste la somme des deux, pour que le volume/les stats existants
+        // continuent de fonctionner sans rien changer ailleurs.
+        ...(e.unilateral ? { repsL, repsR } : {}),
+        ...(logged ? { done: true } : {}),
+        ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
+      };
+    }),
     cardio: isCardio && e.cardio ? {
       vitesse: String(e.cardio.vitesse ?? '').slice(0, 20),
       inclinaison: String(e.cardio.inclinaison ?? '').slice(0, 20),
@@ -1958,9 +2055,27 @@ function sanitizeCoachExercise(e) {
   };
 }
 
+// Normalisation d'un nom d'exercice pour comparer/mapper indépendamment de la casse et des accents.
+const normExName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+// Cibles de charge posées par le coach pour des exercices HORS programme assigné (séances lancées
+// depuis la Bibliothèque, ou athlète sans programme) : a.exerciseTargets = { normName: { name,
+// weight, assisted, sessionName, updatedAt } }. Elles pré-remplissent la prochaine séance de
+// l'athlète contenant cet exercice, quelle qu'en soit la source, puis sont consommées dès qu'une
+// nouvelle séance enregistre cet exercice (la cible a été vue et jouée).
+function consumeExerciseTargets(userId, exercises) {
+  const u = DATA.users[userId];
+  if (!u || !u.exerciseTargets) return false;
+  let changed = false;
+  for (const ex of (Array.isArray(exercises) ? exercises : [])) {
+    const k = normExName(ex && ex.name);
+    if (k && u.exerciseTargets[k]) { delete u.exerciseTargets[k]; changed = true; }
+  }
+  return changed;
+}
+
 app.post('/api/sessions', authRequired, (req, res) => {
   const id = uid();
-  const { date, name, totalVolume, exercises, rpe, notes, duration } = req.body || {};
+  const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
   // Un nom par défaut plutôt qu'un rejet pur : une séance sans nom (programme généré par l'IA
   // sans champ "name", etc.) n'a aucune raison de se perdre silencieusement. Avant ce correctif,
   // le 400 ici faisait échouer la sauvegarde à chaque tentative (retries + resync inclus) sans
@@ -1973,6 +2088,10 @@ app.post('/api/sessions', authRequired, (req, res) => {
       name: String(ex.name || '').slice(0, 100),
       muscle: String(ex.muscle || '').slice(0, 50),
       ...(style ? { style } : {}),
+      // Fourchette de reps cible (ex: "10-12") conservée : sert au récap à détecter la surcharge
+      // progressive (l'athlète a-t-il atteint le haut de la fourchette ?). Sans ça, la fourchette
+      // n'existe que dans le programme et disparaît de la séance enregistrée.
+      ...(ex.repsStr ? { repsStr: String(ex.repsStr).slice(0, 20) } : {}),
       // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
       // (G/D) pour distinguer les répétitions par membre plutôt qu'un total agrégé.
       ...(ex.unilateral ? { unilateral: true } : {}),
@@ -2010,7 +2129,13 @@ app.post('/api/sessions', authRequired, (req, res) => {
   if (rpe != null && !isNaN(parseFloat(rpe))) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
   if (notes) session.notes = String(notes).slice(0, 500);
   if (duration) session.duration = Math.max(0, Math.min(600, parseInt(duration) || 0));
+  // Semaine de décharge : le récap (côté athlète et coach) neutralise la comparaison de perf
+  // pour ne pas pénaliser une baisse de charge volontaire.
+  if (deload) session.deload = true;
   DATA.sessions[id] = session;
+  // Une charge cible posée par le coach est « consommée » dès que l'athlète enregistre une séance
+  // avec cet exercice : elle a joué son rôle de pré-remplissage, on ne la re-propose pas ensuite.
+  consumeExerciseTargets(req.user.id, safeExercises);
   // Garder max 200 sessions par utilisateur (FIFO sur les plus vieilles)
   const userSids = Object.keys(DATA.sessions).filter(sid => DATA.sessions[sid].userId === req.user.id);
   if (userSids.length > 200) {
@@ -2148,8 +2273,45 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   s.coachFeedback = typeof req.body.feedback === 'string' ? req.body.feedback.slice(0, 500) : '';
   s.coachFeedbackAt = Date.now();
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  // Feedback en attente sur l'athlète : affiché en pop-up dès son prochain accès à l'app, puis
+  // acquitté (ack) et effacé. Sans ça, il restait enfoui dans une séance passée que l'athlète
+  // n'ouvrait jamais.
+  if (s.coachFeedback) {
+    a.pendingCoachFeedback = {
+      sessionId: s.id,
+      sessionName: s.name || 'Séance',
+      sessionDate: s.date,
+      feedback: s.coachFeedback,
+      coachName,
+      // Charges montées sur cette séance (récap ancien → nouveau) — récupérées de l'endpoint
+      // /overload. Le pop-up feedback les affiche pour que l'athlète voie d'un coup d'œil ce
+      // qui a changé pour sa prochaine séance.
+      updates: Array.isArray(s.overloadUpdates) ? s.overloadUpdates : [],
+      createdAt: Date.now(),
+    };
+  } else {
+    // Suppression du feedback → on efface aussi le pop-up en attente.
+    if (a.pendingCoachFeedback && a.pendingCoachFeedback.sessionId === s.id) delete a.pendingCoachFeedback;
+  }
   persist();
-  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback });
+  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback, pendingCoachFeedback: a.pendingCoachFeedback || null });
+  // Notification push : indispensable pour que l'athlète soit prévenu qu'un feedback l'attend.
+  if (s.coachFeedback) {
+    pushToUser(s.userId, {
+      title: '💬 Feedback de ' + coachName,
+      body: (s.name ? `Sur ta séance « ${s.name} » : ` : '') + (s.coachFeedback.length > 120 ? s.coachFeedback.slice(0, 117) + '…' : s.coachFeedback),
+      url: '/Muscu.html',
+    });
+  }
+  res.json({ ok: true });
+});
+
+// L'athlète acquitte le pop-up de feedback (bouton « Compris ») → on l'efface. Le feedback lui-même
+// reste sur la séance (visible dans son historique), on ne supprime que la notification.
+app.post('/api/my-coach-feedback/ack', authRequired, (req, res) => {
+  const u = DATA.users[req.user.id];
+  if (u && u.pendingCoachFeedback) { delete u.pendingCoachFeedback; persist(); }
   res.json({ ok: true });
 });
 
@@ -2181,12 +2343,94 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   res.json({ ok: true, session: s });
 });
 
+// ── Surcharge progressive : le coach valide une montée de charge ─────────────────────────────
+// Met à jour de façon CIBLÉE le poids d'exercices dans le programme de l'athlète, en place — sans
+// archiver l'ancien programme ni notifier "nouveau programme" (ce que ferait applyProgramToAthlete).
+// Cible le jour dont le titre correspond au nom de la séance (sinon repli sur tout le programme),
+// et marque la séance (overloadApplied) pour ne jamais re-proposer la même montée (double bump).
+// Les exercices absents du programme (séance de Bibliothèque, programme différent, ou aucun
+// programme assigné) ne sont plus une erreur : leur charge cible est mémorisée par exercice
+// (a.exerciseTargets) et pré-remplira la prochaine séance de l'athlète qui les contient.
+app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+  const sessionName = String(req.body?.sessionName || '');
+  const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
+  if (!updates.length) return res.status(400).json({ error: 'no_updates' });
+  const norm = normExName;
+  const wByName = {}, assistedByName = {};
+  for (const u of updates) { const n = norm(u.name); if (n) { wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); assistedByName[n] = !!u.assisted; } }
+  const prog = DATA.programs[req.params.athleteId];
+  const data = prog && prog.data ? prog.data : null;
+  const applied = new Set(); // clés d'exos effectivement montées DANS le programme
+  if (data) {
+    const snKey = norm(sessionName);
+    const bump = (day) => {
+      for (const ex of (day.exercises || [])) {
+        const k = norm(ex.name);
+        if (!(k in wByName)) continue;
+        const w = wByName[k];
+        ex.weightStr = String(w);
+        ex.sets = (ex.sets || []).map(s => ({ ...s, weight: w }));
+        applied.add(k);
+      }
+    };
+    // 1) Jour(s) dont le titre correspond au nom de la séance.
+    for (const sheet of Object.keys(data)) {
+      const days = data[sheet] || {};
+      for (const dayKey of Object.keys(days)) {
+        const day = days[dayKey] || {};
+        if (snKey && norm(day.category || day.name || dayKey) !== snKey) continue;
+        bump(day);
+      }
+    }
+    // 2) Repli : aucun jour ne correspond → on applique par nom sur l'ensemble du programme.
+    if (applied.size === 0) {
+      for (const sheet of Object.keys(data)) {
+        const days = data[sheet] || {};
+        for (const dayKey of Object.keys(days)) bump(days[dayKey] || {});
+      }
+    }
+  }
+  // Exos non trouvés dans le programme → charge cible mémorisée par exercice.
+  if (!a.exerciseTargets) a.exerciseTargets = {};
+  let targetsWritten = 0;
+  for (const u of updates) {
+    const k = norm(u.name);
+    if (!k || applied.has(k)) continue;
+    a.exerciseTargets[k] = { name: String(u.name || '').slice(0, 100), weight: wByName[k], assisted: assistedByName[k], sessionName: sessionName.slice(0, 100), updatedAt: Date.now() };
+    targetsWritten++;
+  }
+  if (data && applied.size) prog.assignedAt = Date.now();
+  // Récap des charges montées attaché à la séance : c'est ce que le pop-up « feedback » injectera
+  // dans son affichage (ancien → nouveau). Remplace l'ancien mécanisme a.coachSessionNote qui
+  // faisait doublon avec le feedback — voir fusion #.
+  const overloadRecap = updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)], assisted: !!u.assisted })).filter(u => u.name && u.to != null);
+  if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
+    DATA.sessions[sessionId].overloadApplied = true;
+    DATA.sessions[sessionId].overloadUpdates = overloadRecap;
+  }
+  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  persist();
+  io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets });
+  const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
+  const allAssisted = updates.every(u => u.assisted);
+  const someAssisted = updates.some(u => u.assisted);
+  const pushTitle = allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
+  const pushBody = allAssisted
+    ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
+    : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
+  pushToUser(req.params.athleteId, { title: pushTitle, body: pushBody, url: '/Muscu.html' });
+  res.json({ ok: true, applied: applied.size, targets: targetsWritten, data: data || {} });
+});
+
 // Coach crée une séance pour un athlète (import à l'unité)
 app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res) => {
   const athlete = DATA.users[req.params.id];
   if (!athlete) return res.status(404).json({ error: 'not_found' });
   if (athlete.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
-  const { name, date, exercises, totalVolume, duration, notes } = req.body || {};
+  const { name, date, exercises, totalVolume, duration, notes, deload } = req.body || {};
   if (!Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
   // Même filet que POST /api/sessions : un nom par défaut plutôt qu'un rejet silencieux (cf.
   // commentaire là-bas — le client le garde déjà côté CoachLiveSessionScreen, mais mieux vaut
@@ -2204,32 +2448,55 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     notes: notes ? String(notes).slice(0, 500) : '',
     createdByCoach: true,
     createdAt: Date.now(),
+    // Séance de décharge : le récap ne pénalise pas la baisse volontaire (même drapeau que /api/sessions).
+    ...(deload ? { deload: true } : {}),
   };
   DATA.sessions[id] = session;
+  // La séance enregistrée consomme les charges cibles posées sur ces exercices (cf. /overload).
+  consumeExerciseTargets(athlete.id, session.exercises);
   persist();
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const athleteName = athlete.firstName || 'L\'athlète';
   const fmtDate = ds => new Date(ds).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  pushToUser(athlete.id, { title: '🏋️ Nouvelle séance', body: `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`, url: '/Muscu.html' });
+  // Notification enrichie : séance live = résumé volume + durée ; sinon message standard
+  const exCount = (session.exercises || []).length;
+  const vol = session.totalVolume || 0;
+  const dur = session.duration || 0;
+  const isLive = session.createdByCoach && dur > 0;
+  // Notification athlète
+  const athletePushBody = isLive
+    ? `${coachName} a validé ta séance "${session.name}" — ${exCount} exo${exCount > 1 ? 's' : ''}, ${vol > 0 ? Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''}${dur > 0 ? (vol > 0 ? ', ' : '') + dur + ' min' : ''} 💪`
+    : `${coachName} t'a ajouté une séance "${session.name}" le ${fmtDate(session.date)}`;
+  pushToUser(athlete.id, { title: isLive ? '🔴 Séance Live terminée !' : '🏋️ Nouvelle séance', body: athletePushBody, url: '/Muscu.html' });
+  // Notification coach : pour les séances live, prévenir le coach que l'athlète a terminé
+  if (isLive) {
+    pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: `${athleteName} a terminé sa séance "${session.name}"`, url: '/Muscu.html' });
+  }
   res.json({ ok: true, id });
 });
 
 // ── Test email (main coach only) ────────────────────
 app.post('/api/admin/test-email', authRequired, coachOnly, mainCoachOnly, async (req, res) => {
-  const u = DATA.users[req.user.id];
-  const to = String(req.body?.to || '').trim().toLowerCase() || u.email;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'invalid_email' });
-  const result = await sendEmail({
-    to,
-    subject: 'Prime Athl — Test email ✅',
-    html: emailBase(`
-      <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
-      <p>Ton serveur d'emails Resend est correctement configuré.</p>
-      <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Destinataire : <strong>${to}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
-    `),
-  });
-  res.json({ ...result, to });
+  try {
+    const u = DATA.users[req.user.id];
+    const to = String(req.body?.to || '').trim().toLowerCase() || u.email;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'invalid_email' });
+    const result = await sendEmail({
+      to,
+      subject: 'Prime Athl — Test email ✅',
+      html: emailBase(`
+        <h2 style="font-size:20px;margin:0 0 10px;">Test réussi 🎉</h2>
+        <p>Ton serveur d'emails Resend est correctement configuré.</p>
+        <p style="font-size:13px;color:#666;">Expéditeur : <strong>${RESEND_FROM}</strong><br>Destinataire : <strong>${to}</strong><br>Date : ${new Date().toLocaleString('fr-FR')}</p>
+      `),
+    });
+    res.json({ ...result, to });
+  } catch (err) {
+    console.error('[test-email] error', err);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ── Backup / Restore (main coach only) ──────────────
@@ -2384,9 +2651,10 @@ app.post('/api/admin/reject/:userId', authRequired, coachOnly, mainCoachOnly, (r
   delete DATA.freeFoodLogs?.[u.id];
   delete DATA.sessionLibrary?.[u.id];
   delete DATA.plannedSessions?.[u.id];
+  delete DATA.pendingSessions?.[u.id];
   delete DATA.pushSubscriptions?.[u.id];
   delete DATA.messageReads?.[u.id];
-  delete DATA.userPurchasedPrograms?.[u.id];
+  purgeUserPurchases(u.id);
   for (const chatId of Object.keys(DATA.messages || {})) {
     if (chatId.includes(u.id)) delete DATA.messages[chatId];
   }
@@ -2702,19 +2970,21 @@ app.post('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, 
 
 // Coach retire le document attaché (sans toucher au reste du plan)
 app.delete('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly, async (req, res) => {
-  const a = DATA.users[req.params.id];
-  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
-  const existing = DATA.nutritionPrograms[a.id];
-  const doc = existing?.document;
-  if (doc) {
-    delete existing.document;
-    persist();
-    io.to('user:' + a.id).emit('nutrition-updated', { plan: existing, assignedAt: existing.assignedAt });
-    if (process.env.CLOUDINARY_URL && doc.publicId) {
-      cloudinary.uploader.destroy(doc.publicId, { resource_type: 'raw' }).catch(() => {});
+  try {
+    const a = DATA.users[req.params.id];
+    if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+    const existing = DATA.nutritionPrograms[a.id];
+    const doc = existing?.document;
+    if (doc) {
+      delete existing.document;
+      persist();
+      io.to('user:' + a.id).emit('nutrition-updated', { plan: existing, assignedAt: existing.assignedAt });
+      if (process.env.CLOUDINARY_URL && doc.publicId) {
+        cloudinary.uploader.destroy(doc.publicId, { resource_type: 'raw' }).catch(() => {});
+      }
     }
-  }
-  res.json({ ok: true });
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'delete_failed' }); }
 });
 
 // Coach validates and notifies athlete of nutrition plan
@@ -2985,6 +3255,13 @@ app.post('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =
   const { url, dataUrl, note, date, isVideo } = req.body || {};
   const src = url || dataUrl;
   if (!src) return res.status(400).json({ error: 'url_required' });
+  // Même validation de schéma que l'endpoint athlète (POST /api/photos) : sans elle, un coach
+  // pouvait stocker une URL javascript: / data:text/html dans les photos d'un athlète (XSS stocké
+  // si le front l'injecte dans un href/src). Seuls https://, http:// et data:image//data:video/
+  // (le coach peut ajouter des vidéos) sont acceptés.
+  if (!(/^https?:\/\//i.test(src) || /^data:(image|video)\//i.test(src))) {
+    return res.status(400).json({ error: 'invalid_url', detail: 'URL https:// ou data:image//data:video/ uniquement.' });
+  }
   if (src.startsWith('data:') && src.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'photo_too_large', detail: 'Max 3MB' });
   if (!DATA.progressPhotos[u.id]) DATA.progressPhotos[u.id] = [];
   if (DATA.progressPhotos[u.id].length >= MAX_PHOTOS_PER_USER) {
@@ -3101,27 +3378,10 @@ app.post('/api/messages/:partnerId', authRequired, (req, res) => {
   io.to('user:' + partner).emit('new-message', { from: me, msg });
   io.to('user:' + me).emit('new-message', { from: me, msg });
   // Push notification to partner if subscribed
-  const sub = DATA.pushSubscriptions[partner];
-  console.log('[push-msg] partner=', partner, 'hasSub=', !!sub, 'hasVapid=', !!VAPID_PUBLIC_KEY);
-  if (sub && !sub.invalidatedAt && VAPID_PUBLIC_KEY) {
-    const sender = DATA.users[me];
-    const name = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
-    webpush.sendNotification(sub, JSON.stringify({
-      title: `💬 ${name}`,
-      body: text.trim().slice(0, 100),
-      tag: `msg-${me}`,
-      icon: PUSH_ICON,
-      badge: PUSH_BADGE,
-      url: '/Muscu.html'
-    })).then(() => console.log('[push-msg] sent OK'))
-      .catch(e => {
-        console.error('[push-msg] error:', e.statusCode, e.message);
-        if (e.statusCode === 410 || e.statusCode === 404) {
-          const old = DATA.pushSubscriptions[partner];
-          if (old) { DATA.pushSubscriptions[partner] = { ...old, invalidatedAt: Date.now() }; persist(); }
-        }
-      });
-  }
+  // Push notification — utilise pushToUser (multi-device + logging unifié)
+  const sender = DATA.users[me];
+  const senderName = sender?.firstName || sender?.email?.split('@')[0] || 'Athlète';
+  pushToUser(partner, { title: `💬 ${senderName}`, body: text.trim().slice(0, 100), tag: `msg-${me}`, url: '/Muscu.html' });
   res.json({ ok: true, msg });
 });
 
@@ -3131,19 +3391,37 @@ const PUSH_ICON = '/push-icon.webp';
 // (Android n'en garde que la silhouette via l'alpha). icon-192.png a un fond noir opaque → rendu
 // en carré blanc. notif-badge.png est le logo Prime Athl blanc sur fond transparent.
 const PUSH_BADGE = '/notif-badge.png';
+// Options d'envoi web-push : urgence HAUTE → FCM/APNS livrent immédiatement (réveil de l'appareil)
+// au lieu de temporiser/regrouper comme avec l'urgence "normale" par défaut. TTL 4h → si l'appareil
+// est brièvement hors-ligne la notif est encore délivrée à la reconnexion, sans être périmée.
+const PUSH_OPTS = { TTL: 4 * 3600, urgency: 'high' };
 function pushToUser(userId, payload) {
-  if (!VAPID_PUBLIC_KEY) return;
-  const sub = DATA.pushSubscriptions[userId];
-  if (!sub || sub.invalidatedAt) return;
+  if (!VAPID_PUBLIC_KEY) { console.log('[push] skip (no VAPID)', userId, payload.title); return; }
+  const entry = DATA.pushSubscriptions[userId];
+  if (!entry) { console.log('[push] skip (no sub)', userId, payload.title); return; }
+  // Support multi-appareils : entry = subscription OU { devices: [sub, ...] }
+  const subs = entry.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry.invalidatedAt ? [] : [entry]);
+  if (!subs.length) { console.log('[push] skip (all invalidated)', userId); return; }
   const enriched = { icon: PUSH_ICON, badge: PUSH_BADGE, ...payload };
-  webpush.sendNotification(sub, JSON.stringify(enriched))
-    .catch(e => {
-      if (e.statusCode === 410 || e.statusCode === 404) {
-        // Subscription expirée — marquer pour nettoyage différé (pas de suppress immédiat)
-        DATA.pushSubscriptions[userId] = { ...sub, invalidatedAt: Date.now() };
-        persist();
-      }
-    });
+  const body = JSON.stringify(enriched);
+  for (const sub of subs) {
+    webpush.sendNotification(sub, body, PUSH_OPTS)
+      .then(() => console.log('[push] ✓ sent', userId, payload.title, sub.endpoint?.slice(0, 50)))
+      .catch(e => {
+        console.error('[push] ✗ error', userId, e.statusCode, e.message, sub.endpoint?.slice(0, 50));
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          const fresh = DATA.pushSubscriptions[userId];
+          if (!fresh) return;
+          if (fresh.devices) {
+            const d = fresh.devices.find(d => d.endpoint === sub.endpoint);
+            if (d) { d.invalidatedAt = Date.now(); persist(); }
+          } else if (fresh.endpoint === sub.endpoint) {
+            DATA.pushSubscriptions[userId] = { ...fresh, invalidatedAt: Date.now() };
+            persist();
+          }
+        }
+      });
+  }
 }
 
 // ── IA — Nutrition helpers ───────────────────────────
@@ -3355,22 +3633,61 @@ app.get('/api/push/vapid-public-key', (req, res) => {
 });
 
 app.get('/api/push/status', authRequired, (req, res) => {
-  const sub = DATA.pushSubscriptions[req.user.id];
-  res.json({ subscribed: !!sub, endpoint: sub?.endpoint?.slice(0, 50) || null, vapidConfigured: !!VAPID_PUBLIC_KEY });
+  const entry = DATA.pushSubscriptions[req.user.id];
+  const devices = entry?.devices || (entry ? [entry] : []);
+  const active = devices.filter(d => !d.invalidatedAt);
+  res.json({
+    subscribed: active.length > 0,
+    deviceCount: active.length,
+    endpoints: active.map(d => d.endpoint?.slice(0, 60)),
+    vapidConfigured: !!VAPID_PUBLIC_KEY,
+    invalidated: devices.filter(d => d.invalidatedAt).length,
+  });
 });
 
 app.post('/api/push/subscribe', authRequired, (req, res) => {
   const { subscription } = req.body || {};
   if (!subscription) return res.status(400).json({ error: 'subscription_required' });
-  DATA.pushSubscriptions[req.user.id] = subscription;
+  const entry = DATA.pushSubscriptions[req.user.id];
+  // Multi-appareil : ajouter la subscription sans écraser les autres
+  if (entry?.devices) {
+    // Remplacer si même endpoint, sinon ajouter (max 5 appareils)
+    const idx = entry.devices.findIndex(d => d.endpoint === subscription.endpoint);
+    if (idx >= 0) entry.devices[idx] = subscription;
+    else { entry.devices.push(subscription); if (entry.devices.length > 5) entry.devices.shift(); }
+  } else if (entry && entry.endpoint && entry.endpoint !== subscription.endpoint) {
+    // Migration : ancienne sub unique → multi-appareils
+    DATA.pushSubscriptions[req.user.id] = { devices: [entry.invalidatedAt ? subscription : entry, subscription].filter((v,i,a) => a.findIndex(x=>x.endpoint===v.endpoint)===i) };
+  } else {
+    // Première inscription ou même endpoint → objet simple (rétrocompatible)
+    DATA.pushSubscriptions[req.user.id] = subscription;
+  }
   persist();
+  console.log('[push] subscribe', req.user.id, subscription.endpoint?.slice(0, 60));
   res.json({ ok: true });
 });
 
 app.delete('/api/push/subscribe', authRequired, (req, res) => {
-  delete DATA.pushSubscriptions[req.user.id];
+  const endpoint = req.body?.endpoint;
+  const entry = DATA.pushSubscriptions[req.user.id];
+  if (endpoint && entry?.devices) {
+    entry.devices = entry.devices.filter(d => d.endpoint !== endpoint);
+    if (!entry.devices.length) delete DATA.pushSubscriptions[req.user.id];
+  } else {
+    delete DATA.pushSubscriptions[req.user.id];
+  }
   persist();
   res.json({ ok: true });
+});
+
+// ── Test push — envoie une vraie notif pour vérifier que la chaîne fonctionne ──
+app.post('/api/push/test', authRequired, (req, res) => {
+  if (!VAPID_PUBLIC_KEY) return res.json({ ok: false, reason: 'VAPID non configuré sur le serveur' });
+  const entry = DATA.pushSubscriptions[req.user.id];
+  const subs = entry?.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry && !entry.invalidatedAt ? [entry] : []);
+  if (!subs.length) return res.json({ ok: false, reason: 'Aucun appareil enregistré — active les notifications dans ton profil' });
+  pushToUser(req.user.id, { title: '🔔 Test Prime Athl', body: 'Si tu vois ceci, les notifications fonctionnent !', url: '/Muscu.html' });
+  res.json({ ok: true, deviceCount: subs.length });
 });
 
 // ── Alarme "repos terminé" ──────────────────────────
@@ -3518,12 +3835,8 @@ app.post('/api/premium/unlock', authRequired, premiumUnlockLimiter, (req, res) =
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
   if (u.premium) return res.json({ ok: true, already: true });
-  // Vérifier code valide via comparaison timing-safe (anti timing-attack)
-  const provided = Buffer.from(String(code));
-  const found = rawCodes.find(c => {
-    const expected = Buffer.from(c);
-    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-  });
+  // Vérifier code valide via comparaison timing-safe (anti timing-attack), sans fuiter la longueur
+  const found = rawCodes.find(c => safeEqual(String(code), c));
   if (!found) return res.status(400).json({ error: 'invalid_code' });
   const used = DATA.premiumCodes || {};
   if (used[found]) return res.status(400).json({ error: 'code_already_used' });
