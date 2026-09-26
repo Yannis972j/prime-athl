@@ -929,10 +929,16 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // que le filet >200 écrasait silencieusement en "10" au lieu de la vraie valeur voulue.
           // Cellule Répétitions vide dans un bloc (2e exercice d'un superset/triset, cellule
           // fusionnée…) → on hérite de la dernière fourchette explicite, comme SERIES/REPOS.
-          // Jamais pour un exercice en gainage (la colonne y sert de durée, pas de reps).
+          // Jamais pour un exercice en gainage (la colonne y sert de durée, pas de reps), ni pour
+          // un cardio (pas de reps DU TOUT ; sans ce garde-fou, un tapis récupérait la fourchette
+          // de l'exo précédent, ex: "TAPIS DE COURSE → 12-15" hérité d'un ADDUCTION juste au-dessus,
+          // ce qui polluait la donnée et faussait la surcharge progressive). Un cardio RESET aussi
+          // lastRepsTxt pour ne pas propager plus loin non plus.
+          const isCardioRow = !!cardio;
+          if (isCardioRow) lastRepsTxt = '';
           const repsCell = cellText(colReps);
-          const repsTxt = (!isHold && !repsCell) ? lastRepsTxt : repsCell;
-          if (!isHold && repsCell) lastRepsTxt = repsCell;
+          const repsTxt = (!isHold && !isCardioRow && !repsCell) ? lastRepsTxt : (isCardioRow ? '' : repsCell);
+          if (!isHold && !isCardioRow && repsCell) lastRepsTxt = repsCell;
           // Durée renseignée → durée du compte à rebours prise dessus (convention secondes).
           // Sinon (ancien format sans colonne Durée, ex: "Gainage" détecté par le nom seul) on
           // retombe sur la cellule Répétitions, qui contenait alors du texte libre ("1min", "45s").
@@ -4990,6 +4996,16 @@ function programRangeMap(programData){
   Object.values(programData||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day&&day.exercises||[]).forEach(e=>note(e.name,e.repsStr||e.sets?.[0]?.targetStr))));
   return map;
 }
+// Comme programRangeMap mais conserve la fourchette ENTIÈRE (ex: "10-12") au lieu du seul max :
+// sert au récap coach à afficher OBJ. REPS quand la séance sauvegardée ne porte pas repsStr
+// (vieilles séances validées avant que le champ soit propagé, ou 2e exo d'un superset dont
+// l'inheritance parser n'était pas encore en place au moment du save).
+function programRepsStrMap(programData){
+  const map={};
+  const note=(name,str)=>{const n=normExerciseName(name);if(!n||map[n])return;const s=String(str||'').trim();if(s&&/\d/.test(s))map[n]=s;};
+  Object.values(programData||{}).forEach(sheet=>Object.values(sheet||{}).forEach(day=>(day&&day.exercises||[]).forEach(e=>note(e.name,e.repsStr||e.sets?.[0]?.targetStr))));
+  return map;
+}
 
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
 // `extraRange` (optionnel) = map nom normalisé → haut de fourchette, issue du PROGRAMME.
@@ -8545,6 +8561,11 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[editDoneSession,setEditDoneSession]=React.useState(null); // séance réalisée — Corriger
   const[viewProgDay,setViewProgDay]=React.useState(null); // {dayName,dayData} — Voir le contenu prévu d'un jour non fait
   const openSessionModal=(sess,tabKey)=>{setViewSessionTab(tabKey||'recap');setViewSession(sess);};
+  // Fourchettes de reps issues du programme de l'athlète → filet pour le récap coach quand
+  // la séance sauvegardée n'a pas gardé son repsStr (vieilles séances, 2e exo d'un superset
+  // parsé sans inheritance…). Sans ça, OBJ. REPS disparaissait sur ces cas-là.
+  const repsStrMap=React.useMemo(()=>programRepsStrMap(program?.data||{}),[program]);
+  const repsMaxMap=React.useMemo(()=>programRangeMap(program?.data||{}),[program]);
   const movePickerRef=React.useRef(null);
   React.useEffect(()=>{if(moveFrom&&movePickerRef.current)setTimeout(()=>movePickerRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}),80);},[moveFrom]);
 
@@ -8639,7 +8660,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} repsRange={repsMaxMap} repsStrMap={repsStrMap} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
       {/* Assigner : envoyer la séance de ce jour à l'athlète (regroupé ici depuis l'ancienne liste). */}
@@ -10049,7 +10070,7 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
-function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab,repsRange}){
+function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
@@ -10370,7 +10391,10 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
                               // Fourchette de reps prescrite par le coach (ex: "8-12") : sert à juger
                               // d'un coup d'œil si l'athlète a atteint le haut, s'il a stagné en bas,
                               // ou s'il a explosé la cible → décide de la prochaine montée de charge.
-                              const rangeStr=e.repsStr||e.sets?.[0]?.targetStr||(e.sets?.[0]?.target?String(e.sets[0].target):'');
+                              // Fallback sur le programme actuel de l'athlète (repsStrMap) si la
+                              // séance sauvegardée n'a pas propagé repsStr — cas des vieilles séances
+                              // ou d'un 2e exo de superset dont l'inheritance parser était absente.
+                              const rangeStr=e.repsStr||e.sets?.[0]?.targetStr||(e.sets?.[0]?.target?String(e.sets[0].target):'')||(repsStrMap?.[normExerciseName(e.name)]||'');
                               const nums=rangeStr?String(rangeStr).match(/\d+/g):null;
                               const rangeMin=nums&&nums.length?Math.min(...nums.map(Number)):null;
                               const rangeMax=nums&&nums.length?Math.max(...nums.map(Number)):null;
