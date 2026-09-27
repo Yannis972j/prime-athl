@@ -666,6 +666,19 @@ const DELOAD_MINDSET = [
   "La décharge n'est pas du temps perdu : c'est là que le corps transforme le travail des semaines dures en muscle et en force. Léger, mais sérieux.",
   "Reculer d'un pas pour mieux sauter. La semaine prochaine tu repars sur tes vrais poids, plus frais et plus fort.",
 ];
+// Messages APRÈS une semaine de décharge : la précédente séance était en décharge, celle-ci ne l'est
+// plus. L'athlète revient sur ses vrais poids — c'est la 1ère séance de relance. Ton = accueil + coup
+// d'envoi. La comparaison de perf redémarre (donc pas de "recul" à cause de la semaine allégée).
+const POST_DELOAD_CONGRATS = [
+  name => `Bienvenue de retour, ${name}. La décharge est derrière toi — le corps est frais, la tête aussi. À partir d'aujourd'hui on repart sur les vraies charges, avec l'énergie du repos en plus.`,
+  name => `Fin de décharge, ${name}. Ce qu'on a semé la semaine dernière (récupération, sommeil, recharge nerveuse), on le récolte dès aujourd'hui. Sors les vrais poids, tu es prête à cogner.`,
+  name => `Reprise, ${name}. Tu as bien joué le jeu de la décharge — maintenant on repart, plus solide qu'avant. Les prochaines semaines, c'est là qu'on progresse vraiment.`,
+];
+const POST_DELOAD_MINDSET = [
+  "Une décharge bien faite, c'est un tremplin. Tu redémarres avec plus de force, plus de fraîcheur nerveuse, plus de marge de progression. Sers-t'en.",
+  "Le vrai bénéfice de la décharge se voit dans les 2-3 séances qui suivent : charges plus solides, meilleures sensations, plus de reps au même poids. Reste attentive à ces signaux.",
+  "La reprise après décharge, ce n'est pas juste \"remettre les vrais poids\". C'est aussi remettre l'intensité, la concentration, l'ambition. Tu as récupéré pour ça.",
+];
 // Bandeau de récap affiché à la place de l'alerte de régression quand la séance est une décharge.
 function DeloadRecapBanner({ coach }) {
   return (
@@ -675,6 +688,20 @@ function DeloadRecapBanner({ coach }) {
         {coach
           ? <>Semaine de décharge — charges allégées comme prévu. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est planifiée, pas un recul. Comparaison de perf en pause.</>
           : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : tu laisses ton corps récupérer pour revenir plus fort.</>}
+      </div>
+    </div>
+  );
+}
+// Bandeau affiché sur la 1ère séance APRÈS une décharge : accueil de retour, comparaison en
+// pause (les vrais poids d'aujourd'hui vs les 60 % de la semaine dernière fausseraient tout).
+function PostDeloadRecapBanner({ coach }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 13px', borderRadius: 11, background: 'rgba(44,196,160,0.13)', border: '1px solid rgba(44,196,160,0.4)', marginBottom: 12 }}>
+      <span style={{ fontSize: 17, flexShrink: 0 }}>🚀</span>
+      <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
+        {coach
+          ? <>Reprise après décharge — <span style={{ color: '#8FDCC0' }}>retour aux vrais poids</span>. Comparaison volume en pause (les 60 % de la semaine dernière fausseraient la lecture). La progression réelle repart de cette séance.</>
+          : <>Reprise après ta semaine de décharge 🚀 Tu retrouves tes vrais poids, plus <b>frais et plus fort</b>. La comparaison de perf reprend à partir d'ici — c'est un nouveau départ.</>}
       </div>
     </div>
   );
@@ -4845,12 +4872,15 @@ const VOLUME_SAME_MESSAGES=[
 ];
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null,isDeload=false}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false}=opts||{};
   const sn=sessionName||'séance';
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
   if(isDeload)return pick(DELOAD_CONGRATS)(name);
+  // 1ère séance APRÈS une décharge : message de reprise, prime sur la comparaison (qui serait
+  // faussement flatteuse : les vrais poids d'aujourd'hui vs les 60% de la semaine dernière = +40%).
+  if(isPostDeload)return pick(POST_DELOAD_CONGRATS)(name);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) : ton sérieux, sans humour, PRIORITAIRE sur
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
@@ -4949,11 +4979,12 @@ const MOTIVATION_FIRST=[
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed,isDeload){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : mindset dédié, jamais un message de recul/pique.
   if(isDeload)return pick(DELOAD_MINDSET);
+  if(isPostDeload)return pick(POST_DELOAD_MINDSET);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) → ton sérieux prioritaire, sans humour.
   if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)return pick(MOTIVATION_HARD);
   if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
@@ -5389,8 +5420,14 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     const hasVolume=sessionVolumeOf(viewHistSession)>0;
     const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
     const isDeload=!!viewHistSession.deload;
-    const isRegression=!isDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous));
-    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression,isDeload};
+    // Post-décharge : la précédente séance dans l'historique (dans les 14 derniers jours) était en
+    // décharge, et celle-ci ne l'est pas. On désactive alors la comparaison de perf (les vrais
+    // poids d'aujourd'hui vs 60% de la semaine dernière = fausse énorme "hausse"), et on utilise
+    // les messages de reprise dédiés (POST_DELOAD_CONGRATS / POST_DELOAD_MINDSET).
+    const curTs=new Date(viewHistSession.date||0).getTime();
+    const isPostDeload=!isDeload&&Array.isArray(history)&&history.some(h=>h&&h.deload&&new Date(h.date||0).getTime()<curTs&&(curTs-new Date(h.date||0).getTime())<14*86400000);
+    const isRegression=!isDeload&&!isPostDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous));
+    return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression,isDeload,isPostDeload};
   },[viewHistSession,history]);
   // Édition d'une séance déjà validée (ex: ajouter une série oubliée, corriger un poids après
   // coup) — editHistExercises est un brouillon local (copie profonde) modifié librement, envoyé
@@ -5828,8 +5865,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload})}</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload})}</div>
                   {histRecap.isDeload&&<DeloadRecapBanner/>}
+                  {histRecap.isPostDeload&&<PostDeloadRecapBanner/>}
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                       <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
@@ -5905,7 +5943,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload)}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload)}"</div>
                   </div>
                 </div>
               )}
@@ -10082,9 +10120,13 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[],repsRange),[s,history,repsRange]);
   const hasVolume=totalVol>0;
   const isDeload=!!s.deload;
+  // Post-décharge : décharge dans les 14 derniers jours → messages de reprise + pas d'alerte
+  // "hausse spectaculaire" (les vrais poids vs 60% de la semaine dernière fausseraient tout).
+  const curTs=new Date(s.date||0).getTime();
+  const isPostDeload=!isDeload&&Array.isArray(history)&&history.some(h=>h&&h.deload&&new Date(h.date||0).getTime()<curTs&&(curTs-new Date(h.date||0).getTime())<14*86400000);
   // Décharge : écarts négatifs en BLEU neutre (baisse voulue) plutôt qu'en rouge (recul).
   const DOWN=isDeload?'#5A8AE0':T.danger;
-  const isRegression=!isDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
+  const isRegression=!isDeload&&!isPostDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
   const showVolCompare=!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0;
   const firstName=(athleteName||'').trim().split(' ')[0]||'L\'athlète';
 
@@ -10179,9 +10221,10 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload,isPostDeload})}</div>
               {/* Semaine de décharge : bandeau neutre à la place de l'alerte de régression */}
               {isDeload&&<DeloadRecapBanner coach/>}
+              {isPostDeload&&<PostDeloadRecapBanner coach/>}
               {/* Alerte régression */}
               {isRegression&&(
                 <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
@@ -10333,7 +10376,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload,isPostDeload)}"</div>
               </div>
             </div>
           )}
@@ -15963,6 +16006,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // reçoit d'abord les consignes du coach sur sa précédente séance avant de démarrer.
   const[pendingCoachFeedback,setPendingCoachFeedback]=React.useState(null);
   const[activeCoachFeedback,setActiveCoachFeedback]=React.useState(null);
+  // Pop-up d'inactivité : si l'athlète n'a rien fait depuis un moment, on l'accueille au
+  // prochain ouvert d'app avec un rappel bienveillant → escalade selon le nombre de jours.
+  const[inactivityPopup,setInactivityPopup]=React.useState(null);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -16049,6 +16095,41 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/sessions').then(setHistory).catch(()=>{});
     apiCall('/api/session-library').then(lib=>setSessionLibrary(lib||{sessions:[],assignedAt:null})).catch(()=>{});
   },[]);
+
+  // ── Pop-up d'inactivité ─────────────────────────────────────────────────────────────────
+  // Après un certain nombre de jours sans séance, on accueille l'athlète avec un rappel
+  // bienveillant qui monte en intensité (7 → 14 → 21+ jours). Une fois acquitté, on n'y
+  // revient pas avant 3 jours (localStorage) pour ne pas être harcelant. Coach exclu (il voit
+  // les fiches de ses athlètes, pas la sienne).
+  const inactivityRef=React.useRef(false);
+  React.useEffect(()=>{
+    if(inactivityRef.current)return;
+    if(!history)return;
+    if(authUser?.role==='coach')return;
+    inactivityRef.current=true;
+    try{
+      const last=history[0]?.date?new Date(history[0].date).getTime():null;
+      // Pas d'historique → on ne pique pas un nouvel athlète qui n'a pas encore commencé.
+      if(!last)return;
+      const daysSince=Math.floor((Date.now()-last)/86400000);
+      if(daysSince<6)return;
+      // Anti-harcèlement : ne pas re-pop avant 3 jours après le dernier ack.
+      const ackKey='pa_inactivity_ack_'+authUser.id;
+      const lastAck=parseInt(localStorage.getItem(ackKey)||'0',10);
+      if(lastAck&&Date.now()-lastAck<3*86400000)return;
+      // Escalade selon le nombre de jours d'inactivité — ton bienveillant → un cran plus fort.
+      let tone,title,message;
+      if(daysSince<10){tone='soft';title='Ça va faire un moment 👋';message=`Ça fait ${daysSince} jours sans séance, ${authUser.firstName||''}. Pas besoin d'y aller à 100 %, mais reprends contact — même une séance légère te remet dans le rythme.`;}
+      else if(daysSince<15){tone='mid';title='La régularité, c\'est ta meilleure alliée';message=`${daysSince} jours sans séance. Les progrès, ce n'est pas la performance d'un jour, c'est ce que tu fais quand tu n'as pas envie. Reviens aujourd'hui, tu ne le regretteras pas.`;}
+      else if(daysSince<22){tone='strong';title='C\'est là que ça se joue';message=`${daysSince} jours. Le corps oublie vite ce qu'on ne lui redemande pas — mais il retrouve tout encore plus vite quand on s'y remet. Rappelle-toi POURQUOI tu as commencé. Aujourd'hui, tu remets une séance.`;}
+      else {tone='reboot';title='On repart. Ensemble.';message=`Plus de 3 semaines sans t'entraîner. Ce n'est pas grave — ce qui compte, c'est ce que tu fais MAINTENANT. Ne pense pas à rattraper : pense juste à la prochaine séance. Une seule. Pour redémarrer la machine.`;}
+      setInactivityPopup({tone,title,message,daysSince});
+    }catch(e){console.error('inactivity check',e);}
+  },[history,authUser]);
+  const ackInactivity=()=>{
+    try{localStorage.setItem('pa_inactivity_ack_'+authUser.id,String(Date.now()));}catch{}
+    setInactivityPopup(null);
+  };
 
   // Retour au premier plan (app rouverte / téléphone réveillé) → rafraîchissement SILENCIEUX
   // immédiat. C'est le plus gros gain de réactivité sur mobile : sans ça, un programme assigné ou
@@ -16402,6 +16483,31 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         willChange:'transform'}}>
         {/* Ombre swipe-back (bord gauche) */}
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
+        {/* Pop-up d'inactivité — accueil bienveillant/motivant à l'ouverture de l'app quand
+            l'athlète n'a rien fait depuis ≥6 jours. Escalade selon la durée. Anti-harcèlement
+            de 3 jours après acquittement. */}
+        {inactivityPopup&&(()=>{
+          const{tone,title,message,daysSince}=inactivityPopup;
+          const grad=tone==='soft'?['#5A8AE0','#2CC4A0']:tone==='mid'?['#BFA060','#E88A5A']:tone==='strong'?['#E88A5A','#B85070']:['#B85070','#7C5CD6'];
+          const iconBg=tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':tone==='strong'?'rgba(232,138,90,0.15)':'rgba(167,139,250,0.15)';
+          const iconBd=tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':tone==='strong'?'rgba(232,138,90,0.4)':'rgba(167,139,250,0.4)';
+          const iconCol=tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':tone==='strong'?'#F0A87A':'#C4B5FD';
+          return(
+            <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+              <div onClick={ackInactivity} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
+              <div style={{position:'relative',background:'linear-gradient(180deg,#161620,#0d0d14)',border:`1px solid ${iconBd}`,borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+                <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
+                <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:iconBg,border:`1px solid ${iconBd}`,marginBottom:13}}>
+                  <span style={{fontSize:10,fontWeight:800,color:iconCol,letterSpacing:0.5,textTransform:'uppercase'}}>💤 {daysSince} jours sans séance</span>
+                </div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,marginBottom:12,color:'#fff',lineHeight:1.15}}>{title}</div>
+                <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',marginBottom:20,whiteSpace:'pre-wrap'}}>{message}</div>
+                <button onClick={ackInactivity} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>{tone==='soft'?'C\'est parti 💪':tone==='mid'?'Aujourd\'hui je m\'y remets':tone==='strong'?'Je reprends maintenant':'On repart 🚀'}</button>
+                <button onClick={ackInactivity} style={{width:'100%',marginTop:10,height:36,borderRadius:11,border:'none',background:'transparent',color:T.textFaint,fontSize:12,fontWeight:600,cursor:'pointer'}}>Plus tard</button>
+              </div>
+            </div>
+          );
+        })()}
         {/* Pop-up feedback coach — s'affiche UNIQUEMENT quand l'athlète ouvre la séance liée
             au feedback (dans son historique/calendrier). Le feedback lui-même reste dans la
             séance après acquittement pour consultation ultérieure. */}
@@ -16519,7 +16625,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         // hausses ET les stables, ou une chute de volume > 8 %. Évite l'alerte injustifiée sur
         // une séance globalement stable (1 baisse / 1 hausse / 3 stables) ou un -2 % de bruit.
         const isDeloadSession=!!_s?.deload;
-        const isRegression=!isDeloadSession&&((!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
+        // Reprise après décharge : la semaine dernière était en décharge, aujourd'hui c'est
+        // repartis sur les vrais poids. Messages de reprise dédiés + comparaison volume
+        // désactivée (les vrais poids d'aujourd'hui vs 60% de la semaine dernière fausseraient
+        // une "hausse spectaculaire" qui n'en est pas une, et alimenteraient une régression
+        // erronée à la séance d'après).
+        const _curSessTs=new Date(_s?.date||Date.now()).getTime();
+        const isPostDeloadSession=!isDeloadSession&&Array.isArray(history)&&history.some(h=>h&&h.deload&&h!==_s&&new Date(h.date||0).getTime()<_curSessTs&&(_curSessTs-new Date(h.date||0).getTime())<14*86400000);
+        const isRegression=!isDeloadSession&&!isPostDeloadSession&&((!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
           ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
         const regDown=_cmp?_cmp.downCount:0;
         // En semaine de décharge, la baisse est voulue : on affiche les écarts négatifs en BLEU
@@ -16538,13 +16651,19 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession})}</div>
             </div>
 
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
             {isDeloadSession&&(
               <div style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}}>
                 <DeloadRecapBanner/>
+              </div>
+            )}
+            {/* Reprise après décharge — bandeau d'accueil (comparaison de perf en pause) */}
+            {isPostDeloadSession&&(
+              <div style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}}>
+                <PostDeloadRecapBanner/>
               </div>
             )}
 
@@ -16689,7 +16808,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession)}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession)}"</div>
             </div>
 
             {/* Bouton continuer */}
