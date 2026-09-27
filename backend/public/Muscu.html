@@ -16096,38 +16096,71 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/session-library').then(lib=>setSessionLibrary(lib||{sessions:[],assignedAt:null})).catch(()=>{});
   },[]);
 
-  // ── Pop-up d'inactivité ─────────────────────────────────────────────────────────────────
-  // Après un certain nombre de jours sans séance, on accueille l'athlète avec un rappel
-  // bienveillant qui monte en intensité (7 → 14 → 21+ jours). Une fois acquitté, on n'y
-  // revient pas avant 3 jours (localStorage) pour ne pas être harcelant. Coach exclu (il voit
-  // les fiches de ses athlètes, pas la sienne).
-  const inactivityRef=React.useRef(false);
+  // ── Pop-up d'inactivité / régularité ─────────────────────────────────────────────────
+  // Deux pop-ups qui se déclenchent à l'ouverture de l'app selon l'activité récente :
+  //  · INACTIVITÉ : compté en JOURS OUVRÉS depuis la dernière séance (le week-end ne pénalise
+  //    pas, l'athlète est autorisé à récupérer normalement). 2j → tranquille, 3-4j → strict,
+  //    5j+ → rappel à l'ordre.
+  //  · RÉGULARITÉ : 4+ séances dans les 7 derniers jours → message drôle qui célèbre la
+  //    discipline. Anti-spam de 6 jours pour ne pas le voir tous les jours.
+  //  Anti-harcèlement : 3j entre 2 pop-ups d'inactivité. Coach exclu (il gère ses athlètes).
+  const activityCheckRef=React.useRef(false);
   React.useEffect(()=>{
-    if(inactivityRef.current)return;
+    if(activityCheckRef.current)return;
     if(!history)return;
     if(authUser?.role==='coach')return;
-    inactivityRef.current=true;
+    activityCheckRef.current=true;
     try{
+      // 1) Compter les JOURS OUVRÉS (Lun-Ven) entre la dernière séance et aujourd'hui —
+      //    plus juste que les jours calendaires : un athlète qui s'entraîne le vendredi et
+      //    revient le lundi n'est pas "3 jours inactif", il a fait son week-end.
+      const businessDaysBetween=(fromMs,toMs)=>{
+        if(!fromMs||toMs<=fromMs)return 0;
+        const day=86400000;let n=0;
+        // On commence au lendemain de la dernière séance, on avance jour par jour.
+        for(let t=fromMs+day;t<=toMs;t+=day){const d=new Date(t).getDay();if(d!==0&&d!==6)n++;}
+        return n;
+      };
       const last=history[0]?.date?new Date(history[0].date).getTime():null;
-      // Pas d'historique → on ne pique pas un nouvel athlète qui n'a pas encore commencé.
+      const firstName=authUser.firstName||'';
+
+      // 2) Streak de régularité — 4+ séances dans les 7 derniers jours calendaires.
+      const now=Date.now();
+      const weekAgo=now-7*86400000;
+      const recentCount=history.filter(h=>h&&h.date&&new Date(h.date).getTime()>=weekAgo).length;
+      const regularityKey='pa_regularity_ack_'+authUser.id;
+      const lastRegAck=parseInt(localStorage.getItem(regularityKey)||'0',10);
+      if(recentCount>=4&&(!lastRegAck||now-lastRegAck>=6*86400000)){
+        // Message drôle qui célèbre la régularité — le ton "encore toi 😏" du user.
+        const REG_MESSAGES=[
+          {title:'Encore toi 😏',body:`${recentCount} séances en 7 jours, ${firstName}. Tu n'as vraiment rien de mieux à faire que te construire un corps de rêve ? Continue comme ça — régularité + discipline = objectifs atteints. C'est là que ça se joue vraiment.`},
+          {title:'Bon, on ne peut plus t\'arrêter 🔥',body:`${recentCount} séances cette semaine. Tu es exactement là où il faut être. C'est cette régularité qui va payer dans 2 mois, dans 6 mois, dans un an. Ne casse rien, garde le rythme.`},
+          {title:'La discipline paye 💎',body:`${recentCount} séances en 7 jours, ${firstName}. Pendant que d'autres cherchent la motivation, toi tu appliques. C'est exactement comme ça qu'on atteint ses objectifs. Continue.`},
+        ];
+        const pick=REG_MESSAGES[Math.floor(now/86400000)%REG_MESSAGES.length];
+        setInactivityPopup({kind:'regularity',tone:'reg',title:pick.title,message:pick.body,count:recentCount});
+        return;
+      }
+
+      // 3) Inactivité — comptée en jours ouvrés depuis la dernière séance.
       if(!last)return;
-      const daysSince=Math.floor((Date.now()-last)/86400000);
-      if(daysSince<6)return;
-      // Anti-harcèlement : ne pas re-pop avant 3 jours après le dernier ack.
+      const bd=businessDaysBetween(last,now);
+      if(bd<2)return;
       const ackKey='pa_inactivity_ack_'+authUser.id;
       const lastAck=parseInt(localStorage.getItem(ackKey)||'0',10);
-      if(lastAck&&Date.now()-lastAck<3*86400000)return;
-      // Escalade selon le nombre de jours d'inactivité — ton bienveillant → un cran plus fort.
+      if(lastAck&&now-lastAck<3*86400000)return;
       let tone,title,message;
-      if(daysSince<10){tone='soft';title='Ça va faire un moment 👋';message=`Ça fait ${daysSince} jours sans séance, ${authUser.firstName||''}. Pas besoin d'y aller à 100 %, mais reprends contact — même une séance légère te remet dans le rythme.`;}
-      else if(daysSince<15){tone='mid';title='La régularité, c\'est ta meilleure alliée';message=`${daysSince} jours sans séance. Les progrès, ce n'est pas la performance d'un jour, c'est ce que tu fais quand tu n'as pas envie. Reviens aujourd'hui, tu ne le regretteras pas.`;}
-      else if(daysSince<22){tone='strong';title='C\'est là que ça se joue';message=`${daysSince} jours. Le corps oublie vite ce qu'on ne lui redemande pas — mais il retrouve tout encore plus vite quand on s'y remet. Rappelle-toi POURQUOI tu as commencé. Aujourd'hui, tu remets une séance.`;}
-      else {tone='reboot';title='On repart. Ensemble.';message=`Plus de 3 semaines sans t'entraîner. Ce n'est pas grave — ce qui compte, c'est ce que tu fais MAINTENANT. Ne pense pas à rattraper : pense juste à la prochaine séance. Une seule. Pour redémarrer la machine.`;}
-      setInactivityPopup({tone,title,message,daysSince});
-    }catch(e){console.error('inactivity check',e);}
+      if(bd<=2){tone='soft';title='Belle régularité 👋';message=`2 jours ouvrés sans séance, ${firstName} — c'est le rythme normal. Tu es régulier·ère, continue comme ça. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.`;}
+      else if(bd<=4){tone='mid';title='Il est temps de s\'y remettre 💪';message=`${bd} jours ouvrés sans séance. C'est le moment de reprendre — souviens-toi de tes objectifs. Chaque jour compte, et la régularité est ce qui te sépare de tes résultats. Aujourd'hui, tu remets une séance.`;}
+      else {tone='strong';title='Il faut se bouger, sérieusement.';message=`${bd} jours ouvrés sans séance, ${firstName}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque. Mais après, il faut y aller. Personne d'autre ne va aller chercher tes objectifs à ta place. On y va, aujourd'hui.`;}
+      setInactivityPopup({kind:'inactivity',tone,title,message,daysSince:bd});
+    }catch(e){console.error('activity check',e);}
   },[history,authUser]);
   const ackInactivity=()=>{
-    try{localStorage.setItem('pa_inactivity_ack_'+authUser.id,String(Date.now()));}catch{}
+    try{
+      const key=inactivityPopup?.kind==='regularity'?'pa_regularity_ack_':'pa_inactivity_ack_';
+      localStorage.setItem(key+authUser.id,String(Date.now()));
+    }catch{}
     setInactivityPopup(null);
   };
 
@@ -16483,27 +16516,31 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         willChange:'transform'}}>
         {/* Ombre swipe-back (bord gauche) */}
         {dragX>0&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:`linear-gradient(90deg,rgba(191,160,96,${Math.min(0.5,dragX/200)}),transparent)`,zIndex:100,pointerEvents:'none'}}/>}
-        {/* Pop-up d'inactivité — accueil bienveillant/motivant à l'ouverture de l'app quand
-            l'athlète n'a rien fait depuis ≥6 jours. Escalade selon la durée. Anti-harcèlement
-            de 3 jours après acquittement. */}
+        {/* Pop-up d'accueil à l'ouverture — deux modes :
+            · INACTIVITÉ (kind:'inactivity') : escalade selon les jours ouvrés sans séance.
+            · RÉGULARITÉ (kind:'regularity') : célébration quand ≥4 séances / 7 jours. */}
         {inactivityPopup&&(()=>{
-          const{tone,title,message,daysSince}=inactivityPopup;
-          const grad=tone==='soft'?['#5A8AE0','#2CC4A0']:tone==='mid'?['#BFA060','#E88A5A']:tone==='strong'?['#E88A5A','#B85070']:['#B85070','#7C5CD6'];
-          const iconBg=tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':tone==='strong'?'rgba(232,138,90,0.15)':'rgba(167,139,250,0.15)';
-          const iconBd=tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':tone==='strong'?'rgba(232,138,90,0.4)':'rgba(167,139,250,0.4)';
-          const iconCol=tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':tone==='strong'?'#F0A87A':'#C4B5FD';
+          const{kind,tone,title,message,daysSince,count}=inactivityPopup;
+          const isReg=kind==='regularity';
+          // Palettes par ton — reg (vert célébration), soft (bleu-vert), mid (doré), strong (rouge)
+          const grad=isReg?['#2CC4A0','#5A8AE0']:tone==='soft'?['#5A8AE0','#2CC4A0']:tone==='mid'?['#BFA060','#E88A5A']:['#E88A5A','#B85070'];
+          const iconBg=isReg?'rgba(44,196,160,0.15)':tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':'rgba(232,138,90,0.15)';
+          const iconBd=isReg?'rgba(44,196,160,0.4)':tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':'rgba(232,138,90,0.4)';
+          const iconCol=isReg?'#8FDCC0':tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':'#F0A87A';
+          const chip=isReg?`🔥 ${count} séances / 7 jours`:`💤 ${daysSince} jour${daysSince>1?'s':''} ouvré${daysSince>1?'s':''} sans séance`;
+          const cta=isReg?'Merci 🔥':tone==='soft'?'C\'est parti 💪':tone==='mid'?'Aujourd\'hui je m\'y remets':'Je reprends maintenant';
           return(
             <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
               <div onClick={ackInactivity} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
               <div style={{position:'relative',background:'linear-gradient(180deg,#161620,#0d0d14)',border:`1px solid ${iconBd}`,borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
                 <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
                 <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:iconBg,border:`1px solid ${iconBd}`,marginBottom:13}}>
-                  <span style={{fontSize:10,fontWeight:800,color:iconCol,letterSpacing:0.5,textTransform:'uppercase'}}>💤 {daysSince} jours sans séance</span>
+                  <span style={{fontSize:10,fontWeight:800,color:iconCol,letterSpacing:0.5,textTransform:'uppercase'}}>{chip}</span>
                 </div>
                 <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,marginBottom:12,color:'#fff',lineHeight:1.15}}>{title}</div>
                 <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',marginBottom:20,whiteSpace:'pre-wrap'}}>{message}</div>
-                <button onClick={ackInactivity} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>{tone==='soft'?'C\'est parti 💪':tone==='mid'?'Aujourd\'hui je m\'y remets':tone==='strong'?'Je reprends maintenant':'On repart 🚀'}</button>
-                <button onClick={ackInactivity} style={{width:'100%',marginTop:10,height:36,borderRadius:11,border:'none',background:'transparent',color:T.textFaint,fontSize:12,fontWeight:600,cursor:'pointer'}}>Plus tard</button>
+                <button onClick={ackInactivity} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>{cta}</button>
+                {!isReg&&<button onClick={ackInactivity} style={{width:'100%',marginTop:10,height:36,borderRadius:11,border:'none',background:'transparent',color:T.textFaint,fontSize:12,fontWeight:600,cursor:'pointer'}}>Plus tard</button>}
               </div>
             </div>
           );
