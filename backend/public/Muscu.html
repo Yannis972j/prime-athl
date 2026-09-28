@@ -4789,7 +4789,7 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
       {/* ── Fiche « Mes objectifs » — personnalise les pop-ups et les messages de récap ─────
          Les 4 champs sont optionnels : plus l'athlète en remplit, plus les messages deviennent
          perso. Rien de bloquant à l'inscription (peut être laissé vide, l'app reste utilisable). */}
-      {!profile.isMainCoach&&profile.role!=='coach'&&(
+      {(profile.role!=='coach'||profile.isMainCoach)&&(
         <>
           <SectionHeader title="Mes objectifs"/>
           <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,padding:14,marginBottom:14}}>
@@ -16244,7 +16244,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   React.useEffect(()=>{
     if(activityCheckRef.current)return;
     if(!history)return;
-    if(authUser?.role==='coach')return;
+    if(authUser?.role==='coach'&&!authUser?.isMainCoach)return;
     activityCheckRef.current=true;
     try{
       // 1) Compter les JOURS OUVRÉS (Lun-Ven) entre la dernière séance et aujourd'hui —
