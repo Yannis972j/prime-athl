@@ -4657,7 +4657,17 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const upd=(k,v)=>onChange({[k]:v});
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
   const initials=((profile.firstName||'')[0]||'')+((profile.lastName||'')[0]||'')||'PA';
-  const objectives=['Hypertrophie','Force','Perte de poids','Endurance'];
+  // Objectif principal — chips utilisées à la fois pour l'inscription rapide et par la
+  // personnalisation des messages (voir computeGoalsCtx / objectivePhrase).
+  const objectives=['Prise de masse','Perte de gras','Force pure','Retour en forme','Performance sport'];
+  // Style d'entraînement — sert au tirage du mindset (STYLE_MINDSET).
+  const styleChoices=[
+    {v:'hypertrophy',label:'Hypertrophie'},
+    {v:'powerlifting',label:'Powerlifting'},
+    {v:'wellness',label:'Bien-être'},
+    {v:'functional',label:'Fonctionnel'},
+    {v:'hybrid',label:'Hybride'},
+  ];
   const inp={width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid '+T.border,borderRadius:9,color:T.text,fontSize:13,fontWeight:500,padding:'7px 10px',fontFamily:'inherit',outline:'none',boxSizing:'border-box',minWidth:0};
 
   // ── Photo de profil : sélection → recadrage carré côté client → upload Cloudinary ──
@@ -4767,13 +4777,68 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
               <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>kg</span>
             </div>
           </div>
-          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif</div>
+          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif principal</div>
           <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
             {objectives.map(o=>(
               <button key={o} onClick={()=>upd('objective',o)} style={{flex:'1 1 auto',height:28,padding:'0 9px',borderRadius:7,border:profile.objective===o?'1px solid transparent':'1px solid '+T.border,background:profile.objective===o?T.accentSoft:'rgba(255,255,255,0.025)',color:profile.objective===o?T.accent:T.textDim,fontSize:10.5,fontWeight:profile.objective===o?700:500,cursor:'pointer',letterSpacing:0.2,whiteSpace:'nowrap'}}>{o}</button>
             ))}
           </div>
         </div>
+      )}
+
+      {/* ── Fiche « Mes objectifs » — personnalise les pop-ups et les messages de récap ─────
+         Les 4 champs sont optionnels : plus l'athlète en remplit, plus les messages deviennent
+         perso. Rien de bloquant à l'inscription (peut être laissé vide, l'app reste utilisable). */}
+      {!profile.isMainCoach&&profile.role!=='coach'&&(
+        <>
+          <SectionHeader title="Mes objectifs"/>
+          <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,padding:14,marginBottom:14}}>
+            <div style={{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}}>
+              Ces infos personnalisent les rappels, célébrations et mindset qui t'accompagnent.
+              Modifiables à tout moment.
+            </div>
+
+            {/* Motivation profonde — sera citée mot pour mot dans les rappels forts */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Ma motivation — pourquoi je m'entraîne ?</div>
+              <textarea value={profile.goalMotivation||''} onChange={e=>upd('goalMotivation',e.target.value.slice(0,300))} rows={3} placeholder="Ex : Retrouver un corps dont je suis fier avant l'été. Pour moi, pour ma santé, pour tenir le rythme avec mes enfants." style={{width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,color:T.text,fontSize:12.5,fontFamily:'inherit',padding:'9px 10px',lineHeight:1.45,resize:'vertical',outline:'none'}}/>
+              <div style={{fontSize:9.5,color:T.textFaint,marginTop:5,lineHeight:1.4}}>Cette phrase sera reprise mot pour mot dans les rappels forts (5j+ sans séance). Écris ce qui te fait vraiment bouger.</div>
+            </div>
+
+            {/* Échéance (optionnel) */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Échéance (optionnel)</div>
+              <input type="date" value={profile.goalDeadline||''} onChange={e=>upd('goalDeadline',e.target.value)} style={{width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9,color:T.text,fontSize:13,fontFamily:'inherit',padding:'9px 10px',outline:'none'}}/>
+              {(()=>{
+                const g=computeGoalsCtx(profile);
+                if(g&&g.deadlineWeeks!=null)return<div style={{fontSize:10,color:T.good,marginTop:5,fontWeight:600}}>⏳ Dans {g.deadlineWeeks} semaine{g.deadlineWeeks>1?'s':''}</div>;
+                return null;
+              })()}
+            </div>
+
+            {/* Fréquence cible — ajuste les seuils d'inactivité et de célébration */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Fréquence cible</div>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {[2,3,4,5,6].map(n=>(
+                  <button key={n} onClick={()=>upd('goalWeeklyTarget',profile.goalWeeklyTarget===n?0:n)} style={{flex:'1 1 auto',height:32,padding:'0 10px',borderRadius:8,border:profile.goalWeeklyTarget===n?'1px solid rgba(90,138,224,0.5)':'1px solid '+T.border,background:profile.goalWeeklyTarget===n?'rgba(90,138,224,0.12)':'rgba(255,255,255,0.025)',color:profile.goalWeeklyTarget===n?'#8FB4F5':T.textDim,fontSize:11.5,fontWeight:profile.goalWeeklyTarget===n?700:500,cursor:'pointer',whiteSpace:'nowrap'}}>{n}×/sem</button>
+                ))}
+              </div>
+              <div style={{fontSize:9.5,color:T.textFaint,marginTop:5,lineHeight:1.4}}>Ajuste automatiquement quand les rappels se déclenchent — vise 5×/sem, on te rappelle plus vite.</div>
+            </div>
+
+            {/* Style d'entraînement — détermine le pool de mindset */}
+            <div>
+              <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Style d'entraînement</div>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {styleChoices.map(s=>(
+                  <button key={s.v} onClick={()=>upd('goalStyle',profile.goalStyle===s.v?'':s.v)} style={{flex:'1 1 auto',height:32,padding:'0 10px',borderRadius:8,border:profile.goalStyle===s.v?'1px solid rgba(44,196,160,0.5)':'1px solid '+T.border,background:profile.goalStyle===s.v?'rgba(44,196,160,0.12)':'rgba(255,255,255,0.025)',color:profile.goalStyle===s.v?'#8FDCC0':T.textDim,fontSize:11.5,fontWeight:profile.goalStyle===s.v?700:500,cursor:'pointer',whiteSpace:'nowrap'}}>{s.label}</button>
+                ))}
+              </div>
+              <div style={{fontSize:9.5,color:T.textFaint,marginTop:5,lineHeight:1.4}}>Le style choisi détermine le ton des phrases de mindset affichées après tes séances.</div>
+            </div>
+          </div>
+        </>
       )}
 
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
@@ -4871,8 +4936,71 @@ const VOLUME_SAME_MESSAGES=[
   name=>`${name}, même charge totale qu'à ta dernière séance. Reste sur ce rythme !`,
 ];
 
+// ── Personnalisation par la fiche « Mes objectifs » ────────────────────────────────────
+// Normalise le profil user en un objet exploitable par les messages. Renvoie null si la fiche
+// n'est pas remplie du tout (aucun champ) — dans ce cas les messages restent génériques.
+function computeGoalsCtx(profile){
+  if(!profile)return null;
+  const objective=(profile.objective||'').trim().toLowerCase();
+  const motivation=(profile.goalMotivation||'').trim();
+  const style=(profile.goalStyle||'').trim().toLowerCase();
+  const weeklyTarget=Math.max(0,parseInt(profile.goalWeeklyTarget)||0);
+  let deadlineWeeks=null;
+  if(profile.goalDeadline&&/^\d{4}-\d{2}-\d{2}$/.test(profile.goalDeadline)){
+    const d=new Date(profile.goalDeadline+'T12:00:00').getTime();
+    if(!isNaN(d)&&d>Date.now())deadlineWeeks=Math.max(0,Math.round((d-Date.now())/(7*86400000)));
+  }
+  const has=!!(objective||motivation||style||weeklyTarget||deadlineWeeks!=null);
+  if(!has)return null;
+  return{objective,motivation,style,weeklyTarget,deadlineWeeks,hasProfile:true};
+}
+// « ta prise de masse », « ton retour en forme »… — utilisé en fin de phrase.
+function objectivePhrase(obj){
+  const map={'prise de masse':'ta prise de masse','perte de gras':'ta perte de gras','force pure':'ta force','retour en forme':'ton retour en forme','performance sport':'ta performance'};
+  return map[obj]||(obj?`ton objectif « ${obj} »`:'ton objectif');
+}
+// Pools de mindset SPÉCIFIQUES au style — 3 phrases par style. Sélection deterministe via seed.
+const STYLE_MINDSET={
+  hypertrophy:[
+    "L'hypertrophie ne pardonne pas les à-peu-près : ce sont les 2-3 dernières reps de chaque série, faites proprement, qui construisent le muscle. Chaque séance compte.",
+    "Le muscle ne se construit pas en salle — il se construit entre les séances, quand tu dors, quand tu manges. Ton job en salle, c'est de donner au corps la RAISON de grandir.",
+    "3 grammes de protéine par kilo, 7-8h de sommeil, et de la constance : voilà la vraie recette. Le reste c'est de la fioriture.",
+  ],
+  powerlifting:[
+    "La force ne demande pas de la motivation, elle demande de la RÉGULARITÉ. Chaque séance pose une brique.",
+    "Sur les gros mouvements, la technique passe avant la charge. Une répétition propre à 80 % vaut mieux que 3 sales à 90 %.",
+    "Le PR n'arrive jamais par hasard : il est le résultat de 6-8 semaines de séries lourdes bien exécutées. Sois patient·e, la force viendra.",
+  ],
+  wellness:[
+    "Le meilleur exercice, c'est celui que tu FAIS. Ne cherche pas la séance parfaite — cherche la séance de la semaine.",
+    "Ton corps ne compare pas ta perf d'aujourd'hui à celle d'hier : il note juste que tu as été là. La régularité est mille fois plus précieuse que l'intensité.",
+    "Bouger 30 minutes 3 fois par semaine, c'est déjà mieux que 90 % de ce que font les gens. Reste dans cette dynamique, c'est déjà énorme.",
+  ],
+  functional:[
+    "L'objectif du fonctionnel : que le corps réponde bien dans la vraie vie. Chaque séance améliore un peu plus ta capacité à faire ce qui te plaît, ailleurs.",
+    "Ce n'est pas la charge qui compte, c'est la QUALITÉ du mouvement. Un mouvement propre est un mouvement qu'on peut refaire des milliers de fois sans se blesser.",
+    "La mobilité, l'équilibre, le contrôle : ce sont les vraies fondations. Sers-t'en pour tenir 20-30 ans de plus qu'un athlète qui ne fait que soulever lourd.",
+  ],
+  hybrid:[
+    "L'hybride, c'est le meilleur des mondes — à condition de respecter les priorités du jour : force le jour de force, endurance le jour d'endurance. Pas de mélange bâclé.",
+    "Tu as un physique complet à construire — force, cardio, mobilité. Ne compare pas ta séance à celle d'un pur bodybuilder ou d'un pur runner : tu joues à un autre jeu.",
+    "L'équilibre demande plus de discipline qu'une spécialisation. Bravo d'avoir choisi cette voie — sur le long terme, elle paye plus qu'une seule qualité poussée à l'extrême.",
+  ],
+};
+// Suffixe personnalisé injecté à la fin des messages de récap quand la fiche est remplie —
+// une phrase courte qui rappelle où on va sans alourdir le message principal.
+function personalizedSuffix(goals,seed){
+  if(!goals||!goals.hasProfile)return '';
+  const bits=[];
+  if(goals.objective){bits.push(`Rappelle-toi : ${objectivePhrase(goals.objective)} se construit une séance à la fois.`);}
+  if(goals.deadlineWeeks!=null&&goals.deadlineWeeks<=52){bits.push(`Plus que ${goals.deadlineWeeks} semaine${goals.deadlineWeeks>1?'s':''} avant ton échéance — chaque séance compte double.`);}
+  if(!bits.length)return '';
+  const idx=seed!=null?hashStr(seed+'|suffix')%bits.length:Math.floor(Math.random()*bits.length);
+  return ' '+bits[idx];
+}
+
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null}=opts||{};
   const sn=sessionName||'séance';
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
@@ -4979,12 +5107,20 @@ const MOTIVATION_FIRST=[
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : mindset dédié, jamais un message de recul/pique.
   if(isDeload)return pick(DELOAD_MINDSET);
   if(isPostDeload)return pick(POST_DELOAD_MINDSET);
+  // Fiche « Mes objectifs » remplie avec un style → on tire dans le pool spécifique à ce
+  // style (hypertrophie/powerlifting/bien-être/fonctionnel/hybride) ~2 fois sur 3 pour garder
+  // un peu de variation, sinon on tombe sur les pools génériques ci-dessous.
+  if(goals&&goals.hasProfile&&goals.style&&STYLE_MINDSET[goals.style]){
+    // Le 3e cas des mindsets génériques garde sa place pour rester surprenant.
+    const roll=seed!=null?hashStr(seed+'|mind-roll')%3:Math.floor(Math.random()*3);
+    if(roll<2)return pick(STYLE_MINDSET[goals.style]);
+  }
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) → ton sérieux prioritaire, sans humour.
   if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)return pick(MOTIVATION_HARD);
   if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
@@ -5943,7 +6079,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload)}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile))}"</div>
                   </div>
                 </div>
               )}
@@ -16123,37 +16259,61 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       };
       const last=history[0]?.date?new Date(history[0].date).getTime():null;
       const firstName=authUser.firstName||'';
+      // Fiche « Mes objectifs » → personnalise les messages avec objectif/motivation/échéance.
+      const goals=computeGoalsCtx(authUser);
+      const objPhrase=goals?.objective?objectivePhrase(goals.objective):'tes objectifs';
+      const deadlineTail=goals&&goals.deadlineWeeks!=null&&goals.deadlineWeeks<=52
+        ?` Plus que ${goals.deadlineWeeks} semaine${goals.deadlineWeeks>1?'s':''} avant ton échéance.`:'';
 
-      // 2) Streak de régularité — 4+ séances dans les 7 derniers jours calendaires.
+      // 2) Streak de régularité — seuil dynamique : la fiche « fréquence cible » ajuste. Un athlète
+      //    qui vise 4×/sem célèbre à 4, un qui vise 2×/sem célèbre dès 3.
       const now=Date.now();
       const weekAgo=now-7*86400000;
       const recentCount=history.filter(h=>h&&h.date&&new Date(h.date).getTime()>=weekAgo).length;
+      const regThreshold=goals&&goals.weeklyTarget?Math.max(3,goals.weeklyTarget):4;
       const regularityKey='pa_regularity_ack_'+authUser.id;
       const lastRegAck=parseInt(localStorage.getItem(regularityKey)||'0',10);
-      if(recentCount>=4&&(!lastRegAck||now-lastRegAck>=6*86400000)){
-        // Message drôle qui célèbre la régularité — le ton "encore toi 😏" du user.
+      if(recentCount>=regThreshold&&(!lastRegAck||now-lastRegAck>=6*86400000)){
+        const targetTail=goals&&goals.weeklyTarget?` — pile ton objectif de ${goals.weeklyTarget}×/semaine tenu`:'';
+        const objTail=goals?.objective?` C'est exactement cette régularité qui t'amène vers ${objPhrase}.${deadlineTail}`:'';
         const REG_MESSAGES=[
-          {title:'Encore toi 😏',body:`${recentCount} séances en 7 jours, ${firstName}. Tu n'as vraiment rien de mieux à faire que te construire un corps de rêve ? Continue comme ça — régularité + discipline = objectifs atteints. C'est là que ça se joue vraiment.`},
-          {title:'Bon, on ne peut plus t\'arrêter 🔥',body:`${recentCount} séances cette semaine. Tu es exactement là où il faut être. C'est cette régularité qui va payer dans 2 mois, dans 6 mois, dans un an. Ne casse rien, garde le rythme.`},
-          {title:'La discipline paye 💎',body:`${recentCount} séances en 7 jours, ${firstName}. Pendant que d'autres cherchent la motivation, toi tu appliques. C'est exactement comme ça qu'on atteint ses objectifs. Continue.`},
+          {title:'Encore toi 😏',body:`${recentCount} séances en 7 jours, ${firstName}${targetTail}. Tu n'as vraiment rien de mieux à faire que te construire un corps de rêve ?${objTail} Continue comme ça — régularité + discipline = objectifs atteints.`},
+          {title:'Bon, on ne peut plus t\'arrêter 🔥',body:`${recentCount} séances cette semaine${targetTail}. Tu es exactement là où il faut être.${objTail||' Cette régularité va payer dans 2 mois, dans 6 mois, dans un an.'} Ne casse rien, garde le rythme.`},
+          {title:'La discipline paye 💎',body:`${recentCount} séances en 7 jours, ${firstName}. Pendant que d'autres cherchent la motivation, toi tu appliques.${objTail||' C\'est exactement comme ça qu\'on atteint ses objectifs.'} Continue.`},
         ];
         const pick=REG_MESSAGES[Math.floor(now/86400000)%REG_MESSAGES.length];
-        setInactivityPopup({kind:'regularity',tone:'reg',title:pick.title,message:pick.body,count:recentCount});
+        setInactivityPopup({kind:'regularity',tone:'reg',title:pick.title,message:pick.body,count:recentCount,goals});
         return;
       }
 
-      // 3) Inactivité — comptée en jours ouvrés depuis la dernière séance.
+      // 3) Inactivité — jours ouvrés depuis la dernière séance. Le seuil "soft" et le seuil
+      //    "strong" s'ajustent à la fréquence cible : un athlète 5×/sem est piqué plus vite,
+      //    un qui vise 2×/sem a plus de tolérance.
       if(!last)return;
       const bd=businessDaysBetween(last,now);
-      if(bd<2)return;
+      // Plancher à 2 jours minimum même à haute fréquence — jamais avant.
+      const softMin=goals&&goals.weeklyTarget>=5?2:goals&&goals.weeklyTarget<=2?3:2;
+      if(bd<softMin)return;
       const ackKey='pa_inactivity_ack_'+authUser.id;
       const lastAck=parseInt(localStorage.getItem(ackKey)||'0',10);
       if(lastAck&&now-lastAck<3*86400000)return;
+      // Bornes du ton : plus l'athlète vise haut, plus vite on passe au ton strict.
+      const midMax=goals&&goals.weeklyTarget>=5?3:goals&&goals.weeklyTarget<=2?5:4;
       let tone,title,message;
-      if(bd<=2){tone='soft';title='Belle régularité 👋';message=`2 jours ouvrés sans séance, ${firstName} — c'est le rythme normal. Tu es régulier·ère, continue comme ça. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.`;}
-      else if(bd<=4){tone='mid';title='Il est temps de s\'y remettre 💪';message=`${bd} jours ouvrés sans séance. C'est le moment de reprendre — souviens-toi de tes objectifs. Chaque jour compte, et la régularité est ce qui te sépare de tes résultats. Aujourd'hui, tu remets une séance.`;}
-      else {tone='strong';title='Il faut se bouger, sérieusement.';message=`${bd} jours ouvrés sans séance, ${firstName}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque. Mais après, il faut y aller. Personne d'autre ne va aller chercher tes objectifs à ta place. On y va, aujourd'hui.`;}
-      setInactivityPopup({kind:'inactivity',tone,title,message,daysSince:bd});
+      const motivQuote=goals?.motivation?`\n\n"${goals.motivation}"\n\nRappelle-toi ces mots — ils sont de toi. `:'';
+      if(bd<=2){
+        tone='soft';title='Belle régularité 👋';
+        message=`${bd} jours ouvrés sans séance, ${firstName} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
+      } else if(bd<=midMax){
+        tone='mid';title='Il est temps de s\'y remettre 💪';
+        const midObj=goals?.objective?` Souviens-toi : ${objPhrase} se construit une séance à la fois.`:' Souviens-toi de tes objectifs.';
+        message=`${bd} jours ouvrés sans séance. C'est le moment de reprendre.${midObj}${deadlineTail} Aujourd'hui, tu remets une séance.`;
+      } else {
+        tone='strong';title='Il faut se bouger, sérieusement.';
+        const strongTail=goals?.objective?` Ton objectif ne s'atteint pas tout seul — c'est TOI qui le construis, séance après séance.`:` Personne d'autre ne va aller chercher tes objectifs à ta place.`;
+        message=`${bd} jours ouvrés sans séance, ${firstName}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque.${motivQuote}${strongTail}${deadlineTail} On y va, aujourd'hui.`;
+      }
+      setInactivityPopup({kind:'inactivity',tone,title,message,daysSince:bd,goals});
     }catch(e){console.error('activity check',e);}
   },[history,authUser]);
   const ackInactivity=()=>{
@@ -16845,7 +17005,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession)}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession,computeGoalsCtx(profile))}"</div>
             </div>
 
             {/* Bouton continuer */}

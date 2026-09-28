@@ -549,6 +549,12 @@ const profileOf = u => u && {
   id: u.id, email: u.email, role: u.role, coachId: u.coachId,
   firstName: u.firstName || '', lastName: u.lastName || '',
   height: u.height || '', weight: u.weight || '', objective: u.objective || '',
+  // Fiche « Mes objectifs » — sert à personnaliser les pop-ups d'inactivité/régularité + les
+  // messages de récap (mindset, congrats). Tous optionnels, sans blocage à l'inscription.
+  goalMotivation: u.goalMotivation || '',
+  goalDeadline: u.goalDeadline || '',     // 'YYYY-MM-DD' (échéance auto-calculée en semaines côté client)
+  goalWeeklyTarget: u.goalWeeklyTarget || 0, // 2..6 séances/semaine (0 = non défini)
+  goalStyle: u.goalStyle || '',           // hypertrophy|powerlifting|wellness|functional|hybrid
   prSquat: u.prSquat || '', prBench: u.prBench || '', prDeadlift: u.prDeadlift || '',
   avatarUrl: u.avatarUrl || '',
   createdAt: u.createdAt,
@@ -1173,6 +1179,23 @@ app.patch('/api/me', authRequired, (req, res) => {
       const v = parseFloat(req.body[k]);
       if (!isNaN(v)) u[k] = Math.max(min, Math.min(max, v));
     }
+  }
+  // Fiche « Mes objectifs » — écriture des 4 nouveaux champs, tous optionnels et validés.
+  if (req.body.goalMotivation !== undefined) u.goalMotivation = String(req.body.goalMotivation).slice(0, 300);
+  if (req.body.goalDeadline !== undefined) {
+    const d = String(req.body.goalDeadline || '').slice(0, 10);
+    if (!d || /^\d{4}-\d{2}-\d{2}$/.test(d)) u.goalDeadline = d;
+    else return res.status(400).json({ error: 'invalid_deadline' });
+  }
+  if (req.body.goalWeeklyTarget !== undefined) {
+    const n = parseInt(req.body.goalWeeklyTarget, 10);
+    u.goalWeeklyTarget = isNaN(n) ? 0 : Math.max(0, Math.min(7, n));
+  }
+  if (req.body.goalStyle !== undefined) {
+    const ok = ['','hypertrophy','powerlifting','wellness','functional','hybrid'];
+    const v = String(req.body.goalStyle || '').toLowerCase().slice(0, 20);
+    if (ok.includes(v)) u.goalStyle = v;
+    else return res.status(400).json({ error: 'invalid_style' });
   }
   if (req.body.avatarUrl !== undefined) {
     const v = String(req.body.avatarUrl || '').trim();
