@@ -40,8 +40,9 @@ export async function startServer(extraEnv = {}) {
 
   const baseUrl = `http://127.0.0.1:${port}`;
 
-  // Attend que le serveur réponde (max ~10s)
-  const deadline = Date.now() + 10_000;
+  // Attend que le serveur réponde (max ~30s) — marge large pour les runners CI chargés, où un
+  // démarrage lent provoquait un "fetch failed" intermittent (test instable, pas un vrai échec).
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`Le serveur s'est arrêté (code ${child.exitCode}).\nstderr:\n${stderr}`);
