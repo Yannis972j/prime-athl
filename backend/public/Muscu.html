@@ -4653,6 +4653,68 @@ function SubscriptionCard({profile,onShowPricing}){
   );
 }
 
+// ── Helpers « Mon Profil Coaching » ─────────────────────────────────────────────
+// Rangée de chips multi-sélection : value = array de strings, onToggle(next array).
+function CoachChips({options,value,onToggle,accent='#BFA060'}){
+  const sel=Array.isArray(value)?value:[];
+  return(
+    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+      {options.map(o=>{
+        const on=sel.includes(o);
+        return(
+          <button key={o} onClick={()=>onToggle(on?sel.filter(x=>x!==o):[...sel,o])}
+            style={{padding:'6px 11px',borderRadius:8,border:on?`1px solid ${accent}`:'1px solid '+T.border,
+              background:on?accent+'22':'rgba(255,255,255,0.025)',color:on?accent:T.textDim,
+              fontSize:11.5,fontWeight:on?700:500,cursor:'pointer',whiteSpace:'nowrap'}}>{o}</button>
+        );
+      })}
+    </div>
+  );
+}
+// Chip radio (une seule valeur) : value string, onPick(value).
+function CoachRadio({options,value,onPick,accent='#5A8AE0'}){
+  return(
+    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+      {options.map(o=>{
+        const on=value===o;
+        return(
+          <button key={o} onClick={()=>onPick(on?'':o)}
+            style={{padding:'6px 11px',borderRadius:8,border:on?`1px solid ${accent}`:'1px solid '+T.border,
+              background:on?accent+'22':'rgba(255,255,255,0.025)',color:on?accent:T.textDim,
+              fontSize:11.5,fontWeight:on?700:500,cursor:'pointer',whiteSpace:'nowrap'}}>{o}</button>
+        );
+      })}
+    </div>
+  );
+}
+// Échelle 1..max (0 = non défini). value nombre|null, onPick(n).
+function CoachScale({value,onPick,max=5,accent='#B85070'}){
+  return(
+    <div style={{display:'flex',gap:5}}>
+      {Array.from({length:max},(_,i)=>i+1).map(n=>{
+        const on=value===n;
+        return(
+          <button key={n} onClick={()=>onPick(on?null:n)}
+            style={{flex:1,height:34,borderRadius:8,border:on?`1px solid ${accent}`:'1px solid '+T.border,
+              background:on?accent+'22':'rgba(255,255,255,0.025)',color:on?accent:T.textDim,
+              fontSize:13,fontWeight:on?800:600,cursor:'pointer'}}>{n}</button>
+        );
+      })}
+    </div>
+  );
+}
+// Petit label de champ.
+function CoachLabel({children}){
+  return<div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>{children}</div>;
+}
+// Champ texte libre compact (input ou textarea).
+function CoachText({value,onChange,placeholder,rows,max=200}){
+  const st={width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',
+    borderRadius:9,color:T.text,fontSize:12.5,fontFamily:'inherit',padding:'9px 10px',lineHeight:1.45,outline:'none'};
+  if(rows)return<textarea value={value||''} onChange={e=>onChange(e.target.value.slice(0,max))} rows={rows} placeholder={placeholder} style={{...st,resize:'vertical'}}/>;
+  return<input value={value||''} onChange={e=>onChange(e.target.value.slice(0,max))} placeholder={placeholder} style={st}/>;
+}
+
 function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const upd=(k,v)=>onChange({[k]:v});
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
@@ -4841,6 +4903,151 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
         </>
       )}
 
+      {/* ── Fiche « Mon Profil Coaching » — version synthétique ───────────────────────
+         But : cerner la personnalité, l'humour et les leviers de l'élève pour que les
+         messages/pop-ups semblent écrits par un coach qui le connaît vraiment. Tout est
+         optionnel ; les réponses alimentent le moteur de personnalisation (computeCoachCtx). */}
+      {(profile.role!=='coach'||profile.isMainCoach)&&(
+        <>
+          <SectionHeader title="Mon profil coaching"/>
+          <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,padding:14,marginBottom:14}}>
+            <div style={{fontSize:11,color:T.textDim,marginBottom:16,lineHeight:1.5}}>
+              Ces réponses permettent à ton coach (et à l'app) de te parler comme il faut : ton humour,
+              ta façon de réagir, ce qui te pique. Plus tu en dis, plus les messages te ressemblent. Tout est facultatif.
+            </div>
+
+            {/* 1 · Personnalité */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Comment tu te décrirais ?</CoachLabel>
+              <CoachChips accent="#BFA060" value={profile.cpPersonality}
+                options={['Ambitieux','Compétiteur','Discipliné','Perfectionniste','Chill','Travailleur','Têtu','Joueur','Déconneur','Sérieux','Impulsif','Régulier','Procrastinateur','Très motivé','Motivation variable']}
+                onToggle={v=>upd('cpPersonality',v)}/>
+            </div>
+
+            {/* 2 · Style de coach + taquineries */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Quel coach te fait le plus avancer ?</CoachLabel>
+              <CoachChips accent="#5A8AE0" value={profile.cpCoachStyle}
+                options={['Qui me pousse','Qui me challenge','Qui me félicite','Qui me taquine','Qui met la pression','Qui explique','Qui reste calme']}
+                onToggle={v=>upd('cpCoachStyle',v)}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Jusqu'où ton coach peut te chambrer ? (1 = jamais · 5 = à fond)</CoachLabel>
+              <CoachScale accent="#B85070" value={profile.cpBanterLevel} onPick={n=>upd('cpBanterLevel',n)}/>
+            </div>
+
+            {/* 3 · Humour */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Quel humour te fait rire ?</CoachLabel>
+              <CoachChips accent="#2CC4A0" value={profile.cpHumor}
+                options={['Autodérision','Taquinerie','Ironie','Absurde','Sportif','Trash léger','Memes','Références pop','Second degré','Très simple']}
+                onToggle={v=>upd('cpHumor',v)}/>
+              <div style={{marginTop:8}}>
+                <CoachText value={profile.cpFunnyPhrase} onChange={v=>upd('cpFunnyPhrase',v)} max={300} rows={2}
+                  placeholder="Une phrase ou expression que tu utilises souvent, qui te fait rire…"/>
+              </div>
+            </div>
+
+            {/* 4 · Ce qui te pique */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Qu'est-ce qui te donne envie de te dépasser ?</CoachLabel>
+              <CoachChips accent="#E0A84E" value={profile.cpDrives}
+                options={['Battre quelqu\'un','Battre mon record','Ne pas abandonner','Prouver quelque chose','Être fier de moi','Voir mon physique changer','Les compliments','Être challengé']}
+                onToggle={v=>upd('cpDrives',v)}/>
+              <div style={{marginTop:8}}>
+                <CoachText value={profile.cpPressurePhrase} onChange={v=>upd('cpPressurePhrase',v)} max={300} rows={2}
+                  placeholder="Une phrase qui pourrait te piquer / te mettre un coup de pression pour aller t'entraîner…"/>
+              </div>
+            </div>
+
+            {/* 5 · Ce qu'il ne faut PAS faire (limites) */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Comment tu ne veux PAS qu'on te parle ? (limites)</CoachLabel>
+              <CoachChips accent="#B85070" value={profile.cpDontDo}
+                options={['Trop agressif','Trop gentil','Trop sérieux','Trop familier','Trop de messages','Culpabilisant','Me comparer aux autres','Commenter mon physique']}
+                onToggle={v=>upd('cpDontDo',v)}/>
+              <div style={{marginTop:8}}>
+                <CoachText value={profile.cpAvoidTopics} onChange={v=>upd('cpAvoidTopics',v)} max={300} rows={2}
+                  placeholder="Sujets ou blagues à éviter absolument…"/>
+              </div>
+            </div>
+
+            {/* 6 · Leviers de motivation — note 1 à 5 les plus importants */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Tes leviers de motivation — note ceux qui comptent (1 à 5)</CoachLabel>
+              <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                {['Discipline','Fierté','Compétition','Défi','Progression','Reconnaissance','Esthétique','Dépassement de soi','Peur de régresser','Plaisir'].map(lev=>{
+                  const levers=profile.cpLevers||{};
+                  const cur=levers[lev]||0;
+                  return(
+                    <div key={lev} style={{display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{flex:'0 0 120px',fontSize:11.5,color:cur?T.text:T.textDim,fontWeight:cur?600:500}}>{lev}</div>
+                      <div style={{display:'flex',gap:3,flex:1}}>
+                        {[1,2,3,4,5].map(n=>(
+                          <button key={n} onClick={()=>upd('cpLevers',{...levers,[lev]:cur===n?0:n})}
+                            style={{flex:1,height:26,borderRadius:6,border:'none',cursor:'pointer',
+                              background:n<=cur?'#8B5CF6':'rgba(255,255,255,0.06)',opacity:n<=cur?1:0.6}}/>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 7 · Relation + ton */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Quelle relation avec ton coach ?</CoachLabel>
+              <CoachRadio accent="#5A8AE0" value={profile.cpRelation}
+                options={['Strict','Proche','Mentor','Partenaire de perf','Grand frère / sœur','Très pro','Beaucoup d\'humour']}
+                onPick={v=>upd('cpRelation',v)}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Ton coach te parle comme…</CoachLabel>
+              <CoachRadio accent="#2CC4A0" value={profile.cpTonePreference}
+                options={['Un pro','Un ami','Un coéquipier','Quelqu\'un qui te challenge','Un mélange']}
+                onPick={v=>upd('cpTonePreference',v)}/>
+            </div>
+
+            {/* 8 · Munitions inside joke */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Donne à ton coach quelques munitions 😈</CoachLabel>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <CoachText value={profile.cpNickname} onChange={v=>upd('cpNickname',v)} max={60} placeholder="Ton surnom"/>
+                <CoachText value={profile.cpCatchphrase} onChange={v=>upd('cpCatchphrase',v)} max={200} placeholder="Ton expression fétiche"/>
+                <CoachText value={profile.cpFavExercise} onChange={v=>upd('cpFavExercise',v)} max={80} placeholder="Exercice préféré"/>
+                <CoachText value={profile.cpHatedExercise} onChange={v=>upd('cpHatedExercise',v)} max={80} placeholder="Exercice détesté"/>
+              </div>
+              <div style={{marginTop:8}}>
+                <CoachText value={profile.cpTeaseMe} onChange={v=>upd('cpTeaseMe',v)} max={300} rows={2}
+                  placeholder="Un truc sur lequel ton coach peut te taquiner (une manie, une petite faiblesse…)"/>
+              </div>
+            </div>
+
+            {/* 9 · Réactions */}
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Quand tu rates une séance, ce qui t'aide :</CoachLabel>
+              <CoachRadio accent="#E0A84E" value={profile.cpMissedReaction}
+                options={['Me remettre au travail','Relativiser','Me challenger','Rappeler mon objectif','Me laisser puis relancer']}
+                onPick={v=>upd('cpMissedReaction',v)}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <CoachLabel>Quand tu réussis, tu préfères :</CoachLabel>
+              <CoachRadio accent="#2CC4A0" value={profile.cpSuccessReaction}
+                options={['Une grosse félicitation','Un message simple','Une petite vanne','Une statistique','Un nouveau défi']}
+                onPick={v=>upd('cpSuccessReaction',v)}/>
+            </div>
+
+            {/* 10 · Ce qui casse ta motivation */}
+            <div>
+              <CoachLabel>Qu'est-ce qui te fait perdre ta motivation ?</CoachLabel>
+              <CoachText value={profile.cpMotivationKiller} onChange={v=>upd('cpMotivationKiller',v)} max={200} rows={2}
+                placeholder="Ex : quand je stagne, quand je manque de sommeil, quand je m'entraîne seul…"/>
+            </div>
+          </div>
+        </>
+      )}
+
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
 
       <SubscriptionCard profile={profile} onShowPricing={onShowPricing}/>
@@ -4953,6 +5160,94 @@ function computeGoalsCtx(profile){
   const has=!!(objective||motivation||style||weeklyTarget||deadlineWeeks!=null);
   if(!has)return null;
   return{objective,motivation,style,weeklyTarget,deadlineWeeks,hasProfile:true};
+}
+
+// ── Moteur « Mon Profil Coaching » ──────────────────────────────────────────────────────
+// Normalise les champs de la fiche coaching en un contexte exploitable + calcule MESSAGE_INTENSITY
+// (1..5) et les LIMITES (ce que le coach ne doit jamais faire). Renvoie null si rien n'est rempli.
+function computeCoachCtx(profile){
+  if(!profile)return null;
+  const arr=v=>Array.isArray(v)?v:[];
+  const personality=arr(profile.cpPersonality);
+  const coachStyle=arr(profile.cpCoachStyle);
+  const humor=arr(profile.cpHumor);
+  const drives=arr(profile.cpDrives);
+  const dontDo=arr(profile.cpDontDo);
+  const banter=profile.cpBanterLevel==null?null:Math.max(0,Math.min(5,parseInt(profile.cpBanterLevel)||0));
+  const levers=profile.cpLevers&&typeof profile.cpLevers==='object'?profile.cpLevers:{};
+  // Top leviers = ceux avec le score le plus élevé (l'IA les priorise).
+  const topLevers=Object.entries(levers).filter(([,v])=>v>=1).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+  const nickname=(profile.cpNickname||'').trim();
+  const catchphrase=(profile.cpCatchphrase||'').trim();
+  const funnyPhrase=(profile.cpFunnyPhrase||'').trim();
+  const pressurePhrase=(profile.cpPressurePhrase||'').trim();
+  const teaseMe=(profile.cpTeaseMe||'').trim();
+  const favExercise=(profile.cpFavExercise||'').trim();
+  const hatedExercise=(profile.cpHatedExercise||'').trim();
+  const motivationKiller=(profile.cpMotivationKiller||'').trim();
+  const missedReaction=(profile.cpMissedReaction||'').trim();
+  const successReaction=(profile.cpSuccessReaction||'').trim();
+  const relation=(profile.cpRelation||'').trim();
+  const tone=(profile.cpTonePreference||'').trim();
+
+  const has=personality.length||coachStyle.length||humor.length||drives.length||dontDo.length||
+    banter!=null||topLevers.length||nickname||catchphrase||funnyPhrase||pressurePhrase||teaseMe||
+    favExercise||hatedExercise||motivationKiller||missedReaction||successReaction||relation||tone;
+  if(!has)return null;
+
+  // Limites déduites (jamais violées par les générateurs).
+  const noHumor=dontDo.includes('Trop familier')&&(banter!=null&&banter<=1);
+  const humorOk=(banter==null?humor.length>0:banter>=2)&&!dontDo.includes('Trop familier');
+  const noGuilt=dontDo.includes('Culpabilisant');
+  const noBodyComment=dontDo.includes('Commenter mon physique');
+  const noCompare=dontDo.includes('Me comparer aux autres');
+  const wantsSoft=dontDo.includes('Trop agressif')||dontDo.includes('Trop de messages');
+
+  // MESSAGE_INTENSITY 1..5 — 1 doux, 3 challenge, 5 très direct/compétition.
+  let intensity=3;
+  if(banter!=null)intensity=Math.max(1,Math.min(5,banter));
+  if(coachStyle.includes('Qui met la pression')||coachStyle.includes('Qui me challenge'))intensity=Math.min(5,intensity+1);
+  if(coachStyle.includes('Qui me félicite')||coachStyle.includes('Qui reste calme'))intensity=Math.max(1,intensity-1);
+  if(personality.includes('Compétiteur')||personality.includes('Très motivé'))intensity=Math.min(5,intensity+1);
+  if(wantsSoft)intensity=Math.max(1,intensity-1);
+
+  return{
+    personality,coachStyle,humor,drives,dontDo,banter,levers,topLevers,
+    nickname,catchphrase,funnyPhrase,pressurePhrase,teaseMe,favExercise,hatedExercise,
+    motivationKiller,missedReaction,successReaction,relation,tone,
+    humorOk,noHumor,noGuilt,noBodyComment,noCompare,wantsSoft,
+    intensity,hasProfile:true,
+  };
+}
+// Comment nommer l'élève : surnom si donné, sinon prénom.
+function coachName(coachCtx,firstName){
+  return (coachCtx&&coachCtx.nickname)||firstName||'champion';
+}
+// Message de motivation AVANT la séance — croise profil coaching + objectifs + contexte.
+// Renvoie {title,message,tone} ou null (jamais de message vide/générique forcé si peu d'infos).
+function coachPreSessionMessage(coach,goals,firstName,seed){
+  const who=coachName(coach,firstName);
+  const s=Math.abs(parseInt(String(seed).replace(/\D/g,'').slice(-6))||Date.now())%1000;
+  const pick=arr=>arr[s%arr.length];
+  const objPhrase=goals?.objective?objectivePhrase(goals.objective):null;
+  const intensity=coach?coach.intensity:3;
+  const humorOk=coach?coach.humorOk:false;
+  // Pools par intensité (1-2 doux, 3 challenge, 4-5 direct/provoc). L'humour n'est ajouté que si autorisé.
+  const soft=[
+    {title:'On y va tranquille 🙂',message:`Pas besoin de chercher la motivation aujourd'hui, ${who} — on cherche juste à être là. Une série après l'autre.`},
+    {title:'Présent, c\'est déjà gagné',message:`Le plus dur c'est de commencer, ${who}. T'y es. Le reste, ton corps sait faire.${objPhrase?` Chaque séance construit ${objPhrase}.`:''}`},
+  ];
+  const mid=[
+    {title:'Aujourd\'hui, la discipline',message:`On ne cherche pas la motivation, ${who}. On cherche la discipline. Elle, elle est là tous les jours.`},
+    {title:'Une séance = une brique',message:`${objPhrase?`${objPhrase[0].toUpperCase()+objPhrase.slice(1)} se construit maintenant.`:'Ton objectif se construit maintenant.'} Poser une brique aujourd'hui, ${who}. C'est tout ce qu'on te demande.`},
+  ];
+  const hard=[
+    {title:'Alors, on négocie ? 😏',message:`${humorOk?`Alors ${who}, on se retrouve à la salle ou tu comptes négocier avec tes haltères ? 😏`:`${who}, aujourd'hui on ne négocie pas. On exécute.`}`},
+    {title:'Ton banc t\'attend',message:`${coach&&coach.favExercise?`Ton ${coach.favExercise} t'attend`:'Ta séance t\'attend'}, ${who}. Et lui, il ne croit pas aux excuses.`},
+  ];
+  const pool=intensity<=2?soft:intensity===3?mid:hard;
+  const chosen=pick(pool);
+  return{title:chosen.title,message:chosen.message,tone:intensity<=2?'soft':intensity===3?'mid':'strong'};
 }
 // « ta prise de masse », « ton retour en forme »… — utilisé en fin de phrase.
 function objectivePhrase(obj){
@@ -16145,6 +16440,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Pop-up d'inactivité : si l'athlète n'a rien fait depuis un moment, on l'accueille au
   // prochain ouvert d'app avec un rappel bienveillant → escalade selon le nombre de jours.
   const[inactivityPopup,setInactivityPopup]=React.useState(null);
+  // Pop-up de motivation AFFICHÉ au moment de démarrer une séance (si pas de feedback coach à montrer).
+  const[preSessionPopup,setPreSessionPopup]=React.useState(null);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -16261,6 +16558,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const firstName=authUser.firstName||'';
       // Fiche « Mes objectifs » → personnalise les messages avec objectif/motivation/échéance.
       const goals=computeGoalsCtx(authUser);
+      // Fiche « Mon Profil Coaching » → surnom, ton (intensité) et LIMITES à respecter.
+      const coach=computeCoachCtx(authUser);
+      const who=coachName(coach,firstName);
       const objPhrase=goals?.objective?objectivePhrase(goals.objective):'tes objectifs';
       const deadlineTail=goals&&goals.deadlineWeeks!=null&&goals.deadlineWeeks<=52
         ?` Plus que ${goals.deadlineWeeks} semaine${goals.deadlineWeeks>1?'s':''} avant ton échéance.`:'';
@@ -16277,11 +16577,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         const targetTail=goals&&goals.weeklyTarget?` — pile ton objectif de ${goals.weeklyTarget}×/semaine tenu`:'';
         const objTail=goals?.objective?` C'est exactement cette régularité qui t'amène vers ${objPhrase}.${deadlineTail}`:'';
         const REG_MESSAGES=[
-          {title:'Encore toi 😏',body:`${recentCount} séances en 7 jours, ${firstName}${targetTail}. Tu n'as vraiment rien de mieux à faire que te construire un corps de rêve ?${objTail} Continue comme ça — régularité + discipline = objectifs atteints.`},
+          {title:'Encore toi 😏',body:`${recentCount} séances en 7 jours, ${who}${targetTail}. Tu n'as vraiment rien de mieux à faire que te construire un corps de rêve ?${objTail} Continue comme ça — régularité + discipline = objectifs atteints.`},
           {title:'Bon, on ne peut plus t\'arrêter 🔥',body:`${recentCount} séances cette semaine${targetTail}. Tu es exactement là où il faut être.${objTail||' Cette régularité va payer dans 2 mois, dans 6 mois, dans un an.'} Ne casse rien, garde le rythme.`},
-          {title:'La discipline paye 💎',body:`${recentCount} séances en 7 jours, ${firstName}. Pendant que d'autres cherchent la motivation, toi tu appliques.${objTail||' C\'est exactement comme ça qu\'on atteint ses objectifs.'} Continue.`},
+          {title:'La discipline paye 💎',body:`${recentCount} séances en 7 jours, ${who}. Pendant que d'autres cherchent la motivation, toi tu appliques.${objTail||' C\'est exactement comme ça qu\'on atteint ses objectifs.'} Continue.`},
         ];
-        const pick=REG_MESSAGES[Math.floor(now/86400000)%REG_MESSAGES.length];
+        // Célébration sobre si l'élève a demandé peu d'effusion (limite « trop motivant / trop de messages »).
+        const pick=(coach&&coach.wantsSoft)
+          ?{title:'Régularité au top 💎',body:`${recentCount} séances en 7 jours${targetTail}, ${who}. C'est solide. On garde ce rythme.`}
+          :REG_MESSAGES[Math.floor(now/86400000)%REG_MESSAGES.length];
         setInactivityPopup({kind:'regularity',tone:'reg',title:pick.title,message:pick.body,count:recentCount,goals});
         return;
       }
@@ -16301,17 +16604,26 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const midMax=goals&&goals.weeklyTarget>=5?3:goals&&goals.weeklyTarget<=2?5:4;
       let tone,title,message;
       const motivQuote=goals?.motivation?`\n\n"${goals.motivation}"\n\nRappelle-toi ces mots — ils sont de toi. `:'';
+      // Phrase de pression écrite par l'élève lui-même (utilisée seulement si l'intensité le permet).
+      const ownPressure=coach&&coach.pressurePhrase&&(coach.intensity>=3)?`\n\n« ${coach.pressurePhrase} »\n\nTes mots. `:'';
+      // Limite : jamais culpabiliser si l'élève l'a interdit → on plafonne le ton "strong".
+      const capStrong=coach&&(coach.noGuilt||coach.intensity<=2||coach.wantsSoft);
       if(bd<=2){
         tone='soft';title='Belle régularité 👋';
-        message=`${bd} jours ouvrés sans séance, ${firstName} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
+        message=`${bd} jours ouvrés sans séance, ${who} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
       } else if(bd<=midMax){
         tone='mid';title='Il est temps de s\'y remettre 💪';
         const midObj=goals?.objective?` Souviens-toi : ${objPhrase} se construit une séance à la fois.`:' Souviens-toi de tes objectifs.';
         message=`${bd} jours ouvrés sans séance. C'est le moment de reprendre.${midObj}${deadlineTail} Aujourd'hui, tu remets une séance.`;
+      } else if(capStrong){
+        // Ton ferme mais bienveillant — pas de culpabilisation, on relance sans juger.
+        tone='mid';title='On reprend le fil 💪';
+        const objTail2=goals?.objective?` ${objPhrase[0].toUpperCase()+objPhrase.slice(1)} avance une séance à la fois.`:'';
+        message=`${bd} jours ouvrés sans séance, ${who}. Pas de reproche — on ne regarde pas derrière.${objTail2}${deadlineTail} La prochaine étape, c'est simplement : aujourd'hui, une séance.`;
       } else {
         tone='strong';title='Il faut se bouger, sérieusement.';
         const strongTail=goals?.objective?` Ton objectif ne s'atteint pas tout seul — c'est TOI qui le construis, séance après séance.`:` Personne d'autre ne va aller chercher tes objectifs à ta place.`;
-        message=`${bd} jours ouvrés sans séance, ${firstName}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque.${motivQuote}${strongTail}${deadlineTail} On y va, aujourd'hui.`;
+        message=`${bd} jours ouvrés sans séance, ${who}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque.${ownPressure||motivQuote}${strongTail}${deadlineTail} On y va, aujourd'hui.`;
       }
       setInactivityPopup({kind:'inactivity',tone,title,message,daysSince:bd,goals});
     }catch(e){console.error('activity check',e);}
@@ -16512,10 +16824,23 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // démarre une séance du MÊME NOM que celle sur laquelle le coach a laissé son feedback.
     // Comparaison insensible à la casse/accents/espaces (ex: "LEGS · FESSIERS" == "Legs fessiers").
     // Marche pour toute origine (programme, Bibliothèque, planifiée, refaire…) tant que le nom colle.
+    let showedFeedback=false;
     if(pendingCoachFeedback&&!coachSessionTarget){
       const wn=normExerciseName(w.name);
       const fn=normExerciseName(pendingCoachFeedback.sessionName);
-      if(wn&&fn&&wn===fn)setActiveCoachFeedback(pendingCoachFeedback);
+      if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
+    }
+    // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
+    // et seulement pour l'athlète qui démarre POUR LUI (pas le coach qui joue pour un athlète).
+    if(!showedFeedback&&!coachSessionTarget){
+      try{
+        const coach=computeCoachCtx(authUser);
+        const goals=computeGoalsCtx(authUser);
+        if(coach||goals){
+          const msg=coachPreSessionMessage(coach,goals,authUser.firstName||'',w.id||w.name||Date.now());
+          if(msg)setPreSessionPopup(msg);
+        }
+      }catch(e){console.error('pre-session popup',e);}
     }
   };
 
@@ -16701,6 +17026,29 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                 <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',marginBottom:20,whiteSpace:'pre-wrap'}}>{message}</div>
                 <button onClick={ackInactivity} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>{cta}</button>
                 {!isReg&&<button onClick={ackInactivity} style={{width:'100%',marginTop:10,height:36,borderRadius:11,border:'none',background:'transparent',color:T.textFaint,fontSize:12,fontWeight:600,cursor:'pointer'}}>Plus tard</button>}
+              </div>
+            </div>
+          );
+        })()}
+        {/* Pop-up de motivation pré-séance — s'affiche au démarrage d'une séance quand il n'y a
+            pas de feedback coach à montrer. Ton adapté au Profil Coaching (intensité, humour, surnom). */}
+        {preSessionPopup&&(()=>{
+          const{tone,title,message}=preSessionPopup;
+          const grad=tone==='soft'?['#5A8AE0','#2CC4A0']:tone==='mid'?['#BFA060','#E88A5A']:['#E88A5A','#B85070'];
+          const iconBd=tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':'rgba(232,138,90,0.4)';
+          const iconBg=tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':'rgba(232,138,90,0.15)';
+          const iconCol=tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':'#F0A87A';
+          return(
+            <div style={{position:'fixed',inset:0,zIndex:9550,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+              <div onClick={()=>setPreSessionPopup(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
+              <div style={{position:'relative',background:'linear-gradient(180deg,#161620,#0d0d14)',border:`1px solid ${iconBd}`,borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+                <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
+                <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:iconBg,border:`1px solid ${iconBd}`,marginBottom:13}}>
+                  <span style={{fontSize:10,fontWeight:800,color:iconCol,letterSpacing:0.5,textTransform:'uppercase'}}>🔥 On démarre</span>
+                </div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,marginBottom:12,color:'#fff',lineHeight:1.15}}>{title}</div>
+                <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',marginBottom:20,whiteSpace:'pre-wrap'}}>{message}</div>
+                <button onClick={()=>setPreSessionPopup(null)} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>C'est parti 💪</button>
               </div>
             </div>
           );

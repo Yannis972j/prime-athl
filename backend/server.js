@@ -555,6 +555,32 @@ const profileOf = u => u && {
   goalDeadline: u.goalDeadline || '',     // 'YYYY-MM-DD' (échéance auto-calculée en semaines côté client)
   goalWeeklyTarget: u.goalWeeklyTarget || 0, // 2..6 séances/semaine (0 = non défini)
   goalStyle: u.goalStyle || '',           // hypertrophy|powerlifting|wellness|functional|hybrid
+  // Fiche « Mon Profil Coaching » — personnalisation poussée des messages/pop-ups
+  cpPersonality: u.cpPersonality || [],       // tags personnalité (array de strings)
+  cpDescribeMe: u.cpDescribeMe || '',         // "3 mots de tes proches"
+  cpCoachStyle: u.cpCoachStyle || [],         // style de coach préféré
+  cpBanterLevel: u.cpBanterLevel ?? null,     // 0-5 acceptation des taquineries
+  cpHumor: u.cpHumor || [],                   // types d'humour
+  cpFunnyPhrase: u.cpFunnyPhrase || '',       // phrase qui fait rire
+  cpDrives: u.cpDrives || [],                 // ce qui pique / pousse à se dépasser
+  cpPressurePhrase: u.cpPressurePhrase || '', // phrase qui met la pression
+  cpDontDo: u.cpDontDo || [],                 // ce que le coach ne doit PAS faire
+  cpAvoidTopics: u.cpAvoidTopics || '',       // sujets à éviter
+  cpLevers: u.cpLevers || {},                 // leviers de motivation {lever: score 1-5}
+  cpRelation: u.cpRelation || '',             // type de relation souhaitée
+  cpTonePreference: u.cpTonePreference || '', // ton de communication préféré
+  cpExcusePhrase: u.cpExcusePhrase || '',     // excuse récurrente
+  cpFavExercise: u.cpFavExercise || '',       // exercice préféré
+  cpHatedExercise: u.cpHatedExercise || '',   // exercice détesté
+  cpWeakness: u.cpWeakness || '',             // petite faiblesse
+  cpMotivationKiller: u.cpMotivationKiller || '', // ce qui tue la motivation
+  cpNickname: u.cpNickname || '',             // surnom
+  cpCatchphrase: u.cpCatchphrase || '',       // expression fétiche
+  cpTeaseMe: u.cpTeaseMe || '',               // truc sur lequel on peut le taquiner
+  cpMissedReaction: u.cpMissedReaction || '', // réaction préférée quand il rate
+  cpSuccessReaction: u.cpSuccessReaction || '', // réaction préférée quand il réussit
+  cpNotifPrefs: u.cpNotifPrefs || [],         // quand recevoir les messages
+  cpMsgFrequency: u.cpMsgFrequency || '',     // fréquence des messages
   prSquat: u.prSquat || '', prBench: u.prBench || '', prDeadlift: u.prDeadlift || '',
   avatarUrl: u.avatarUrl || '',
   createdAt: u.createdAt,
@@ -1196,6 +1222,40 @@ app.patch('/api/me', authRequired, (req, res) => {
     const v = String(req.body.goalStyle || '').toLowerCase().slice(0, 20);
     if (ok.includes(v)) u.goalStyle = v;
     else return res.status(400).json({ error: 'invalid_style' });
+  }
+  // ── Fiche « Mon Profil Coaching » — validation légère, tout optionnel ──
+  // Champs texte : bornés en longueur. Champs array : max 20 items, chacun borné.
+  const cpText = (key, max) => {
+    if (req.body[key] !== undefined) u[key] = String(req.body[key] || '').slice(0, max);
+  };
+  const cpArr = (key) => {
+    if (req.body[key] !== undefined) {
+      const a = Array.isArray(req.body[key]) ? req.body[key] : [];
+      u[key] = a.slice(0, 20).map(x => String(x || '').slice(0, 60));
+    }
+  };
+  cpArr('cpPersonality'); cpArr('cpCoachStyle'); cpArr('cpHumor');
+  cpArr('cpDrives'); cpArr('cpDontDo'); cpArr('cpNotifPrefs');
+  cpText('cpDescribeMe', 200); cpText('cpFunnyPhrase', 300); cpText('cpPressurePhrase', 300);
+  cpText('cpAvoidTopics', 300); cpText('cpRelation', 40); cpText('cpTonePreference', 40);
+  cpText('cpExcusePhrase', 200); cpText('cpFavExercise', 80); cpText('cpHatedExercise', 80);
+  cpText('cpWeakness', 200); cpText('cpMotivationKiller', 200); cpText('cpNickname', 60);
+  cpText('cpCatchphrase', 200); cpText('cpTeaseMe', 300); cpText('cpMissedReaction', 60);
+  cpText('cpSuccessReaction', 60); cpText('cpMsgFrequency', 40);
+  if (req.body.cpBanterLevel !== undefined) {
+    const n = parseInt(req.body.cpBanterLevel, 10);
+    u.cpBanterLevel = isNaN(n) ? null : Math.max(0, Math.min(5, n));
+  }
+  if (req.body.cpLevers !== undefined) {
+    const src = req.body.cpLevers && typeof req.body.cpLevers === 'object' ? req.body.cpLevers : {};
+    const out = {};
+    let cnt = 0;
+    for (const [k, v] of Object.entries(src)) {
+      if (cnt++ >= 20) break;
+      const n = parseInt(v, 10);
+      if (!isNaN(n) && n >= 1 && n <= 5) out[String(k).slice(0, 40)] = n;
+    }
+    u.cpLevers = out;
   }
   if (req.body.avatarUrl !== undefined) {
     const v = String(req.body.avatarUrl || '').trim();
