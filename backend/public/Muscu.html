@@ -16799,6 +16799,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showCongrats,setShowCongrats]=React.useState(false);
   const[showAddToProgramme,setShowAddToProgramme]=React.useState(false);
   const[lastFinishedSession,setLastFinishedSession]=React.useState(null);
+  // Prénom à afficher dans l'écran de récap : celui de l'athlète quand le coach a joué la séance
+  // POUR lui (coachSessionTarget est effacé avant le rendu du récap), sinon celui du user connecté.
+  const[congratsName,setCongratsName]=React.useState(null);
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
   const[sessionComparison,setSessionComparison]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
@@ -16881,6 +16884,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const tgt=coachSessionTarget;
       const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,tgt.history||[],programRangeMap(importedPrograms));
       setVolumeVsPrev(vvp);setSessionComparison(comp);setLastFinishedSession(snapshot);
+      setCongratsName(tgt.athleteName||null); // récap au nom de l'athlète, pas du coach
       setCoachSessionTarget(null);
       try{
         await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload}});
@@ -16893,6 +16897,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setVolumeVsPrev(vvp);
     setSessionComparison(comp);
     setLastFinishedSession(snapshot);
+    setCongratsName(null); // séance de l'utilisateur lui-même → son propre prénom
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
     // Jusqu'à 5 tentatives avec backoff croissant (1.5s/3s/6s/10s ≈ 20s au total) avant
@@ -17196,7 +17201,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession})}</div>
             </div>
 
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
