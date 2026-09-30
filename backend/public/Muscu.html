@@ -4723,6 +4723,25 @@ function CoachText({value,onChange,placeholder,rows,max=200}){
   return<input value={value||''} onChange={e=>onChange(e.target.value.slice(0,max))} placeholder={placeholder} style={st}/>;
 }
 
+// Section repliable du profil (accordéon) — même style que « Infos profil ».
+function ProfileCollapse({title,subtitle,icon,open,onToggle,children}){
+  return(
+    <div style={{marginBottom:12}}>
+      <button onClick={onToggle} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:open?'12px 12px 0 0':12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderBottom:open?'none':`1px solid ${T.border}`,cursor:'pointer'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+          {icon&&<span style={{fontSize:15,flexShrink:0}}>{icon}</span>}
+          <div style={{textAlign:'left',minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{title}</div>
+            {!open&&subtitle&&<div style={{fontSize:10,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtitle}</div>}
+          </div>
+        </div>
+        <Icon name={open?'chevronDown':'chevronRight'} size={14} stroke={T.textFaint}/>
+      </button>
+      {open&&<div style={{padding:'12px 14px 14px',borderRadius:'0 0 12px 12px',background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderTop:'none'}}>{children}</div>}
+    </div>
+  );
+}
+
 function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const upd=(k,v)=>onChange({[k]:v});
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
@@ -4745,6 +4764,8 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const[avatarBusy,setAvatarBusy]=React.useState(false);
   const avatarFileRef=React.useRef(null);
   const[editOpen,setEditOpen]=React.useState(false);
+  const[goalsOpen,setGoalsOpen]=React.useState(false);
+  const[coachOpen,setCoachOpen]=React.useState(false);
 
   const handleAvatarFile=e=>{
     const file=e.target.files[0];
@@ -4867,9 +4888,8 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
          Les 4 champs sont optionnels : plus l'athlète en remplit, plus les messages deviennent
          perso. Rien de bloquant à l'inscription (peut être laissé vide, l'app reste utilisable). */}
       {(profile.role!=='coach'||profile.isMainCoach)&&(
-        <>
-          <SectionHeader title="Mes objectifs"/>
-          <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,padding:14,marginBottom:14}}>
+        <ProfileCollapse title="Mes objectifs" icon="🎯" open={goalsOpen} onToggle={()=>setGoalsOpen(o=>!o)}
+          subtitle={(()=>{const p=[];if(profile.goalMotivation)p.push('motivation');if(profile.goalDeadline)p.push('échéance');if(profile.goalWeeklyTarget)p.push(profile.goalWeeklyTarget+'×/sem');if(profile.goalStyle)p.push('style');return p.length?p.join(' · '):'Personnalise tes rappels et messages';})()}>
             <div style={{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}}>
               Ces infos personnalisent les rappels, célébrations et mindset qui t'accompagnent.
               Modifiables à tout moment.
@@ -4914,8 +4934,7 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
               </div>
               <div style={{fontSize:9.5,color:T.textFaint,marginTop:5,lineHeight:1.4}}>Le style choisi détermine le ton des phrases de mindset affichées après tes séances.</div>
             </div>
-          </div>
-        </>
+        </ProfileCollapse>
       )}
 
       {/* ── Fiche « Mon Profil Coaching » — version synthétique ───────────────────────
@@ -4923,9 +4942,8 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
          messages/pop-ups semblent écrits par un coach qui le connaît vraiment. Tout est
          optionnel ; les réponses alimentent le moteur de personnalisation (computeCoachCtx). */}
       {(profile.role!=='coach'||profile.isMainCoach)&&(
-        <>
-          <SectionHeader title="Mon profil coaching"/>
-          <div style={{borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,padding:14,marginBottom:14}}>
+        <ProfileCollapse title="Mon profil coaching" icon="🎭" open={coachOpen} onToggle={()=>setCoachOpen(o=>!o)}
+          subtitle={(()=>{let n=0;['cpPersonality','cpCoachStyle','cpHumor','cpDrives','cpDontDo','cpNotifPrefs'].forEach(k=>{if((profile[k]||[]).length)n++;});['cpNickname','cpFunnyPhrase','cpPressurePhrase','cpTeaseMe','cpMotivationKiller','cpRelation','cpTonePreference','cpMissedReaction','cpSuccessReaction'].forEach(k=>{if(profile[k])n++;});if(profile.cpBanterLevel!=null)n++;if(profile.cpLevers&&Object.keys(profile.cpLevers).length)n++;return n?`${n} section${n>1?'s':''} remplie${n>1?'s':''}`:'Aide ton coach à te parler comme il faut';})()}>
             <div style={{fontSize:11,color:T.textDim,marginBottom:16,lineHeight:1.5}}>
               Ces réponses permettent à ton coach (et à l'app) de te parler comme il faut : ton humour,
               ta façon de réagir, ce qui te pique. Plus tu en dis, plus les messages te ressemblent. Tout est facultatif.
@@ -5059,8 +5077,7 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
               <CoachText value={profile.cpMotivationKiller} onChange={v=>upd('cpMotivationKiller',v)} max={200} rows={2}
                 placeholder="Ex : quand je stagne, quand je manque de sommeil, quand je m'entraîne seul…"/>
             </div>
-          </div>
-        </>
+        </ProfileCollapse>
       )}
 
       {!profile.isMainCoach&&<><SectionHeader title="Album"/><PhotoGallery/></>}
