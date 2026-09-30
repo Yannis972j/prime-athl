@@ -5463,6 +5463,59 @@ function sessionVolumeOf(sess){
   if(sess&&typeof sess.totalVolume==='number')return sess.totalVolume;
   return (sess?.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
 }
+
+// ── Récap mensuel (Option A : agrégation 100 % client à partir des séances validées) ──────
+// allSessions = toutes les séances de l'athlète ; ym = 'YYYY-MM' (mois LOCAL). Réutilise
+// sessionVolumeOf + normExerciseName + la formule Epley (comme le récap de séance). Les
+// décharges sont exclues des totaux (charges volontairement allégées → fausseraient les deltas).
+function buildMonthlyRecap(allSessions, ym){
+  const e1=(w,r)=>r>0?Math.round(w*(1+r/30)):w; // 1RM estimé (Epley)
+  const list=(allSessions||[]).filter(s=>s&&s.date);
+  const mKey=s=>{const d=new Date(s.date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;};
+  const [y,m]=ym.split('-').map(Number);
+  const prevD=new Date(y,m-2,1);
+  const prevYm=`${prevD.getFullYear()}-${String(prevD.getMonth()+1).padStart(2,'0')}`;
+  const cur=list.filter(s=>mKey(s)===ym&&!s.deload);
+  const prev=list.filter(s=>mKey(s)===prevYm&&!s.deload);
+  const before=list.filter(s=>new Date(s.date)<new Date(y,m-1,1)); // strictement avant ce mois
+  const sum=arr=>arr.reduce((a,s)=>a+sessionVolumeOf(s),0);
+  const daysInMonth=new Date(y,m,0).getDate();
+  const perWeek=n=>+(n/(daysInMonth/7)).toFixed(1);
+  const curVol=sum(cur),prevVol=sum(prev);
+  const avg=arr=>arr.length?Math.round(arr.reduce((a,s)=>a+(s.duration||0),0)/arr.length):0;
+  // Records : meilleur 1RM estimé par exercice CE mois vs meilleur AVANT ce mois.
+  const bestBefore={};
+  before.forEach(s=>(s.exercises||[]).forEach(ex=>{const k=normExerciseName(ex.name);if(!k)return;(ex.sets||[]).forEach(st=>{const w=st.weight||0,r=st.reps||0;if(w<=0)return;const e=e1(w,r);if(!bestBefore[k]||e>bestBefore[k])bestBefore[k]=e;});}));
+  const bestMonth={};
+  cur.forEach(s=>(s.exercises||[]).forEach(ex=>{const k=normExerciseName(ex.name);if(!k)return;(ex.sets||[]).forEach(st=>{const w=st.weight||0,r=st.reps||0;if(w<=0)return;const e=e1(w,r);if(!bestMonth[k]||e>bestMonth[k].e1rm)bestMonth[k]={name:(ex.name||'').trim(),e1rm:e,w,r};});}));
+  const prs=Object.entries(bestMonth).filter(([k,v])=>!bestBefore[k]||v.e1rm>bestBefore[k])
+    .map(([k,v])=>({name:v.name,e1rm:v.e1rm,w:v.w,r:v.r,gain:bestBefore[k]?v.e1rm-bestBefore[k]:null}))
+    .sort((a,b)=>(b.gain==null?-1:b.gain)-(a.gain==null?-1:a.gain)).slice(0,8);
+  // Progression par nom de séance : volume ce mois vs mois précédent.
+  const byName={},prevByName={};
+  cur.forEach(s=>{const k=normExerciseName(s.name||'');if(!k)return;(byName[k]=byName[k]||{name:s.name||'Séance',count:0,vol:0}).count++;byName[k].vol+=sessionVolumeOf(s);});
+  prev.forEach(s=>{const k=normExerciseName(s.name||'');if(!k)return;prevByName[k]=(prevByName[k]||0)+sessionVolumeOf(s);});
+  const progression=Object.entries(byName).map(([k,v])=>{const pv=prevByName[k]||0;return{...v,vol:Math.round(v.vol),pct:pv>0?Math.round((v.vol-pv)/pv*100):null};}).sort((a,b)=>b.vol-a.vol);
+  // Baisses à surveiller : exercice fait ≥3× ce mois dont le 1RM de la dernière occurrence
+  // est ≥5 % sous la première.
+  const occ={};
+  cur.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(s=>(s.exercises||[]).forEach(ex=>{const k=normExerciseName(ex.name);if(!k)return;let best=0;(ex.sets||[]).forEach(st=>{const w=st.weight||0,r=st.reps||0;if(w>0)best=Math.max(best,e1(w,r));});if(best>0){(occ[k]=occ[k]||{name:(ex.name||'').trim(),pts:[]}).pts.push(best);}}));
+  const declines=Object.values(occ).filter(o=>o.pts.length>=3).map(o=>{const f=o.pts[0],l=o.pts[o.pts.length-1];return{name:o.name,pct:f>0?Math.round((l-f)/f*100):0};}).filter(d=>d.pct<=-5).sort((a,b)=>a.pct-b.pct).slice(0,4);
+  return{
+    ym,prevYm,count:cur.length,prevCount:prev.length,
+    volume:Math.round(curVol),volDelta:prevVol>0?Math.round((curVol-prevVol)/prevVol*100):null,
+    perWeek:perWeek(cur.length),prevPerWeek:perWeek(prev.length),
+    avgDur:avg(cur),prevAvgDur:avg(prev),
+    prs,progression,declines,hasData:cur.length>0,
+  };
+}
+// Liste des mois (YYYY-MM) qui contiennent au moins une séance, du plus récent au plus ancien.
+function monthsWithSessions(allSessions){
+  const set=new Set();
+  (allSessions||[]).forEach(s=>{if(s&&s.date){const d=new Date(s.date);set.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);}});
+  return [...set].sort().reverse();
+}
+function frMonthLabel(ym){const[y,m]=ym.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});}
 // Construit la comparaison complète d'une séance vs la dernière séance du MÊME nom qui la précède.
 // Réutilisé par saveSession (fin de séance) ET par le récap ouvert au clic sur le calendrier.
 // Map { nom d'exercice normalisé → haut de la fourchette de reps } depuis un programme importé
@@ -10961,6 +11014,147 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',history,onC
   );
 }
 
+// ── Récap mensuel — écran plein pour le coach, calculé depuis les vraies séances (Option A) ──
+function MonthlyRecapModal({sessions,athleteName,athleteGender='',coachName='ton coach',onClose}){
+  const months=React.useMemo(()=>{const m=monthsWithSessions(sessions);return m.length?m:[(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;})()];},[sessions]);
+  const[idx,setIdx]=React.useState(0);
+  const ym=months[idx];
+  const recap=React.useMemo(()=>buildMonthlyRecap(sessions,ym),[sessions,ym]);
+  const msgKey='pa_recap_msg_'+athleteName+'_'+ym;
+  const[coachMsg,setCoachMsg]=React.useState(()=>{try{return localStorage.getItem(msgKey)||'';}catch{return '';}});
+  React.useEffect(()=>{try{setCoachMsg(localStorage.getItem(msgKey)||'');}catch{setCoachMsg('');}},[msgKey]);
+  const saveMsg=v=>{setCoachMsg(v);try{localStorage.setItem(msgKey,v);}catch{}};
+  const[copied,setCopied]=React.useState(false);
+  const fmt=n=>Math.round(n).toLocaleString('fr-FR');
+  const deltaEl=(pct,unit='%')=>{if(pct==null)return<span style={{fontSize:11,fontWeight:700,color:T.textFaint}}>—</span>;const up=pct>0,flat=pct===0;return<span style={{fontSize:11,fontWeight:700,color:flat?T.textFaint:up?T.good:T.danger}}>{flat?'= stable':`${up?'▲ +':'▼ '}${pct}${unit}`}</span>;};
+  const maxProgVol=Math.max(1,...recap.progression.map(p=>p.vol));
+
+  const copyText=()=>{
+    const L=[];
+    L.push(`RÉCAP ${frMonthLabel(ym).toUpperCase()} — ${athleteName}`);
+    L.push('');
+    L.push(`• ${recap.count} séances${recap.prevCount?` (${recap.count-recap.prevCount>=0?'+':''}${recap.count-recap.prevCount} vs mois dernier)`:''}`);
+    L.push(`• Volume total : ${fmt(recap.volume)} kg${recap.volDelta!=null?` (${recap.volDelta>=0?'+':''}${recap.volDelta}%)`:''}`);
+    L.push(`• Régularité : ${recap.perWeek}/sem · Durée moy. : ${recap.avgDur} min`);
+    if(recap.prs.length){L.push('');L.push('RECORDS DU MOIS :');recap.prs.forEach(p=>L.push(`  🏅 ${p.name} — ${p.w} kg × ${p.r} (1RM ${p.e1rm} kg${p.gain?`, +${p.gain} kg`:''})`));}
+    if(recap.progression.length){L.push('');L.push('PROGRESSION :');recap.progression.forEach(p=>L.push(`  ${p.name} : ${fmt(p.vol)} kg${p.pct!=null?` (${p.pct>=0?'+':''}${p.pct}%)`:''}`));}
+    if(recap.declines.length){L.push('');L.push('À SURVEILLER :');recap.declines.forEach(d=>L.push(`  ⚠️ ${d.name} : ${d.pct}%`));}
+    if(coachMsg.trim()){L.push('');L.push('MOT DU COACH :');L.push(coachMsg.trim());}
+    const txt=L.join('\n');
+    (async()=>{try{await navigator.clipboard.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch{alert('Copie impossible — sélectionne le texte manuellement.');}})();
+  };
+
+  const secTitle=(t,extra)=><div style={{fontSize:11,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:T.textDim,margin:'18px 0 8px',display:'flex',gap:7,alignItems:'center'}}>{t}{extra&&<span style={{color:T.textFaint,fontWeight:500,textTransform:'none',letterSpacing:0}}>{extra}</span>}</div>;
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:9700,background:'#06060a',display:'flex',flexDirection:'column'}}>
+      {/* Barre top */}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'calc(12px + env(safe-area-inset-top)) 16px 12px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+        <button onClick={onClose} style={{width:34,height:34,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:T.text,fontSize:16,cursor:'pointer',flexShrink:0}}>✕</button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:1,textTransform:'uppercase'}}>Récap mensuel</div>
+          <div style={{fontSize:15,fontWeight:800,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{athleteName}</div>
+        </div>
+        <button onClick={copyText} style={{height:34,padding:'0 12px',borderRadius:10,border:'none',background:copied?'rgba(44,196,160,0.15)':'linear-gradient(135deg,#BFA060,#B85070)',color:copied?'#6fdcc0':'#0c0c12',fontSize:12,fontWeight:800,cursor:'pointer',flexShrink:0}}>{copied?'✓ Copié':'Copier'}</button>
+      </div>
+
+      {/* Contenu scrollable */}
+      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'0 16px calc(28px + env(safe-area-inset-bottom))'}}>
+        {/* Sélecteur de mois */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'14px 0'}}>
+          <button disabled={idx>=months.length-1} onClick={()=>setIdx(i=>Math.min(months.length-1,i+1))} style={{width:36,height:36,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:idx>=months.length-1?T.textFaint:T.text,fontSize:16,cursor:idx>=months.length-1?'default':'pointer',opacity:idx>=months.length-1?0.4:1}}>‹</button>
+          <div style={{fontSize:16,fontWeight:800,textTransform:'capitalize',textAlign:'center',flex:1}}>{frMonthLabel(ym)}</div>
+          <button disabled={idx<=0} onClick={()=>setIdx(i=>Math.max(0,i-1))} style={{width:36,height:36,borderRadius:10,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.03)',color:idx<=0?T.textFaint:T.text,fontSize:16,cursor:idx<=0?'default':'pointer',opacity:idx<=0?0.4:1}}>›</button>
+        </div>
+
+        {!recap.hasData?(
+          <div style={{textAlign:'center',padding:'50px 20px',color:T.textFaint,fontSize:13,lineHeight:1.6}}>Aucune séance validée sur ce mois.<br/>Choisis un autre mois avec les flèches.</div>
+        ):(<>
+          {/* Hero */}
+          <div style={{background:'radial-gradient(120% 90% at 50% 0%,rgba(191,160,96,0.16),transparent 60%),rgba(255,255,255,0.038)',border:`1px solid ${T.border}`,borderRadius:20,padding:'22px 18px',textAlign:'center',marginBottom:4}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',color:T.textFaint}}>Le mois en un chiffre</div>
+            <div style={{fontSize:52,fontWeight:800,letterSpacing:-2,lineHeight:1,margin:'6px 0 2px',background:'linear-gradient(120deg,#BFA060,#B85070)',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',fontVariantNumeric:'tabular-nums'}}>{recap.count}<span style={{fontSize:20,color:T.textFaint,WebkitTextFillColor:T.textFaint}}> séances</span></div>
+            {recap.prevCount>0&&<div style={{fontSize:12.5,color:T.textDim,marginTop:6}}>{recap.count-recap.prevCount>=0?<b style={{color:T.good}}>+{recap.count-recap.prevCount} vs {frMonthLabel(recap.prevYm).split(' ')[0]}</b>:<b style={{color:T.danger}}>{recap.count-recap.prevCount} vs {frMonthLabel(recap.prevYm).split(' ')[0]}</b>}</div>}
+          </div>
+
+          {/* Tuiles perf */}
+          {secTitle('Performance du mois')}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {[
+              {v:fmt(recap.volume),u:'kg',k:'Volume total',d:deltaEl(recap.volDelta)},
+              {v:String(recap.perWeek).replace('.',','),u:'/sem',k:'Régularité',d:deltaEl(recap.prevPerWeek>0?Math.round((recap.perWeek-recap.prevPerWeek)/recap.prevPerWeek*100):null)},
+              {v:recap.avgDur,u:'min',k:'Durée moyenne',d:deltaEl(recap.prevAvgDur>0?Math.round((recap.avgDur-recap.prevAvgDur)/recap.prevAvgDur*100):null)},
+              {v:recap.prs.length,u:'',k:'Records',d:<span style={{fontSize:11,fontWeight:700,color:recap.prs.length?T.good:T.textFaint}}>{recap.prs.length?'🏅 nouveaux':'—'}</span>},
+            ].map((t,i)=>(
+              <div key={i} style={{background:'rgba(255,255,255,0.038)',border:`1px solid ${T.border}`,borderRadius:14,padding:'13px 14px'}}>
+                <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5,fontVariantNumeric:'tabular-nums'}}>{t.v}{t.u&&<span style={{fontSize:12,fontWeight:600,color:T.textFaint,marginLeft:2}}>{t.u}</span>}</div>
+                <div style={{fontSize:10,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase',color:T.textFaint,margin:'3px 0 6px'}}>{t.k}</div>
+                {t.d}
+              </div>
+            ))}
+          </div>
+
+          {/* Progression */}
+          {recap.progression.length>0&&(<>
+            {secTitle('Progression par séance','· volume vs mois dernier')}
+            <div style={{background:'rgba(255,255,255,0.038)',border:`1px solid ${T.border}`,borderRadius:16,padding:'6px 14px'}}>
+              {recap.progression.map((p,i)=>(
+                <div key={i} style={{padding:'12px 0',borderBottom:i<recap.progression.length-1?`1px solid ${T.border}`:'none'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
+                    <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div><div style={{fontSize:11,color:T.textFaint,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{p.count} séance{p.count>1?'s':''} · {fmt(p.vol)} kg</div></div>
+                    <div style={{fontSize:14,fontWeight:800,whiteSpace:'nowrap',color:p.pct==null?T.textFaint:p.pct>0?T.good:p.pct<0?T.danger:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{p.pct==null?'nouv.':`${p.pct>0?'+':''}${p.pct}%`}</div>
+                  </div>
+                  <div style={{height:7,borderRadius:4,background:'rgba(255,255,255,0.06)',marginTop:9,overflow:'hidden'}}><span style={{display:'block',height:'100%',borderRadius:4,width:`${Math.max(8,Math.round(p.vol/maxProgVol*100))}%`,background:'linear-gradient(90deg,#2CC4A0,#5A8AE0)'}}/></div>
+                </div>
+              ))}
+            </div>
+          </>)}
+
+          {/* Records */}
+          {recap.prs.length>0&&(<>
+            {secTitle('🏅 Records du mois')}
+            <div style={{background:'rgba(255,255,255,0.038)',border:`1px solid ${T.border}`,borderRadius:16,padding:'6px 14px'}}>
+              {recap.prs.map((p,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:i<recap.prs.length-1?`1px solid ${T.border}`:'none'}}>
+                  <div style={{width:34,height:34,borderRadius:10,flex:'0 0 34px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,background:'rgba(191,160,96,0.14)',border:'1px solid rgba(191,160,96,0.3)'}}>🥇</div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div><div style={{fontSize:11.5,color:T.textDim,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{p.w} kg × {p.r} — 1RM estimé {p.e1rm} kg</div></div>
+                  {p.gain?<div style={{fontSize:12,fontWeight:800,color:T.good,whiteSpace:'nowrap'}}>+{p.gain} kg</div>:<div style={{fontSize:11,fontWeight:700,color:'#8FB4F5',whiteSpace:'nowrap'}}>1er</div>}
+                </div>
+              ))}
+            </div>
+          </>)}
+
+          {/* À surveiller */}
+          {recap.declines.length>0&&(<>
+            {secTitle('⚠️ À surveiller')}
+            <div style={{background:'rgba(232,90,110,0.09)',border:'1px solid rgba(232,90,110,0.32)',borderRadius:16,padding:'6px 14px'}}>
+              {recap.declines.map((d,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'12px 0',borderBottom:i<recap.declines.length-1?'1px solid rgba(232,90,110,0.2)':'none'}}>
+                  <div style={{fontSize:14,fontWeight:700}}>{d.name}</div>
+                  <div style={{fontSize:14,fontWeight:800,color:T.danger,fontVariantNumeric:'tabular-nums'}}>{d.pct}%</div>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:T.textDim,padding:'0 0 10px',lineHeight:1.5}}>1RM estimé en baisse sur ces exercices — à retravailler le mois prochain.</div>
+            </div>
+          </>)}
+
+          {/* Mot du coach */}
+          {secTitle('Le mot du coach')}
+          <div style={{background:'rgba(255,255,255,0.038)',border:`1px solid ${T.border}`,borderLeft:'3px solid #5A8AE0',borderRadius:'0 16px 16px 0',padding:'13px 14px'}}>
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#8FB4F5',marginBottom:8}}>💬 {coachName}</div>
+            <textarea value={coachMsg} onChange={e=>saveMsg(e.target.value.slice(0,600))} rows={4} placeholder="Écris ton mot du mois (facultatif) — il sera inclus dans le récap copié…" style={{width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:T.text,fontSize:13,fontFamily:'inherit',padding:'10px 11px',lineHeight:1.5,resize:'vertical',outline:'none'}}/>
+            <div style={{fontSize:9.5,color:T.textFaint,marginTop:5}}>Enregistré automatiquement pour ce mois.</div>
+          </div>
+
+          <div style={{textAlign:'center',fontSize:11,color:T.textFaint,marginTop:18,lineHeight:1.6}}>
+            Récap calculé à partir des séances validées · décharges exclues des totaux
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 function CoachSessionCard({s,athleteId,athleteName,athleteGender='',isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
   const[expanded,setExpanded]=React.useState(false);
   const[showModal,setShowModal]=React.useState(false);
@@ -12054,6 +12248,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[nutriDetail,setNutriDetail]=React.useState(null);
   const[nutriMode,setNutriMode]=React.useState('mirror'); // 'mirror' | 'edit'
   const[showDangerZone,setShowDangerZone]=React.useState(false);
+  const[showRecap,setShowRecap]=React.useState(false); // récap mensuel
   const[detailTab,setDetailTab]=React.useState('profil');
   const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
   const[athleteLibrary,setAthleteLibrary]=React.useState({sessions:[],nutrition:[]});
@@ -12375,6 +12570,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
           <CoachPlanSessionModal athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} sourceSession={planFromBiblio}
             onClose={()=>setPlanFromBiblio(null)} onDone={()=>{reloadDetail(a.id);load();}}/>
         )}
+        {showRecap&&(
+          <MonthlyRecapModal sessions={sessions} athleteName={a.firstName||a.email.split('@')[0]} athleteGender={a.gender||''}
+            coachName={'Coach '+(authUser?.firstName||'')} onClose={()=>setShowRecap(false)}/>
+        )}
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'0 18px'}}>
@@ -12620,6 +12819,19 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 </div>
               );
             })()}
+
+            {/* Récap mensuel — génère un bilan du mois (perf, progression, PR, baisses) à partir
+                des séances validées, avec un mot du coach, prêt à copier/envoyer à l'athlète. */}
+            {sessions.length>0&&(
+              <button onClick={()=>setShowRecap(true)} style={{width:'100%',height:48,marginTop:4,marginBottom:8,borderRadius:13,border:'1px solid rgba(191,160,96,0.35)',background:'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',padding:'0 14px'}}>
+                <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>📊</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700}}>Récap mensuel</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>Bilan du mois à envoyer à l'athlète</div>
+                </div>
+                <Icon name="chevronRight" size={15} stroke="rgba(191,160,96,0.6)"/>
+              </button>
+            )}
           </div>
         )}
 
