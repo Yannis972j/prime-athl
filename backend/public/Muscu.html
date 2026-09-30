@@ -3671,6 +3671,7 @@ function StatsScreen({history,profile,athleteId}){
   // pointait sinon sur la veille si l'utilisateur restait sur l'écran Stats après 00h00, décalant
   // tous les filtres par période d'un jour. L'intervalle ne re-render que quand le jour change.
   const[todayKey,setTodayKey]=React.useState(()=>dayKeyOf(Date.now()));
+  const[showRecap,setShowRecap]=React.useState(false); // récap mensuel perso
   React.useEffect(()=>{
     const t=setInterval(()=>{const k=dayKeyOf(Date.now());setTodayKey(prev=>prev!==k?k:prev);},60000);
     return()=>clearInterval(t);
@@ -3856,6 +3857,23 @@ function StatsScreen({history,profile,athleteId}){
           <div style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,marginTop:2}}>Statistiques</div>
         </div>
       </div>
+
+      {/* Récap mensuel perso — le coach principal s'entraîne aussi comme athlète : il retrouve
+          ici son bilan mensuel (mêmes calculs que la fiche athlète), prêt à consulter/copier. */}
+      {profile?.isMainCoach&&history.length>0&&(
+        <button onClick={()=>setShowRecap(true)} style={{width:'100%',height:48,marginBottom:16,borderRadius:13,border:'1px solid rgba(191,160,96,0.35)',background:'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.06))',color:T.text,cursor:'pointer',display:'flex',alignItems:'center',gap:10,textAlign:'left',padding:'0 14px'}}>
+          <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>📊</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700}}>Mon récap mensuel</div>
+            <div style={{fontSize:10,color:T.textFaint,marginTop:1}}>Bilan du mois : perf, records, progression</div>
+          </div>
+          <Icon name="chevronRight" size={15} stroke="rgba(191,160,96,0.6)"/>
+        </button>
+      )}
+      {showRecap&&(
+        <MonthlyRecapModal sessions={history} athleteName={profile.firstName||'Moi'} athleteGender={profile.gender||''}
+          coachName={'Coach '+(profile.firstName||'')} onClose={()=>setShowRecap(false)}/>
+      )}
 
       {/* ── Filtre temporel global ── */}
       <div style={{display:'flex',gap:6,marginBottom:18,overflowX:'auto',paddingBottom:2}}>
