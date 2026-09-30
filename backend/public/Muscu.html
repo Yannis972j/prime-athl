@@ -3811,8 +3811,10 @@ function StatsScreen({history,profile,athleteId}){
   const sessionsByDay=React.useMemo(()=>{
     const m={};
     history.forEach(h=>{
-      const d=new Date(h.date);
-      const key=d.toISOString().slice(0,10);
+      // Clé en date LOCALE (ymdKey) et non UTC (toISOString) : le calendrier fait sa recherche
+      // avec une clé locale. En UTC+, une séance faite après minuit était indexée la veille et
+      // s'affichait sur le mauvais jour du calendrier.
+      const key=ymdKey(new Date(h.date));
       if(!m[key])m[key]={count:0,volume:0,names:[]};
       m[key].count++;
       m[key].volume+=h.totalVolume||0;
