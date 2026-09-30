@@ -548,6 +548,7 @@ const signForUser = u => sign({ id: u.id, role: u.role, tv: u.tokenVersion || 0 
 const profileOf = u => u && {
   id: u.id, email: u.email, role: u.role, coachId: u.coachId,
   firstName: u.firstName || '', lastName: u.lastName || '',
+  gender: u.gender || '',   // 'h' | 'f' | '' (non précisé) — accord grammatical des messages
   height: u.height || '', weight: u.weight || '', objective: u.objective || '',
   // Fiche « Mes objectifs » — sert à personnaliser les pop-ups d'inactivité/régularité + les
   // messages de récap (mindset, congrats). Tous optionnels, sans blocage à l'inscription.
@@ -1205,6 +1206,12 @@ app.patch('/api/me', authRequired, (req, res) => {
       const v = parseFloat(req.body[k]);
       if (!isNaN(v)) u[k] = Math.max(min, Math.min(max, v));
     }
+  }
+  // Sexe (accord grammatical des messages) — 'h' | 'f' | '' seulement.
+  if (req.body.gender !== undefined) {
+    const g = String(req.body.gender || '').toLowerCase();
+    if (['', 'h', 'f'].includes(g)) u.gender = g;
+    else return res.status(400).json({ error: 'invalid_gender' });
   }
   // Fiche « Mes objectifs » — écriture des 4 nouveaux champs, tous optionnels et validés.
   if (req.body.goalMotivation !== undefined) u.goalMotivation = String(req.body.goalMotivation).slice(0, 300);

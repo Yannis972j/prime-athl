@@ -656,27 +656,33 @@ function computeDeload(ex) {
     sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: roundPlate((s.weight || 0) * DELOAD_WEIGHT_PCT) })),
   };
 }
+// Accord grammatical : rend la forme féminine si gender==='f', sinon la forme masculine
+// (défaut quand le sexe n'est pas précisé). Centralise tous les accords des messages.
+function gg(gender, masc, fem){ return gender === 'f' ? fem : masc; }
+
 // Messages de récap SPÉCIFIQUES à une séance de décharge : ton neutre/bienveillant, jamais
 // punitif — une baisse de charge en décharge est voulue, pas un recul à sanctionner.
+// (name, g) → g = sexe de l'athlète pour l'accord.
 const DELOAD_CONGRATS = [
-  name => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus fort. C'est exactement ce qu'il faut faire cette semaine.`,
-  name => `Décharge validée, ${name}. Cette semaine, l'objectif c'est de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
+  (name,g) => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus ${gg(g,'fort','forte')}. C'est exactement ce qu'il faut faire cette semaine.`,
+  (name,g) => `Décharge validée, ${name}. Cette semaine, l'objectif c'est de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
 ];
+// Entrées mindset : string OU (g)=>string quand la phrase porte un accord. motivationQuote résout.
 const DELOAD_MINDSET = [
   "La décharge n'est pas du temps perdu : c'est là que le corps transforme le travail des semaines dures en muscle et en force. Léger, mais sérieux.",
-  "Reculer d'un pas pour mieux sauter. La semaine prochaine tu repars sur tes vrais poids, plus frais et plus fort.",
+  g => `Reculer d'un pas pour mieux sauter. La semaine prochaine tu repars sur tes vrais poids, plus ${gg(g,'frais','fraîche')} et plus ${gg(g,'fort','forte')}.`,
 ];
 // Messages APRÈS une semaine de décharge : la précédente séance était en décharge, celle-ci ne l'est
 // plus. L'athlète revient sur ses vrais poids — c'est la 1ère séance de relance. Ton = accueil + coup
 // d'envoi. La comparaison de perf redémarre (donc pas de "recul" à cause de la semaine allégée).
 const POST_DELOAD_CONGRATS = [
-  name => `Bienvenue de retour, ${name}. La décharge est derrière toi — le corps est frais, la tête aussi. À partir d'aujourd'hui on repart sur les vraies charges, avec l'énergie du repos en plus.`,
-  name => `Fin de décharge, ${name}. Ce qu'on a semé la semaine dernière (récupération, sommeil, recharge nerveuse), on le récolte dès aujourd'hui. Sors les vrais poids, tu es prêt à cogner.`,
-  name => `Reprise, ${name}. Tu as bien joué le jeu de la décharge — maintenant on repart, plus solide qu'avant. Les prochaines semaines, c'est là qu'on progresse vraiment.`,
+  (name,g) => `Bienvenue de retour, ${name}. La décharge est derrière toi — le corps est frais, la tête aussi. À partir d'aujourd'hui on repart sur les vraies charges, avec l'énergie du repos en plus.`,
+  (name,g) => `Fin de décharge, ${name}. Ce qu'on a semé la semaine dernière (récupération, sommeil, recharge nerveuse), on le récolte dès aujourd'hui. Sors les vrais poids, tu es ${gg(g,'prêt','prête')} à cogner.`,
+  (name,g) => `Reprise, ${name}. Tu as bien joué le jeu de la décharge — maintenant on repart, plus solide qu'avant. Les prochaines semaines, c'est là qu'on progresse vraiment.`,
 ];
 const POST_DELOAD_MINDSET = [
   "Une décharge bien faite, c'est un tremplin. Tu redémarres avec plus de force, plus de fraîcheur nerveuse, plus de marge de progression. Sers-t'en.",
-  "Le vrai bénéfice de la décharge se voit dans les 2-3 séances qui suivent : charges plus solides, meilleures sensations, plus de reps au même poids. Reste attentif à ces signaux.",
+  g => `Le vrai bénéfice de la décharge se voit dans les 2-3 séances qui suivent : charges plus solides, meilleures sensations, plus de reps au même poids. Reste ${gg(g,'attentif','attentive')} à ces signaux.`,
   "La reprise après décharge, ce n'est pas juste \"remettre les vrais poids\". C'est aussi remettre l'intensité, la concentration, l'ambition. Tu as récupéré pour ça.",
 ];
 // Bandeau de récap affiché à la place de l'alerte de régression quand la séance est une décharge.
@@ -4841,6 +4847,13 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
               <span style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:10,color:T.textFaint,pointerEvents:'none'}}>kg</span>
             </div>
           </div>
+          {/* Sexe — sert à l'accord grammatical des messages (prêt/prête, fort/forte…). */}
+          <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Sexe</div>
+          <div style={{display:'flex',gap:4,marginBottom:10}}>
+            {[{v:'h',l:'Homme'},{v:'f',l:'Femme'}].map(o=>(
+              <button key={o.v} onClick={()=>upd('gender',profile.gender===o.v?'':o.v)} style={{flex:'1 1 auto',height:30,borderRadius:8,border:profile.gender===o.v?'1px solid rgba(90,138,224,0.5)':'1px solid '+T.border,background:profile.gender===o.v?'rgba(90,138,224,0.12)':'rgba(255,255,255,0.025)',color:profile.gender===o.v?'#8FB4F5':T.textDim,fontSize:12,fontWeight:profile.gender===o.v?700:500,cursor:'pointer'}}>{o.l}</button>
+            ))}
+          </div>
           <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Objectif principal</div>
           <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
             {objectives.map(o=>(
@@ -5297,15 +5310,15 @@ function personalizedSuffix(goals,seed){
 }
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null,gender=''}=opts||{};
   const sn=sessionName||'séance';
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
-  if(isDeload)return pick(DELOAD_CONGRATS)(name);
+  if(isDeload)return pick(DELOAD_CONGRATS)(name,gender);
   // 1ère séance APRÈS une décharge : message de reprise, prime sur la comparaison (qui serait
   // faussement flatteuse : les vrais poids d'aujourd'hui vs les 60% de la semaine dernière = +40%).
-  if(isPostDeload)return pick(POST_DELOAD_CONGRATS)(name);
+  if(isPostDeload)return pick(POST_DELOAD_CONGRATS)(name,gender);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) : ton sérieux, sans humour, PRIORITAIRE sur
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
@@ -5327,7 +5340,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
     // Majorité en baisse → recul réel : ton sérieux, sans humour.
     if(downRatio>=0.7)return `${name}, ${downCount} exos sur ${totalExercises} en baisse. Ce n'est pas un entraînement, c'est un recul. Reprends-toi sérieusement dès la prochaine.`;
-    if(downRatio>=0.5)return `La moitié de tes exos en baisse, ${name}. Tu es passé à côté de ta séance. La prochaine, tu remets le niveau là où il doit être.`;
+    if(downRatio>=0.5)return `La moitié de tes exos en baisse, ${name}. Tu es ${gg(gender,'passé','passée')} à côté de ta séance. La prochaine, tu remets le niveau là où il doit être.`;
     // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
     if(upCount===0&&downCount===0){
       return hasVolume
@@ -5404,9 +5417,10 @@ const MOTIVATION_FIRST=[
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gender=''){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
-  const pick=arr=>arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];
+  // Une entrée de pool peut être une string OU une fonction (g)=>string (accord grammatical) : on résout.
+  const pick=arr=>{const v=arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];return typeof v==='function'?v(gender):v;};
   // Séance de décharge : mindset dédié, jamais un message de recul/pique.
   if(isDeload)return pick(DELOAD_MINDSET);
   if(isPostDeload)return pick(POST_DELOAD_MINDSET);
@@ -6298,7 +6312,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload})}</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||''})}</div>
                   {histRecap.isDeload&&<DeloadRecapBanner/>}
                   {histRecap.isPostDeload&&<PostDeloadRecapBanner/>}
                   {histRecap.isRegression&&(
@@ -6376,7 +6390,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile))}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'')}"</div>
                   </div>
                 </div>
               )}
@@ -9016,7 +9030,7 @@ function NutritionEditor({athleteId,athleteName,initialPlan,assignedAt,onSaved,o
 }
 
 // ── Athlete Calendar Summary (coach view) ─────────────────
-function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,athleteName,editable=false,onMovesChange,onSessionPlanned,onDeleteSession,plannedSessions}){
+function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='all',moves,athleteId,athleteName,athleteGender='',editable=false,onMovesChange,onSessionPlanned,onDeleteSession,plannedSessions}){
   const now=new Date();
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
@@ -9131,7 +9145,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} history={sessions} initialTab={viewSessionTab} repsRange={repsMaxMap} repsStrMap={repsStrMap} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} history={sessions} initialTab={viewSessionTab} repsRange={repsMaxMap} repsStrMap={repsStrMap} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
       {/* Assigner : envoyer la séance de ce jour à l'athlète (regroupé ici depuis l'ancienne liste). */}
@@ -9589,7 +9603,7 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
     <div style={{marginBottom:14}}>
       {importDay&&<CoachImportSessionModal athleteId={athleteId} athleteName={athleteName} dayName={importDay.dayName} dayData={importDay.dayData} onClose={()=>setImportDay(null)} onDone={reload}/>}
       {viewDay&&<CoachDayViewModal dayName={viewDay.dayName} dayData={viewDay.dayData} onClose={()=>setViewDay(null)}/>}
-      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} history={hist} initialTab="recap" repsRange={progRange} onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
+      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteData?.gender||''} history={hist} initialTab="recap" repsRange={progRange} onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
       {editSession&&<CoachEditSessionModal session={editSession} athleteName={athleteName} onClose={()=>setEditSession(null)} onDone={()=>{setEditSession(null);reload();}}/>}
       {sheetNames.length>1&&(
         <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
@@ -10541,7 +10555,7 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
-function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
+function CoachSessionModal({s,athleteId,athleteName,athleteGender='',history,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
@@ -10654,7 +10668,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload,isPostDeload})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload,isPostDeload,gender:athleteGender})}</div>
               {/* Semaine de décharge : bandeau neutre à la place de l'alerte de régression */}
               {isDeload&&<DeloadRecapBanner coach/>}
               {isPostDeload&&<PostDeloadRecapBanner coach/>}
@@ -10809,7 +10823,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload,isPostDeload)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload,isPostDeload,null,athleteGender)}"</div>
               </div>
             </div>
           )}
@@ -10947,7 +10961,7 @@ function CoachSessionModal({s,athleteId,athleteName,history,onClose,onFeedbackSa
   );
 }
 
-function CoachSessionCard({s,athleteId,athleteName,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
+function CoachSessionCard({s,athleteId,athleteName,athleteGender='',isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
   const[expanded,setExpanded]=React.useState(false);
   const[showModal,setShowModal]=React.useState(false);
   const[showCopyModal,setShowCopyModal]=React.useState(false);
@@ -11078,7 +11092,7 @@ function CoachSessionCard({s,athleteId,athleteName,isDeleting,onStartDelete,onCa
         </div>
       )}
       {showModal&&ReactDOM.createPortal(
-        <CoachSessionModal s={s} athleteId={athleteId} onClose={()=>setShowModal(false)} onFeedbackSaved={()=>{setShowModal(false);if(onFeedbackSaved)onFeedbackSaved();}}/>,
+        <CoachSessionModal s={s} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} onClose={()=>setShowModal(false)} onFeedbackSaved={()=>{setShowModal(false);if(onFeedbackSaved)onFeedbackSaved();}}/>,
         document.body
       )}
       {showCopyModal&&ReactDOM.createPortal(
@@ -12570,6 +12584,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               mode="sport"
               athleteId={a.id}
               athleteName={a.firstName||a.email.split('@')[0]}
+              athleteGender={a.gender||''}
               moves={a.scheduleMoves}
               plannedSessions={a.plannedSessions}
               editable={true}
@@ -12653,7 +12668,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {sessions.slice(0,50).map(s=>(
-                  <CoachSessionCard key={s.id} s={s} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]}
+                  <CoachSessionCard key={s.id} s={s} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} athleteGender={a.gender||''}
                     isDeleting={deletingSessionId===s.id}
                     onStartDelete={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
                     onCancelTouchDelete={()=>clearTimeout(sessionPressTimer.current)}
@@ -12741,7 +12756,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                       );
                     })}
                   </div>
-                  <button onClick={()=>{setCoachBiblioPreview(null);onStartWorkoutForAthlete&&onStartWorkoutForAthlete(s,a.id,a.firstName||a.email.split('@')[0],sessions);}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
+                  <button onClick={()=>{setCoachBiblioPreview(null);onStartWorkoutForAthlete&&onStartWorkoutForAthlete(s,a.id,a.firstName||a.email.split('@')[0],sessions,a.gender||'');}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
                     ▶️ Démarrer et valider pour {a.firstName||a.email.split('@')[0]}
                   </button>
                   <button onClick={()=>setPlanFromBiblio(s)} style={{width:'100%',height:50,borderRadius:15,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,boxShadow:'0 8px 22px rgba(191,160,96,0.3)'}}>
@@ -16804,6 +16819,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Prénom à afficher dans l'écran de récap : celui de l'athlète quand le coach a joué la séance
   // POUR lui (coachSessionTarget est effacé avant le rendu du récap), sinon celui du user connecté.
   const[congratsName,setCongratsName]=React.useState(null);
+  // Sexe à utiliser pour l'accord des messages du récap (athlète quand le coach joue pour lui).
+  const[congratsGender,setCongratsGender]=React.useState('');
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
   const[sessionComparison,setSessionComparison]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
@@ -16837,13 +16854,20 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     }
     // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
     // et seulement pour l'athlète qui démarre POUR LUI (pas le coach qui joue pour un athlète).
+    // Anti-spam : au plus 1× par jour (sur la 1re séance du jour) — sinon le message se répète à
+    // chaque démarrage, y compris après une annulation, et perd tout son effet.
     if(!showedFeedback&&!coachSessionTarget){
       try{
-        const coach=computeCoachCtx(authUser);
-        const goals=computeGoalsCtx(authUser);
-        if(coach||goals){
-          const msg=coachPreSessionMessage(coach,goals,authUser.firstName||'',w.id||w.name||Date.now());
-          if(msg)setPreSessionPopup(msg);
+        const preKey='pa_presession_ack_'+authUser.id;
+        const todayKey=ymdKey();
+        const lastShown=localStorage.getItem(preKey)||'';
+        if(lastShown!==todayKey){
+          const coach=computeCoachCtx(authUser);
+          const goals=computeGoalsCtx(authUser);
+          if(coach||goals){
+            const msg=coachPreSessionMessage(coach,goals,authUser.firstName||'',w.id||w.name||Date.now());
+            if(msg){setPreSessionPopup(msg);try{localStorage.setItem(preKey,todayKey);}catch{}}
+          }
         }
       }catch(e){console.error('pre-session popup',e);}
     }
@@ -16864,10 +16888,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setCoachSessionTargetRaw(t);
     try{if(t)localStorage.setItem(COACH_TARGET_KEY,JSON.stringify(t));else localStorage.removeItem(COACH_TARGET_KEY);}catch{}
   },[COACH_TARGET_KEY]);
-  const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory)=>{
+  const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory,athleteGender='')=>{
     // Ordre important : on POSE la cible AVANT startWorkout, pour que le SessionScreen se
     // monte déjà avec le bon athleteName (sinon 1er render = prénom du coach).
-    setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[]});
+    setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[],athleteGender:athleteGender||''});
     startWorkout(w,{keepCoachTarget:true});
   };
   // Pop-up de feedback : on l'efface une fois lu, mais le feedback lui-même reste
@@ -16887,6 +16911,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,tgt.history||[],programRangeMap(importedPrograms));
       setVolumeVsPrev(vvp);setSessionComparison(comp);setLastFinishedSession(snapshot);
       setCongratsName(tgt.athleteName||null); // récap au nom de l'athlète, pas du coach
+      setCongratsGender(tgt.athleteGender||''); // accord au sexe de l'athlète
       setCoachSessionTarget(null);
       try{
         await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload}});
@@ -16900,6 +16925,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setSessionComparison(comp);
     setLastFinishedSession(snapshot);
     setCongratsName(null); // séance de l'utilisateur lui-même → son propre prénom
+    setCongratsGender(profile.gender||''); // et son propre sexe pour l'accord
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
     // Jusqu'à 5 tentatives avec backoff croissant (1.5s/3s/6s/10s ≈ 20s au total) avant
@@ -17203,7 +17229,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,gender:congratsGender||profile.gender||''})}</div>
             </div>
 
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
@@ -17360,7 +17386,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession,computeGoalsCtx(profile))}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession,computeGoalsCtx(profile),congratsGender||profile.gender||'')}"</div>
             </div>
 
             {/* Bouton continuer */}
