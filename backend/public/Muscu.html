@@ -4614,8 +4614,6 @@ function SubscriptionCard({profile,onShowPricing}){
   const[err,setErr]=React.useState('');
   const CREATOR='yannisgym972@gmail.com';
   if(profile.email===CREATOR||profile.role==='coach')return null;
-  const inTrial=profile.createdAt&&Date.now()<(profile.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((profile.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const isActive=profile.stripeStatus==='active';
   const PLAN_LABELS={explorer:'Explorer — 4,99€/mois',ia:'IA Programme — 14,99€/mois',coaching:'Coaching Online — 150€/mois',coaching_complet:'Coaching Complet — 249€/mois'};
   const PLAN_COLORS={explorer:'#0d9488',ia:'#6366f1',coaching:'#BFA060',coaching_complet:'#D4883A'};
@@ -4647,22 +4645,7 @@ function SubscriptionCard({profile,onShowPricing}){
             </div>
           </>
         )}
-        {!isActive&&inTrial&&(
-          <>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <span style={{fontSize:20}}>🎁</span>
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — 7 jours</div>
-                <div style={{fontSize:11,color:T.textDim}}>{trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-              </div>
-            </div>
-            {err&&<div style={{fontSize:11,color:T.danger,marginBottom:8}}>{err}</div>}
-            {onShowPricing&&<button onClick={onShowPricing} style={{width:'100%',height:38,borderRadius:10,border:'none',background:'linear-gradient(135deg,#BFA060,#D4883A)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-              🚀 Voir les offres
-            </button>}
-          </>
-        )}
-        {!isActive&&!inTrial&&(
+        {!isActive&&(
           <>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
               <span style={{fontSize:20}}>🔒</span>
@@ -12707,7 +12690,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               {isMain&&<div style={{marginTop:8,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>🔓 Accès complet à l'application</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement ou essai gratuit'}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement'}</div>
                 </div>
                 <button onClick={async()=>{
                   try{
@@ -13530,7 +13513,175 @@ const AUTH_ERR_FR={
   too_many_requests:'Trop de requêtes. Patiente un peu.',
 };
 
+// ── Fiches de démarrage (prospect) — intégrées à la landing page, envoyées au coach WhatsApp ──
+const COACH_WHATSAPP='596696311862';
+const OBJ_OPTS=['Perte de gras','Prise de masse','Recomposition','Performance'];
+// Config data-driven des 2 fiches. types: text|tel|email|num|area|radio|chips|freq|meals
+const FICHE_CONF={
+  pres:{name:'Fiche de présentation',sections:[
+    {t:'Ce qui m\'intéresse',f:[{k:'Intéressé par',type:'chips',opts:['Programme sportif','Plan alimentaire','Présentiel','Tout']}]},
+    {t:'1. Informations personnelles',f:[{k:'Nom / Prénom',type:'text',req:true},{k:'Âge',type:'num'},{k:'Téléphone',type:'tel'},{k:'Email',type:'email'},{k:'Profession',type:'text'}]},
+    {t:'2. Données physiques',f:[{k:'Poids actuel (kg)',type:'num'},{k:'Taille (cm)',type:'num'},{k:'Poids visé (kg)',type:'num'}]},
+    {t:'3. Niveau & expérience',f:[{k:'Es-tu sportif ?',type:'radio',opts:['Oui','Un peu','Non / débutant']},{k:'Déjà en salle ?',type:'radio',opts:['Jamais','Un peu','Oui, régulièrement']},{k:'Sports déjà pratiqués',type:'area'},{k:'Depuis combien de temps',type:'text'}]},
+    {t:'4. Objectifs',f:[{k:'Objectif principal',type:'radio',opts:OBJ_OPTS},{k:'Objectif (tes mots)',type:'area'},{k:'Échéance / date',type:'text'}]},
+    {t:'5. Santé & antécédents',f:[{k:'Zones sensibles',type:'chips',opts:['Épaules','Dos','Genoux','Poignets','Aucune']},{k:'Blessures / opérations',type:'area'},{k:'Santé / traitement',type:'text'},{k:'Certificat médical ?',type:'radio',opts:['Oui','Non']}]},
+    {t:'6. Mode de vie',f:[{k:'Repas / jour',type:'num'},{k:'Allergies / régime',type:'text'},{k:'Sommeil',type:'text'},{k:'Tabac / alcool',type:'radio',opts:['Non','Occasionnel','Régulier']},{k:'Stress',type:'text'}]},
+    {t:'7. Disponibilité',f:[{k:'Séances / semaine',type:'num'},{k:'Jours & créneaux',type:'text'},{k:'Où t\'entraînes-tu ?',type:'chips',opts:['Salle','Maison','Extérieur']},{k:'Matériel',type:'text'}]},
+    {t:'8. Motivation',f:[{k:'Pourquoi la musculation ?',type:'area'},{k:'Motivation (1 à 10)',type:'radio',opts:['1-3','4-6','7-8','9-10']},{k:'Ce qui t\'a fait lâcher avant',type:'text'}]},
+  ]},
+  alim:{name:'Fiche alimentaire',sections:[
+    {t:'1. Profil',f:[{k:'Nom / Prénom',type:'text',req:true},{k:'Âge',type:'num'},{k:'Taille (cm)',type:'num'},{k:'Poids actuel (kg)',type:'num'},{k:'Poids visé (kg)',type:'num'},{k:'Masse grasse %',type:'num'},{k:'Profession',type:'text'},{k:'Sexe',type:'radio',opts:['Homme','Femme']}]},
+    {t:'2. Objectif',f:[{k:'Objectif principal',type:'radio',opts:OBJ_OPTS},{k:'Échéance',type:'text'},{k:'Objectif (tes mots)',type:'area'},{k:'Régimes déjà suivis',type:'area'}]},
+    {t:'3. Santé & restrictions',f:[{k:'Problèmes de santé',type:'chips',opts:['Diabète','Cholestérol','Hypertension','Thyroïde','Aucun']},{k:'Traitements',type:'text'},{k:'Digestion',type:'chips',opts:['Ballonnements','Reflux','Constipation','Aucun']},{k:'Intolérances',type:'text'},{k:'Allergies',type:'text'},{k:'Règles régulières ? (femmes)',type:'radio',opts:['Oui','Non / absentes +3 mois','Non concerné']}]},
+    {t:'4. Habitudes alimentaires',f:[{k:'Repas / jour',type:'num'},{k:'Heure 1er repas',type:'text'},{k:'Heure dernier repas',type:'text'},{k:'Petit-déjeuner',type:'radio',opts:['Sucré','Salé','Les deux','Je saute']},{k:'Tu cuisines',type:'radio',opts:['Toujours','Souvent','Parfois','Rarement']},{k:'Tu pèses tes aliments ?',type:'radio',opts:['Oui','Parfois','Jamais']},{k:'Grignotage',type:'radio',opts:['Jamais','Parfois','Souvent','Tout le temps']},{k:'Si oui, quels aliments',type:'text'}]},
+    {t:'Fréquence de consommation',f:[{k:'Fréquence',type:'freq'}]},
+    {t:'5. Journée type',f:[{k:'Jour d\'entraînement',type:'meals'},{k:'Jour de repos',type:'meals'}]},
+    {t:'6. Hydratation & compléments',f:[{k:'Eau / jour (L)',type:'num'},{k:'Cafés / jour',type:'num'},{k:'Boissons sucrées',type:'radio',opts:['Jamais','Occasionnel','1-2/jour','+2/jour']},{k:'Alcool',type:'radio',opts:['Jamais','Occasionnel','Hebdo','Quotidien']},{k:'Suppléments',type:'chips',opts:['Whey','Créatine','Oméga-3','Vitamines','Pré-workout','Aucun']},{k:'Autres compléments',type:'text'}]},
+    {t:'7. Préférences',f:[{k:'Régime',type:'chips',opts:['Omnivore','Végétarien','Végan','Halal','Sans gluten','Sans lactose']},{k:'Aliments que tu ADORES',type:'area'},{k:'Aliments que tu DÉTESTES',type:'area'},{k:'Budget',type:'radio',opts:['Serré','Moyen','Pas de contrainte']}]},
+    {t:'8. Logistique & mode de vie',f:[{k:'Niveau cuisine',type:'radio',opts:['Débutant','Basique','Intermédiaire','À l\'aise']},{k:'Temps cuisine / jour (min)',type:'num'},{k:'Meal prep',type:'radio',opts:['Oui','Un peu','Non']},{k:'Frigo au travail ?',type:'radio',opts:['Oui','Non']},{k:'Séances / semaine',type:'num'},{k:'Type',type:'chips',opts:['Musculation','CrossFit','Cardio','Sport co','Autre']},{k:'Heure entraînement',type:'text'},{k:'Activité hors sport',type:'radio',opts:['Sédentaire','Légèrement actif','Actif','Très actif']},{k:'Sommeil (h/nuit)',type:'num'},{k:'Qualité sommeil',type:'radio',opts:['Bonne','Correcte','Mauvaise']},{k:'Manges plus si stressé(e) ?',type:'radio',opts:['Oui','Non','Moins']}]},
+  ]},
+};
+const FREQ_CATS=['Viande rouge','Volaille','Poisson/fruits de mer','Oeufs','Produits laitiers','Légumineuses','Féculents','Légumes','Fruits','Oléagineux','Fast-food/plats préparés','Sucreries/sodas','Alcool'];
+const FREQ_COLS=['Jamais','Rare','1-2x','3-5x','Chaque jour'];
+const MEAL_SLOTS=['Petit-déjeuner','Collation matin','Déjeuner','Collation après-midi','Dîner','Avant coucher'];
+
+function StartFichesModal({onClose}){
+  const[tab,setTab]=React.useState('pres');
+  const[ans,setAns]=React.useState({pres:{},alim:{}});
+  const[result,setResult]=React.useState(null); // texte compilé
+  const conf=FICHE_CONF[tab];
+  const A=ans[tab];
+  const set=(k,v)=>setAns(s=>({...s,[tab]:{...s[tab],[k]:v}}));
+  const toggle=(k,opt)=>{const cur=A[k]||[];set(k,cur.includes(opt)?cur.filter(x=>x!==opt):[...cur,opt]);};
+
+  const fieldLabel=t=>t;
+  const inp={width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:T.text,fontSize:16,fontFamily:'inherit',padding:'11px 12px',outline:'none'};
+  const chip=(on)=>({padding:'9px 13px',borderRadius:10,border:on?'1px solid '+T.accent:'1px solid '+T.border,background:on?'rgba(191,160,96,0.16)':'rgba(255,255,255,0.03)',color:on?T.text:T.textDim,fontSize:13,fontWeight:on?700:500,cursor:'pointer',whiteSpace:'nowrap'});
+
+  function renderField(fl){
+    const k=fl.k,v=A[k];
+    if(fl.type==='chips'||fl.type==='radio'){
+      const multi=fl.type==='chips';
+      return(
+        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+          {fl.opts.map(o=>{
+            const on=multi?((v||[]).includes(o)):v===o;
+            return <button key={o} type="button" onClick={()=>multi?toggle(k,o):set(k,v===o?'':o)} style={chip(on)}>{o}</button>;
+          })}
+        </div>
+      );
+    }
+    if(fl.type==='area') return <textarea value={v||''} onChange={e=>set(k,e.target.value)} rows={2} style={{...inp,resize:'vertical',lineHeight:1.5}}/>;
+    if(fl.type==='freq') return (
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr><th/>{FREQ_COLS.map(c=><th key={c} style={{fontSize:9,color:T.textFaint,fontWeight:700,padding:'0 2px 6px',textTransform:'uppercase'}}>{c}</th>)}</tr></thead>
+        <tbody>{FREQ_CATS.map(cat=>{
+          const sel=(A['Fréquence']||{})[cat];
+          return <tr key={cat}><td style={{fontSize:11.5,color:T.textDim,padding:'6px 6px 6px 0'}}>{cat}</td>
+            {FREQ_COLS.map(col=><td key={col} style={{textAlign:'center'}}>
+              <button type="button" onClick={()=>set('Fréquence',{...(A['Fréquence']||{}),[cat]:sel===col?undefined:col})} style={{width:20,height:20,borderRadius:6,border:sel===col?'1px solid '+T.accent:'1.5px solid '+T.textFaint,background:sel===col?T.accent:'transparent',color:'#0c0c12',fontSize:12,cursor:'pointer',lineHeight:1}}>{sel===col?'✓':''}</button>
+            </td>)}
+          </tr>;
+        })}</tbody>
+      </table></div>
+    );
+    if(fl.type==='meals'){
+      const mv=A[k]||{};
+      return <div>{MEAL_SLOTS.map(m=>(
+        <div key={m} style={{display:'flex',alignItems:'center',gap:8,margin:'6px 0'}}>
+          <span style={{flex:'0 0 104px',fontSize:11.5,color:T.textDim}}>{m}</span>
+          <input value={mv[m]||''} onChange={e=>set(k,{...mv,[m]:e.target.value})} placeholder="aliments, quantités…" style={{...inp,fontSize:14,padding:'9px 10px'}}/>
+        </div>
+      ))}</div>;
+    }
+    const itype=fl.type==='num'?'number':fl.type==='tel'?'tel':fl.type==='email'?'email':'text';
+    return <input type={itype} value={v||''} onChange={e=>set(k,e.target.value)} style={inp}/>;
+  }
+
+  function compile(){
+    const out=['*PRIME ATHL — '+conf.name.toUpperCase()+'*'];
+    const nom=A['Nom / Prénom']; if(nom&&nom.trim())out.push('👤 '+nom.trim());
+    out.push('🗓️ '+new Date().toLocaleDateString('fr-FR'));
+    conf.sections.forEach(sec=>{
+      const lines=[];
+      sec.f.forEach(fl=>{
+        const v=A[fl.k];
+        if(fl.k==='Nom / Prénom')return;
+        if(fl.type==='chips'){ if(v&&v.length)lines.push('• '+fl.k+' : '+v.join(', ')); }
+        else if(fl.type==='freq'){ const fr=Object.entries(v||{}).filter(([,c])=>c).map(([cat,c])=>cat+' ('+c+')'); if(fr.length)lines.push('• '+fr.join(' · ')); }
+        else if(fl.type==='meals'){ const mm=Object.entries(v||{}).filter(([,t])=>t&&t.trim()).map(([m,t])=>m+': '+t.trim()); if(mm.length)lines.push('• '+fl.k+' → '+mm.join(' | ')); }
+        else if(v&&String(v).trim()) lines.push('• '+fl.k+' : '+String(v).trim());
+      });
+      if(lines.length){ out.push(''); out.push('*'+sec.t+'*'); lines.forEach(l=>out.push(l)); }
+    });
+    out.push(''); out.push('— Envoyé via Prime Athl —');
+    return out.join('\n');
+  }
+
+  function send(){
+    if(!(A['Nom / Prénom']||'').trim()){ alert('Ajoute au moins ton nom 🙏'); return; }
+    setResult(compile());
+  }
+  function copyMsg(){
+    const t=result||compile();
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(()=>{});
+  }
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:9800,background:'#06060a',display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'calc(12px + env(safe-area-inset-top)) 16px 10px',borderBottom:'1px solid '+T.border,flexShrink:0}}>
+        <button onClick={onClose} style={{width:34,height:34,borderRadius:10,border:'1px solid '+T.border,background:'rgba(255,255,255,0.03)',color:T.text,fontSize:16,cursor:'pointer'}}>✕</button>
+        <div style={{flex:1}}><div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:1,textTransform:'uppercase'}}>Prime Athl · Accompagnement</div><div style={{fontSize:15,fontWeight:800}}>Fiche de démarrage</div></div>
+      </div>
+      <div style={{display:'flex',gap:6,padding:'10px 16px',flexShrink:0}}>
+        {[['pres','Présentation'],['alim','Alimentaire']].map(([id,lb])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,height:40,borderRadius:11,border:tab===id?'none':'1px solid '+T.border,background:tab===id?'linear-gradient(135deg,#BFA060,#B85070)':'rgba(255,255,255,0.03)',color:tab===id?'#0c0c12':T.textDim,fontSize:13,fontWeight:700,cursor:'pointer'}}>{lb}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'4px 16px 110px'}}>
+        {tab==='pres'&&(
+          <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid '+T.border,borderRadius:14,padding:14,margin:'6px 0 8px'}}>
+            <div style={{fontSize:13,color:'#E88AB0',fontWeight:800,marginBottom:8}}>Mon accompagnement</div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700}}>Programme sportif — 150 € pour démarrer, puis 100 €/mois</div>
+            <div style={{fontSize:12,color:T.textDim,marginTop:2}}>• Création du programme : 50 € (une fois)<br/>• Appli + suivi : 100 €/mois</div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Plan alimentaire — 100 € <span style={{color:T.textDim,fontWeight:400}}>(unique, ajustable)</span></div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700}}>Séance en présentiel — 30 € <span style={{color:T.textDim,fontWeight:400}}>(optionnelle)</span></div>
+          </div>
+        )}
+        {conf.sections.map(sec=>(
+          <div key={sec.t}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:T.accent,margin:'18px 2px 8px'}}>{sec.t}</div>
+            {sec.f.map(fl=>(
+              <div key={fl.k} style={{marginBottom:12}}>
+                {fl.type!=='freq'&&<div style={{fontSize:11,fontWeight:600,letterSpacing:0.3,textTransform:'uppercase',color:T.textFaint,marginBottom:6}}>{fieldLabel(fl.k)}{fl.req?' *':''}</div>}
+                {renderField(fl)}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div style={{position:'fixed',left:0,right:0,bottom:0,padding:'12px 16px calc(12px + env(safe-area-inset-bottom))',background:'linear-gradient(180deg,transparent,#06060a 25%)'}}>
+        <button onClick={send} style={{width:'100%',height:52,borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer'}}>Envoyer au coach</button>
+      </div>
+
+      {result&&(
+        <div onClick={e=>{if(e.target===e.currentTarget)setResult(null);}} style={{position:'fixed',inset:0,zIndex:9900,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div style={{background:'#06060a',border:'1px solid '+T.border,borderRadius:'20px 20px 0 0',width:'100%',maxWidth:500,padding:'20px 16px calc(20px + env(safe-area-inset-bottom))'}}>
+            <div style={{fontSize:19,fontWeight:800,marginBottom:6}}>Ton message est prêt ✅</div>
+            <div style={{fontSize:12.5,color:T.textDim,marginBottom:16,lineHeight:1.5}}>Appuie sur <b>Ouvrir WhatsApp</b> (sur téléphone) ou copie le message et colle-le au coach.</div>
+            <a href={'https://wa.me/'+COACH_WHATSAPP+'?text='+encodeURIComponent(result)} target="_blank" rel="noopener" style={{display:'flex',alignItems:'center',justifyContent:'center',height:50,borderRadius:14,background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#0c0c12',fontSize:15,fontWeight:800,textDecoration:'none',marginBottom:9}}>Ouvrir WhatsApp</a>
+            <button onClick={copyMsg} style={{width:'100%',height:46,borderRadius:14,border:'1px solid '+T.border,background:'rgba(255,255,255,0.06)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:9}}>Copier le message</button>
+            <textarea readOnly value={result} style={{width:'100%',boxSizing:'border-box',height:150,background:'rgba(0,0,0,0.3)',border:'1px solid '+T.border,borderRadius:10,color:T.text,fontSize:13,fontFamily:'inherit',padding:10,lineHeight:1.5}}/>
+            <button onClick={()=>setResult(null)} style={{width:'100%',height:40,marginTop:4,border:'none',background:'transparent',color:T.textFaint,fontSize:13,cursor:'pointer'}}>Fermer</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuthScreen({onLogin,onSignup}){
+  const[showFiches,setShowFiches]=React.useState(false);
   const params=(()=>{try{return new URLSearchParams(window.location.search);}catch{return new URLSearchParams();}})();
   const resetTokenFromUrl=params.get('reset');
   const[mode,setMode]=React.useState(resetTokenFromUrl?'reset':'login');
@@ -13764,10 +13915,18 @@ function AuthScreen({onLogin,onSignup}){
         </form>
         </>)}
 
+        {(mode==='login'||mode==='signup')&&(
+          <div style={{marginTop:18,paddingTop:16,borderTop:'1px solid rgba(255,255,255,0.08)'}}>
+            <div style={{fontSize:12,color:T.textDim,textAlign:'center',marginBottom:10,lineHeight:1.5}}>Pas encore accompagné ? Découvre mon offre et envoie-moi ta fiche.</div>
+            <button type="button" onClick={()=>setShowFiches(true)} style={{width:'100%',height:48,border:'1px solid rgba(191,160,96,0.4)',borderRadius:13,background:'linear-gradient(135deg,rgba(191,160,96,0.12),rgba(184,80,112,0.08))',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>📋 Remplir ma fiche de démarrage</button>
+          </div>
+        )}
+
         <div style={{fontSize:10,color:T.textFaint,textAlign:'center',marginTop:24,letterSpacing:0.3}}>
           ● BACKEND : {API_BASE||'same origin'}
         </div>
       </div>
+      {showFiches&&<StartFichesModal onClose={()=>setShowFiches(false)}/>}
     </div>
   );
 }
@@ -13826,8 +13985,6 @@ function PricingScreen({onBack,currentUser}){
     setLoading(null);
   };
   const isActive=(planId)=>currentUser?.stripeStatus==='active'&&currentUser?.stripePlan===planId;
-  const inTrial=currentUser?.createdAt&&Date.now()<(currentUser.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((currentUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const soloPlans=PLANS.filter(p=>p.section==='solo');
   const coachPlans=PLANS.filter(p=>p.section==='coaching');
   const renderPlan=(plan)=>{
@@ -13900,16 +14057,6 @@ function PricingScreen({onBack,currentUser}){
           <span style={{fontWeight:700,color:'#E07020'}}>Catalogue</span>
         </div>
       </div>
-      {/* Trial banner */}
-      {inTrial&&(
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.18)',marginBottom:18}}>
-          <div style={{width:34,height:34,borderRadius:9,background:'rgba(44,196,160,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>🎁</div>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>Essai gratuit — {trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-            <div style={{fontSize:10,color:T.textDim}}>Tous les univers débloqués</div>
-          </div>
-        </div>
-      )}
       {err&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:10,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.3)',color:T.danger,fontSize:12,fontWeight:600}}>{err}</div>}
       {/* S'entraîner seul */}
       <div style={{fontSize:9,fontWeight:700,letterSpacing:0.7,textTransform:'uppercase',color:T.textFaint,marginBottom:10,paddingLeft:2}}>S'entraîner seul</div>
@@ -13949,7 +14096,7 @@ function PricingScreen({onBack,currentUser}){
           <div style={{fontSize:12,fontWeight:800,color:'#6366f1',flexShrink:0}}>30€</div>
         </div>
       </div>
-      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Essai gratuit 7 jours · Résiliation à tout moment<br/>Paiement sécurisé Stripe</div>
+      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Résiliation à tout moment · Paiement sécurisé Stripe</div>
     </div>
   );
 }
@@ -15830,7 +15977,6 @@ function userHasAccessFE(u,universe){
   if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
   if(u.fullAccess)return true;
-  if(u.createdAt&&Date.now()<(u.createdAt+7*24*3600*1000))return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
 }
@@ -15845,8 +15991,6 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
     {id:'programmes',emoji:'📋',title:'Catalogue',desc:'Programmes structurés multi-semaines à acheter et suivre',
      grad:'linear-gradient(135deg,#E07020,#D4883A)',glow:'rgba(224,112,32,0.4)',border:'rgba(224,112,32,0.3)',bg:'rgba(224,112,32,0.07)',plan:null},
   ];
-  const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((authUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   return(
     <div style={{padding:'28px 20px 100px',color:T.text,height:'100%',boxSizing:'border-box',overflowY:'auto'}}>
       <div style={{marginBottom:24}}>
@@ -15854,20 +15998,11 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
         <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.6,lineHeight:1.1}}><HoloText>Tes Univers</HoloText></div>
         <div style={{fontSize:13,color:T.textDim,marginTop:8}}>Choisis ton mode d'entraînement</div>
       </div>
-      {inTrial&&(
-        <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.25)',display:'flex',alignItems:'center',gap:10}}>
-          <span style={{fontSize:18}}>🎁</span>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — {trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-            <div style={{fontSize:11,color:T.textDim}}>Tous les univers débloqués pendant l'essai</div>
-          </div>
-        </div>
-      )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.08)',border:'1px solid rgba(184,80,112,0.25)',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={onShowPricing}>
           <span style={{fontSize:18}}>🔒</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.danger}}>Essai terminé</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.danger}}>Abonnement requis</div>
             <div style={{fontSize:11,color:T.textDim}}>Abonne-toi pour débloquer les univers</div>
           </div>
           <div style={{fontSize:11,color:T.accent,fontWeight:700}}>Voir les plans →</div>
@@ -15905,7 +16040,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           ⚙️ Gérer mon abonnement
         </button>
       )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <button onClick={onShowPricing} style={{marginTop:16,width:'100%',height:44,borderRadius:13,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>
           🚀 Débloquer Prime Athl
         </button>

@@ -139,15 +139,11 @@ const PLAN_UNIVERSES = {
   coaching_complet:  ['explorer', 'ia', 'coach'],
 };
 
-// Durée de l'essai gratuit (7 jours)
-const TRIAL_MS = 7 * 24 * 3600 * 1000;
-
 function userHasAccess(u, universe) {
   if (!u) return false;
   if (u.email === MAIN_COACH_EMAIL) return true;
   if (u.role === 'coach') return true;
   if (u.fullAccess) return true;
-  if (Date.now() < (u.createdAt || 0) + TRIAL_MS) return true;
   if (u.stripeStatus === 'active' && u.stripePlan) {
     return (PLAN_UNIVERSES[u.stripePlan] || []).includes(universe);
   }
@@ -4544,8 +4540,6 @@ app.post('/api/admin/training-programs/:id/upload-cover', authRequired, mainCoac
 app.get('/api/stripe/status', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(404).json({ error: 'not_found' });
-  const inTrial = Date.now() < (u.createdAt || 0) + TRIAL_MS;
-  const trialDaysLeft = inTrial ? Math.ceil(((u.createdAt || 0) + TRIAL_MS - Date.now()) / 86400000) : 0;
   const access = {
     explorer: userHasAccess(u, 'explorer'),
     ia:       userHasAccess(u, 'ia'),
@@ -4554,7 +4548,7 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
   res.json({
     plan: u.stripePlan || null,
     status: u.stripeStatus || null,
-    inTrial, trialDaysLeft,
+    inTrial: false, trialDaysLeft: 0,
     access,
     stripeEnabled: !!stripe,
   });
