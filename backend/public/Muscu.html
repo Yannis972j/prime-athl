@@ -4614,8 +4614,6 @@ function SubscriptionCard({profile,onShowPricing}){
   const[err,setErr]=React.useState('');
   const CREATOR='yannisgym972@gmail.com';
   if(profile.email===CREATOR||profile.role==='coach')return null;
-  const inTrial=profile.createdAt&&Date.now()<(profile.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((profile.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const isActive=profile.stripeStatus==='active';
   const PLAN_LABELS={explorer:'Explorer — 4,99€/mois',ia:'IA Programme — 14,99€/mois',coaching:'Coaching Online — 150€/mois',coaching_complet:'Coaching Complet — 249€/mois'};
   const PLAN_COLORS={explorer:'#0d9488',ia:'#6366f1',coaching:'#BFA060',coaching_complet:'#D4883A'};
@@ -4647,22 +4645,7 @@ function SubscriptionCard({profile,onShowPricing}){
             </div>
           </>
         )}
-        {!isActive&&inTrial&&(
-          <>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <span style={{fontSize:20}}>🎁</span>
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — 7 jours</div>
-                <div style={{fontSize:11,color:T.textDim}}>{trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-              </div>
-            </div>
-            {err&&<div style={{fontSize:11,color:T.danger,marginBottom:8}}>{err}</div>}
-            {onShowPricing&&<button onClick={onShowPricing} style={{width:'100%',height:38,borderRadius:10,border:'none',background:'linear-gradient(135deg,#BFA060,#D4883A)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-              🚀 Voir les offres
-            </button>}
-          </>
-        )}
-        {!isActive&&!inTrial&&(
+        {!isActive&&(
           <>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
               <span style={{fontSize:20}}>🔒</span>
@@ -12707,7 +12690,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               {isMain&&<div style={{marginTop:8,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>🔓 Accès complet à l'application</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement ou essai gratuit'}</div>
+                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement'}</div>
                 </div>
                 <button onClick={async()=>{
                   try{
@@ -14002,8 +13985,6 @@ function PricingScreen({onBack,currentUser}){
     setLoading(null);
   };
   const isActive=(planId)=>currentUser?.stripeStatus==='active'&&currentUser?.stripePlan===planId;
-  const inTrial=currentUser?.createdAt&&Date.now()<(currentUser.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((currentUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   const soloPlans=PLANS.filter(p=>p.section==='solo');
   const coachPlans=PLANS.filter(p=>p.section==='coaching');
   const renderPlan=(plan)=>{
@@ -14076,16 +14057,6 @@ function PricingScreen({onBack,currentUser}){
           <span style={{fontWeight:700,color:'#E07020'}}>Catalogue</span>
         </div>
       </div>
-      {/* Trial banner */}
-      {inTrial&&(
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.18)',marginBottom:18}}>
-          <div style={{width:34,height:34,borderRadius:9,background:'rgba(44,196,160,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>🎁</div>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>Essai gratuit — {trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-            <div style={{fontSize:10,color:T.textDim}}>Tous les univers débloqués</div>
-          </div>
-        </div>
-      )}
       {err&&<div style={{marginBottom:12,padding:'10px 14px',borderRadius:10,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.3)',color:T.danger,fontSize:12,fontWeight:600}}>{err}</div>}
       {/* S'entraîner seul */}
       <div style={{fontSize:9,fontWeight:700,letterSpacing:0.7,textTransform:'uppercase',color:T.textFaint,marginBottom:10,paddingLeft:2}}>S'entraîner seul</div>
@@ -14125,7 +14096,7 @@ function PricingScreen({onBack,currentUser}){
           <div style={{fontSize:12,fontWeight:800,color:'#6366f1',flexShrink:0}}>30€</div>
         </div>
       </div>
-      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Essai gratuit 7 jours · Résiliation à tout moment<br/>Paiement sécurisé Stripe</div>
+      <div style={{fontSize:11,color:T.textFaint,textAlign:'center',lineHeight:1.7}}>Résiliation à tout moment · Paiement sécurisé Stripe</div>
     </div>
   );
 }
@@ -16006,7 +15977,6 @@ function userHasAccessFE(u,universe){
   if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
   if(u.fullAccess)return true;
-  if(u.createdAt&&Date.now()<(u.createdAt+7*24*3600*1000))return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
 }
@@ -16021,8 +15991,6 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
     {id:'programmes',emoji:'📋',title:'Catalogue',desc:'Programmes structurés multi-semaines à acheter et suivre',
      grad:'linear-gradient(135deg,#E07020,#D4883A)',glow:'rgba(224,112,32,0.4)',border:'rgba(224,112,32,0.3)',bg:'rgba(224,112,32,0.07)',plan:null},
   ];
-  const inTrial=authUser?.createdAt&&Date.now()<(authUser.createdAt+7*24*3600*1000);
-  const trialDaysLeft=inTrial?Math.ceil(((authUser.createdAt+7*24*3600*1000)-Date.now())/(24*3600*1000)):0;
   return(
     <div style={{padding:'28px 20px 100px',color:T.text,height:'100%',boxSizing:'border-box',overflowY:'auto'}}>
       <div style={{marginBottom:24}}>
@@ -16030,20 +15998,11 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
         <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.6,lineHeight:1.1}}><HoloText>Tes Univers</HoloText></div>
         <div style={{fontSize:13,color:T.textDim,marginTop:8}}>Choisis ton mode d'entraînement</div>
       </div>
-      {inTrial&&(
-        <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(251,191,36,0.08)',border:'1px solid rgba(251,191,36,0.25)',display:'flex',alignItems:'center',gap:10}}>
-          <span style={{fontSize:18}}>🎁</span>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:'#fbbf24'}}>Essai gratuit — {trialDaysLeft} jour{trialDaysLeft>1?'s':''} restant{trialDaysLeft>1?'s':''}</div>
-            <div style={{fontSize:11,color:T.textDim}}>Tous les univers débloqués pendant l'essai</div>
-          </div>
-        </div>
-      )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.08)',border:'1px solid rgba(184,80,112,0.25)',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={onShowPricing}>
           <span style={{fontSize:18}}>🔒</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.danger}}>Essai terminé</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.danger}}>Abonnement requis</div>
             <div style={{fontSize:11,color:T.textDim}}>Abonne-toi pour débloquer les univers</div>
           </div>
           <div style={{fontSize:11,color:T.accent,fontWeight:700}}>Voir les plans →</div>
@@ -16081,7 +16040,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           ⚙️ Gérer mon abonnement
         </button>
       )}
-      {!inTrial&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <button onClick={onShowPricing} style={{marginTop:16,width:'100%',height:44,borderRadius:13,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>
           🚀 Débloquer Prime Athl
         </button>
