@@ -1516,10 +1516,13 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
 // ── Session Screen ────────────────────────────────────────
 
-function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,targets={},importedPrograms,onRestUpdate}){
+function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,targets={},importedPrograms,onRestUpdate,coachFeedback}){
   const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
   const[perfOpenFor,setPerfOpenFor]=React.useState(null); // nom d'exo dont l'historique "dernières perf" est déplié
+  // Rappel du feedback coach pendant la séance (déjà vu en pop-up au démarrage) — replié par
+  // défaut pour ne pas encombrer, dépliable à tout moment pour relire les consignes.
+  const[fbOpen,setFbOpen]=React.useState(false);
 
   const finishAndClose=(rpe=null)=>{
     try{localStorage.removeItem(SNAP_KEY);}catch{}
@@ -2841,6 +2844,40 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             );
           })}
         </div>
+        {/* Rappel feedback coach — carte repliable dans l'espace libre avant le bouton de fin.
+            Replié par défaut (l'athlète l'a déjà lu en pop-up au démarrage), avec un aperçu
+            d'une ligne ; déplier pour relire tout le message + les charges mises à jour. */}
+        {coachFeedback&&coachFeedback.feedback&&(
+          <div style={{marginTop:14,borderRadius:16,border:'1px solid rgba(90,138,224,0.3)',background:'linear-gradient(180deg,rgba(90,138,224,0.08),rgba(90,138,224,0.03))',overflow:'hidden'}}>
+            <button onClick={()=>setFbOpen(o=>!o)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'13px 14px',background:'transparent',border:'none',cursor:'pointer'}}>
+              <div style={{width:30,height:30,borderRadius:9,background:'rgba(90,138,224,0.15)',border:'1px solid rgba(90,138,224,0.35)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>💬</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,color:'#8FB4F5',fontWeight:800,letterSpacing:0.4,textTransform:'uppercase'}}>Feedback de {coachFeedback.coachName||'ton coach'}</div>
+                {!fbOpen&&<div style={{fontSize:12,color:T.textDim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{coachFeedback.feedback}</div>}
+              </div>
+              <div style={{flexShrink:0,color:T.textFaint,transform:fbOpen?'rotate(180deg)':'none',transition:'transform 0.2s'}}><Icon name="chevronDown" size={16} stroke={T.textFaint}/></div>
+            </button>
+            {fbOpen&&(
+              <div style={{padding:'0 14px 14px'}}>
+                <div style={{fontSize:13,lineHeight:1.6,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 10px 10px 0',padding:'12px 14px',whiteSpace:'pre-wrap'}}>{coachFeedback.feedback}</div>
+                {coachFeedback.updates&&coachFeedback.updates.length>0&&(<>
+                  <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#8FB4F5',margin:'12px 0 8px',display:'flex',alignItems:'center',gap:5}}>⬆ Charges mises à jour</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    {coachFeedback.updates.map((u,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:11,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)'}}>
+                        <span style={{fontSize:12,fontWeight:600,color:'#fff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</span>
+                        <span style={{fontSize:13,fontWeight:800,flexShrink:0}}>
+                          {u.from>0&&<span style={{color:T.textFaint,textDecoration:'line-through',fontSize:11,marginRight:5}}>{u.from}</span>}
+                          <span style={{color:T.good}}>{u.to} kg</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Terminer/Valider la séance — toujours disponible, même sans aucune série faite, pour clore proprement la séance à tout moment */}
@@ -16841,6 +16878,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[inactivityPopup,setInactivityPopup]=React.useState(null);
   // Pop-up de motivation AFFICHÉ au moment de démarrer une séance (si pas de feedback coach à montrer).
   const[preSessionPopup,setPreSessionPopup]=React.useState(null);
+  // Feedback coach lié à la séance EN COURS, conservé tout au long de la séance (contrairement à
+  // activeCoachFeedback qui est effacé dès que l'athlète ferme le pop-up) pour l'afficher en rappel
+  // dépliable dans l'écran de séance. Posé au démarrage d'une séance dont le nom correspond.
+  const[sessionCoachFeedback,setSessionCoachFeedback]=React.useState(null);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
   const profile=authUser; // profile is the auth user
@@ -17229,10 +17270,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // Comparaison insensible à la casse/accents/espaces (ex: "LEGS · FESSIERS" == "Legs fessiers").
     // Marche pour toute origine (programme, Bibliothèque, planifiée, refaire…) tant que le nom colle.
     let showedFeedback=false;
+    setSessionCoachFeedback(null); // repart propre à chaque démarrage
     if(pendingCoachFeedback&&!coachSessionTarget){
       const wn=normExerciseName(w.name);
       const fn=normExerciseName(pendingCoachFeedback.sessionName);
-      if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
+      if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);setSessionCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
     }
     // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
     // et seulement pour l'athlète qui démarre POUR LUI (pas le coach qui joue pour un athlète).
@@ -17504,7 +17546,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         )}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);setSessionCoachFeedback(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest} coachFeedback={coachSessionTarget?null:sessionCoachFeedback}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
