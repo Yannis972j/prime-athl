@@ -720,6 +720,14 @@ function PostDeloadRecapBanner({ coach }) {
 function normExerciseName(name) {
   return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
 }
+// Clé de comparaison de NOMS DE SÉANCE, plus tolérante que normExerciseName : en plus de la casse
+// et des accents, on neutralise toute la ponctuation/séparateurs (· / - – — () etc.) pour que
+// "LEGS · FESSIERS" et "Legs fessiers" soient reconnues comme la MÊME séance. Réservé au
+// rapprochement feedback↔séance : ne surtout pas remplacer normExerciseName (utilisé pour
+// l'appariement d'EXERCICES, la progression, le calendrier) où fusionner la ponctuation serait risqué.
+function normSessionKey(name) {
+  return normExerciseName(name).replace(/[^a-z0-9]+/g, ' ').trim();
+}
 // Nom d'une séance à partir de sa source (jour de programme, bloc Excel, séance de biblio).
 // Base = le TITRE explicite du tableau Excel (colonne/bloc = category, sinon name). On n'utilise
 // JAMAIS le jour de la semaine comme nom : deux séances différentes toutes nommées "MARDI" se
@@ -17267,13 +17275,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setWorkout({...w,exercises});setSessionActive(true);try{localStorage.setItem(SESS_ACTIVE_KEY,'1');}catch{}setScreen('session');
     // Feedback du coach sur la précédente séance → pop-up au lancement UNIQUEMENT si l'athlète
     // démarre une séance du MÊME NOM que celle sur laquelle le coach a laissé son feedback.
-    // Comparaison insensible à la casse/accents/espaces (ex: "LEGS · FESSIERS" == "Legs fessiers").
+    // Comparaison via normSessionKey : insensible casse/accents/espaces ET ponctuation (ex:
+    // "LEGS · FESSIERS" == "Legs fessiers"), pour que le feedback suive bien la même séance.
     // Marche pour toute origine (programme, Bibliothèque, planifiée, refaire…) tant que le nom colle.
     let showedFeedback=false;
     setSessionCoachFeedback(null); // repart propre à chaque démarrage
     if(pendingCoachFeedback&&!coachSessionTarget){
-      const wn=normExerciseName(w.name);
-      const fn=normExerciseName(pendingCoachFeedback.sessionName);
+      const wn=normSessionKey(w.name);
+      const fn=normSessionKey(pendingCoachFeedback.sessionName);
       if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);setSessionCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
     }
     // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
