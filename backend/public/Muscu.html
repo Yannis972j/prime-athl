@@ -5374,8 +5374,12 @@ function personalizedSuffix(goals,seed){
 }
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null,gender=''}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null,gender='',coach=null}=opts||{};
   const sn=sessionName||'séance';
+  // Profil coaching : surnom à la place du prénom, et ton adouci si l'élève a demandé « pas
+  // culpabilisant » / « doux » (on ne lui sert jamais le message sévère d'une baisse).
+  if(coach&&coach.nickname)name=coach.nickname;
+  const soft=coach&&(coach.noGuilt||coach.wantsSoft||coach.intensity<=2);
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
@@ -5385,8 +5389,9 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   if(isPostDeload)return pick(POST_DELOAD_CONGRATS)(name,gender);
   // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) : ton sérieux, sans humour, PRIORITAIRE sur
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
+  // Exception : profil « doux / pas culpabilisant » → version légère plutôt que sévère.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
-    return pick(VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
+    return pick(soft?VOLUME_DOWN_MILD_MESSAGES:VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
   }
   // Si on a une comparaison complète, message basé sur la vraie performance
   if(comp&&comp.totalExercises>0){
@@ -5402,9 +5407,13 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     // Majorité en hausse → booster
     if(upRatio>=0.7)return `${name}, ${upCount} exercices sur ${totalExercises} en progression. T'es dans une dynamique de fou, lâche rien.`;
     if(upRatio>=0.5)return `Plus de la moitié de tes exercices en hausse, ${name}. La progression est là, continue de pousser.`;
-    // Majorité en baisse → recul réel : ton sérieux, sans humour.
-    if(downRatio>=0.7)return `${name}, ${downCount} exos sur ${totalExercises} en baisse. Ce n'est pas un entraînement, c'est un recul. Reprends-toi sérieusement dès la prochaine.`;
-    if(downRatio>=0.5)return `La moitié de tes exos en baisse, ${name}. Tu es ${gg(gender,'passé','passée')} à côté de ta séance. La prochaine, tu remets le niveau là où il doit être.`;
+    // Majorité en baisse → recul réel : ton sérieux, sans humour. Profil « doux » → version ferme mais bienveillante.
+    if(downRatio>=0.7)return soft
+      ?`${downCount} exos sur ${totalExercises} en baisse aujourd'hui, ${name}. Pas de reproche — ça arrive. La prochaine, on repart simplement de l'avant.`
+      :`${name}, ${downCount} exos sur ${totalExercises} en baisse. Ce n'est pas un entraînement, c'est un recul. Reprends-toi sérieusement dès la prochaine.`;
+    if(downRatio>=0.5)return soft
+      ?`La moitié de tes exos en baisse, ${name}. Un jour sans, ça fait partie du chemin. On vise mieux la prochaine, tranquillement.`
+      :`La moitié de tes exos en baisse, ${name}. Tu es ${gg(gender,'passé','passée')} à côté de ta séance. La prochaine, tu remets le niveau là où il doit être.`;
     // Stable — formulation différente selon qu'il y a de la charge (muscu) ou non (cardio/PDC)
     if(upCount===0&&downCount===0){
       return hasVolume
@@ -5475,13 +5484,67 @@ const MOTIVATION_FIRST=[
   "Y'a pas de comparaison encore, mais y'a un point de départ. Et la seule direction qui compte, c'est vers le haut.",
   "Le plus dur c'est de commencer. C'est fait. Maintenant, la seule règle : revenir.",
 ];
+// ── Pools de mindset ADAPTÉS AU PROFIL COACHING (fiche « Mon Profil Coaching ») ──────────
+// Choisis par mindsetPoolFor() selon l'intensité voulue et les limites (humour, culpabilisation).
+// SOFT : profils doux / "pas trop de pression" → bienveillant, jamais dur. Marche aussi bien pour
+// une séance stable que pour une bonne séance (félicitation calme).
+const MINDSET_SOFT=[
+  "Pas de pression : tu es venu, tu as fait le travail. C'est exactement ça qui compte sur la durée.",
+  "La régularité tranquille bat l'intensité qui s'épuise. Tu avances à ton rythme, et c'est le bon.",
+  "Chaque séance est une brique posée sans bruit. Tu construis quelque chose de solide, l'air de rien.",
+  "Sois fier d'être là aujourd'hui. Le reste vient tout seul, avec le temps et la constance.",
+  "Pas besoin d'en faire des tonnes : la constance douce, c'est ça ton vrai super-pouvoir.",
+  "Tu fais le travail sans chercher la lumière. C'est cette discipline calme qui paie le plus loin.",
+];
+// INTENSE : profils qui veulent être challengés / compétiteurs (intensité 4-5), SANS humour →
+// direct, exigeant, tourné vers le dépassement. Jamais culpabilisant, toujours vers l'avant.
+const MINDSET_INTENSE=[
+  "Tu n'es pas là pour participer, tu es là pour progresser. La prochaine, va chercher la rep de plus.",
+  "Le confort ne construit rien. La prochaine séance, mets-toi volontairement là où c'est dur.",
+  "Ceux qui avancent ne négocient pas avec eux-mêmes. Tu connais ton standard — tiens-le.",
+  "Chaque série moyenne est une occasion ratée. La prochaine fois : aucune rep gratuite.",
+  "Le niveau que tu acceptes aujourd'hui devient ta norme demain. Alors place la barre haut.",
+  "On ne vise pas 'correct'. 'Correct', c'est le point de départ, jamais la destination.",
+  "La version de toi que tu veux devenir ne prendrait pas cette séance à la légère. Sois-la.",
+];
+// FIRM_KIND : utilisé à la place du ton dur quand l'élève a demandé « pas culpabilisant » / « doux ».
+// Ferme sur le cap, bienveillant sur la personne — on corrige sans juger.
+const MINDSET_FIRM_KIND=[
+  "Une séance en dessous, ça arrive à tout le monde — on ne s'y attarde pas. La prochaine, tu repars de l'avant.",
+  "Pas de reproche : on regarde devant. Un seul objectif pour la prochaine — revenir net.",
+  "Ce n'était pas ton meilleur jour, et ce n'est pas grave. Ce qui compte, c'est la suite.",
+  "On ne juge pas un creux, on le corrige. La prochaine séance est déjà une nouvelle chance.",
+  "L'important n'est pas ce passage à vide, mais ce que tu fais juste après. Remets une brique.",
+];
+// Sélection du pool de mindset selon la catégorie de perf + le profil coaching (peut être null).
+function mindsetPoolFor(cat,coach){
+  const base={hard:MOTIVATION_HARD,pique:MOTIVATION_PIQUE,elite:MOTIVATION_ELITE,good:MOTIVATION_GOOD,neutral:MOTIVATION_NEUTRAL,first:MOTIVATION_FIRST};
+  let pool=base[cat]||MOTIVATION_GOOD;
+  if(!coach)return pool;
+  const soft=coach.wantsSoft||coach.intensity<=2;
+  const intense=coach.intensity>=4&&!coach.wantsSoft;
+  if(cat==='hard'){
+    if(coach.noGuilt||soft)pool=MINDSET_FIRM_KIND;        // jamais culpabiliser si interdit / profil doux
+    else if(intense)pool=MINDSET_INTENSE;                 // ferme et exigeant, sans vanne
+  }else if(cat==='pique'){
+    if(!coach.humorOk)pool=soft?MINDSET_FIRM_KIND:MINDSET_INTENSE; // pas d'humour autorisé → version sérieuse
+    else if(soft)pool=MINDSET_SOFT;
+  }else if(cat==='neutral'){
+    if(intense)pool=MINDSET_INTENSE;else if(soft)pool=MINDSET_SOFT;
+  }else if(cat==='good'||cat==='elite'){
+    if(soft)pool=MINDSET_SOFT;                            // félicitation calme pour les profils doux
+  }else if(cat==='first'){
+    if(soft)pool=MINDSET_SOFT;else if(intense)pool=MINDSET_INTENSE;
+  }
+  return pool;
+}
 // Hash déterministe d'une chaîne (petit FNV-like) → index stable. Sert à figer une citation/
 // un message par séance : sans ça, le tirage aléatoire change à chaque rendu (re-render au
 // clic, à la frappe du feedback, en rouvrant la fiche…), ce qui donnait l'impression que la
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gender=''){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gender='',coach=null){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   // Une entrée de pool peut être une string OU une fonction (g)=>string (accord grammatical) : on résout.
   const pick=arr=>{const v=arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];return typeof v==='function'?v(gender):v;};
@@ -5496,30 +5559,30 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
     const roll=seed!=null?hashStr(seed+'|mind-roll')%3:Math.floor(Math.random()*3);
     if(roll<2)return pick(STYLE_MINDSET[goals.style]);
   }
-  // BAISSE NETTE (volume ≥ 8 % sous la dernière fois) → ton sérieux prioritaire, sans humour.
-  if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)return pick(MOTIVATION_HARD);
-  if(!comp&&!volumeVsPrev)return pick(MOTIVATION_FIRST);
-  if(comp&&comp.totalExercises>0){
+  // On détermine d'abord la CATÉGORIE de performance, puis mindsetPoolFor() choisit le pool en
+  // tenant compte du profil coaching (intensité voulue, humour autorisé, pas de culpabilisation).
+  let cat;
+  if(volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92)cat='hard'; // baisse nette
+  else if(!comp&&!volumeVsPrev)cat='first';
+  else if(comp&&comp.totalExercises>0){
     const {prsCount,upCount,downCount,totalExercises}=comp;
     const upRatio=upCount/totalExercises;
     const downRatio=downCount/totalExercises;
-    // La régression prime : on la signale AVANT de féliciter quoi que ce soit.
-    if(downRatio>=0.6)return pick(MOTIVATION_HARD);        // majorité en baisse → dur
-    if(prsCount>=2||upRatio>=0.7)return pick(MOTIVATION_ELITE);
-    if(downRatio>=0.4||(downCount>upCount&&downCount>0))return pick(MOTIVATION_PIQUE); // baisse marquée → piquer
-    if(prsCount>=1||upRatio>=0.5)return pick(MOTIVATION_GOOD);
-    if(upCount===0&&downCount===0)return pick(MOTIVATION_NEUTRAL);
-    if(downCount>0)return pick(MOTIVATION_PIQUE);          // au moindre recul, on ne félicite pas
-    return pick(MOTIVATION_GOOD);
-  }
-  if(volumeVsPrev){
+    if(downRatio>=0.6)cat='hard';                                   // majorité en baisse
+    else if(prsCount>=2||upRatio>=0.7)cat='elite';
+    else if(downRatio>=0.4||(downCount>upCount&&downCount>0))cat='pique'; // baisse marquée
+    else if(prsCount>=1||upRatio>=0.5)cat='good';
+    else if(upCount===0&&downCount===0)cat='neutral';
+    else if(downCount>0)cat='pique';                               // au moindre recul, on ne félicite pas
+    else cat='good';
+  }else if(volumeVsPrev){
     const delta=volumeVsPrev.current-volumeVsPrev.previous;
     const pctDown=volumeVsPrev.previous>0?(volumeVsPrev.previous-volumeVsPrev.current)/volumeVsPrev.previous:0;
-    if(delta>0)return pick(MOTIVATION_GOOD);
-    if(delta<0)return pick(pctDown>=0.15?MOTIVATION_HARD:MOTIVATION_PIQUE);
-    return pick(MOTIVATION_NEUTRAL);
-  }
-  return pick(MOTIVATION_FIRST);
+    if(delta>0)cat='good';
+    else if(delta<0)cat=pctDown>=0.15?'hard':'pique';
+    else cat='neutral';
+  }else cat='first';
+  return pick(mindsetPoolFor(cat,coach));
 }
 
 // Volume total (kg) d'une séance : utilise totalVolume si présent, sinon recalcule depuis les séries.
@@ -6429,7 +6492,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||''})}</div>
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.id||viewHistSession.date,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||'',coach:computeCoachCtx(profile)})}</div>
                   {histRecap.isDeload&&<DeloadRecapBanner/>}
                   {histRecap.isPostDeload&&<PostDeloadRecapBanner/>}
                   {histRecap.isRegression&&(
@@ -6507,7 +6570,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'')}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.id||viewHistSession.date,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'',computeCoachCtx(profile))}"</div>
                   </div>
                 </div>
               )}
@@ -9720,7 +9783,7 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
     <div style={{marginBottom:14}}>
       {importDay&&<CoachImportSessionModal athleteId={athleteId} athleteName={athleteName} dayName={importDay.dayName} dayData={importDay.dayData} onClose={()=>setImportDay(null)} onDone={reload}/>}
       {viewDay&&<CoachDayViewModal dayName={viewDay.dayName} dayData={viewDay.dayData} onClose={()=>setViewDay(null)}/>}
-      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteData?.gender||''} history={hist} initialTab="recap" repsRange={progRange} onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
+      {recapSession&&<CoachSessionModal s={recapSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteData?.gender||''} athleteProfile={athleteData||null} history={hist} initialTab="recap" repsRange={progRange} onClose={()=>setRecapSession(null)} onFeedbackSaved={reload}/>}
       {editSession&&<CoachEditSessionModal session={editSession} athleteName={athleteName} onClose={()=>setEditSession(null)} onDone={()=>{setEditSession(null);reload();}}/>}
       {sheetNames.length>1&&(
         <div style={{display:'flex',gap:5,marginBottom:8,overflowX:'auto',paddingBottom:4}}>
@@ -10672,9 +10735,13 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
-function CoachSessionModal({s,athleteId,athleteName,athleteGender='',history,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
+function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
   const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
+  // Mindset du récap au profil coaching/objectifs DE L'ATHLÈTE (si dispo) — mêmes phrases
+  // personnalisées que ce que l'athlète voit de son côté.
+  const athCoach=React.useMemo(()=>computeCoachCtx(athleteProfile),[athleteProfile]);
+  const athGoals=React.useMemo(()=>computeGoalsCtx(athleteProfile),[athleteProfile]);
   React.useEffect(()=>{setTab(initialTab||'recap');},[s.id,initialTab]);
 
   const totalVol=(s.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
@@ -10785,7 +10852,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',history,onC
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload,isPostDeload,gender:athleteGender})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.id||s.date,isDeload,isPostDeload,gender:athleteGender,coach:athCoach})}</div>
               {/* Semaine de décharge : bandeau neutre à la place de l'alerte de régression */}
               {isDeload&&<DeloadRecapBanner coach/>}
               {isPostDeload&&<PostDeloadRecapBanner coach/>}
@@ -10940,7 +11007,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',history,onC
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload,isPostDeload,null,athleteGender)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.id||s.date,isDeload,isPostDeload,athGoals,athleteGender,athCoach)}"</div>
               </div>
             </div>
           )}
@@ -12662,15 +12729,19 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
         {msg&&<div style={{margin:'0 18px 12px',padding:'10px 14px',borderRadius:11,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:T.good,fontSize:13,fontWeight:600,textAlign:'center'}}>{msg}</div>}
 
-        {/* Tab bar — 7 onglets ne tiennent pas sur une seule ligne mobile en scroll horizontal
-            (le fondu aux bords ne suffisait pas à faire comprendre qu'il fallait swiper, les
-            derniers onglets restaient invisibles pour l'utilisateur) : on les répartit plutôt
-            sur 2 lignes avec flexWrap, tous visibles sans avoir besoin de scroller. */}
-        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16,padding:'0 18px'}}>
-          {TABS.map(t=>(
-            <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:'0 0 auto',padding:'7px 11px',borderRadius:10,border:'none',background:detailTab===t.id?T.accentSoft:'transparent',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.15s,color 0.15s'}}>
-              {t.label}
-            </button>
+        {/* Tab bar — 7 onglets répartis sur 2 rangées PLEINE LARGEUR (4 + 3), chaque onglet en
+            flex:1 pour remplir la ligne. Tout est visible d'un coup, sans scroll horizontal (que
+            l'utilisateur ne devinait pas) ni wrap aligné à gauche (qui faisait "déborder" les 2
+            derniers onglets au lieu de ressembler à une 2e rangée intentionnelle). */}
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16,padding:'0 18px'}}>
+          {[TABS.slice(0,4),TABS.slice(4)].map((row,ri)=>(
+            <div key={ri} style={{display:'flex',gap:6}}>
+              {row.map(t=>(
+                <button key={t.id} onClick={()=>{setDetailTab(t.id);setCoachBiblioPreview(null);}} style={{flex:1,minWidth:0,padding:'9px 6px',borderRadius:11,border:detailTab===t.id?'1px solid rgba(191,160,96,0.4)':'1px solid rgba(255,255,255,0.06)',background:detailTab===t.id?T.accentSoft:'rgba(255,255,255,0.02)',color:detailTab===t.id?T.accent:T.textDim,fontSize:12,fontWeight:detailTab===t.id?700:500,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',transition:'background 0.15s,color 0.15s,border-color 0.15s'}}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 
@@ -13036,7 +13107,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                       );
                     })}
                   </div>
-                  <button onClick={()=>{setCoachBiblioPreview(null);onStartWorkoutForAthlete&&onStartWorkoutForAthlete(s,a.id,a.firstName||a.email.split('@')[0],sessions,a.gender||'');}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
+                  <button onClick={()=>{setCoachBiblioPreview(null);onStartWorkoutForAthlete&&onStartWorkoutForAthlete(s,a.id,a.firstName||a.email.split('@')[0],sessions,a.gender||'',a);}} style={{width:'100%',height:50,borderRadius:15,border:'1px solid rgba(232,64,64,0.4)',background:'linear-gradient(135deg,rgba(232,64,64,0.16),rgba(184,80,112,0.08))',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,marginBottom:10}}>
                     ▶️ Démarrer et valider pour {a.firstName||a.email.split('@')[0]}
                   </button>
                   <button onClick={()=>setPlanFromBiblio(s)} style={{width:'100%',height:50,borderRadius:15,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,letterSpacing:0.2,boxShadow:'0 8px 22px rgba(191,160,96,0.3)'}}>
@@ -16993,7 +17064,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const activityCheckRef=React.useRef(false);
   React.useEffect(()=>{
     if(activityCheckRef.current)return;
-    if(!history)return;
+    // IMPORTANT : attendre que l'historique soit RÉELLEMENT chargé (≥1 séance). history démarre à
+    // [] (tableau vide mais truthy) : un simple `!history` laissait passer le 1er rendu, verrouillait
+    // activityCheckRef, et l'effet ne se relançait plus quand les séances arrivaient → les pop-ups
+    // d'activité ne se déclenchaient jamais. On ne verrouille donc qu'une fois des données présentes.
+    if(!history||!history.length)return;
     if(authUser?.role==='coach'&&!authUser?.isMainCoach)return;
     activityCheckRef.current=true;
     try{
@@ -17049,7 +17124,34 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const bd=businessDaysBetween(last,now);
       // Plancher à 2 jours minimum même à haute fréquence — jamais avant.
       const softMin=goals&&goals.weeklyTarget>=5?2:goals&&goals.weeklyTarget<=2?3:2;
-      if(bd<softMin)return;
+      if(bd<softMin){
+        // IRRÉGULARITÉ : l'athlète s'entraîne RÉCEMMENT (donc pas d'inactivité) mais « en dents de
+        // scie » — des trous importants entre séances sur 3 semaines. On ne le laisse pas passer :
+        // nudge doux qui vise le vrai levier (la régularité), 1×/6 j max, chip dédié.
+        const irregKey='pa_irregular_ack_'+authUser.id;
+        const lastIrregAck=parseInt(localStorage.getItem(irregKey)||'0',10);
+        const threeWeeks=now-21*86400000;
+        const times=history.filter(h=>h&&h.date&&new Date(h.date).getTime()>=threeWeeks).map(h=>new Date(h.date).getTime()).sort((a,b)=>a-b);
+        if(times.length>=3&&recentCount<regThreshold&&(!lastIrregAck||now-lastIrregAck>=6*86400000)){
+          let maxGap=0;for(let i=1;i<times.length;i++)maxGap=Math.max(maxGap,times[i]-times[i-1]);
+          const gapDays=Math.round(maxGap/86400000);
+          if(gapDays>=5){
+            const objTailIrr=goals?.objective?` C'est la régularité, pas les coups d'éclat, qui construit ${objPhrase}.`:' La régularité bat toujours l\'intensité ponctuelle.';
+            const IRREG=[
+              {title:'On installe un vrai rythme ?',body:`Content de te revoir, ${who}. Mais tes séances sont en dents de scie en ce moment — jusqu'à ${gapDays} jours sans rien.${objTailIrr} Cette semaine, vise un rythme fixe plutôt qu'une grosse séance isolée.`},
+              {title:'Le rythme avant l\'intensité',body:`Tu reviens, ${who}, et c'est bien — mais par à-coups (un trou de ${gapDays} jours récemment).${objTailIrr} Choisis 3 créneaux fixes cette semaine et tiens-les, même courts.`},
+              {title:'La constance, ton chantier n°1',body:`${who}, tu t'entraînes… quand tu y penses 😉 Des trous de ${gapDays} jours cassent la progression.${objTailIrr} L'objectif du moment : régulariser, pas en faire plus.`},
+            ];
+            const pick=(coach&&coach.wantsSoft)
+              ?{title:'On régularise, tranquillement',body:`Content de te revoir, ${who}. Tes séances sont un peu espacées (jusqu'à ${gapDays} jours).${objTailIrr} Pas de pression : vise juste un rythme un peu plus régulier cette semaine.`}
+              :IRREG[Math.floor(now/86400000)%IRREG.length];
+            // ackPrefix dédié : throttle 6 j posé À LA FERMETURE (comme régularité/inactivité),
+            // pas à l'affichage — sinon un pop-up masqué (ex. par l'onboarding) se grille tout seul.
+            setInactivityPopup({kind:'inactivity',tone:'soft',chip:`🔁 Rythme en dents de scie`,ackPrefix:'pa_irregular_ack_',title:pick.title,message:pick.body,daysSince:bd,goals});
+          }
+        }
+        return;
+      }
       const ackKey='pa_inactivity_ack_'+authUser.id;
       const lastAck=parseInt(localStorage.getItem(ackKey)||'0',10);
       if(lastAck&&now-lastAck<3*86400000)return;
@@ -17083,7 +17185,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   },[history,authUser]);
   const ackInactivity=()=>{
     try{
-      const key=inactivityPopup?.kind==='regularity'?'pa_regularity_ack_':'pa_inactivity_ack_';
+      const key=inactivityPopup?.ackPrefix||(inactivityPopup?.kind==='regularity'?'pa_regularity_ack_':'pa_inactivity_ack_');
       localStorage.setItem(key+authUser.id,String(Date.now()));
     }catch{}
     setInactivityPopup(null);
@@ -17257,6 +17359,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[congratsName,setCongratsName]=React.useState(null);
   // Sexe à utiliser pour l'accord des messages du récap (athlète quand le coach joue pour lui).
   const[congratsGender,setCongratsGender]=React.useState('');
+  // Profil coaching + objectifs à utiliser pour les phrases de mindset du récap. On vise TOUJOURS
+  // la personne à qui appartient la séance : l'athlète quand le coach joue pour lui, sinon soi-même.
+  const[congratsCoach,setCongratsCoach]=React.useState(null);
+  const[congratsGoals,setCongratsGoals]=React.useState(null);
   const[volumeVsPrev,setVolumeVsPrev]=React.useState(null);
   const[sessionComparison,setSessionComparison]=React.useState(null);
   const[addingToProgramme,setAddingToProgramme]=React.useState(false);
@@ -17326,10 +17432,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setCoachSessionTargetRaw(t);
     try{if(t)localStorage.setItem(COACH_TARGET_KEY,JSON.stringify(t));else localStorage.removeItem(COACH_TARGET_KEY);}catch{}
   },[COACH_TARGET_KEY]);
-  const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory,athleteGender='')=>{
+  const startWorkoutForAthlete=(w,athleteId,athleteName,athleteHistory,athleteGender='',athleteProfile=null)=>{
     // Ordre important : on POSE la cible AVANT startWorkout, pour que le SessionScreen se
     // monte déjà avec le bon athleteName (sinon 1er render = prénom du coach).
-    setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[],athleteGender:athleteGender||''});
+    // athleteProfile (champs cp*/goal*) sert à personnaliser le mindset du récap AU PROFIL DE
+    // L'ATHLÈTE, pas à celui du coach qui joue la séance pour lui.
+    setCoachSessionTarget({athleteId,athleteName,history:Array.isArray(athleteHistory)?athleteHistory:[],athleteGender:athleteGender||'',athleteProfile:athleteProfile||null});
     startWorkout(w,{keepCoachTarget:true});
   };
   // Pop-up de feedback : on l'efface une fois lu, mais le feedback lui-même reste
@@ -17350,6 +17458,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       setVolumeVsPrev(vvp);setSessionComparison(comp);setLastFinishedSession(snapshot);
       setCongratsName(tgt.athleteName||null); // récap au nom de l'athlète, pas du coach
       setCongratsGender(tgt.athleteGender||''); // accord au sexe de l'athlète
+      // Mindset au profil coaching/objectifs DE L'ATHLÈTE (pas du coach qui joue pour lui).
+      setCongratsCoach(tgt.athleteProfile?computeCoachCtx(tgt.athleteProfile):null);
+      setCongratsGoals(tgt.athleteProfile?computeGoalsCtx(tgt.athleteProfile):null);
       setCoachSessionTarget(null);
       try{
         await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload}});
@@ -17364,6 +17475,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setLastFinishedSession(snapshot);
     setCongratsName(null); // séance de l'utilisateur lui-même → son propre prénom
     setCongratsGender(profile.gender||''); // et son propre sexe pour l'accord
+    setCongratsCoach(computeCoachCtx(profile)); // son propre profil coaching pour le mindset
+    setCongratsGoals(computeGoalsCtx(profile));
     setHistory(h=>[snapshot,...h].slice(0,500));
     triggerSave();
     // Jusqu'à 5 tentatives avec backoff croissant (1.5s/3s/6s/10s ≈ 20s au total) avant
@@ -17483,7 +17596,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           const iconBg=isReg?'rgba(44,196,160,0.15)':tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':'rgba(232,138,90,0.15)';
           const iconBd=isReg?'rgba(44,196,160,0.4)':tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':'rgba(232,138,90,0.4)';
           const iconCol=isReg?'#8FDCC0':tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':'#F0A87A';
-          const chip=isReg?`🔥 ${count} séances / 7 jours`:`💤 ${daysSince} jour${daysSince>1?'s':''} ouvré${daysSince>1?'s':''} sans séance`;
+          const chip=inactivityPopup.chip||(isReg?`🔥 ${count} séances / 7 jours`:`💤 ${daysSince} jour${daysSince>1?'s':''} ouvré${daysSince>1?'s':''} sans séance`);
           const cta=isReg?'Merci 🔥':tone==='soft'?'C\'est parti 💪':tone==='mid'?'Aujourd\'hui je m\'y remets':'Je reprends maintenant';
           return(
             <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -17666,7 +17779,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,gender:congratsGender||profile.gender||''})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.id||_s?.date,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,gender:congratsGender||profile.gender||'',coach:congratsCoach})}</div>
             </div>
 
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
@@ -17823,7 +17936,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession,computeGoalsCtx(profile),congratsGender||profile.gender||'')}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.id||_s?.date,isDeloadSession,isPostDeloadSession,congratsGoals||computeGoalsCtx(profile),congratsGender||profile.gender||'',congratsCoach)}"</div>
             </div>
 
             {/* Bouton continuer */}
