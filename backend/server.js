@@ -1294,7 +1294,8 @@ app.get('/api/program', authRequired, (req, res) => {
 app.put('/api/my-program', authRequired, (req, res) => {
   const data = req.body?.data || {};
   const ts = Date.now();
-  DATA.programs[req.user.id] = { data, assignedBy: req.user.id, assignedAt: ts };
+  const cleanName = typeof req.body?.fileName === 'string' ? req.body.fileName.replace(/^.*[\\/]/, '').trim().slice(0, 120) : '';
+  DATA.programs[req.user.id] = { data, assignedBy: req.user.id, assignedAt: ts, fileName: cleanName };
   persist();
   res.json({ ok: true, assignedAt: ts });
 });
@@ -1311,11 +1312,11 @@ app.put('/api/my-program/scheduled', authRequired, (req, res) => {
   // Si la date choisie est déjà passée ou aujourd'hui, applique immédiatement — pas besoin
   // d'attendre un cycle de vérification pour un programme censé être déjà actif.
   if (activateOn <= ymd(Date.now())) {
-    const ts = applyProgramToAthlete(req.user.id, data, req.user.id);
+    const ts = applyProgramToAthlete(req.user.id, data, req.user.id, req.body?.fileName);
     persist();
     return res.json({ ok: true, assignedAt: ts, scheduled: false });
   }
-  DATA.scheduledPrograms[req.user.id] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now() };
+  DATA.scheduledPrograms[req.user.id] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now(), fileName: req.body?.fileName || '' };
   persist();
   res.json({ ok: true, scheduled: true, activateOn });
 });
@@ -1356,7 +1357,7 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
     const lastSession = userSessions.reduce((m, s) => (!m || s.date > m.date) ? s : m, null);
     return {
       ...profileOf(u),
-      program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+      program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
       scheduledProgram: sched ? { activateOn: sched.activateOn } : null,
       sessionCount: userSessions.length,
       lastSessionAt: lastSession ? lastSession.date : null,
@@ -1376,7 +1377,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     .slice(0, 500);
   res.json({
     ...profileOf(u),
-    program: p ? { data: p.data, assignedAt: p.assignedAt } : null,
+    program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
     sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
@@ -1654,17 +1655,20 @@ app.delete('/api/my-nutrition', authRequired, (req, res) => {
 // Assigne effectivement un programme à un athlète (auto-archive l'ancien, notifie).
 // Partagé entre l'assignation immédiate (PUT ci-dessous) et l'activation automatique
 // d'un programme programmé à l'avance (cf. activateScheduledPrograms plus bas).
-function applyProgramToAthlete(athleteId, data, assignedBy) {
+function applyProgramToAthlete(athleteId, data, assignedBy, fileName) {
   const ts = Date.now();
   const prev = DATA.programs[athleteId];
   if (prev && prev.data && Object.keys(prev.data).length > 0) {
     if (!DATA.savedPrograms[athleteId]) DATA.savedPrograms[athleteId] = [];
     const already = DATA.savedPrograms[athleteId];
-    const autoName = 'Programme du ' + new Date(prev.assignedAt || ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    const autoName = (prev.fileName && String(prev.fileName).trim()) || ('Programme du ' + new Date(prev.assignedAt || ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }));
     already.unshift({ id: Date.now().toString(36) + 'a', name: autoName, savedAt: Date.now(), data: prev.data });
     if (already.length > 5) DATA.savedPrograms[athleteId] = already.slice(0, 5);
   }
-  DATA.programs[athleteId] = { data, assignedBy, assignedAt: ts };
+  // fileName = nom du fichier Excel importé, pour que le coach repère d'un coup d'œil quel
+  // programme est assigné. Nettoyé (pas de chemin, longueur bornée).
+  const cleanName = typeof fileName === 'string' ? fileName.replace(/^.*[\\/]/, '').trim().slice(0, 120) : '';
+  DATA.programs[athleteId] = { data, assignedBy, assignedAt: ts, fileName: cleanName };
   delete DATA.scheduleMoves[athleteId];
   io.to('user:' + athleteId).emit('program-updated', { data, assignedAt: ts });
   io.to('user:' + athleteId).emit('schedule-moves-updated', { scheduleMoves: {} });
@@ -1686,7 +1690,7 @@ function activateScheduledPrograms() {
   for (const athleteId of Object.keys(DATA.scheduledPrograms || {})) {
     const sched = DATA.scheduledPrograms[athleteId];
     if (!sched || !sched.activateOn || sched.activateOn > todayStr) continue;
-    applyProgramToAthlete(athleteId, sched.data, sched.assignedBy);
+    applyProgramToAthlete(athleteId, sched.data, sched.assignedBy, sched.fileName);
     delete DATA.scheduledPrograms[athleteId];
     activated++;
   }
@@ -1698,7 +1702,7 @@ app.put('/api/coach/program/:athleteId', authRequired, coachOnly, (req, res) => 
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   const data = req.body?.data || {};
-  const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id);
+  const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id, req.body?.fileName);
   persist();
   res.json({ ok: true, assignedAt: ts });
 });
@@ -1715,11 +1719,11 @@ app.put('/api/coach/program/:athleteId/scheduled', authRequired, coachOnly, (req
   // Si la date choisie est déjà passée ou aujourd'hui, applique immédiatement — pas besoin
   // d'attendre un cycle de vérification pour un programme censé être déjà actif.
   if (activateOn <= ymd(Date.now())) {
-    const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id);
+    const ts = applyProgramToAthlete(req.params.athleteId, data, req.user.id, req.body?.fileName);
     persist();
     return res.json({ ok: true, assignedAt: ts, scheduled: false });
   }
-  DATA.scheduledPrograms[req.params.athleteId] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now() };
+  DATA.scheduledPrograms[req.params.athleteId] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now(), fileName: req.body?.fileName || '' };
   persist();
   const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
   const dateLabel = new Date(ymdToLocal(activateOn)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });

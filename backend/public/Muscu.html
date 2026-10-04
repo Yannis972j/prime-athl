@@ -1156,6 +1156,7 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
   return e => {
     const file = e.target.files[0];
     if (!file) return;
+    const fileName = file.name || ''; // nom du fichier Excel → affiché sur la carte programme
     e.target.value = '';
     parseYannisExcel(file,
       (programs, warnings, librarySessions) => {
@@ -1185,12 +1186,12 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
           onConfirm: (activateOn) => {
             if (allowSchedule && activateOn && nS) {
               setMsg('⏳ Programmation...');
-              apiCall('/api/my-program/scheduled', {method:'PUT', body:{data:programs, activateOn}}).then(r => {
+              apiCall('/api/my-program/scheduled', {method:'PUT', body:{data:programs, activateOn, fileName}}).then(r => {
                 if (r?.scheduled === false) {
                   // Le serveur a jugé la date déjà atteinte et a appliqué immédiatement — on se
                   // base sur SA réponse, pas sur notre variable locale (horloge client/serveur
                   // potentiellement désynchronisée autour de minuit).
-                  if (onImportPrograms) onImportPrograms(programs);
+                  if (onImportPrograms) onImportPrograms(programs, fileName);
                   setMsg(okMsg());
                 } else {
                   const dateLabel = new Date(activateOn+'T00:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
@@ -1203,7 +1204,7 @@ function makeHandleProgramExcel(fileRef, onImportPrograms, setMsg, setPreview, a
             }
             // n'écrase le programme (jours) que s'il y en a un — un fichier 100% "séances sans jour"
             // ne doit pas vider le programme existant.
-            if (onImportPrograms && nS) onImportPrograms(programs);
+            if (onImportPrograms && nS) onImportPrograms(programs, fileName);
             saveLib().then(() => { if (onScheduled) onScheduled(); });
             setMsg(okMsg());
             setTimeout(() => setMsg(null), 4000);
@@ -12463,6 +12464,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     const file=e.target.files[0];
     if(!file||!selected)return;
     const target=selected;
+    const fileName=file.name||''; // nom du fichier Excel → affiché sur la carte programme de l'athlète
     e.target.value='';
     parseYannisExcel(file,(data,warnings)=>{
       // Le coach a pu changer d'athlète pendant le parsing (async) — on annule plutôt
@@ -12487,7 +12489,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               // propre variable locale, pour ne jamais afficher "programmé" quand le programme
               // actuel vient en fait d'être écrasé (ex: horloge serveur/client légèrement
               // désynchronisées autour de minuit).
-              const r=await apiCall('/api/coach/program/'+target.id+'/scheduled',{method:'PUT',body:{data,activateOn}});
+              const r=await apiCall('/api/coach/program/'+target.id+'/scheduled',{method:'PUT',body:{data,activateOn,fileName}});
               if(r?.scheduled===false){
                 flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
               }else{
@@ -12495,7 +12497,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 flash(`✓ Programme programmé pour le ${dateLabel}`);
               }
             }else{
-              await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data}});
+              await apiCall('/api/coach/program/'+target.id,{method:'PUT',body:{data,fileName}});
               flash(`✓ Programme assigné · ${nD} jour${nD>1?'s':''}`);
             }
             reloadDetail(target.id);
@@ -12597,6 +12599,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     const totalVol=sessions.reduce((s,x)=>s+(x.totalVolume||0),0);
     const programDays=Object.values(a.program?.data||{}).reduce((s,d)=>s+Object.keys(d).length,0);
     const programMonths=Object.keys(a.program?.data||{}).length;
+    // Nom du fichier Excel importé (sans l'extension), pour identifier le programme assigné.
+    // Repli sur la synthèse "X mois · Yj" pour les anciens programmes sans nom enregistré.
+    const programFileName=(a.program?.fileName||'').replace(/\.(xlsx|xls|csv)$/i,'').trim();
     const libData=detail?.sessionLibrary;
     const libCount=libData?.sessions?.length||0;
 
@@ -12795,8 +12800,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                     {programDays>0?'📋':'📥'}
                   </div>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?`${programMonths} mois · ${programDays}j`:'Programme'}</div>
-                    <div style={{fontSize:9,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?(a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'Programme actif'):'Importer un Excel'}</div>
+                    <div style={{fontSize:12,fontWeight:600,letterSpacing:0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?(programFileName||`${programMonths} mois · ${programDays}j`):'Programme'}</div>
+                    <div style={{fontSize:9,color:T.textFaint,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{programDays>0?`${programFileName?`${programMonths} mois · ${programDays}j · `:''}${a.program?.assignedAt?`maj ${new Date(a.program.assignedAt).toLocaleDateString('fr-FR')}`:'actif'}`:'Importer un Excel'}</div>
                   </div>
                 </button>
                 {programDays>0&&(
@@ -17230,10 +17235,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[showStripeSuccess,setShowStripeSuccess]=React.useState(false);
 
   // Wrap setImportedPrograms: local + push to backend (athlete) or coach UI handles its own
-  const updateOwnProgram=React.useCallback(async data=>{
+  const updateOwnProgram=React.useCallback(async(data,fileName)=>{
     setImportedPrograms(data);
     triggerSave();
-    try{await apiCall('/api/my-program',{method:'PUT',body:{data}});}catch(e){console.error('program sync',e);}
+    try{await apiCall('/api/my-program',{method:'PUT',body:{data,...(fileName?{fileName}:{})}});}catch(e){console.error('program sync',e);}
   },[triggerSave]);
 
   const SESS_ACTIVE_KEY='pa_sess_active_'+authUser.id;
