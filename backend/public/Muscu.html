@@ -279,11 +279,14 @@ function Pill({children,color=T.accent,style={}}){
 }
 
 function SectionHeader({title,right,icon,iconColor}){
+  // Fine barre d'accent verticale à gauche du titre → repère visuel premium, cohérent dans toute l'app.
+  const accent=iconColor||T.accent;
   return(
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,paddingLeft:2}}>
-      <div style={{display:'flex',alignItems:'center',gap:7}}>
-        {icon&&<Icon name={icon} size={14} stroke={iconColor||T.accent}/>}
-        <div style={{fontSize:13,fontWeight:600,letterSpacing:0.3,color:T.text,textTransform:'uppercase'}}>{title}</div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:11,paddingLeft:2}}>
+      <div style={{display:'flex',alignItems:'center',gap:9}}>
+        <div style={{width:3,height:15,borderRadius:2,background:`linear-gradient(180deg,${accent},${accent}44)`,flexShrink:0}}/>
+        {icon&&<Icon name={icon} size={14} stroke={accent}/>}
+        <div style={{fontSize:12.5,fontWeight:700,letterSpacing:0.8,color:T.text,textTransform:'uppercase'}}>{title}</div>
       </div>
       {right}
     </div>
@@ -7868,10 +7871,10 @@ function MonthCalendar({year,month,onPrevMonth,onNextMonth,selected,onSelectDay,
   const todayStr=ymdKey();
   return(
     <div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-        <button onClick={onPrevMonth} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
-        <span style={{fontSize:13,fontWeight:700,textTransform:'capitalize'}}>{new Date(year,month).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</span>
-        <button onClick={onNextMonth} style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <button onClick={onPrevMonth} style={{width:34,height:34,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'background 0.15s'}}>‹</button>
+        <span style={{fontSize:15,fontWeight:800,textTransform:'capitalize',letterSpacing:0.2}}>{new Date(year,month).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</span>
+        <button onClick={onNextMonth} style={{width:34,height:34,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.04)',color:T.textDim,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'background 0.15s'}}>›</button>
       </div>
       {legend&&legend.length>0&&(
         <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
@@ -7882,8 +7885,8 @@ function MonthCalendar({year,month,onPrevMonth,onNextMonth,selected,onSelectDay,
           ))}
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap,marginBottom:3}}>
-        {weekLabels.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:9,fontWeight:700,color:T.textFaint}}>{d}</div>)}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap,marginBottom:6}}>
+        {weekLabels.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,letterSpacing:0.5,color:T.textDim}}>{d}</div>)}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap}}>
         {calDays.map((d,i)=>{
@@ -7895,15 +7898,18 @@ function MonthCalendar({year,month,onPrevMonth,onNextMonth,selected,onSelectDay,
           const selectable=info.selectable!==false&&!!onSelectDay;
           let bg=info.bg??'rgba(255,255,255,0.03)';
           let border=info.border??'1px solid rgba(255,255,255,0.05)';
-          if(isToday)border=info.todayBorder??'2px solid rgba(191,160,96,0.6)';
-          if(isSel){bg=info.selBg??'rgba(191,160,96,0.18)';border=info.selBorder??'2px solid #BFA060';}
+          // Premium : "aujourd'hui" = anneau doré doux (box-shadow) qui n'écrase pas la couleur
+          // d'état de la case ; "sélectionné" = anneau plein + légère surbrillance.
+          let boxShadow=info.dots&&info.dots.length?'0 1px 4px rgba(0,0,0,0.25)':'none';
+          if(isToday){border=info.todayBorder??'1px solid rgba(191,160,96,0.5)';boxShadow='0 0 0 2px rgba(191,160,96,0.35), 0 2px 8px rgba(0,0,0,0.3)';}
+          if(isSel){bg=info.selBg??'rgba(191,160,96,0.2)';border=info.selBorder??'1px solid #BFA060';boxShadow='0 0 0 2px rgba(191,160,96,0.55), 0 4px 12px rgba(191,160,96,0.2)';}
           return(
             <div key={i} onClick={()=>selectable&&onSelectDay(isSel?null:dateStr)} title={info.title}
-              style={{aspectRatio:'1',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:selectable?'pointer':'default',background:bg,border,transition:'background 0.15s,border-color 0.15s'}}>
-              <span style={{fontSize:11,fontWeight:600,color:info.textColor??T.textFaint,lineHeight:1}}>{d}</span>
+              style={{aspectRatio:'1',borderRadius:12,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:selectable?'pointer':'default',background:bg,border,boxShadow,transition:'background 0.15s,border-color 0.15s,box-shadow 0.15s'}}>
+              <span style={{fontSize:12.5,fontWeight:isToday||isSel?800:600,color:info.textColor??T.textFaint,lineHeight:1}}>{d}</span>
               {info.dots&&info.dots.length>0&&(
-                <div style={{display:'flex',gap:2,marginTop:2}}>
-                  {info.dots.map((c,ci)=><div key={ci} style={{width:3,height:3,borderRadius:2,background:c}}/>)}
+                <div style={{display:'flex',gap:3,marginTop:3}}>
+                  {info.dots.map((c,ci)=><div key={ci} style={{width:4,height:4,borderRadius:2,background:c,boxShadow:`0 0 4px ${c}99`}}/>)}
                 </div>
               )}
             </div>
@@ -9334,16 +9340,19 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
       {editDoneSession&&<CoachEditSessionModal session={editDoneSession} athleteName={athleteName} onClose={()=>setEditDoneSession(null)} onDone={()=>{setEditDoneSession(null);onSessionPlanned&&onSessionPlanned();}}/>}
       {/* Voir : contenu prévu d'un jour non encore réalisé. */}
       {viewProgDay&&<CoachDayViewModal dayName={viewProgDay.dayName} dayData={viewProgDay.dayData} onClose={()=>setViewProgDay(null)}/>}
-      {/* Legend */}
-      <div style={{display:'flex',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-        {mode!=='nutrition'&&[['#BFA060','Prévu'],['#2CC4A0','Fait'],...(mode==='sport'?[['#5A8AE0','Planifiée']]:[])].map(([c,l])=>(
-          <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}>
-            <div style={{width:6,height:6,borderRadius:3,background:c}}/>{l}
+      {/* Legend — pastilles premium (petit halo coloré sur fond discret) */}
+      {(()=>{
+        const chip=(c,l)=>(
+          <div key={l} style={{display:'flex',alignItems:'center',gap:6,fontSize:10,fontWeight:600,color:T.textDim,padding:'4px 9px',borderRadius:999,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+            <div style={{width:7,height:7,borderRadius:4,background:c,boxShadow:`0 0 5px ${c}aa`}}/>{l}
           </div>
-        ))}
-        {mode==='nutrition'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#BFA060'}}/>Planifié</div>}
-        {mode!=='sport'&&<div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.textDim}}><div style={{width:6,height:6,borderRadius:3,background:'#5A8AE0'}}/>Nutrition validée</div>}
-      </div>
+        );
+        const items=[];
+        if(mode!=='nutrition'){items.push(chip('#BFA060','Prévu'));items.push(chip('#2CC4A0','Fait'));if(mode==='sport')items.push(chip('#5A8AE0','Planifiée'));}
+        if(mode==='nutrition')items.push(chip('#BFA060','Planifié'));
+        if(mode!=='sport')items.push(chip('#5A8AE0','Nutrition validée'));
+        return <div style={{display:'flex',gap:7,marginBottom:12,flexWrap:'wrap'}}>{items}</div>;
+      })()}
 
       <MonthCalendar year={calYear} month={calMonth} onPrevMonth={prevM} onNextMonth={nextM}
         selected={sel} onSelectDay={setSel}
@@ -12941,7 +12950,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               const path=`M ${pts.join(' L ')}`;
               return(
                 <div style={{marginBottom:16,marginTop:4}}>
-                  <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>Volume · {sorted.length} dernières séances</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,paddingLeft:2}}>
+                    <div style={{width:3,height:13,borderRadius:2,background:'linear-gradient(180deg,#BFA060,#BFA06044)',flexShrink:0}}/>
+                    <div style={{fontSize:11,color:T.textDim,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Volume · {sorted.length} dernières séances</div>
+                  </div>
                   <GlassCard padding={12}>
                     <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:H,display:'block'}}>
                       <defs><linearGradient id="vg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#BFA060" stopOpacity="0.25"/><stop offset="100%" stopColor="#BFA060" stopOpacity="0"/></linearGradient></defs>
