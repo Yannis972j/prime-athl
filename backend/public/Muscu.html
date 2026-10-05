@@ -5594,6 +5594,19 @@ function sessionVolumeOf(sess){
   return (sess?.exercises||[]).reduce((sum,e)=>(e.sets||[]).reduce((a,st)=>a+(st.weight||0)*(st.reps||0),sum),0);
 }
 
+// "Reprise après décharge" = UNIQUEMENT la 1re vraie séance qui suit une décharge, pas toutes les
+// séances des 2 semaines suivantes. On regarde la séance IMMÉDIATEMENT précédente (chronologiquement,
+// la plus récente avant `target`) : si c'était une décharge et que `target` n'en est pas une, alors
+// `target` est la reprise → message dédié une seule fois. Dès la séance d'après, la précédente n'est
+// plus la décharge → on repasse aux récaps normaux (diversité retrouvée).
+function isFirstSessionAfterDeload(target,history){
+  if(!target||target.deload)return false;
+  const tTime=new Date(target.date||0).getTime();
+  const prior=(history||[]).filter(h=>h&&h!==target&&(target.id?h.id!==target.id:true)&&new Date(h.date||0).getTime()<tTime)
+    .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime());
+  return prior.length>0 && !!prior[0].deload;
+}
+
 // ── Récap mensuel (Option A : agrégation 100 % client à partir des séances validées) ──────
 // allSessions = toutes les séances de l'athlète ; ym = 'YYYY-MM' (mois LOCAL). Réutilise
 // sessionVolumeOf + normExerciseName + la formule Epley (comme le récap de séance). Les
@@ -6054,8 +6067,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     // décharge, et celle-ci ne l'est pas. On désactive alors la comparaison de perf (les vrais
     // poids d'aujourd'hui vs 60% de la semaine dernière = fausse énorme "hausse"), et on utilise
     // les messages de reprise dédiés (POST_DELOAD_CONGRATS / POST_DELOAD_MINDSET).
-    const curTs=new Date(viewHistSession.date||0).getTime();
-    const isPostDeload=!isDeload&&Array.isArray(history)&&history.some(h=>h&&h.deload&&new Date(h.date||0).getTime()<curTs&&(curTs-new Date(h.date||0).getTime())<14*86400000);
+    // Reprise après décharge : seulement si la séance JUSTE AVANT était une décharge (pas sur 14 j).
+    const isPostDeload=isFirstSessionAfterDeload(viewHistSession,history);
     const isRegression=!isDeload&&!isPostDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>0&&comp.downCount>=comp.upCount)||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous));
     return{comp,volumeVsPrev,hasVolume,showVolCompare,isRegression,isDeload,isPostDeload};
   },[viewHistSession,history]);
@@ -10760,10 +10773,9 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
   const{comp,volumeVsPrev}=React.useMemo(()=>buildSessionComparison(s,history||[],repsRange),[s,history,repsRange]);
   const hasVolume=totalVol>0;
   const isDeload=!!s.deload;
-  // Post-décharge : décharge dans les 14 derniers jours → messages de reprise + pas d'alerte
-  // "hausse spectaculaire" (les vrais poids vs 60% de la semaine dernière fausseraient tout).
-  const curTs=new Date(s.date||0).getTime();
-  const isPostDeload=!isDeload&&Array.isArray(history)&&history.some(h=>h&&h.deload&&new Date(h.date||0).getTime()<curTs&&(curTs-new Date(h.date||0).getTime())<14*86400000);
+  // Reprise après décharge : UNIQUEMENT si la séance juste avant était une décharge (1 seule fois),
+  // pour les messages de reprise + pas d'alerte "hausse spectaculaire" (vrais poids vs 60%).
+  const isPostDeload=isFirstSessionAfterDeload(s,history);
   // Décharge : écarts négatifs en BLEU neutre (baisse voulue) plutôt qu'en rouge (recul).
   const DOWN=isDeload?'#5A8AE0':T.danger;
   const isRegression=!isDeload&&!isPostDeload&&((!!comp&&(comp.exercises||[]).length>0&&comp.downCount>comp.upCount&&comp.downCount>comp.sameCount)||(!!volumeVsPrev&&volumeVsPrev.current>0&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
@@ -17772,8 +17784,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         // désactivée (les vrais poids d'aujourd'hui vs 60% de la semaine dernière fausseraient
         // une "hausse spectaculaire" qui n'en est pas une, et alimenteraient une régression
         // erronée à la séance d'après).
-        const _curSessTs=new Date(_s?.date||Date.now()).getTime();
-        const isPostDeloadSession=!isDeloadSession&&Array.isArray(history)&&history.some(h=>h&&h.deload&&h!==_s&&new Date(h.date||0).getTime()<_curSessTs&&(_curSessTs-new Date(h.date||0).getTime())<14*86400000);
+        // UNIQUEMENT la 1re séance après la décharge (la précédente était une décharge), pas 14 jours.
+        const isPostDeloadSession=isFirstSessionAfterDeload(_s,history);
         const isRegression=!isDeloadSession&&!isPostDeloadSession&&((!!_cmp&&(_cmp.exercises||[]).length>0&&_cmp.downCount>_cmp.upCount&&_cmp.downCount>_cmp.sameCount)
           ||(showVolCompare&&volumeVsPrev.current<volumeVsPrev.previous*0.92));
         const regDown=_cmp?_cmp.downCount:0;
