@@ -1541,7 +1541,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     if(onSaveSession){
       const totalVolume=exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),0);
       const snap={
-        date:new Date().toISOString(),
+        // Validation rétroactive : si la séance a été lancée pour une date passée (workout.logDate
+        // = 'YYYY-MM-DD'), on l'enregistre à MIDI de ce jour-là plutôt qu'à l'instant présent, pour
+        // qu'elle tombe sur le bon jour du calendrier. Sinon, date du jour comme d'habitude.
+        date:(workout&&workout.logDate&&/^\d{4}-\d{2}-\d{2}$/.test(workout.logDate))?new Date(workout.logDate+'T12:00:00').toISOString():new Date().toISOString(),
         // Le serveur rejette une séance sans nom (400 name_required) — sans ce repli, un
         // programme dont le nom est vide ou manquant (ex: programme généré par l'IA sans champ
         // "name") faisait échouer la sauvegarde à CHAQUE tentative, y compris les 3 retries et
@@ -2417,6 +2420,13 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
       {/* content — l'image apparaît au-dessus (espace réservé), puis la carte sets glisse par-dessus avec un fond plus dense */}
       <div ref={scrollRef} style={{flex:1,overflow:'auto',WebkitOverflowScrolling:'touch',padding:'0 14px 110px',position:'relative',zIndex:1}}>
+        {/* Bandeau validation rétroactive : rappelle que la séance sera enregistrée à une date passée. */}
+        {workout&&workout.logDate&&/^\d{4}-\d{2}-\d{2}$/.test(workout.logDate)&&(
+          <div style={{marginTop:10,display:'flex',alignItems:'center',gap:8,padding:'10px 13px',borderRadius:12,background:'rgba(90,138,224,0.1)',border:'1px solid rgba(90,138,224,0.3)'}}>
+            <span style={{fontSize:15}}>📅</span>
+            <div style={{fontSize:12,fontWeight:600,color:'#8FB4F5'}}>Séance enregistrée au {new Date(workout.logDate+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
+          </div>
+        )}
         {/* Espace pour que l'image de l'exercice reste visible en haut */}
         {(()=>{const u=exerciseImageURL(ex.name);return u?(
           <div style={{height:'clamp(115px, 18vh, 170px)',display:'flex',alignItems:'flex-start',justifyContent:'flex-start',padding:'6px 2px'}}>
@@ -6286,11 +6296,16 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const startDay=(dayName,dateStr)=>{
     const d=(dateStr?daysForDate(dateStr):days)[dayName];
     if(!d)return;
+    // Validation rétroactive : si on lance une séance pour un jour DÉJÀ PASSÉ, on la fera enregistrer
+    // à cette date-là (logDate) au lieu d'aujourd'hui — l'athlète/coach peut ainsi logger une séance
+    // oubliée un jour précédent (ex : on est le 5, je valide la séance du 1er).
+    const isPast=dateStr&&dateStr<ymdKey();
     onStartWorkout({
       name:sessionTitleFrom(d,dayName),
       muscles:d.category||'',
       // La séance hérite du mode décharge actif → le récap saura qu'il ne faut pas pénaliser.
       ...(deloadMode?{deload:true}:{}),
+      ...(isPast?{logDate:dateStr}:{}),
       exercises:d.exercises.map(ex=>{
         const src=applyDeload(ex);
         return{...src,id:uid(),sets:src.sets.map(s=>({...s,reps:0,done:false}))};
@@ -6911,6 +6926,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const displayExercises=d?d.exercises.map(applyDeload):(histSession?.exercises||null);
             const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+            // Jour déjà passé (avant aujourd'hui) → on propose de VALIDER la séance à cette date.
+            const isPastDay=selectedDay.dateStr<ymdKey();
             const refaire=()=>{
               if(!histSession)return;
               onStartWorkout({
@@ -6977,8 +6994,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                           </button>
                         )}
                         <button onClick={()=>d?startDay(selectedDay.dayName,selectedDay.dateStr):refaire()} style={{flex:1,height:46,borderRadius:13,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 24px rgba(191,160,96,0.35)',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-                          <Icon name="play" size={16} stroke="#fff"/>
-                          {isDone?'Refaire la séance':'Démarrer la séance'}
+                          <Icon name={isPastDay&&!isDone?'check':'play'} size={16} stroke="#fff"/>
+                          {isDone?'Refaire la séance':isPastDay?'Valider à cette date':'Démarrer la séance'}
                         </button>
                         {/* Édition désactivée sur un jour prévisualisé depuis le programme prévu : elle
                             écrirait par erreur dans le programme actif (sheet), pas dans celui en attente. */}
