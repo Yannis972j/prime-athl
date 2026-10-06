@@ -5464,6 +5464,14 @@ const MOTIVATION_ELITE=[
   "Chaque PR que tu poses aujourd'hui, c'est le warm-up de la version de toi dans 6 mois.",
   "Tu progresses pas parce que c'est facile. Tu progresses parce que t'as décidé que c'était non-négociable.",
   "Le physique, c'est un effet secondaire. Ce que tu construis vraiment, c'est un mental en acier.",
+  // Grosse séance / belle progression — ton fort, fierté (profils non-doux).
+  "Ce que tu viens de faire, personne ne pourra te l'enlever. Cette séance, c'est la preuve que tu es plus fort que ce que tu croyais hier.",
+  "Tu ne t'es pas entraîné aujourd'hui. Tu as envoyé un message à la personne que tu seras demain : j'arrive.",
+  "La fierté que tu ressens là, retiens-la. C'est ton carburant. C'est ça qui sépare ceux qui progressent de ceux qui stagnent.",
+  "Les résultats que tu vois aujourd'hui, c'est le prix des jours où t'avais pas envie mais où t'es venu quand même.",
+  "Tu deviens ce que tu répètes. Et là, tu répètes l'excellence. Continue, c'est exactement comme ça qu'on se construit.",
+  "Ta progression ne doit rien à la chance. C'est ta discipline qui parle. Respecte ça.",
+  "Ceux qui disent que c'est de la génétique ne t'ont jamais vu à l'entraînement.",
 ];
 const MOTIVATION_GOOD=[
   "La progression se cache dans la régularité. T'es sur la bonne voie, continue de te pointer.",
@@ -5528,6 +5536,20 @@ const MINDSET_FIRM_KIND=[
   "Ce n'était pas ton meilleur jour, et ce n'est pas grave. Ce qui compte, c'est la suite.",
   "On ne juge pas un creux, on le corrige. La prochaine séance est déjà une nouvelle chance.",
   "L'important n'est pas ce passage à vide, mais ce que tu fais juste après. Remets une brique.",
+  // Séance difficile / en dessous — soutien honnête, jamais culpabilisant.
+  "Une mauvaise séance vaut toujours mieux qu'une séance sautée. T'es là, c'est déjà une victoire sur toi-même.",
+  "Aujourd'hui c'était dur. Et alors ? C'est dans ces séances-là que tu construis le mental qui fera la différence. Les bonnes séances entretiennent la confiance, les mauvaises construisent le caractère.",
+  "Ne juge pas ta valeur sur une seule séance. Juge-la sur le fait que t'es encore là, debout, prêt à revenir. C'est ça la vraie force.",
+];
+// HARSH : « coup de pied ». Confrontant, peut culpabiliser. RÉSERVÉ aux profils intensité élevée
+// qui N'ONT PAS coché « pas culpabilisant »/« doux », et UNIQUEMENT sur une vraie baisse (cat 'hard').
+const MINDSET_HARSH=[
+  "Tu veux des résultats de champion avec des efforts de spectateur. Ça marche pas comme ça. Réveille-toi ou arrête de perdre ton temps et le mien.",
+  "Ton corps ne te ment pas. Si t'as rien donné, ça se voit. Pas dans une semaine, pas dans un mois — là, maintenant, sur chaque série.",
+  "Y'a des gens qui rêvent d'avoir ta place et ton programme. Toi tu l'as, et tu gaspilles. Demande-toi si t'es vraiment sérieux ou si tu fais semblant.",
+  "Je peux te donner le meilleur programme du monde, si c'est toi qui freines, on ira nulle part. Le problème c'est pas le plan, c'est l'exécution.",
+  "Si tu continues comme ça, dans 3 mois tu seras exactement au même endroit qu'aujourd'hui. Et tu le sais. La question c'est : est-ce que ça te suffit ?",
+  "T'as le choix. Soit tu souffres maintenant à l'entraînement, soit tu souffres plus tard en regardant dans le miroir. Mais la souffrance, tu l'auras dans les deux cas. Choisis la bonne.",
 ];
 // Sélection du pool de mindset selon la catégorie de perf + le profil coaching (peut être null).
 function mindsetPoolFor(cat,coach){
@@ -5538,7 +5560,8 @@ function mindsetPoolFor(cat,coach){
   const intense=coach.intensity>=4&&!coach.wantsSoft;
   if(cat==='hard'){
     if(coach.noGuilt||soft)pool=MINDSET_FIRM_KIND;        // jamais culpabiliser si interdit / profil doux
-    else if(intense)pool=MINDSET_INTENSE;                 // ferme et exigeant, sans vanne
+    else if(intense)pool=MINDSET_HARSH;                   // coup de pied (intensité élevée, culpabilisation OK)
+    // intensité 3 (ni doux ni intense) → MOTIVATION_HARD (sérieux sans brutalité), inchangé.
   }else if(cat==='pique'){
     if(!coach.humorOk)pool=soft?MINDSET_FIRM_KIND:MINDSET_INTENSE; // pas d'humour autorisé → version sérieuse
     else if(soft)pool=MINDSET_SOFT;
