@@ -5335,7 +5335,7 @@ function coachPreSessionMessage(coach,goals,firstName,seed){
   ];
   const hard=[
     {title:'Alors, on négocie ? 😏',message:`${humorOk?`Alors ${who}, on se retrouve à la salle ou tu comptes négocier avec tes haltères ? 😏`:`${who}, aujourd'hui on ne négocie pas. On exécute.`}`},
-    {title:'Pas d\'excuses aujourd\'hui',message:`${coach&&coach.favExercise?`Au menu : ${coach.favExercise}. `:''}${who}, ta séance t'attend — et elle ne croit pas aux excuses.`},
+    {title:'Pas d\'excuses aujourd\'hui',message:`${who}, ta séance t'attend — et elle ne croit pas aux excuses.`},
   ];
   const pool=intensity<=2?soft:intensity===3?mid:hard;
   const chosen=pick(pool);
