@@ -4822,6 +4822,10 @@ function ProfileCollapse({title,subtitle,icon,open,onToggle,children}){
 
 function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
   const upd=(k,v)=>onChange({[k]:v});
+  // Normalise un champ coaching multi-select (relation/ton/réactions) : les anciennes valeurs
+  // étaient stockées en string unique (choix unique), elles sont désormais en array (choix
+  // multiple) — on migre une string historique en [string] pour l'affichage sans perte.
+  const cpArr=v=>Array.isArray(v)?v:(v?[v]:[]);
   const fullName=`${profile.firstName||''} ${profile.lastName||''}`.trim();
   const initials=((profile.firstName||'')[0]||'')+((profile.lastName||'')[0]||'')||'PA';
   // Objectif principal — chips utilisées à la fois pour l'inscription rapide et par la
@@ -5021,7 +5025,7 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
          optionnel ; les réponses alimentent le moteur de personnalisation (computeCoachCtx). */}
       {(profile.role!=='coach'||profile.isMainCoach)&&(
         <ProfileCollapse title="Mon profil coaching" icon="🎭" open={coachOpen} onToggle={()=>setCoachOpen(o=>!o)}
-          subtitle={(()=>{let n=0;['cpPersonality','cpCoachStyle','cpHumor','cpDrives','cpDontDo','cpNotifPrefs'].forEach(k=>{if((profile[k]||[]).length)n++;});['cpNickname','cpFunnyPhrase','cpPressurePhrase','cpTeaseMe','cpMotivationKiller','cpRelation','cpTonePreference','cpMissedReaction','cpSuccessReaction'].forEach(k=>{if(profile[k])n++;});if(profile.cpBanterLevel!=null)n++;if(profile.cpLevers&&Object.keys(profile.cpLevers).length)n++;return n?`${n} section${n>1?'s':''} remplie${n>1?'s':''}`:'Aide ton coach à te parler comme il faut';})()}>
+          subtitle={(()=>{let n=0;['cpPersonality','cpCoachStyle','cpHumor','cpDrives','cpDontDo','cpNotifPrefs','cpRelation','cpTonePreference','cpMissedReaction','cpSuccessReaction'].forEach(k=>{const v=profile[k];if((Array.isArray(v)?v.length:(v?1:0)))n++;});['cpNickname','cpFunnyPhrase','cpPressurePhrase','cpTeaseMe','cpMotivationKiller'].forEach(k=>{if(profile[k])n++;});if(profile.cpBanterLevel!=null)n++;if(profile.cpLevers&&Object.keys(profile.cpLevers).length)n++;return n?`${n} section${n>1?'s':''} remplie${n>1?'s':''}`:'Aide ton coach à te parler comme il faut';})()}>
             <div style={{fontSize:11,color:T.textDim,marginBottom:16,lineHeight:1.5}}>
               Ces réponses permettent à ton coach (et à l'app) de te parler comme il faut : ton humour,
               ta façon de réagir, ce qui te pique. Plus tu en dis, plus les messages te ressemblent. Tout est facultatif.
@@ -5108,16 +5112,16 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
 
             {/* 7 · Relation + ton */}
             <div style={{marginBottom:16}}>
-              <CoachLabel>Quelle relation avec ton coach ?</CoachLabel>
-              <CoachRadio accent="#5A8AE0" value={profile.cpRelation}
+              <CoachLabel>Quelle relation avec ton coach ? (plusieurs choix possibles)</CoachLabel>
+              <CoachChips accent="#5A8AE0" value={cpArr(profile.cpRelation)}
                 options={['Strict','Proche','Mentor','Partenaire de perf','Grand frère / sœur','Très pro','Beaucoup d\'humour']}
-                onPick={v=>upd('cpRelation',v)}/>
+                onToggle={v=>upd('cpRelation',v)}/>
             </div>
             <div style={{marginBottom:16}}>
-              <CoachLabel>Ton coach te parle comme…</CoachLabel>
-              <CoachRadio accent="#2CC4A0" value={profile.cpTonePreference}
+              <CoachLabel>Ton coach te parle comme… (plusieurs choix possibles)</CoachLabel>
+              <CoachChips accent="#2CC4A0" value={cpArr(profile.cpTonePreference)}
                 options={['Un pro','Un ami','Un coéquipier','Quelqu\'un qui te challenge','Un mélange']}
-                onPick={v=>upd('cpTonePreference',v)}/>
+                onToggle={v=>upd('cpTonePreference',v)}/>
             </div>
 
             {/* 8 · Munitions inside joke */}
@@ -5137,16 +5141,16 @@ function ProfileScreen({profile,onChange,onLogout,onShowPricing}){
 
             {/* 9 · Réactions */}
             <div style={{marginBottom:16}}>
-              <CoachLabel>Quand tu rates une séance, ce qui t'aide :</CoachLabel>
-              <CoachRadio accent="#E0A84E" value={profile.cpMissedReaction}
+              <CoachLabel>Quand tu rates une séance, ce qui t'aide : (plusieurs choix possibles)</CoachLabel>
+              <CoachChips accent="#E0A84E" value={cpArr(profile.cpMissedReaction)}
                 options={['Me remettre au travail','Relativiser','Me challenger','Rappeler mon objectif','Me laisser puis relancer']}
-                onPick={v=>upd('cpMissedReaction',v)}/>
+                onToggle={v=>upd('cpMissedReaction',v)}/>
             </div>
             <div style={{marginBottom:16}}>
-              <CoachLabel>Quand tu réussis, tu préfères :</CoachLabel>
-              <CoachRadio accent="#2CC4A0" value={profile.cpSuccessReaction}
+              <CoachLabel>Quand tu réussis, tu préfères : (plusieurs choix possibles)</CoachLabel>
+              <CoachChips accent="#2CC4A0" value={cpArr(profile.cpSuccessReaction)}
                 options={['Une grosse félicitation','Un message simple','Une petite vanne','Une statistique','Un nouveau défi']}
-                onPick={v=>upd('cpSuccessReaction',v)}/>
+                onToggle={v=>upd('cpSuccessReaction',v)}/>
             </div>
 
             {/* 10 · Ce qui casse ta motivation */}
@@ -5295,14 +5299,17 @@ function computeCoachCtx(profile){
   const favExercise=(profile.cpFavExercise||'').trim();
   const hatedExercise=(profile.cpHatedExercise||'').trim();
   const motivationKiller=(profile.cpMotivationKiller||'').trim();
-  const missedReaction=(profile.cpMissedReaction||'').trim();
-  const successReaction=(profile.cpSuccessReaction||'').trim();
-  const relation=(profile.cpRelation||'').trim();
-  const tone=(profile.cpTonePreference||'').trim();
+  // Relation / ton / réactions : désormais multi-select (array). Rétro-compat : une ancienne
+  // valeur string unique est migrée en [string] pour rester exploitable.
+  const arrM=v=>Array.isArray(v)?v.filter(Boolean):(v&&String(v).trim()?[String(v).trim()]:[]);
+  const missedReaction=arrM(profile.cpMissedReaction);
+  const successReaction=arrM(profile.cpSuccessReaction);
+  const relation=arrM(profile.cpRelation);
+  const tone=arrM(profile.cpTonePreference);
 
   const has=personality.length||coachStyle.length||humor.length||drives.length||dontDo.length||
     banter!=null||topLevers.length||nickname||catchphrase||funnyPhrase||pressurePhrase||teaseMe||
-    favExercise||hatedExercise||motivationKiller||missedReaction||successReaction||relation||tone;
+    favExercise||hatedExercise||motivationKiller||missedReaction.length||successReaction.length||relation.length||tone.length;
   if(!has)return null;
 
   // Limites déduites (jamais violées par les générateurs).
@@ -5334,6 +5341,17 @@ function coachName(coachCtx,firstName){
   return (coachCtx&&coachCtx.nickname)||firstName||'champion';
 }
 // Message de motivation AVANT la séance — croise profil coaching + objectifs + contexte.
+// Phrases pré-séance « discipline / donne tout » ajoutées par le coach. Ton ferme et universel
+// (pas de surnom) : injectées dans les pools mid (intensité 3) et hard (4-5), jamais soft — un
+// profil ayant demandé un ton doux / non culpabilisant ne doit pas recevoir « pas d'excuses ».
+const PRESESSION_PUSH=[
+  {title:'Donne tout',message:`Tu es venu pour progresser, pas pour faire semblant. Donne tout.`},
+  {title:'Ne la gâche pas',message:`Chaque séance est une occasion de devenir plus fort. Ne la gâche pas.`},
+  {title:'Laisse tes excuses au lit',message:`Laisse tes excuses dans ton lit. Aujourd'hui, tu passes à l'action.`},
+  {title:'Maîtrise chaque rep',message:`Concentre-toi sur l'objectif. Maîtrise chaque répétition. Construis ton physique.`},
+  {title:'Discipline > motivation',message:`Tu n'as pas besoin d'être motivé. Tu as besoin de discipline. Alors, au travail !`},
+  {title:'Souviens-toi pourquoi',message:`Souviens-toi pourquoi tu as commencé. Maintenant, donne-toi les moyens d'y arriver.`},
+];
 // Renvoie {title,message,tone} ou null (jamais de message vide/générique forcé si peu d'infos).
 function coachPreSessionMessage(coach,goals,firstName,seed){
   const who=coachName(coach,firstName);
@@ -5351,10 +5369,12 @@ function coachPreSessionMessage(coach,goals,firstName,seed){
     {title:'Aujourd\'hui, la discipline',message:`On ne cherche pas la motivation, ${who}. On cherche la discipline. Elle, elle est là tous les jours.`},
     {title:'Une séance = une brique',message:`${objPhrase?`${objPhrase[0].toUpperCase()+objPhrase.slice(1)} se construit maintenant.`:'Ton objectif se construit maintenant.'} Poser une brique aujourd'hui, ${who}. C'est tout ce qu'on te demande.`},
     {title:'Construis ton corps de rêve',message:`C'est le moment de te construire ton corps de rêve, ${who}. Donne-toi à fond.`},
+    ...PRESESSION_PUSH,
   ];
   const hard=[
     {title:'Alors, on négocie ? 😏',message:`${humorOk?`Alors ${who}, on se retrouve à la salle ou tu comptes négocier avec tes haltères ? 😏`:`${who}, aujourd'hui on ne négocie pas. On exécute.`}`},
     {title:'Pas d\'excuses aujourd\'hui',message:`${who}, ta séance t'attend — et elle ne croit pas aux excuses.`},
+    ...PRESESSION_PUSH,
   ];
   const pool=intensity<=2?soft:intensity===3?mid:hard;
   const chosen=pick(pool);

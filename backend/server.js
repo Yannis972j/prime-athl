@@ -541,6 +541,9 @@ const verify     = t => jwt.verify(t, JWT_SECRET);
 // Signe un token incluant la version du token (pour invalidation à la déconnexion)
 const signForUser = u => sign({ id: u.id, role: u.role, tv: u.tokenVersion || 0 });
 
+// Relation/ton/réactions coaching : multi-select (array). Migre une ancienne valeur string
+// unique en [string] pour que l'API renvoie toujours un array exploitable côté client.
+const cpMulti = v => Array.isArray(v) ? v : (v ? [v] : []);
 const profileOf = u => u && {
   id: u.id, email: u.email, role: u.role, coachId: u.coachId,
   firstName: u.firstName || '', lastName: u.lastName || '',
@@ -564,8 +567,8 @@ const profileOf = u => u && {
   cpDontDo: u.cpDontDo || [],                 // ce que le coach ne doit PAS faire
   cpAvoidTopics: u.cpAvoidTopics || '',       // sujets à éviter
   cpLevers: u.cpLevers || {},                 // leviers de motivation {lever: score 1-5}
-  cpRelation: u.cpRelation || '',             // type de relation souhaitée
-  cpTonePreference: u.cpTonePreference || '', // ton de communication préféré
+  cpRelation: cpMulti(u.cpRelation),          // type(s) de relation souhaitée (multi-select)
+  cpTonePreference: cpMulti(u.cpTonePreference), // ton(s) de communication préféré(s) (multi-select)
   cpExcusePhrase: u.cpExcusePhrase || '',     // excuse récurrente
   cpFavExercise: u.cpFavExercise || '',       // exercice préféré
   cpHatedExercise: u.cpHatedExercise || '',   // exercice détesté
@@ -574,8 +577,8 @@ const profileOf = u => u && {
   cpNickname: u.cpNickname || '',             // surnom
   cpCatchphrase: u.cpCatchphrase || '',       // expression fétiche
   cpTeaseMe: u.cpTeaseMe || '',               // truc sur lequel on peut le taquiner
-  cpMissedReaction: u.cpMissedReaction || '', // réaction préférée quand il rate
-  cpSuccessReaction: u.cpSuccessReaction || '', // réaction préférée quand il réussit
+  cpMissedReaction: cpMulti(u.cpMissedReaction), // réaction(s) préférée(s) quand il rate (multi-select)
+  cpSuccessReaction: cpMulti(u.cpSuccessReaction), // réaction(s) préférée(s) quand il réussit (multi-select)
   cpNotifPrefs: u.cpNotifPrefs || [],         // quand recevoir les messages
   cpMsgFrequency: u.cpMsgFrequency || '',     // fréquence des messages
   prSquat: u.prSquat || '', prBench: u.prBench || '', prDeadlift: u.prDeadlift || '',
@@ -1239,12 +1242,14 @@ app.patch('/api/me', authRequired, (req, res) => {
   };
   cpArr('cpPersonality'); cpArr('cpCoachStyle'); cpArr('cpHumor');
   cpArr('cpDrives'); cpArr('cpDontDo'); cpArr('cpNotifPrefs');
+  // Relation / ton / réactions : désormais multi-select (array), comme les autres chips.
+  cpArr('cpRelation'); cpArr('cpTonePreference'); cpArr('cpMissedReaction'); cpArr('cpSuccessReaction');
   cpText('cpDescribeMe', 200); cpText('cpFunnyPhrase', 300); cpText('cpPressurePhrase', 300);
-  cpText('cpAvoidTopics', 300); cpText('cpRelation', 40); cpText('cpTonePreference', 40);
+  cpText('cpAvoidTopics', 300);
   cpText('cpExcusePhrase', 200); cpText('cpFavExercise', 80); cpText('cpHatedExercise', 80);
   cpText('cpWeakness', 200); cpText('cpMotivationKiller', 200); cpText('cpNickname', 60);
-  cpText('cpCatchphrase', 200); cpText('cpTeaseMe', 300); cpText('cpMissedReaction', 60);
-  cpText('cpSuccessReaction', 60); cpText('cpMsgFrequency', 40);
+  cpText('cpCatchphrase', 200); cpText('cpTeaseMe', 300);
+  cpText('cpMsgFrequency', 40);
   if (req.body.cpBanterLevel !== undefined) {
     const n = parseInt(req.body.cpBanterLevel, 10);
     u.cpBanterLevel = isNaN(n) ? null : Math.max(0, Math.min(5, n));
