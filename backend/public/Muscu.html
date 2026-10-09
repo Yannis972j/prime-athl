@@ -4453,11 +4453,22 @@ function PushNotifToggle(){
   };
 
   if(status==='loading')return null;
-  if(status==='unsupported')return(
-    <div style={{padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10,fontSize:11,color:T.textFaint}}>
-      🔔 Notifications push non supportées sur ce navigateur
-    </div>
-  );
+  if(status==='unsupported'){
+    // iPhone/iPad : le push n'existe que dans l'app installée sur l'écran d'accueil (iOS 16.4+).
+    const isIOS=typeof navigator!=='undefined'&&(/iph|ipod|ipad/i.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
+    const standalone=typeof window!=='undefined'&&((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone);
+    if(isIOS&&!standalone)return(
+      <div style={{padding:'12px 14px',borderRadius:12,background:'rgba(90,138,224,0.08)',border:'1px solid rgba(90,138,224,0.25)',marginBottom:10}}>
+        <div style={{fontSize:12,fontWeight:700,color:'#8FB4F5',marginBottom:4}}>🔔 Active les notifications sur iPhone</div>
+        <div style={{fontSize:11,color:T.textDim,lineHeight:1.5}}>Apple n'autorise les notifications que depuis l'app installée. Touche <b style={{color:T.text}}>Partager</b> (l'icône ⬆️ en bas de Safari) → <b style={{color:T.text}}>Sur l'écran d'accueil</b>, puis ouvre Prime Athl depuis l'icône : le bouton d'activation apparaîtra ici (iOS 16.4+).</div>
+      </div>
+    );
+    return(
+      <div style={{padding:'10px 12px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:10,fontSize:11,color:T.textFaint}}>
+        🔔 Notifications push non supportées sur ce navigateur
+      </div>
+    );
+  }
 
   const isOn=status==='on';
   const isLoading=status==='subscribing';
@@ -4530,7 +4541,13 @@ function ProfilePushRow(){
   if(status==='loading')return null;
   const isOn=status==='on';
   const isLoading=status==='subscribing';
-  const label=status==='unsupported'?'Non supporté':status==='denied'?'Bloquées':isOn?'Activées':'Désactivées';
+  // Sur iPhone/iPad, le push web n'existe QUE dans l'app installée sur l'écran d'accueil (iOS 16.4+).
+  // Dans un onglet Safari, PushManager est absent → "unsupported". On explique quoi faire au lieu
+  // d'un cul-de-sac "Non supporté".
+  const isIOS=typeof navigator!=='undefined'&&(/iph|ipod|ipad/i.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
+  const standalone=typeof window!=='undefined'&&((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone);
+  const iosNeedsInstall=status==='unsupported'&&isIOS&&!standalone;
+  const label=status==='unsupported'?(iosNeedsInstall?'Installe l\'app':'Non supporté'):status==='denied'?'Bloquées':isOn?'Activées':'Désactivées';
   return(
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px'}}>
@@ -4538,6 +4555,7 @@ function ProfilePushRow(){
           <span style={{fontSize:16,flexShrink:0}}>{isOn?'🔔':'🔕'}</span>
           <div>
             <span style={{fontSize:12,fontWeight:600,color:T.text}}>Notifications</span>
+            {iosNeedsInstall&&<div style={{fontSize:9.5,color:T.textFaint,marginTop:2,lineHeight:1.4}}>Sur iPhone : <b style={{color:T.text}}>Partager</b> → <b style={{color:T.text}}>Sur l'écran d'accueil</b>, puis ouvre Prime Athl depuis l'icône. Les notifs s'activent de là (iOS 16.4+).</div>}
             {error&&<div style={{fontSize:9,color:T.danger}}>{error}</div>}
           </div>
         </div>
