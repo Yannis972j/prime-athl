@@ -5380,6 +5380,17 @@ function coachPreSessionMessage(coach,goals,firstName,seed){
   const chosen=pick(pool);
   return{title:chosen.title,message:chosen.message,tone:intensity<=2?'soft':intensity===3?'mid':'strong'};
 }
+// Rappel de fin d'accès (J-3 / J-2 / J-1) — ton qui monte, surnom pris en compte via le profil
+// coaching. Pousse à continuer ET à contacter le coach pour poursuivre l'aventure.
+function accessReminderMessage(daysLeft,coach,firstName){
+  const who=coachName(coach,firstName);
+  if(daysLeft>=3)return{tone:'mid',chip:'⏳ Plus que 3 jours d\'accès',title:`On ne lâche rien, ${who} 💪`,
+    message:`Il te reste 3 jours d'accès à ton programme. Tu as lancé une vraie dynamique — ce serait bête de couper l'élan maintenant. Parle à ton coach pour continuer l'aventure.`};
+  if(daysLeft===2)return{tone:'strong',chip:'⏳ Plus que 2 jours d\'accès',title:`Encore 2 jours — reste dans le game 🔥`,
+    message:`Les résultats appartiennent à ceux qui restent constants, ${who}. Il te reste 2 jours : ne casse pas ta progression si près du but. Écris à ton coach pour prolonger et garder le cap.`};
+  return{tone:'strong',chip:'⏳ Dernier jour d\'accès',title:`C'est aujourd'hui que ça se joue`,
+    message:`C'est ton dernier jour d'accès, ${who}. Tu as commencé quelque chose de sérieux — ne laisse pas tout s'arrêter là. Contacte ton coach aujourd'hui pour poursuivre l'aventure ensemble.`};
+}
 // « ta prise de masse », « ton retour en forme »… — utilisé en fin de phrase.
 function objectivePhrase(obj){
   const map={'prise de masse':'ta prise de masse','perte de gras':'ta perte de gras','force pure':'ta force','retour en forme':'ton retour en forme','performance sport':'ta performance'};
@@ -12368,6 +12379,52 @@ function CoachProfileField({label,value,onCommit,suffix,type='text'}){
   );
 }
 
+// Carte « Durée d'accès à l'application » (fiche athlète, côté coach). Le coach fixe un nombre
+// de jours à partir d'aujourd'hui ; l'athlète reçoit des rappels à J-3/J-2/J-1 puis est bloqué
+// une fois la date dépassée. « ∞ » = accès illimité (efface la date). onSave(nbJours) : 0 = ∞.
+function AthleteAccessCard({athlete,onSave}){
+  const exp=athlete.accessExpiresAt?new Date(athlete.accessExpiresAt):null;
+  const expValid=exp&&!isNaN(exp.getTime());
+  const now=Date.now();
+  const daysLeft=expValid?Math.ceil((exp.getTime()-now)/86400000):null;
+  const expired=expValid&&exp.getTime()<=now;
+  const[days,setDays]=React.useState('');
+  const[saving,setSaving]=React.useState(false);
+  const run=async(val)=>{if(saving)return;setSaving(true);try{await onSave(val);}finally{setSaving(false);setDays('');}};
+  const fmt=expValid?exp.toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'';
+  const PRE=[7,14,30,90];
+  // Pastille de statut : vert (actif), rouge (expiré), neutre (illimité).
+  const st=!expValid
+    ?{txt:'Accès illimité — aucune date de fin',c:'#8FB4F5',bg:'rgba(90,138,224,0.07)',bd:'rgba(90,138,224,0.22)',dot:'#5A8AE0'}
+    :expired
+    ?{txt:`Accès expiré depuis le ${fmt} — l'athlète est bloqué`,c:'#F0A87A',bg:'rgba(184,80,112,0.08)',bd:'rgba(184,80,112,0.3)',dot:'#B85070'}
+    :{txt:`Accès actif jusqu'au ${fmt} · ${daysLeft} jour${daysLeft>1?'s':''} restant${daysLeft>1?'s':''}`,c:'#9FE6D0',bg:'rgba(44,196,160,0.07)',bd:'rgba(44,196,160,0.22)',dot:'#2CC4A0'};
+  const btnBase={height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.025)',color:T.textDim,fontSize:12,fontWeight:700,cursor:saving?'wait':'pointer'};
+  return(
+    <div style={{marginTop:8,padding:'12px 14px',borderRadius:12,background:'rgba(191,160,96,0.05)',border:'1px solid rgba(191,160,96,0.22)'}}>
+      <div style={{fontSize:12,fontWeight:700,color:'#D6BE86',marginBottom:10}}>⏳ Durée d'accès à l'application</div>
+      <div style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Fixer / prolonger (à partir d'aujourd'hui)</div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+        {PRE.map(n=>(
+          <button key={n} disabled={saving} onClick={()=>run(n)} style={{...btnBase,flex:'1 1 52px',minWidth:48}}>{n} j</button>
+        ))}
+        <button disabled={saving} onClick={()=>run(0)} style={{...btnBase,flex:'1 1 52px',minWidth:48}} title="Accès illimité">∞</button>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:10}}>
+        <input type="number" inputMode="numeric" min="1" max="3650" value={days} onChange={e=>setDays(e.target.value)} placeholder="Nb de jours précis"
+          style={{flex:1,minWidth:0,height:38,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(0,0,0,0.25)',color:T.text,fontSize:13,fontWeight:600,padding:'0 12px',outline:'none',fontFamily:'inherit'}}/>
+        <button disabled={saving||!(parseInt(days)>=1)} onClick={()=>run(parseInt(days))}
+          style={{height:38,padding:'0 16px',borderRadius:10,border:'none',background:(parseInt(days)>=1&&!saving)?'linear-gradient(135deg,#BFA060,#B85070)':'rgba(255,255,255,0.06)',color:(parseInt(days)>=1&&!saving)?'#fff':T.textFaint,fontSize:12.5,fontWeight:800,cursor:(parseInt(days)>=1&&!saving)?'pointer':'default',flexShrink:0}}>Enregistrer</button>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:10,background:st.bg,border:`1px solid ${st.bd}`}}>
+        <div style={{width:8,height:8,borderRadius:'50%',background:st.dot,boxShadow:`0 0 8px ${st.dot}`,flexShrink:0}}/>
+        <div style={{fontSize:12,color:st.c,fontWeight:600,lineHeight:1.4}}>{st.txt}</div>
+      </div>
+      <div style={{fontSize:10,color:T.textFaint,marginTop:8,lineHeight:1.5}}>Rappels automatiques à l'athlète à J-3, J-2 et J-1. « ∞ » = illimité (aucun rappel, aucun blocage).</div>
+    </div>
+  );
+}
+
 function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,onConsumedInitialProgramEdit,onStartWorkout,onStartWorkoutForAthlete}){
   const[athletes,setAthletes]=React.useState([]);
   const[invites,setInvites]=React.useState([]);
@@ -12926,6 +12983,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   {a.fullAccess?'Révoquer':'Activer'}
                 </button>
               </div>}
+
+              {/* Durée d'accès à l'application (fenêtre limitée + rappels J-3/J-2/J-1) */}
+              {isMain&&<AthleteAccessCard athlete={a} onSave={async(nbJours)=>{
+                try{
+                  await apiCall('/api/coach/athletes/'+a.id,{method:'PATCH',body:{accessDays:nbJours}});
+                  await reloadDetail(a.id);load();
+                  flash(nbJours>=1?`✓ Accès fixé à ${nbJours} jour${nbJours>1?'s':''}`:'✓ Accès illimité');
+                }catch(e){flash('✗ '+(e.message||e));}
+              }}/>}
 
               {/* Danger zone */}
               <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:8,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
@@ -17076,7 +17142,32 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[sessionCoachFeedback,setSessionCoachFeedback]=React.useState(null);
   const[scheduleMoves,setScheduleMoves]=React.useState({});
   const[sessionLibrary,setSessionLibrary]=React.useState({sessions:[],assignedAt:null});
+  // Rappel de fin d'accès (J-3/J-2/J-1) affiché à l'ouverture de l'app.
+  const[accessPopup,setAccessPopup]=React.useState(null);
   const profile=authUser; // profile is the auth user
+  // Accès à durée limitée fixé par le coach. Jours restants (null = illimité), et blocage une
+  // fois la date dépassée — jamais pour un coach ni pour un accès complet (fullAccess).
+  const accessDaysLeft=React.useMemo(()=>{
+    if(!profile||profile.role==='coach'||profile.fullAccess||!profile.accessExpiresAt)return null;
+    const t=new Date(profile.accessExpiresAt).getTime();
+    if(isNaN(t))return null;
+    return Math.ceil((t-Date.now())/86400000);
+  },[profile?.accessExpiresAt,profile?.role,profile?.fullAccess]);
+  const accessExpired=accessDaysLeft!=null&&accessDaysLeft<=0;
+  // Rappel à J-3 / J-2 / J-1 : une seule fois par palier (ack en localStorage à la fermeture).
+  React.useEffect(()=>{
+    if(accessDaysLeft==null||accessDaysLeft<1||accessDaysLeft>3)return;
+    const palier=accessDaysLeft;
+    const key='pa_access_ack_'+authUser.id+'_d'+palier;
+    try{if(localStorage.getItem(key))return;}catch{}
+    const coach=computeCoachCtx(authUser);
+    const msg=accessReminderMessage(palier,coach,authUser.firstName||'');
+    setAccessPopup({...msg,daysLeft:palier,ackKey:key});
+  },[accessDaysLeft,authUser.id]);
+  const ackAccessPopup=React.useCallback(goToCoach=>{
+    setAccessPopup(p=>{if(p){try{localStorage.setItem(p.ackKey,ymdKey());}catch{}}return null;});
+    if(goToCoach){setActiveUniverse(null);setTab('messages');}
+  },[]);
   const setProfileCloud=React.useCallback(async patch=>{
     const updated={...profile,...patch};
     setUser(updated);
@@ -17696,7 +17787,42 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {/* Pop-up d'accueil à l'ouverture — deux modes :
             · INACTIVITÉ (kind:'inactivity') : escalade selon les jours ouvrés sans séance.
             · RÉGULARITÉ (kind:'regularity') : célébration quand ≥4 séances / 7 jours. */}
-        {inactivityPopup&&(()=>{
+        {/* Rappel de fin d'accès (J-3/J-2/J-1) — prioritaire sur le pop-up d'inactivité. */}
+        {accessPopup&&(()=>{
+          const{tone,title,message,chip}=accessPopup;
+          const grad=tone==='mid'?['#BFA060','#E88A5A']:['#E88A5A','#B85070'];
+          const iconBd=tone==='mid'?'rgba(191,160,96,0.4)':'rgba(184,80,112,0.5)';
+          const iconBg=tone==='mid'?'rgba(191,160,96,0.15)':'rgba(184,80,112,0.15)';
+          const iconCol=tone==='mid'?'#D6BE86':'#FF9EB8';
+          return(
+            <div style={{position:'fixed',inset:0,zIndex:9650,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+              <div onClick={()=>ackAccessPopup(false)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
+              <div style={{position:'relative',background:'linear-gradient(180deg,#161620,#0d0d14)',border:`1px solid ${iconBd}`,borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+                <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
+                <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:iconBg,border:`1px solid ${iconBd}`,marginBottom:13}}>
+                  <span style={{fontSize:10,fontWeight:800,color:iconCol,letterSpacing:0.5,textTransform:'uppercase'}}>{chip}</span>
+                </div>
+                <div style={{fontFamily:"'Outfit',sans-serif",fontSize:22,fontWeight:800,marginBottom:12,color:'#fff',lineHeight:1.15}}>{title}</div>
+                <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',marginBottom:20,whiteSpace:'pre-wrap'}}>{message}</div>
+                <button onClick={()=>ackAccessPopup(true)} style={{width:'100%',height:52,borderRadius:15,border:'none',background:`linear-gradient(135deg,${grad[0]},${grad[1]})`,color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>💬 Contacter mon coach</button>
+                <button onClick={()=>ackAccessPopup(false)} style={{width:'100%',marginTop:10,height:36,borderRadius:11,border:'none',background:'transparent',color:T.textFaint,fontSize:12,fontWeight:600,cursor:'pointer'}}>Plus tard</button>
+              </div>
+            </div>
+          );
+        })()}
+        {/* Accès expiré → blocage total SAUF la messagerie (pour contacter le coach). Non-fermable. */}
+        {accessExpired&&tab!=='messages'&&(
+          <div style={{position:'fixed',inset:0,zIndex:9700,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 26px',background:'linear-gradient(180deg,#0d0d14,#07070e)',textAlign:'center'}}>
+            <div style={{fontSize:44,marginBottom:10}}>⏳</div>
+            <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:'rgba(184,80,112,0.15)',border:'1px solid rgba(184,80,112,0.5)',marginBottom:16}}>
+              <span style={{fontSize:10,fontWeight:800,color:'#FF9EB8',letterSpacing:0.5,textTransform:'uppercase'}}>Accès expiré</span>
+            </div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:'#fff',lineHeight:1.2,marginBottom:12,maxWidth:340}}>Ton accès est arrivé à son terme{profile.firstName?`, ${profile.firstName}`:''}</div>
+            <div style={{fontSize:14,lineHeight:1.65,color:'#E8E6EF',maxWidth:330,marginBottom:26}}>Tu as fait du bon travail — ne t'arrête pas en si bon chemin. Contacte ton coach pour prolonger ton accès et poursuivre l'aventure ensemble. 💪</div>
+            <button onClick={()=>{setActiveUniverse(null);setTab('messages');}} style={{width:'100%',maxWidth:320,height:54,borderRadius:16,border:'none',background:'linear-gradient(135deg,#E88A5A,#B85070)',color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15.5,fontWeight:800,cursor:'pointer'}}>💬 Contacter mon coach</button>
+          </div>
+        )}
+        {inactivityPopup&&!accessPopup&&(()=>{
           const{kind,tone,title,message,daysSince,count}=inactivityPopup;
           const isReg=kind==='regularity';
           // Palettes par ton — reg (vert célébration), soft (bleu-vert), mid (doré), strong (rouge)

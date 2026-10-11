@@ -149,6 +149,26 @@ function userHasAccess(u, universe) {
   }
   return false;
 }
+
+// Accès à durée limitée fixé par le coach (accessExpiresAt). Renvoie true quand la fenêtre
+// d'accès de l'athlète est écoulée → l'app le bloque (écran « contacte ton coach »).
+// Jamais pour un coach / le coach principal / un accès complet (fullAccess), et jamais quand
+// aucune date n'est posée (= accès illimité, comportement par défaut historique).
+function isAccessExpired(u) {
+  if (!u) return false;
+  if (u.role === 'coach' || u.email === MAIN_COACH_EMAIL) return false;
+  if (u.fullAccess) return false;
+  if (!u.accessExpiresAt) return false;
+  const t = new Date(u.accessExpiresAt).getTime();
+  return !isNaN(t) && t <= Date.now();
+}
+// Middleware : refuse l'écriture quand l'accès de l'athlète est expiré (défense côté serveur,
+// en plus du blocage UI). L'athlète garde la lecture de /api/me (pour afficher l'écran de fin).
+const accessActive = (req, res, next) => {
+  const u = DATA.users[req.user.id];
+  if (isAccessExpired(u)) return res.status(403).json({ error: 'access_expired' });
+  next();
+};
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
@@ -590,6 +610,9 @@ const profileOf = u => u && {
   requestedRole: u.requestedRole || u.role || 'athlete',
   premium: !!u.premium,
   fullAccess: !!u.fullAccess,
+  // Fenêtre d'accès à durée limitée fixée par le coach (null = illimité). Le client s'en sert
+  // pour les rappels J-3/J-2/J-1 et pour l'écran de blocage une fois la date dépassée.
+  accessExpiresAt: u.accessExpiresAt || null,
   stripeStatus: u.stripeStatus || null,
   stripePlan: u.stripePlan || null,
 };
@@ -1534,6 +1557,19 @@ app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) =
       if (req.body.password.length < 8) return res.status(400).json({ error: 'password_too_short', detail: 'Minimum 8 caractères.' });
       u.passwordHash = await bcrypt.hash(req.body.password, 12);
     }
+    // Durée d'accès à l'application. `accessDays` = nombre de jours à partir de maintenant.
+    //  · N ≥ 1   → accessExpiresAt = maintenant + N jours (fenêtre d'accès)
+    //  · 0/null/'' → accès illimité (on efface la date)
+    if (req.body.accessDays !== undefined) {
+      const raw = req.body.accessDays;
+      if (raw === null || raw === '' || raw === 0 || raw === '0') {
+        u.accessExpiresAt = null;
+      } else {
+        const n = parseInt(raw, 10);
+        if (isNaN(n) || n < 1 || n > 3650) return res.status(400).json({ error: 'invalid_access_days', detail: '1 à 3650 jours.' });
+        u.accessExpiresAt = new Date(Date.now() + n * 86400000).toISOString();
+      }
+    }
     persist();
     const p = profileOf(u);
     io.to('user:' + u.id).emit('my-profile-updated', { profile: p });
@@ -2168,7 +2204,7 @@ function consumeExerciseTargets(userId, exercises) {
   return changed;
 }
 
-app.post('/api/sessions', authRequired, (req, res) => {
+app.post('/api/sessions', authRequired, accessActive, (req, res) => {
   const id = uid();
   const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
   // Un nom par défaut plutôt qu'un rejet pur : une séance sans nom (programme généré par l'IA
