@@ -10178,32 +10178,58 @@ function CoachPendingSessions({athleteId,pending,onChange,onFlash}){
 
 // Dossier repliable pour la vue coach de la bibliothèque (même classement par feuille que côté
 // athlète). État d'ouverture interne → utilisable dans une liste sans hisser d'état parent.
-function CoachLibFolder({sheet,sessions,defaultOpen,onPick}){
+// Dossier repliable de séances. Utilisé pour la bibliothèque (1 dossier par feuille) ET pour le
+// programme d'un athlète (dossier = nom du fichier Excel). Une séance « programme » porte `day`
+// (LUNDI…) : on l'affiche en pastille au-dessus du titre de la séance. `showGroups` insère un
+// libellé de feuille quand le fichier en contient plusieurs (mois différents).
+function CoachLibFolder({sheet,sessions,defaultOpen,onPick,showGroups}){
   const[open,setOpen]=React.useState(!!defaultOpen);
   return(
     <div style={{borderRadius:14,border:`1.5px solid ${open?'rgba(191,160,96,0.5)':'rgba(191,160,96,0.28)'}`,background:'rgba(191,160,96,0.03)',overflow:'hidden'}}>
       <button onClick={()=>setOpen(o=>!o)} style={{width:'100%',textAlign:'left',padding:'11px 13px',background:'linear-gradient(135deg,rgba(191,160,96,0.13),rgba(184,80,112,0.04))',border:'none',borderBottom:open?'1px solid rgba(191,160,96,0.22)':'none',cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
         <div style={{width:34,height:34,borderRadius:10,background:'linear-gradient(135deg,#BFA060,#B85070)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,boxShadow:'0 3px 10px rgba(191,160,96,0.35)'}}>📂</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-0.1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sheet}</div>
+          <div style={{fontSize:13.5,fontWeight:800,color:'#fff',letterSpacing:-0.1,lineHeight:1.25,overflowWrap:'anywhere'}}>{sheet}</div>
           <div style={{fontSize:10,color:T.accent,fontWeight:700,marginTop:1}}>{sessions.length} séance{sessions.length>1?'s':''}</div>
         </div>
         <span style={{width:24,height:24,borderRadius:8,background:'rgba(191,160,96,0.14)',border:'1px solid rgba(191,160,96,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:T.accent,flexShrink:0}}>{open?'▾':'▸'}</span>
       </button>
       {open&&(
         <div style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 10px 11px',borderLeft:'2px solid rgba(191,160,96,0.22)',margin:'0 0 0 22px'}}>
-          {sessions.map((s,idx)=>(
-            <div key={'lib-'+idx} onClick={()=>onPick(s)} style={{padding:'10px 14px',borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.18)',cursor:'pointer'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <div style={{fontSize:13,fontWeight:600,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
-                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                  <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
-                  <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
-                </div>
+          {sessions.map((s,idx)=>{
+            const isProg=!!s.day;
+            const groupHeader=showGroups&&s._group&&s._group!==(sessions[idx-1]&&sessions[idx-1]._group);
+            return(
+            <React.Fragment key={'lib-'+idx}>
+              {groupHeader&&<div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',color:T.textFaint,margin:idx>0?'8px 0 0':'0'}}>{s._group}</div>}
+              <div onClick={()=>onPick(s)} style={{padding:'10px 14px',borderRadius:12,background:isProg?'rgba(191,160,96,0.06)':'rgba(90,138,224,0.06)',border:isProg?'1px solid rgba(191,160,96,0.18)':'1px solid rgba(90,138,224,0.18)',cursor:'pointer'}}>
+                {isProg?(
+                  <>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+                      <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:T.accent,background:'rgba(191,160,96,0.14)',border:'1px solid rgba(191,160,96,0.3)',borderRadius:6,padding:'2px 8px'}}>{s.day}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                        <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
+                        <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
+                      </div>
+                    </div>
+                    <div style={{fontSize:13.5,fontWeight:700,lineHeight:1.3}}>{s.name||'Séance'}</div>
+                  </>
+                ):(
+                  <>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div style={{fontSize:13,fontWeight:600,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'Séance'}</div>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                        <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
+                        <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
+                      </div>
+                    </div>
+                    {s.muscles&&<div style={{fontSize:10,color:'#5A8AE0',marginTop:3}}>{s.muscles}</div>}
+                  </>
+                )}
               </div>
-              {s.muscles&&<div style={{fontSize:10,color:'#5A8AE0',marginTop:3}}>{s.muscles}</div>}
-            </div>
-          ))}
+            </React.Fragment>
+            );
+          })}
         </div>
       )}
     </div>
@@ -13241,6 +13267,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   </button>
                   <div style={{padding:'18px',borderRadius:18,background:`${sc}14`,border:`1px solid ${sc}40`,marginBottom:16}}>
                     <div style={{fontSize:28,marginBottom:6}}>{s._source==='program'?'📋':s._source==='coach-lib'?'📚':'🤖'}</div>
+                    {s.day&&<div style={{display:'inline-block',fontSize:10,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',color:T.accent,background:'rgba(191,160,96,0.14)',border:'1px solid rgba(191,160,96,0.3)',borderRadius:6,padding:'2px 9px',marginBottom:6}}>{s.day}</div>}
                     <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.4,marginBottom:2}}>{s.name}</div>
                     {s.tip&&<div style={{fontSize:12,color:'#c4b5fd',fontStyle:'italic',lineHeight:1.5,marginBottom:8}}>💡 {s.tip}</div>}
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -13339,14 +13366,23 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               const coachLibSessions=(libData?.sessions||[]).map(s=>({...s,_source:'coach-lib'}));
               const programSessions=(()=>{
                 if(!a.program?.data)return[];
+                // Séances du programme classées LUNDI → DIMANCHE (feuilles dans l'ordre du fichier).
+                // Nom = TITRE du tableau Excel (même règle que quand l'athlète démarre sa séance :
+                // sessionTitleFrom), pour que feedback et comparaison « vs séance précédente »
+                // retrouvent la même séance quel que soit celui qui la valide.
+                const DOW=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
+                const dIdx=d=>{const i=DOW.indexOf(String(d).trim().toUpperCase());return i<0?99:i;};
                 const out=[];
-                Object.entries(a.program.data).forEach(([month,days])=>{
-                  Object.entries(days).forEach(([day,exs])=>{
-                    const dayEx=Array.isArray(exs)?exs:(exs?.exercises||[]);
-                    if(!dayEx.length)return;
-                    const muscles=[...new Set(dayEx.map(e=>e.muscle).filter(Boolean))].join(', ');
-                    out.push({name:`${month} — ${day}`,muscles,exercises:dayEx,_source:'program',savedAt:a.program.assignedAt});
-                  });
+                Object.entries(a.program.data).forEach(([sheet,days])=>{
+                  Object.entries(days||{}).map(([day,dd],pos)=>({day,dd,pos}))
+                    .sort((x,y)=>dIdx(x.day)-dIdx(y.day)||x.pos-y.pos)
+                    .forEach(({day,dd})=>{
+                      const dayEx=Array.isArray(dd)?dd:(dd?.exercises||[]);
+                      if(!dayEx.length)return;
+                      const muscles=[...new Set(dayEx.map(e=>e.muscle).filter(Boolean))].join(', ');
+                      const title=sessionTitleFrom(Array.isArray(dd)?{exercises:dayEx}:dd,day);
+                      out.push({name:title,day,muscles,exercises:dayEx,_source:'program',_group:sheet,savedAt:a.program.assignedAt});
+                    });
                 });
                 return out;
               })();
@@ -13370,29 +13406,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
                   {/* Programme du coach */}
                   {programSessions.length>0&&(
-                    <div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                        <div style={{width:28,height:28,borderRadius:9,background:'linear-gradient(135deg,rgba(191,160,96,0.2),rgba(184,80,112,0.1))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>📋</div>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Programme du coach</div>
-                          <div style={{fontSize:10,color:T.textFaint}}>{programMonths} mois · {programSessions.length} séances</div>
-                        </div>
-                      </div>
-                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                        {programSessions.map((s,idx)=>(
-                          <div key={'prog-'+idx} onClick={()=>setCoachBiblioPreview(s)} style={{padding:'10px 14px',borderRadius:12,background:'rgba(191,160,96,0.06)',border:'1px solid rgba(191,160,96,0.15)',cursor:'pointer',transition:'background 0.2s'}}>
-                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                              <div style={{fontSize:13,fontWeight:600,flex:1}}>{s.name}</div>
-                              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                                <div style={{fontSize:10,color:T.textFaint}}>{(s.exercises||[]).length} exos</div>
-                                <Icon name="chevronRight" size={12} stroke={T.textFaint}/>
-                              </div>
-                            </div>
-                            {s.muscles&&<div style={{fontSize:10,color:T.accent,marginTop:3}}>{s.muscles}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    // Dossier = nom du fichier Excel du programme ; dedans, les séances LUNDI → DIMANCHE.
+                    <CoachLibFolder sheet={programFileName||'Programme du coach'} sessions={programSessions} defaultOpen={true}
+                      showGroups={new Set(programSessions.map(x=>x._group)).size>1}
+                      onPick={s=>setCoachBiblioPreview(s)}/>
                   )}
 
                   {/* Bibliothèque de l'athlète (séances à la carte assignées par le coach) */}
