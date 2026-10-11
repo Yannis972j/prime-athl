@@ -12539,6 +12539,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
   const[nutriDetail,setNutriDetail]=React.useState(null);
   const[nutriMode,setNutriMode]=React.useState('mirror'); // 'mirror' | 'edit'
   const[showDangerZone,setShowDangerZone]=React.useState(false);
+  const[showAccess,setShowAccess]=React.useState(false);
   const[showRecap,setShowRecap]=React.useState(false); // récap mensuel
   const[detailTab,setDetailTab]=React.useState('profil');
   const[deletingSessionId,setDeletingSessionId]=React.useState(null); // long-press suppression
@@ -12950,8 +12951,16 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 ))}
               </div>
 
+              {/* Accès & abonnement — regroupé dans un menu dépliant pour épurer la fiche */}
+              {isMain&&(()=>{const dl=a.accessExpiresAt?Math.ceil((new Date(a.accessExpiresAt).getTime()-Date.now())/86400000):null;const accSummary=a.fullAccess?'Accès complet actif':dl==null?'Durée illimitée':dl<=0?'⚠ Accès expiré':`${dl} j restant${dl>1?'s':''}`;return(
+                <button onClick={()=>setShowAccess(s=>!s)} style={{width:'100%',marginTop:10,height:44,padding:'0 14px',borderRadius:12,border:'1px solid '+T.border,background:'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.text,display:'flex',alignItems:'center',gap:8}}>🔑 Accès &amp; abonnement</span>
+                  <span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:11,fontWeight:600,color:dl!=null&&dl<=0?T.danger:T.textDim}}>{accSummary}</span><span style={{fontSize:12,color:T.textFaint}}>{showAccess?'▴':'▾'}</span></span>
+                </button>
+              );})()}
+              {isMain&&showAccess&&(<>
               {/* Accès Premium */}
-              {isMain&&<div style={{marginTop:10,padding:'10px 14px',borderRadius:12,background:'rgba(144,144,196,0.06)',border:'1px solid rgba(144,144,196,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+              {isMain&&<div style={{marginTop:8,padding:'10px 14px',borderRadius:12,background:'rgba(144,144,196,0.06)',border:'1px solid rgba(144,144,196,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:700,color:'#9090c4'}}>🔑 Accès Explorer Premium</div>
                   <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.premium?'Actif — accès aux séances prêtes':'Inactif — accès verrouillé'}</div>
@@ -12992,6 +13001,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   flash(nbJours>=1?`✓ Accès fixé à ${nbJours} jour${nbJours>1?'s':''}`:'✓ Accès illimité');
                 }catch(e){flash('✗ '+(e.message||e));}
               }}/>}
+              </>)}
 
               {/* Danger zone */}
               <button onClick={()=>setShowDangerZone(s=>!s)} style={{width:'100%',marginTop:8,height:38,borderRadius:11,border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.3}}>
