@@ -630,17 +630,17 @@ function isAssistedName(name) {
 function isAssistedEx(ex) {
   return !!(ex && (ex.assisted || isAssistedName(ex.name)));
 }
-// Maintien gauche/droite (gainage latéral…) : chaque série = 2 tenues (G puis D), donc ex.sets
-// contient 2× plus d'entrées que de séries. Ces helpers donnent le vrai nombre de SÉRIES à afficher.
-function isSideSplitEx(ex) {
-  return !!(ex && Array.isArray(ex.sets) && ex.sets.some(s => s && s.side));
+// Maintien gauche/droite (gainage latéral…) : UNE série = deux chronos (droit + gauche, même durée).
+// Détecté par le flag posé à l'import OU par le nom (programmes déjà importés / saisie manuelle).
+function isSideHoldEx(ex) {
+  if (!ex || !(ex.holdSeconds > 0)) return false;
+  if (ex.sideHold) return true;
+  const n = String(ex.name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return /lateral|unilat/.test(n);
 }
-function seriesCount(ex) {
-  const n = (ex && ex.sets ? ex.sets.length : 0);
-  return isSideSplitEx(ex) ? Math.ceil(n / 2) : n;
-}
+function seriesCount(ex) { return ex && ex.sets ? ex.sets.length : 0; }
 function seriesLabel(ex, rep) {
-  return seriesCount(ex) + '×' + rep + (isSideSplitEx(ex) ? '/côté' : '');
+  return seriesCount(ex) + '×' + rep + (isSideHoldEx(ex) ? '/côté' : '');
 }
 // ── Semaine de décharge (deload) : l'app calcule elle-même les valeurs allégées à partir des
 // valeurs normales du programme, sans dépendre d'une feuille "DECHARGE" dans l'Excel. Ajuste
@@ -661,9 +661,7 @@ function computeDeload(ex) {
     return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
   };
   const sets = ex.sets || [];
-  let nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
-  // Maintien gauche/droite : on garde des paires complètes (G puis D), jamais un côté orphelin.
-  if (sets.some(s => s.side)) nDeload = Math.min(sets.length, Math.max(2, nDeload + (nDeload % 2)));
+  const nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
   return {
     weightStr: scaleWeight(ex.weightStr),
     repsStr: ex.repsStr,
@@ -1026,8 +1024,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (restCell) lastRestStr = restCell;
           const restSecs = parseRest(restStr);
 
-          // Gainage latéral (ou tout maintien unilatéral) : la durée se tient DES DEUX CÔTÉS →
-          // chaque série devient 2 tenues, gauche puis droite (même durée chacune).
+          // Gainage latéral (ou tout maintien unilatéral) : dans UNE même série, la durée se tient
+          // des deux côtés — un chrono pour le côté droit, un autre pour le gauche (même durée).
           const sideSplitHold = isHold && !cardio && (/lateral|lateraux|\bcote\b|\bside\b/.test(norm(exNameRaw)) || isUnilateralName(exNameRaw));
           const exercise = {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
@@ -1042,9 +1040,8 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             ...(isUnilateralName(exNameRaw) ? { unilateral: true } : {}),
             ...(isAssistedName(exNameRaw) ? { assisted: true } : {}),
             ...(posture ? { posture } : {}),
-            sets: sideSplitHold
-              ? Array.from({length:numSets*2}, (_, k) => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr, side: k%2===0 ? 'G' : 'D'}))
-              : Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
+            ...(sideSplitHold ? { sideHold: true } : {}),
+            sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
           };
 
           if (currentDay) {
@@ -1646,7 +1643,15 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     // tel quel et ferait planter le render (ex=undefined → ex.sets). On exige un tableau non vide,
     // sinon on repart des exercices de la séance.
     try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');if(s&&s.workoutName===workout.name&&Array.isArray(s.exercises)&&s.exercises.length>0)return s.exercises;}catch{}
-    return workout.exercises.map(e=>({...e,sets:e.sets.map(s=>({...s}))}));
+    return workout.exercises.map(e=>{
+      // Ancien format (1 set par côté, champ side) : on fusionne G+D dans UNE série à 2 chronos.
+      if(e.sets&&e.sets.some(x=>x&&x.side)){
+        const merged=[];
+        for(let k=0;k<e.sets.length;k+=2){const{side,...rest}=e.sets[k];merged.push({...rest});}
+        return{...e,sideHold:true,sets:merged};
+      }
+      return{...e,sets:e.sets.map(s=>({...s}))};
+    });
   });
   const[currentEx,setCurrentEx]=React.useState(0);
   const[restSeconds,setRestSeconds]=React.useState(0);
@@ -1930,6 +1935,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const currentExRef=React.useRef(currentEx);
   const validateSetRef=React.useRef(null);
   const holdTimerExRef=React.useRef(null);
+  const holdSideRef=React.useRef(null);
+  const finishSideRef=React.useRef(null);
   exercisesRef.current=exercises;
   currentExRef.current=currentEx;
   React.useEffect(()=>{
@@ -1943,13 +1950,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         // une série sur le mauvais exercice.
         if(currentExRef.current!==holdTimerExRef.current)return;
         const si=(exercisesRef.current[currentExRef.current]?.sets??[]).findIndex(s=>!s.done);
-        if(si>=0&&validateSetRef.current)validateSetRef.current(si);
+        if(si<0)return;
+        // Maintien droit/gauche : la fin du chrono valide CE côté ; la série n'est validée que
+        // quand les deux côtés sont faits.
+        const side=holdSideRef.current;holdSideRef.current=null;
+        if(side&&finishSideRef.current){finishSideRef.current(si,side);return;}
+        if(validateSetRef.current)validateSetRef.current(si);
       },350);
     }
     prevSetTimerRef.current=setTimerSecs;
   },[setTimerSecs,playBeep]);
-  const startSetTimer=React.useCallback((secs)=>{
+  const startSetTimer=React.useCallback((secs,side)=>{
     getAudioCtx();
+    holdSideRef.current=side||null;
     setTimerActiveRef.current=true;
     holdTimerExRef.current=currentExRef.current;
     setSetTimerTotal(secs);
@@ -2070,10 +2083,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     });
     setExercises(updatedExercises);
 
-    // Maintien gauche/droite (ex: gainage latéral) : après le côté gauche, on enchaîne directement
-    // sur le côté droit du même exo — ni repos ni changement d'exercice.
-    if(ex.sets[si]?.side==='G'&&ex.sets[si+1]&&!ex.sets[si+1].done)return;
-
     // SUPERSET / TRISET / ABDOS : enchaîner sans repos jusqu'au dernier exo du bloc — un bloc
     // ABDOS (circuit de gainage/abdos illimité) est un circuit au même titre qu'un superset/triset,
     // il doit donc lui aussi passer à l'exercice suivant du bloc plutôt que de proposer un repos
@@ -2107,6 +2116,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     setRestSeconds(rest);setRestTotal(rest);
   };
   validateSetRef.current=validateSet;
+  // Maintien droit/gauche : marque un côté comme fait ; valide la série quand les deux le sont.
+  const finishSide=(si,side)=>{
+    const e=exercisesRef.current[currentExRef.current];const st=e?.sets?.[si];if(!st)return;
+    const other=side==='G'?'D':'G';
+    if(st['done'+other])validateSet(si);
+    else updSet(currentEx,si,{['done'+side]:true});
+  };
+  finishSideRef.current=finishSide;
 
   const goToEx=React.useCallback(idx=>{
     setTimerActiveRef.current=false;
@@ -2186,7 +2203,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // retrouvait hors-champ, seul le libellé du haut dépassant tout en bas de l'écran.
   const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
-      <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours</div>
+      <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours{holdSideRef.current?` · côté ${holdSideRef.current==='G'?'gauche':'droit'}`:''}</div>
       <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
       <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
         <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
@@ -2208,7 +2225,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       </div>
       <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
         <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
-        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);validateSet(ex.sets.findIndex(s=>!s.done));}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
+        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);const si=ex.sets.findIndex(s=>!s.done);const sd=holdSideRef.current;holdSideRef.current=null;if(sd)finishSide(si,sd);else validateSet(si);}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
       </div>
     </div>,
     document.body
@@ -2337,14 +2354,23 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   <div>
                     <div style={{fontSize:11,color:'#8AADEE',fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>Durée</div>
                     <div style={{fontSize:28,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)}</div>
-                    <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:2}}>à tenir</div>
-                    {set.side&&<div style={{fontSize:12,fontWeight:800,color:'#8AADEE',marginTop:6,letterSpacing:0.4}}>CÔTÉ {set.side==='G'?'GAUCHE':'DROIT'}</div>}
+                    <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:2}}>{isSideHoldEx(ex)?'par côté':'à tenir'}</div>
                   </div>
-                  {setTimerSecs===0&&(
+                  {setTimerSecs===0&&(isSideHoldEx(ex)?(
+                    <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:10}}>
+                      {['D','G'].map(sd=>set['done'+sd]?(
+                        <div key={sd} style={{minHeight:40,borderRadius:12,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.4)',color:'#2CC4A0',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>✓ {sd==='D'?'Droite':'Gauche'}</div>
+                      ):(
+                        <button key={sd} onClick={()=>startSetTimer(ex.holdSeconds,sd)} style={{width:'100%',minHeight:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                          ▶ {sd==='D'?'Droite':'Gauche'}
+                        </button>
+                      ))}
+                    </div>
+                  ):(
                     <button onClick={()=>startSetTimer(ex.holdSeconds)} style={{marginTop:10,width:'100%',minHeight:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
                       ▶ Démarrer
                     </button>
-                  )}
+                  ))}
                 </div>
               ):(
                 <div style={{flex:1,padding:'16px 8px',borderRadius:18,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',textAlign:'center'}}>
@@ -2631,7 +2657,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.3,flexShrink:0}}>S{i+1}</span>
                         <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                           {ex.holdSeconds>0?(
-                            <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} tenues{s.side?` · ${s.side==='G'?'gauche':'droit'}`:''}</span>
+                            <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{isSideHoldEx(ex)?`D ${fmtHoldDuration(ex.holdSeconds)} · G ${fmtHoldDuration(ex.holdSeconds)}`:`${fmtHoldDuration(ex.holdSeconds)} tenues`}</span>
                           ):isUnilateralEx(ex)?(<>
                             <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{s.weight||0}</span>
                             <span style={{fontSize:10,color:T.textFaint}}>kg</span>
@@ -2726,10 +2752,22 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <span style={{fontSize:10,color:'rgba(255,255,255,0.2)',flexShrink:0,margin:'0 1px'}}>×</span>
                         {/* Gainage/planche : pas de reps, un bouton qui déclenche le compte à
                             rebours de la durée à tenir (valide la série tout seul à la fin) */}
-                        {ex.holdSeconds>0?(
+                        {isSideHoldEx(ex)?(
+                          <div style={{flex:1,display:'flex',flexDirection:'column',gap:5,minWidth:0}}>
+                            {['D','G'].map(sd=>(
+                              s['done'+sd]?(
+                                <div key={sd} style={{height:32,borderRadius:9,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.4)',color:'#2CC4A0',fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>✓ {fmtHoldDuration(ex.holdSeconds)} · {sd==='D'?'Droite':'Gauche'}</div>
+                              ):(
+                                <button key={sd} disabled={setTimerSecs>0} onClick={()=>startSetTimer(ex.holdSeconds,sd)} style={{height:32,borderRadius:9,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:12,fontWeight:800,cursor:setTimerSecs>0?'default':'pointer',opacity:setTimerSecs>0?0.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+                                  ▶ {fmtHoldDuration(ex.holdSeconds)} · {sd==='D'?'Droite':'Gauche'}
+                                </button>
+                              )
+                            ))}
+                          </div>
+                        ):ex.holdSeconds>0?(
                           setTimerSecs===0?(
                             <button onClick={()=>startSetTimer(ex.holdSeconds)} style={{flex:1,height:32,borderRadius:9,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
-                              ▶ {fmtHoldDuration(ex.holdSeconds)}{s.side?` · ${s.side}`:''}
+                              ▶ {fmtHoldDuration(ex.holdSeconds)}
                             </button>
                           ):(
                             <div style={{flex:1,textAlign:'center',fontSize:11,color:'#8AADEE',fontWeight:700}}>⏱ en cours…</div>
@@ -2763,7 +2801,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       <div style={{width:22,height:22,borderRadius:8,background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.textFaint,flexShrink:0}}>{i+1}</div>
                       <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                         {ex.holdSeconds>0?(
-                          <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} à tenir{s.side?` · ${s.side==='G'?'gauche':'droit'}`:''}</span>
+                          <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{isSideHoldEx(ex)?`${fmtHoldDuration(ex.holdSeconds)} droite + ${fmtHoldDuration(ex.holdSeconds)} gauche`:`${fmtHoldDuration(ex.holdSeconds)} à tenir`}</span>
                         ):(<>
                           <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.weight||'—'}</span>
                           <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span>
@@ -2788,16 +2826,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               {ex.style!=='CARDIO'&&<>
               <button onClick={()=>{
                 const last=ex.sets[ex.sets.length-1];
-                // Maintien G/D : une série ajoutée = une paire (gauche + droite)
-                const mk=side=>({weight:last?.weight||20,reps:0,done:false,target:last?.target||10,...(side?{side}:{})});
-                setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,...(isSideSplitEx(e)?[mk('G'),mk('D')]:[mk()])]}));
+                setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,{weight:last?.weight||20,reps:0,done:false,target:last?.target||10}]}));
               }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'border-color 0.2s ease,color 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(191,160,96,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
                 <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
               </button>
-              {ex.sets.length>(isSideSplitEx(ex)?2:1)&&(
+              {ex.sets.length>1&&(
                 <button onClick={()=>{
                   if(!confirm('Supprimer la dernière série ?'))return;
-                  setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,isSideSplitEx(e)&&e.sets.length>2?-2:-1)}));
+                  setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,-1)}));
                 }} style={{width:'100%',marginTop:4,height:26,border:'none',borderRadius:8,background:'transparent',color:T.textFaint,fontSize:10,fontWeight:600,cursor:'pointer',opacity:0.55,letterSpacing:0.3}}>− Retirer la dernière</button>
               )}
               </> }
@@ -18520,7 +18556,7 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.posture?` · 📍 ${ex.posture}`:''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{seriesCount(ex)||'?'}×{ex.repsStr||(ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds):'?')}{isSideSplitEx(ex)?'/côté':''}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{seriesCount(ex)||'?'}×{ex.repsStr||(ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds):'?')}{isSideHoldEx(ex)?'/côté':''}</div>
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.rest}</div>
                 </div>
               </div>
