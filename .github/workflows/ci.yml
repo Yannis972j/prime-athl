@@ -29,3 +29,24 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  # Déploiement automatique sur Render après un merge sur main (CI verte uniquement).
+  # Évite le « Manual Deploy » : le déploiement auto de Render ne se déclenche pas toujours.
+  # Prérequis (une seule fois) : Render > service prime-athl > Settings > Deploy Hook → copier
+  # l'URL, puis GitHub > Settings > Secrets and variables > Actions > New secret
+  # nommé RENDER_DEPLOY_HOOK_URL. Sans ce secret, le job est ignoré (aucun échec).
+  deploy:
+    name: Deploy → Render
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::notice::RENDER_DEPLOY_HOOK_URL non défini — déploiement auto ignoré."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" && echo "Déploiement Render déclenché."
