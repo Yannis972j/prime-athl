@@ -630,6 +630,18 @@ function isAssistedName(name) {
 function isAssistedEx(ex) {
   return !!(ex && (ex.assisted || isAssistedName(ex.name)));
 }
+// Maintien gauche/droite (gainage latéral…) : chaque série = 2 tenues (G puis D), donc ex.sets
+// contient 2× plus d'entrées que de séries. Ces helpers donnent le vrai nombre de SÉRIES à afficher.
+function isSideSplitEx(ex) {
+  return !!(ex && Array.isArray(ex.sets) && ex.sets.some(s => s && s.side));
+}
+function seriesCount(ex) {
+  const n = (ex && ex.sets ? ex.sets.length : 0);
+  return isSideSplitEx(ex) ? Math.ceil(n / 2) : n;
+}
+function seriesLabel(ex, rep) {
+  return seriesCount(ex) + '×' + rep + (isSideSplitEx(ex) ? '/côté' : '');
+}
 // ── Semaine de décharge (deload) : l'app calcule elle-même les valeurs allégées à partir des
 // valeurs normales du programme, sans dépendre d'une feuille "DECHARGE" dans l'Excel. Ajuste
 // simplement ces deux constantes pour changer l'intensité de la décharge.
@@ -649,7 +661,9 @@ function computeDeload(ex) {
     return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
   };
   const sets = ex.sets || [];
-  const nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
+  let nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
+  // Maintien gauche/droite : on garde des paires complètes (G puis D), jamais un côté orphelin.
+  if (sets.some(s => s.side)) nDeload = Math.min(sets.length, Math.max(2, nDeload + (nDeload % 2)));
   return {
     weightStr: scaleWeight(ex.weightStr),
     repsStr: ex.repsStr,
@@ -721,7 +735,12 @@ function PostDeloadRecapBanner({ coach }) {
 // compter comme un exercice distinct ni fragmenter sa courbe de progression. Utilisé partout où
 // des exercices sont regroupés/comparés par nom (stats, "dernière fois", vue d'ensemble...).
 function normExerciseName(name) {
-  return String(name || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+  const base = String(name || '');
+  // Une précision de posture entre parenthèses ("Leg Press (pieds hauts)") ne change pas
+  // l'exercice : même clé que "Leg Press" → une seule courbe de stats / un seul "dernière fois".
+  // Garde-fou : si retirer les parenthèses vide le nom, on garde le nom d'origine.
+  const stripped = base.replace(/\([^)]*\)/g, ' ').trim();
+  return (stripped || base).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
 }
 // Clé de comparaison de NOMS DE SÉANCE, plus tolérante que normExerciseName : en plus de la casse
 // et des accents, on neutralise toute la ponctuation/séparateurs (· / - – — () etc.) pour que
@@ -899,7 +918,14 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             return (cell.w || String(cell.v || '')).trim();
           };
 
-          const exName = String(row[colExercice]||'').trim().replace(/^\([ABC]\)\s*/i,'');
+          const exNameRaw = String(row[colExercice]||'').trim().replace(/^\([ABC]\)\s*/i,'');
+          // Précisions de posture entre parenthèses (ex: "LEG PRESS (PIEDS HAUTS ET ÉCARTÉS)") :
+          // elles ne font PAS partie du nom de l'exercice — sinon chaque position des pieds créerait
+          // un exercice distinct dans les stats / la progression. Nom nettoyé = "LEG PRESS", la
+          // précision est conservée à part (exercise.posture) et affichée comme indication.
+          const exName = exNameRaw.replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim() || exNameRaw.replace(/[()]/g,' ').replace(/\s+/g,' ').trim();
+          const postureRaw = (exNameRaw.match(/\(([^)]*)\)/g)||[]).map(m=>m.slice(1,-1).trim()).filter(Boolean).join(' · ');
+          const posture = postureRaw ? postureRaw.charAt(0).toUpperCase()+postureRaw.slice(1).toLowerCase() : '';
           if (!exName || exName === '_') return;
 
           const dayRaw = String(row[colJour]||'').trim().toUpperCase();
@@ -939,7 +965,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // (et assimilés), qui reste suivi en distance/vitesse via l'objet cardio ci-dessous.
           const dureeTxt = cellText(colDuree);
           const isTapis = /tapis/.test(norm(exName));
-          const isHold = !isTapis && (!!dureeTxt || isHoldExercise(exName));
+          const isHold = !isTapis && (!!dureeTxt || isHoldExercise(exNameRaw));
 
           // Cardio "vrai" (tapis, vélo...) : suivi en distance/vitesse, jamais en compte à
           // rebours. On utilise .w (texte formaté) pour préserver les plages comme "4-5" qu'Excel
@@ -1000,6 +1026,9 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           if (restCell) lastRestStr = restCell;
           const restSecs = parseRest(restStr);
 
+          // Gainage latéral (ou tout maintien unilatéral) : la durée se tient DES DEUX CÔTÉS →
+          // chaque série devient 2 tenues, gauche puis droite (même durée chacune).
+          const sideSplitHold = isHold && !cardio && (/lateral|lateraux|\bcote\b|\bside\b/.test(norm(exNameRaw)) || isUnilateralName(exNameRaw));
           const exercise = {
             id: uid(), name: exName, muscle: muscleName, style: styleVal,
             rest: restStr, restSeconds: restSecs, weightStr, repsStr, cardio,
@@ -1010,9 +1039,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
             // "unilatéral" dans le nom (ex: "Leg Extension Unilatéral") → tagué dès l'import,
             // pour que le toggle G/D de l'éditeur reflète bien l'état sans que Yannis ait à y
             // repenser (isUnilateralEx() sert par ailleurs de filet à l'affichage/la saisie).
-            ...(isUnilateralName(exName) ? { unilateral: true } : {}),
-            ...(isAssistedName(exName) ? { assisted: true } : {}),
-            sets: Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
+            ...(isUnilateralName(exNameRaw) ? { unilateral: true } : {}),
+            ...(isAssistedName(exNameRaw) ? { assisted: true } : {}),
+            ...(posture ? { posture } : {}),
+            sets: sideSplitHold
+              ? Array.from({length:numSets*2}, (_, k) => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr, side: k%2===0 ? 'G' : 'D'}))
+              : Array.from({length:numSets}, () => ({weight, reps:0, done:false, target:repsTarget, targetStr:repsStr})),
           };
 
           if (currentDay) {
@@ -2038,6 +2070,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     });
     setExercises(updatedExercises);
 
+    // Maintien gauche/droite (ex: gainage latéral) : après le côté gauche, on enchaîne directement
+    // sur le côté droit du même exo — ni repos ni changement d'exercice.
+    if(ex.sets[si]?.side==='G'&&ex.sets[si+1]&&!ex.sets[si+1].done)return;
+
     // SUPERSET / TRISET / ABDOS : enchaîner sans repos jusqu'au dernier exo du bloc — un bloc
     // ABDOS (circuit de gainage/abdos illimité) est un circuit au même titre qu'un superset/triset,
     // il doit donc lui aussi passer à l'exercice suivant du bloc plutôt que de proposer un repos
@@ -2247,7 +2283,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           {/* Nom exercice + numéro de série */}
           <div style={{textAlign:'center',marginBottom:24}}>
             <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase',marginBottom:6}}>Exercice {currentEx+1}/{exercises.length} · {ex.muscle||''}</div>
-            <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:14}}>{ex.name}</div>
+            <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:ex.posture?6:14}}>{ex.name}</div>
+            {ex.posture&&<div style={{fontSize:13,fontWeight:600,color:'#8AADEE',marginBottom:14}}>📍 {ex.posture}</div>}
             {overloadDue(ex)&&(
               <div title="Tu as atteint le haut de la fourchette la dernière fois — prêt à monter la charge" style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',borderRadius:999,background:`${VIOLET}22`,border:`1px solid ${VIOLET}66`,marginBottom:12}}>
                 <span style={{fontSize:13}}>⬆</span>
@@ -2301,6 +2338,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                     <div style={{fontSize:11,color:'#8AADEE',fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',marginBottom:10}}>Durée</div>
                     <div style={{fontSize:28,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)}</div>
                     <div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:2}}>à tenir</div>
+                    {set.side&&<div style={{fontSize:12,fontWeight:800,color:'#8AADEE',marginTop:6,letterSpacing:0.4}}>CÔTÉ {set.side==='G'?'GAUCHE':'DROIT'}</div>}
                   </div>
                   {setTimerSecs===0&&(
                     <button onClick={()=>startSetTimer(ex.holdSeconds)} style={{marginTop:10,width:'100%',minHeight:44,borderRadius:12,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
@@ -2471,7 +2509,10 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   const open=perfOpenFor===normExerciseName(ex.name);
                   return(
                     <div onClick={hasPerf?()=>setPerfOpenFor(open?null:normExerciseName(ex.name)):undefined} title={hasPerf?'Voir les dernières perf.':undefined} style={{display:'flex',alignItems:'center',gap:7,flex:1,minWidth:0,cursor:hasPerf?'pointer':'default'}}>
-                      <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,minWidth:0}}>{ex.name}</div>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:20,fontWeight:700,letterSpacing:-0.4,lineHeight:1.1,minWidth:0}}>{ex.name}</div>
+                        {ex.posture&&<div style={{fontSize:11.5,fontWeight:600,color:'#8AADEE',marginTop:4,lineHeight:1.3}}>📍 {ex.posture}</div>}
+                      </div>
                       {hasPerf&&<span style={{fontSize:11,color:open?T.accent:T.textFaint,flexShrink:0,transition:'color 0.2s'}}>📊</span>}
                     </div>
                   );
@@ -2590,7 +2631,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <span style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.3,flexShrink:0}}>S{i+1}</span>
                         <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                           {ex.holdSeconds>0?(
-                            <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} tenues</span>
+                            <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} tenues{s.side?` · ${s.side==='G'?'gauche':'droit'}`:''}</span>
                           ):isUnilateralEx(ex)?(<>
                             <span style={{fontSize:19,fontWeight:700,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{s.weight||0}</span>
                             <span style={{fontSize:10,color:T.textFaint}}>kg</span>
@@ -2688,7 +2729,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         {ex.holdSeconds>0?(
                           setTimerSecs===0?(
                             <button onClick={()=>startSetTimer(ex.holdSeconds)} style={{flex:1,height:32,borderRadius:9,border:'none',background:'linear-gradient(135deg,#5A8AE0,#8AADEE)',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
-                              ▶ {fmtHoldDuration(ex.holdSeconds)}
+                              ▶ {fmtHoldDuration(ex.holdSeconds)}{s.side?` · ${s.side}`:''}
                             </button>
                           ):(
                             <div style={{flex:1,textAlign:'center',fontSize:11,color:'#8AADEE',fontWeight:700}}>⏱ en cours…</div>
@@ -2722,7 +2763,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       <div style={{width:22,height:22,borderRadius:8,background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:T.textFaint,flexShrink:0}}>{i+1}</div>
                       <div style={{flex:1,display:'flex',alignItems:'baseline',gap:3}}>
                         {ex.holdSeconds>0?(
-                          <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} à tenir</span>
+                          <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{fmtHoldDuration(ex.holdSeconds)} à tenir{s.side?` · ${s.side==='G'?'gauche':'droit'}`:''}</span>
                         ):(<>
                           <span style={{fontSize:17,fontWeight:700,color:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{s.weight||'—'}</span>
                           <span style={{fontSize:9,color:T.textFaint,marginLeft:1}}>kg</span>
@@ -2747,14 +2788,16 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               {ex.style!=='CARDIO'&&<>
               <button onClick={()=>{
                 const last=ex.sets[ex.sets.length-1];
-                setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,{weight:last?.weight||20,reps:0,done:false,target:last?.target||10}]}));
+                // Maintien G/D : une série ajoutée = une paire (gauche + droite)
+                const mk=side=>({weight:last?.weight||20,reps:0,done:false,target:last?.target||10,...(side?{side}:{})});
+                setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:[...e.sets,...(isSideSplitEx(e)?[mk('G'),mk('D')]:[mk()])]}));
               }} style={{width:'100%',marginTop:8,height:34,border:'1px dashed rgba(255,255,255,0.12)',borderRadius:11,background:'transparent',color:T.textFaint,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,letterSpacing:0.2,transition:'border-color 0.2s ease,color 0.2s ease'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(191,160,96,0.3)';e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.color=T.textFaint;}}>
                 <Icon name="plus" size={12} stroke="currentColor"/> Ajouter une série
               </button>
-              {ex.sets.length>1&&(
+              {ex.sets.length>(isSideSplitEx(ex)?2:1)&&(
                 <button onClick={()=>{
                   if(!confirm('Supprimer la dernière série ?'))return;
-                  setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,-1)}));
+                  setExercises(prev=>prev.map((e,i)=>i!==currentEx?e:{...e,sets:e.sets.slice(0,isSideSplitEx(e)&&e.sets.length>2?-2:-1)}));
                 }} style={{width:'100%',marginTop:4,height:26,border:'none',borderRadius:8,background:'transparent',color:T.textFaint,fontSize:10,fontWeight:600,cursor:'pointer',opacity:0.55,letterSpacing:0.3}}>− Retirer la dernière</button>
               )}
               </> }
@@ -2866,7 +2909,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
                         {chargeStr&&<div style={{fontSize:11,fontWeight:700,color:exOverload&&!isDone?VIOLET:color}}>{chargeStr}</div>}
-                        <div style={{fontSize:10,color:T.textFaint}}>{e.sets.length}×{repsStr}</div>
+                        <div style={{fontSize:10,color:T.textFaint}}>{seriesLabel(e,repsStr)}</div>
                       </div>
                       {isActive&&<Pill color={color} style={{flexShrink:0}}>NOW</Pill>}
                     </button>
@@ -7060,8 +7103,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                     <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
                                     {group.style==='CLASSIQUE'&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'} reps</div>}
                                   </div>
-                                  {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'}</span>}
-                                  {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{ex.sets.length}×{ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'}</span>}
+                                  {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{seriesLabel(ex,ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?')}</span>}
+                                  {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{seriesLabel(ex,ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?')}</span>}
                                 </div>
                               ))}
                             </div>
@@ -13324,6 +13367,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                 const isCardio=ex.style==='CARDIO'&&ex.cardio;
                                 const setsArr=ex.sets||[];
                                 const repsDisplay=isCardio?(cardioHasVal(ex.cardio.duree)?fixCardioDuree(ex.cardio.duree)+'min':'—')
+                                  :ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds)
                                   :setsArr.length?(setsArr[0].reps||'?'):'?';
                                 return(
                                   <div key={ii} style={{padding:'10px 12px',borderRadius:12,background:grouped?gc+'0c':'rgba(255,255,255,0.03)',border:'1px solid '+(grouped?gc+'2e':T.border)}}>
@@ -13331,10 +13375,10 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                       <div style={{width:24,height:24,borderRadius:7,background:accent+'18',border:'1px solid '+accent+'30',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:accent,flexShrink:0}}>{n}</div>
                                       <div style={{flex:1,minWidth:0}}>
                                         <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                        <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
+                                        <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.posture?` · 📍 ${ex.posture}`:''}</div>
                                       </div>
                                       <div style={{textAlign:'right',flexShrink:0}}>
-                                        <div style={{fontSize:11,fontWeight:700,color:accent}}>{setsArr.length}×{repsDisplay}</div>
+                                        <div style={{fontSize:11,fontWeight:700,color:accent}}>{seriesLabel(ex,repsDisplay)}</div>
                                         {ex.restSeconds>0&&<div style={{fontSize:10,color:T.textFaint}}>{ex.restSeconds}s repos</div>}
                                       </div>
                                     </div>
@@ -17342,6 +17386,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // d'activité ne se déclenchaient jamais. On ne verrouille donc qu'une fois des données présentes.
     if(!history||!history.length)return;
     if(authUser?.role==='coach'&&!authUser?.isMainCoach)return;
+    // Seules comptent les séances RÉELLEMENT effectuées : une séance ajoutée/planifiée par le coach
+    // (createdByCoach sans durée) n'est pas une séance faite. Sans ce filtre, une nouvelle athlète
+    // à qui le coach vient d'ajouter une séance recevait « X jours sans séance » alors qu'elle n'a
+    // jamais commencé. Pas encore de séance faite → aucun pop-up d'activité.
+    const doneHistory=history.filter(h=>h&&h.date&&(!h.createdByCoach||h.duration>0));
+    if(!doneHistory.length)return;
     activityCheckRef.current=true;
     try{
       // 1) Compter les JOURS OUVRÉS (Lun-Ven) entre la dernière séance et aujourd'hui —
@@ -17354,7 +17404,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         for(let t=fromMs+day;t<=toMs;t+=day){const d=new Date(t).getDay();if(d!==0&&d!==6)n++;}
         return n;
       };
-      const last=history[0]?.date?new Date(history[0].date).getTime():null;
+      const last=doneHistory.reduce((m,h)=>Math.max(m,new Date(h.date).getTime()||0),0)||null;
       const firstName=authUser.firstName||'';
       // Fiche « Mes objectifs » → personnalise les messages avec objectif/motivation/échéance.
       const goals=computeGoalsCtx(authUser);
@@ -17369,7 +17419,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       //    qui vise 4×/sem célèbre à 4, un qui vise 2×/sem célèbre dès 3.
       const now=Date.now();
       const weekAgo=now-7*86400000;
-      const recentCount=history.filter(h=>h&&h.date&&new Date(h.date).getTime()>=weekAgo).length;
+      const recentCount=doneHistory.filter(h=>new Date(h.date).getTime()>=weekAgo).length;
       const regThreshold=goals&&goals.weeklyTarget?Math.max(3,goals.weeklyTarget):4;
       const regularityKey='pa_regularity_ack_'+authUser.id;
       const lastRegAck=parseInt(localStorage.getItem(regularityKey)||'0',10);
@@ -17403,7 +17453,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         const irregKey='pa_irregular_ack_'+authUser.id;
         const lastIrregAck=parseInt(localStorage.getItem(irregKey)||'0',10);
         const threeWeeks=now-21*86400000;
-        const times=history.filter(h=>h&&h.date&&new Date(h.date).getTime()>=threeWeeks).map(h=>new Date(h.date).getTime()).sort((a,b)=>a-b);
+        const times=doneHistory.filter(h=>new Date(h.date).getTime()>=threeWeeks).map(h=>new Date(h.date).getTime()).sort((a,b)=>a-b);
         if(times.length>=3&&recentCount<regThreshold&&(!lastIrregAck||now-lastIrregAck>=6*86400000)){
           let maxGap=0;for(let i=1;i<times.length;i++)maxGap=Math.max(maxGap,times[i]-times[i-1]);
           const gapDays=Math.round(maxGap/86400000);
@@ -17437,20 +17487,20 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const capStrong=coach&&(coach.noGuilt||coach.intensity<=2||coach.wantsSoft);
       if(bd<=2){
         tone='soft';title='Belle régularité 👋';
-        message=`${bd} jours ouvrés sans séance, ${who} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
+        message=`${bd} jours sans séance, ${who} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
       } else if(bd<=midMax){
         tone='mid';title='Il est temps de s\'y remettre 💪';
         const midObj=goals?.objective?` Souviens-toi : ${objPhrase} se construit une séance à la fois.`:' Souviens-toi de tes objectifs.';
-        message=`${bd} jours ouvrés sans séance. C'est le moment de reprendre.${midObj}${deadlineTail} Aujourd'hui, tu remets une séance.`;
+        message=`${bd} jours sans séance. C'est le moment de reprendre.${midObj}${deadlineTail} Aujourd'hui, tu remets une séance.`;
       } else if(capStrong){
         // Ton ferme mais bienveillant — pas de culpabilisation, on relance sans juger.
         tone='mid';title='On reprend le fil 💪';
         const objTail2=goals?.objective?` ${objPhrase[0].toUpperCase()+objPhrase.slice(1)} avance une séance à la fois.`:'';
-        message=`${bd} jours ouvrés sans séance, ${who}. Pas de reproche — on ne regarde pas derrière.${objTail2}${deadlineTail} La prochaine étape, c'est simplement : aujourd'hui, une séance.`;
+        message=`${bd} jours sans séance, ${who}. Pas de reproche — on ne regarde pas derrière.${objTail2}${deadlineTail} La prochaine étape, c'est simplement : aujourd'hui, une séance.`;
       } else {
         tone='strong';title='Il faut se bouger, sérieusement.';
         const strongTail=goals?.objective?` Ton objectif ne s'atteint pas tout seul — c'est TOI qui le construis, séance après séance.`:` Personne d'autre ne va aller chercher tes objectifs à ta place.`;
-        message=`${bd} jours ouvrés sans séance, ${who}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque.${ownPressure||motivQuote}${strongTail}${deadlineTail} On y va, aujourd'hui.`;
+        message=`${bd} jours sans séance, ${who}. Il y a un problème ? Prends 2 minutes pour identifier ce qui bloque.${ownPressure||motivQuote}${strongTail}${deadlineTail} On y va, aujourd'hui.`;
       }
       setInactivityPopup({kind:'inactivity',tone,title,message,daysSince:bd,goals});
     }catch(e){console.error('activity check',e);}
@@ -17903,7 +17953,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
           const iconBg=isReg?'rgba(44,196,160,0.15)':tone==='soft'?'rgba(90,138,224,0.15)':tone==='mid'?'rgba(191,160,96,0.15)':'rgba(232,138,90,0.15)';
           const iconBd=isReg?'rgba(44,196,160,0.4)':tone==='soft'?'rgba(90,138,224,0.4)':tone==='mid'?'rgba(191,160,96,0.4)':'rgba(232,138,90,0.4)';
           const iconCol=isReg?'#8FDCC0':tone==='soft'?'#8FB4F5':tone==='mid'?'#D6BE86':'#F0A87A';
-          const chip=inactivityPopup.chip||(isReg?`🔥 ${count} séances / 7 jours`:`💤 ${daysSince} jour${daysSince>1?'s':''} ouvré${daysSince>1?'s':''} sans séance`);
+          const chip=inactivityPopup.chip||(isReg?`🔥 ${count} séances / 7 jours`:`💤 ${daysSince} jour${daysSince>1?'s':''} sans séance`);
           const cta=isReg?'Merci 🔥':tone==='soft'?'C\'est parti 💪':tone==='mid'?'Aujourd\'hui je m\'y remets':'Je reprends maintenant';
           return(
             <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -18467,10 +18517,10 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
                 <div style={{width:24,height:24,borderRadius:7,background:`${sc2}18`,border:`1px solid ${sc2}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:sc2,flexShrink:0}}>{i+1}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                  <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}</div>
+                  <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.posture?` · 📍 ${ex.posture}`:''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{ex.sets?.length||'?'}×{ex.repsStr||'?'}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{seriesCount(ex)||'?'}×{ex.repsStr||(ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds):'?')}{isSideSplitEx(ex)?'/côté':''}</div>
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.rest}</div>
                 </div>
               </div>
