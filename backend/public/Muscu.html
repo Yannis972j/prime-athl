@@ -1647,7 +1647,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     // sous chaque série, suggestion d'auto-remplissage, signal de surcharge) doit toujours
     // pointer vers la dernière séance NORMALE — jamais vers une semaine allégée, sinon on
     // proposerait 60 % du poids comme cible et l'athlète croirait avoir régressé.
-    const sorted=[...(history||[])].filter(h=>!h.deload).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    // On RESTREINT aussi aux séances portant LE MÊME NOM que la séance en cours (même
+    // normalisation que buildSessionComparison) : un même exercice présent dans deux séances
+    // différentes (ex: "Squat barre" en jour FORCE 6-8 reps ET en jour VOLUME 12-15) ne doit
+    // pas afficher en "dernière fois" la perf de l'AUTRE séance, qui suit une autre logique de
+    // charge. Séance sans nom (cas limite) → on garde l'ancien comportement global.
+    const sessKey=normExerciseName(workout?.name||'');
+    const sameSession=h=>!sessKey||normExerciseName(h.name||'')===sessKey;
+    const sorted=[...(history||[])].filter(h=>!h.deload&&sameSession(h)).sort((a,b)=>new Date(b.date)-new Date(a.date));
     for(const h of sorted){
       for(const he of (h.exercises||[])){
         const k=normExerciseName(he.name);
@@ -1658,16 +1665,19 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       }
     }
     return map;
-  },[history]);
+  },[history,workout?.name]);
 
   // Historique multi-séances d'un exercice (les 3 dernières séances NORMALES) — alimente le
   // bloc discret "Dernières perf." déplié au clic sur le nom de l'exo. On ignore les séances de
-  // décharge, comme la référence "dernière fois", pour ne jamais afficher une semaine allégée.
+  // décharge, comme la référence "dernière fois", et on RESTREINT au même nom de séance (comme
+  // lastExData) pour ne jamais mélanger les perfs de deux séances distinctes portant le même exo.
   const exPerfHistory=React.useCallback((exName)=>{
     if(!exName)return[];
     const k=normExerciseName(exName);
     const results=[];
-    const sorted=[...(history||[])].filter(h=>!h.deload).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const sessKey=normExerciseName(workout?.name||'');
+    const sameSession=h=>!sessKey||normExerciseName(h.name||'')===sessKey;
+    const sorted=[...(history||[])].filter(h=>!h.deload&&sameSession(h)).sort((a,b)=>new Date(b.date)-new Date(a.date));
     for(const h of sorted){
       const match=(h.exercises||[]).find(e=>normExerciseName(e.name)===k);
       if(match&&(match.sets||[]).length){
@@ -1676,7 +1686,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       }
     }
     return results;
-  },[history]);
+  },[history,workout?.name]);
 
   // ── Surcharge progressive (signal violet) ──────────────────────────────────
   // Un exercice est "en surcharge" quand, à sa DERNIÈRE séance, l'athlète a atteint le HAUT de
