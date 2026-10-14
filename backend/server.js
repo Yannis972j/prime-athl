@@ -2150,6 +2150,9 @@ function sanitizeCoachExercise(e) {
     groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
     groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',
     ...(style ? { style } : {}),
+    // Libellé de circuit / échauffement ("CIRCUIT 2", "ÉCHAUFFEMENT") : sans lui, les circuits d'une
+    // séance importée Excel étaient fondus en un seul bloc dans le récap enregistré.
+    ...(e.block ? { block: String(e.block).slice(0, 40) } : {}),
     // Fourchette de reps cible conservée (comme POST /api/sessions) pour la détection de surcharge.
     ...(e.repsStr ? { repsStr: String(e.repsStr).slice(0, 20) } : {}),
     // Exercice unilatéral (un bras/une jambe à la fois) : chaque série porte alors un côté
@@ -2219,6 +2222,8 @@ app.post('/api/sessions', authRequired, accessActive, (req, res) => {
       name: String(ex.name || '').slice(0, 100),
       muscle: String(ex.muscle || '').slice(0, 50),
       ...(style ? { style } : {}),
+      // Libellé de circuit / échauffement : voir sanitizeCoachExercise.
+      ...(ex.block ? { block: String(ex.block).slice(0, 40) } : {}),
       // Fourchette de reps cible (ex: "10-12") conservée : sert au récap à détecter la surcharge
       // progressive (l'athlète a-t-il atteint le haut de la fourchette ?). Sans ça, la fourchette
       // n'existe que dans le programme et disparaît de la séance enregistrée.
