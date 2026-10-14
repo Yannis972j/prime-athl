@@ -11610,7 +11610,7 @@ function MonthlyRecapModal({sessions,athleteName,athleteGender='',coachName='ton
   );
 }
 
-function CoachSessionCard({s,athleteId,athleteName,athleteGender='',isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
+function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athleteProfile=null,isDeleting,onStartDelete,onCancelTouchDelete,onCancelDelete,onDelete,onFeedbackSaved,onEdit}){
   const[expanded,setExpanded]=React.useState(false);
   const[showModal,setShowModal]=React.useState(false);
   const[showCopyModal,setShowCopyModal]=React.useState(false);
@@ -11741,7 +11741,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',isDeleting,o
         </div>
       )}
       {showModal&&ReactDOM.createPortal(
-        <CoachSessionModal s={s} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} onClose={()=>setShowModal(false)} onFeedbackSaved={()=>{setShowModal(false);if(onFeedbackSaved)onFeedbackSaved();}}/>,
+        <CoachSessionModal s={s} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} athleteProfile={athleteProfile} history={history} onClose={()=>setShowModal(false)} onFeedbackSaved={()=>{setShowModal(false);if(onFeedbackSaved)onFeedbackSaved();}}/>,
         document.body
       )}
       {showCopyModal&&ReactDOM.createPortal(
@@ -13413,7 +13413,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {sessions.slice(0,50).map(s=>(
-                  <CoachSessionCard key={s.id} s={s} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} athleteGender={a.gender||''}
+                  <CoachSessionCard key={s.id} s={s} athleteId={a.id} athleteName={a.firstName||a.email.split('@')[0]} athleteGender={a.gender||''} history={sessions} athleteProfile={a}
                     isDeleting={deletingSessionId===s.id}
                     onStartDelete={()=>{sessionPressTimer.current=setTimeout(()=>setDeletingSessionId(s.id),500);}}
                     onCancelTouchDelete={()=>clearTimeout(sessionPressTimer.current)}
