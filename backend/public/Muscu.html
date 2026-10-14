@@ -6818,7 +6818,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                     <CompLoadLine ex={ex} isNew={isNew} good={T.good} down={DOWN}/>
                                     {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                     {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
-                                    {!isNew&&ex.kind==='bodyweight'&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                                    {!isNew&&ex.kind!=='cardio'&&ex.kind!=='hold'&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                                   </div>
                                 </div>
                                 <div style={{textAlign:'right',flexShrink:0}}>
