@@ -5554,6 +5554,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     if(prsCount>=2)return `${name}, ${prsCount} nouveaux records personnels en une séance. T'es en feu, continue comme ça.`;
     if(prsCount===1){
       const prEx=comp.exercises.find(e=>e.isPR);
+      if(prEx&&prEx.kind==='assisted')return `Nouveau PR sur ${prEx.name}, ${name}. Moins d'assistance que jamais — tu te rapproches du poids du corps.`;
       return `Nouveau PR sur ${prEx?prEx.name:'un exercice'}, ${name}. ${prEx?`${prEx.curMaxW}kg — c'est au-dessus de tout ce que t'as fait avant.`:'Respect.'}`;
     }
     // Majorité en hausse → booster
@@ -5856,6 +5857,29 @@ function programRepsStrMap(programData){
   return map;
 }
 
+// Ligne « charge » d'un exercice dans les récaps (athlète, historique, coach). Elle dépend du TYPE :
+// muscu chargée → charge max ; assisté → assistance (moins = mieux, couleurs inversées) ;
+// gainage → durée de maintien ; poids du corps → pas de charge ; cardio → rien.
+function CompLoadLine({ex,isNew,good,down}){
+  const kind=ex.kind||'strength';
+  const neutral='rgba(255,255,255,0.6)';
+  if(kind==='cardio')return null;
+  if(kind==='hold'){
+    if(isNew)return ex.curHold>0?<span>Durée : {fmtHoldDuration(ex.curHold)}</span>:null;
+    return <span>Durée : {fmtHoldDuration(ex.prevHold)}→<b style={{color:ex.curHold>ex.prevHold?good:ex.curHold<ex.prevHold?down:neutral}}>{fmtHoldDuration(ex.curHold)}</b></span>;
+  }
+  if(kind==='assisted'){
+    if(isNew)return ex.curMaxW>0?<span>Assistance : {ex.curMaxW}kg</span>:null;
+    if(!(ex.prevMaxW>0)&&!(ex.curMaxW>0))return null;
+    const better=ex.wDelta<0,worse=ex.wDelta>0;
+    return <span>Assistance : {ex.prevMaxW}→<b style={{color:better?good:worse?down:neutral}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:better?good:down}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>;
+  }
+  if(kind==='bodyweight')return <span>Poids du corps</span>;
+  if(isNew)return ex.curMaxW>0?<span>Charge max : {ex.curMaxW}kg</span>:null;
+  if(!(ex.prevMaxW>0))return null;
+  return <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?good:ex.wDelta<0?down:neutral}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?good:down}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>;
+}
+
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
 // `extraRange` (optionnel) = map nom normalisé → haut de fourchette, issue du PROGRAMME.
 function buildSessionComparison(target,history,extraRange){
@@ -5866,20 +5890,6 @@ function buildSessionComparison(target,history,extraRange){
   // comparaison "vs la dernière fois" ne se déclenche jamais (faux "Première séance").
   const tKey=normExerciseName(target.name||'');
   const tTime=new Date(target.date||0).getTime();
-  // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
-  // elle-même (par id, ou par référence si pas d'id).
-  // On EXCLUT les séances de décharge de la référence : une semaine normale ne doit jamais se
-  // comparer à une semaine allégée (sinon fausse explosion de PR au retour), et une décharge ne
-  // se compare qu'à la dernière semaine NORMALE (la baisse est ensuite neutralisée à l'affichage).
-  const prev=(history||[])
-    .filter(s=>s&&s!==target&&!s.deload&&tKey&&normExerciseName(s.name||'')===tKey&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
-    .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime())[0]||null;
-  const curVolTotal=sessionVolumeOf(target);
-  const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
-  if(!prev||!target.exercises)return{comp:null,volumeVsPrev};
-  const comp={prevDate:prev.date,exercises:[]};
-  const prevExMap={};
-  (prev.exercises||[]).forEach(e=>{if(e.name)prevExMap[normExerciseName(e.name)]=e;});
   // Une série "compte" si elle a été RÉELLEMENT faite (reps saisis), pas selon le drapeau `done`
   // — celui-ci est posé de façon incohérente selon le mode de création (séance créée côté coach,
   // import, live…) : certaines séances valides portent des séries done:false AVEC des reps réels,
@@ -5887,6 +5897,43 @@ function buildSessionComparison(target,history,extraRange){
   // volume total, lui, comptait ces séries. On aligne donc le détail sur le volume, et de manière
   // symétrique entre séance courante et précédente.
   const isLoggedSet=s=>(s.reps||0)>0||(s.repsL||0)>0||(s.repsR||0)>0||s.done===true;
+  const isCardioEx=e=>e.style==='CARDIO';
+  // Séries réellement faites d'un exercice. Un gainage/maintien n'a ni charge ni reps (0/0) et la
+  // sauvegarde ne conserve pas `done` : seules les séries validées sont enregistrées, donc pour un
+  // maintien TOUTE série présente compte (sinon « 1→0 série » et un faux recul).
+  const loggedSetsOf=e=>e.holdSeconds>0&&!isCardioEx(e)?(e.sets||[]):(e.sets||[]).filter(isLoggedSet);
+  // Noms (normalisés) des exercices de MUSCU réellement faits dans une séance (cardio exclu : il
+  // n'a pas de charge à comparer et il est conservé à l'enregistrement même sans série validée).
+  const strengthNames=sess=>new Set((sess.exercises||[]).filter(e=>e.name&&!isCardioEx(e)&&loggedSetsOf(e).length>0).map(e=>normExerciseName(e.name)));
+  const tNames=strengthNames(target);
+  const targetHasStrength=tNames.size>0;
+  // Séance de référence : même nom, strictement antérieure, la plus récente. On exclut la séance
+  // elle-même (par id, ou par référence si pas d'id).
+  // On EXCLUT les séances de décharge de la référence : une semaine normale ne doit jamais se
+  // comparer à une semaine allégée (sinon fausse explosion de PR au retour), et une décharge ne
+  // se compare qu'à la dernière semaine NORMALE (la baisse est ensuite neutralisée à l'affichage).
+  const candidates=(history||[])
+    .filter(s=>s&&s!==target&&!s.deload&&tKey&&normExerciseName(s.name||'')===tKey&&(target.id?s.id!==target.id:true)&&new Date(s.date||0).getTime()<tTime)
+    .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime());
+  // Une séance précédente VIDE (validée sans aucune série — seul le cardio est conservé) ne doit pas
+  // servir de référence : tout apparaissait « NEW » avec un faux « même niveau ». On préfère donc,
+  // pour une séance de muscu : (1) la plus récente qui partage au moins un exercice, (2) à défaut la
+  // plus récente qui contient du vrai travail de muscu, (3) sinon aucune → « première séance ».
+  let prev;
+  if(targetHasStrength){
+    prev=candidates.find(c=>{const n=strengthNames(c);for(const k of tNames)if(n.has(k))return true;return false;})
+      ||candidates.find(c=>strengthNames(c).size>0)||null;
+  }else prev=candidates[0]||null; // séance 100 % cardio : on compare à la dernière du même nom
+  const curVolTotal=sessionVolumeOf(target);
+  const volumeVsPrev=prev?{current:curVolTotal,previous:sessionVolumeOf(prev)}:null;
+  if(!prev||!target.exercises)return{comp:null,volumeVsPrev};
+  const comp={prevDate:prev.date,exercises:[]};
+  // Appariement par NOM + ORDRE D'APPARITION : un exercice présent plusieurs fois dans la séance
+  // (ex: tapis en échauffement ET en fin de séance, même exo à deux charges) se compare à sa propre
+  // occurrence précédente, pas toujours à la dernière — ce qui faussait écarts de charge et PR.
+  const prevByKey={};
+  (prev.exercises||[]).forEach(e=>{if(!e.name)return;const k=normExerciseName(e.name);(prevByKey[k]=prevByKey[k]||[]).push(e);});
+  const seenKey={};
   // Fourchette de reps par exercice, avec repli en cascade pour la détection de surcharge :
   // (1) la séance elle-même, (2) une séance passée qui l'a stockée, (3) le programme (extraRange).
   const rangeMap={};
@@ -5898,40 +5945,71 @@ function buildSessionComparison(target,history,extraRange){
   const topReps=ex=>{const str=String(ex.repsStr||ex.sets?.[0]?.targetStr||ex.sets?.[0]?.target||'');const n=str.match(/\d+/g);if(n&&n.length)return Math.max(...n.map(Number));return rangeMap[normExerciseName(ex.name)]??null;};
   // 1RM estimé (formule d'Epley : charge × (1 + reps/30)) — la meilleure mesure de progression
   // quand charge ET reps bougent en même temps. On prend la meilleure série (estimation la plus
-  // haute). Non pertinent en cardio / gainage / unilatéral (reps = somme des deux côtés).
+  // haute). Non pertinent en cardio / gainage / unilatéral / assisté (reps = somme des deux côtés ;
+  // une charge d'assistance plus haute n'est pas une force plus haute).
   const e1rmOf=sets=>Math.round(Math.max(0,...sets.map(s=>(s.weight||0)*(1+(s.reps||0)/30))));
-  let prsCount=0,upCount=0,downCount=0,sameCount=0;
+  // Assistance moyenne pondérée par les reps (tractions/dips assistés) : MOINS d'assistance = progrès.
+  const avgAssist=sets=>{const r=sets.reduce((a,s)=>a+(s.reps||0),0);return r>0?Math.round(sets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0)/r*2)/2:0;};
+  let prsCount=0,upCount=0,downCount=0,sameCount=0,newCount=0,naCount=0;
   target.exercises.forEach(ex=>{
     if(!ex.name)return;
-    const p=prevExMap[normExerciseName(ex.name)];
-    const curSets=(ex.sets||[]).filter(isLoggedSet);
+    const k=normExerciseName(ex.name);
+    const occ=seenKey[k]||0;seenKey[k]=occ+1;
+    const p=(prevByKey[k]||[])[occ];
+    const curSets=loggedSetsOf(ex);
     const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
     const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
-    const e1Eligible=ex.style!=='CARDIO'&&!ex.holdSeconds&&!ex.unilateral;
-    const curE1RM=e1Eligible?e1rmOf(curSets):0;
-    const top=topReps(ex);
     const uni=isUnilateralEx(ex);
     const assisted=isAssistedEx(ex);
+    const cardio=isCardioEx(ex);
+    const hold=!cardio&&ex.holdSeconds>0;
+    const e1Eligible=!cardio&&!hold&&!ex.unilateral&&!assisted;
+    const curE1RM=e1Eligible?e1rmOf(curSets):0;
+    const top=topReps(ex);
     // En décharge, jamais de signal de surcharge : les reps atteignent facilement le haut de la
     // fourchette avec des charges allégées, ce qui déclencherait de fausses propositions de montée.
-    const atCap=!target.deload&&!!top&&ex.style!=='CARDIO'&&!ex.holdSeconds&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
-    if(!p){comp.exercises.push({name:ex.name,status:'new',curMaxW,curVol,curSets:curSets.length,curTotalReps,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0,assisted});return;}
-    const pSets=(p.sets||[]).filter(isLoggedSet);
+    // Pas non plus pour un exercice assisté : "monter la charge" y serait l'inverse du progrès.
+    const atCap=!target.deload&&!assisted&&!!top&&!cardio&&!hold&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
+    if(!p){newCount++;comp.exercises.push({name:ex.name,status:'new',kind:cardio?'cardio':assisted?'assisted':hold?'hold':'strength',curMaxW,curVol,curSets:curSets.length,curTotalReps,curHold:hold?(ex.holdSeconds||0):0,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0,assisted});return;}
+    const pSets=loggedSetsOf(p);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
     const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const prevTotalReps=pSets.reduce((a,s)=>a+(s.reps||0),0);
     const prevE1RM=e1Eligible?e1rmOf(pSets):0;
     const wDelta=curMaxW-prevMaxW;
     const vDelta=curVol-prevVol;
-    const isPR=curMaxW>0&&wDelta>0;
+    // Durée de maintien par série (gainage…) et temps total sous tension.
+    const curHold=hold?(ex.holdSeconds||0):0, prevHold=hold?(p.holdSeconds||0):0;
+    const cmp=(a,b)=>a>b?1:a<b?-1:0;
+    // Le « type » détermine la mesure de progression (le volume kg n'a de sens que pour la muscu chargée).
+    let kind='strength',status,isPR=false;
+    if(cardio){kind='cardio';status='na';}
+    else if(assisted){
+      kind='assisted';
+      const a=avgAssist(curSets),b=avgAssist(pSets);
+      const dAssist=cmp(b,a);                       // +1 = moins d'assistance qu'avant (mieux)
+      const dReps=cmp(curTotalReps,prevTotalReps);
+      const s=dAssist!==0?(dReps===-dAssist?0:dAssist):dReps; // assistance et reps se contredisent → stable
+      status=s>0?'up':s<0?'down':'same';
+      const minW=sets=>Math.min(...sets.map(x=>x.weight||0));
+      isPR=curSets.length>0&&pSets.length>0&&minW(pSets)>0&&minW(curSets)<minW(pSets);
+    }
+    else if(hold){kind='hold';const d=cmp(curHold*curSets.length,prevHold*pSets.length);status=d>0?'up':d<0?'down':'same';}
+    else if(curMaxW===0&&prevMaxW===0&&(curTotalReps>0||prevTotalReps>0)){kind='bodyweight';const d=cmp(curTotalReps,prevTotalReps);status=d>0?'up':d<0?'down':'same';}
+    else{status=vDelta>0?'up':vDelta<0?'down':'same';isPR=curMaxW>0&&wDelta>0;}
     if(isPR)prsCount++;
-    const status=vDelta>0?'up':vDelta<0?'down':'same';
-    if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-    comp.exercises.push({name:ex.name,status,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,vDelta,curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,atCap,topReps:top,curE1RM,prevE1RM,e1Delta:curE1RM-prevE1RM,assisted});
+    if(status==='na')naCount++;else if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
+    comp.exercises.push({name:ex.name,status,kind,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,
+      // Écart de volume en kg : uniquement pour la muscu chargée (sinon valeur trompeuse ou vide).
+      vDelta:kind==='strength'?vDelta:0,
+      curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,curHold,prevHold,atCap,topReps:top,curE1RM,prevE1RM,e1Delta:curE1RM-prevE1RM,assisted});
   });
   comp.prsCount=prsCount;comp.upCount=upCount;comp.downCount=downCount;comp.sameCount=sameCount;
-  comp.totalExercises=comp.exercises.length;
+  comp.newCount=newCount;comp.naCount=naCount;
+  // Exercices RÉELLEMENT comparés (ni nouveaux, ni cardio) : sert de dénominateur aux messages
+  // (« 6 exercices sur 7 en progression ») et à la décision « il y a une comparaison ».
+  comp.totalExercises=upCount+downCount+sameCount;
   comp.isDeload=!!target.deload;
   comp.overloadCount=comp.exercises.filter(e=>e.atCap).length;
   comp.overloadNames=comp.exercises.filter(e=>e.atCap).map(e=>e.name);
@@ -6725,7 +6803,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                           const isNew=ex.status==='new',up=ex.status==='up',down=ex.status==='down';
                           const DOWN=histRecap.isDeload?'#5A8AE0':T.danger; // décharge : baisse voulue → bleu
                           const sc=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
-                          const si=isNew?'🆕':up?'↑':down?'↓':'=';
+                          const si=isNew?'🆕':up?'↑':down?'↓':ex.status==='na'?'·':'=';
                           const vd=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                           return(
                             <div key={i} style={{padding:'9px 12px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<histRecap.comp.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
@@ -6737,15 +6815,15 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                     {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
                                   </div>
                                   <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
-                                    {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
-                                    {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                                    <CompLoadLine ex={ex} isNew={isNew} good={T.good} down={DOWN}/>
                                     {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                     {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
+                                    {!isNew&&ex.kind==='bodyweight'&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                                   </div>
                                 </div>
                                 <div style={{textAlign:'right',flexShrink:0}}>
                                   {vd&&<div style={{fontSize:10.5,fontWeight:700,color:sc}}>{vd}</div>}
-                                  {ex.curVol>0&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                                  {ex.curVol>0&&ex.kind!=='assisted'&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
                                 </div>
                               </div>
                             </div>
@@ -11122,7 +11200,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                       const isNew=ex.status==='new';
                       const up=ex.status==='up',down=ex.status==='down';
                       const statusColor=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
-                      const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
+                      const statusIcon=isNew?'🆕':up?'↑':down?'↓':ex.status==='na'?'·':'=';
                       const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                       return(
                         <div key={i} style={{padding:'9px 12px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<comp.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
@@ -11143,8 +11221,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                                 <div style={{fontSize:10.5,marginTop:3,fontWeight:800,color:'rgba(255,255,255,0.65)'}}><span style={{fontWeight:700,color:T.textFaint}}>Force est. </span>{ex.curE1RM} kg</div>
                               )}
                               <div style={{fontSize:10.5,color:'rgba(255,255,255,0.4)',marginTop:3,display:'flex',gap:8,flexWrap:'wrap'}}>
-                                {!isNew&&ex.prevMaxW>0&&<span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>}
-                                {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                                <CompLoadLine ex={ex} isNew={isNew} good={T.good} down={DOWN}/>
                                 {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                 {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                 {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
@@ -11153,7 +11230,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               {vDeltaStr&&<div style={{fontSize:10.5,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
-                              {ex.curVol>0&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                              {ex.curVol>0&&ex.kind!=='assisted'&&<div style={{fontSize:9.5,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
                             </div>
                           </div>
                         </div>
@@ -18255,7 +18332,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                     const up=ex.status==='up';
                     const down=ex.status==='down';
                     const statusColor=isNew?'#5A8AE0':up?T.good:down?DOWN:'rgba(255,255,255,0.4)';
-                    const statusIcon=isNew?'🆕':up?'↑':down?'↓':'=';
+                    const statusIcon=isNew?'🆕':up?'↑':down?'↓':ex.status==='na'?'·':'=';
                     const vDeltaStr=ex.vDelta!=null&&ex.vDelta!==0?(ex.vDelta>0?'+':'')+Math.round(ex.vDelta).toLocaleString('fr-FR')+' kg':'';
                     return(
                       <div key={i} style={{padding:'10px 14px',background:ex.isPR?'rgba(191,160,96,0.06)':'rgba(255,255,255,0.02)',borderBottom:i<sessionComparison.exercises.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
@@ -18267,10 +18344,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                               {ex.isPR&&<span style={{fontSize:9,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
                             </div>
                             <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
-                              {!isNew&&ex.prevMaxW>0&&(
-                                <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?T.good:ex.wDelta<0?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?T.good:DOWN}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>
-                              )}
-                              {isNew&&ex.curMaxW>0&&<span>Charge max : {ex.curMaxW}kg</span>}
+                              <CompLoadLine ex={ex} isNew={isNew} good={T.good} down={DOWN}/>
                               {!isNew&&<span>{ex.prevSets}→{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                               {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                               {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
@@ -18279,7 +18353,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                           </div>
                           <div style={{textAlign:'right',flexShrink:0}}>
                             {vDeltaStr&&<div style={{fontSize:11,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
-                            {ex.curVol>0&&<div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
+                            {ex.curVol>0&&ex.kind!=='assisted'&&<div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:1}}>{Math.round(ex.curVol).toLocaleString('fr-FR')} kg</div>}
                           </div>
                         </div>
                       </div>
@@ -18306,7 +18380,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                       <span style={{fontSize:15}}>⬆</span>
                       <span style={{fontSize:12,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Prêt à monter la charge — {sessionComparison.overloadCount} exercice{sessionComparison.overloadCount>1?'s':''}</span>
                     </div>
-                    <div style={{fontSize:11.5,color:'rgba(255,255,255,0.62)',lineHeight:1.5,marginBottom:sessionComparison.overloadNames.length?8:0}}>Tu as fait le haut de la fourchette partout 💪 Ton coach validera la montée pour ta prochaine séance.</div>
+                    <div style={{fontSize:11.5,color:'rgba(255,255,255,0.62)',lineHeight:1.5,marginBottom:sessionComparison.overloadNames.length?8:0}}>Tu as fait le haut de la fourchette {sessionComparison.overloadCount>=sessionComparison.totalExercises?'partout':sessionComparison.overloadCount>1?'sur ces exercices':'sur cet exercice'} 💪 Ton coach validera la montée pour ta prochaine séance.</div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                       {sessionComparison.overloadNames.map((n,i)=>(
                         <span key={i} style={{fontSize:11,fontWeight:700,color:'#A78BFA',background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.3)',borderRadius:999,padding:'3px 10px'}}>{n}</span>
