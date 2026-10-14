@@ -5634,9 +5634,17 @@ const MOTIVATION_ELITE=[
 const MOTIVATION_GOOD=[
   "La progression se cache dans la régularité. T'es sur la bonne voie, continue de te pointer.",
   "Tu fais ce que la majorité des gens reporte à demain. Ça compte plus que tu crois.",
-  "Le progrès, c'est pas linéaire. Les séances comme celle-là, c'est celles qui construisent le socle.",
   "T'es pas là pour être parfait. T'es là pour être meilleur qu'hier. Et c'est le cas.",
   "La différence entre toi et quelqu'un qui stagne ? Toi, tu te pointes même quand c'est dur.",
+];
+// Séance MITIGÉE : du progrès (record / exos en hausse) ET au moins un exo en retrait. On reconnaît
+// les deux — ni fête (il y a un recul), ni consolation (il y a de vrais gains).
+const MOTIVATION_MIXED=[
+  "Un record d'un côté, un exo en retrait de l'autre : une séance n'est jamais tout vert ou tout rouge. Garde l'élan sur ce qui monte, et va rechercher ce qui a reculé.",
+  "Le progrès, c'est pas linéaire : tu gagnes quelque part, tu lâches un peu ailleurs. C'est en corrigeant le point faible qu'on construit le socle.",
+  "Bilan positif, mais pas parfait. La prochaine fois, ramène l'exo en retrait au niveau des autres.",
+  "Ce qui monte compte autant que ce qui baisse. Capitalise sur tes hausses, et règle son compte à l'exercice en retrait.",
+  "Une séance mitigée reste une séance de progrès si tu en tires quelque chose. Qu'est-ce que tu corriges la prochaine fois ?",
 ];
 const MOTIVATION_PIQUE=[
   "T'avais un peu plus dans le réservoir aujourd'hui, on le sait tous les deux 😏 La prochaine, tu vides le tank.",
@@ -5714,7 +5722,7 @@ const MINDSET_HARSH=[
 ];
 // Sélection du pool de mindset selon la catégorie de perf + le profil coaching (peut être null).
 function mindsetPoolFor(cat,coach){
-  const base={hard:MOTIVATION_HARD,pique:MOTIVATION_PIQUE,elite:MOTIVATION_ELITE,good:MOTIVATION_GOOD,neutral:MOTIVATION_NEUTRAL,first:MOTIVATION_FIRST};
+  const base={hard:MOTIVATION_HARD,pique:MOTIVATION_PIQUE,elite:MOTIVATION_ELITE,good:MOTIVATION_GOOD,mixed:MOTIVATION_MIXED,neutral:MOTIVATION_NEUTRAL,first:MOTIVATION_FIRST};
   let pool=base[cat]||MOTIVATION_GOOD;
   if(!coach)return pool;
   const soft=coach.wantsSoft||coach.intensity<=2;
@@ -5728,7 +5736,7 @@ function mindsetPoolFor(cat,coach){
     else if(soft)pool=MINDSET_SOFT;
   }else if(cat==='neutral'){
     if(intense)pool=MINDSET_INTENSE;else if(soft)pool=MINDSET_SOFT;
-  }else if(cat==='good'||cat==='elite'){
+  }else if(cat==='good'||cat==='elite'||cat==='mixed'){
     if(soft)pool=MINDSET_SOFT;                            // félicitation calme pour les profils doux
   }else if(cat==='first'){
     if(soft)pool=MINDSET_SOFT;else if(intense)pool=MINDSET_INTENSE;
@@ -5768,7 +5776,7 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
     if(downRatio>=0.6)cat='hard';                                   // majorité en baisse
     else if(prsCount>=2||upRatio>=0.7)cat='elite';
     else if(downRatio>=0.4||(downCount>upCount&&downCount>0))cat='pique'; // baisse marquée
-    else if(prsCount>=1||upRatio>=0.5)cat='good';
+    else if(prsCount>=1||upRatio>=0.5)cat=downCount>0?'mixed':'good'; // du progrès, mais un exo recule
     else if(upCount===0&&downCount===0)cat='neutral';
     else if(downCount>0)cat='pique';                               // au moindre recul, on ne félicite pas
     else cat='good';
