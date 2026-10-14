@@ -4352,6 +4352,14 @@ function BackupRestoreCard(){
   const[msg,setMsg]=React.useState(null);
   const[busy,setBusy]=React.useState(false);
   const fileRef=React.useRef(null);
+  // Mode de stockage réel du serveur ('postgres' | 'render-disk' | 'ephemeral') : le message
+  // d'avertissement en dépend, au lieu d'alerter à tort sur « Render Free efface les données ».
+  const[storage,setStorage]=React.useState(null);
+  React.useEffect(()=>{
+    let alive=true;
+    apiCall('/api/admin/health').then(h=>{if(alive)setStorage(h&&h.storage?h.storage:'unknown');}).catch(()=>{if(alive)setStorage('unknown');});
+    return()=>{alive=false;};
+  },[]);
 
   const download=async()=>{
     setBusy(true);setMsg(null);
@@ -4391,9 +4399,19 @@ function BackupRestoreCard(){
     <div style={{marginBottom:10}}>
       <SectionHeader title="Sauvegarde des données" right={<span style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3}}>COACH PRINCIPAL</span>}/>
       <div style={{padding:12,borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)'}}>
-        <div style={{fontSize:11,color:T.textDim,marginBottom:10,lineHeight:1.5}}>
-          💡 Render Free efface les données à chaque redéploiement. Télécharge une sauvegarde avant chaque mise à jour, restaure-la ensuite.
-        </div>
+        {storage==='ephemeral'?(
+          <div style={{fontSize:11,color:'#FFB0B0',marginBottom:10,lineHeight:1.5,padding:'8px 10px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.35)'}}>
+            ⚠️ Stockage temporaire : tes données seront EFFACÉES au prochain déploiement. Télécharge une sauvegarde avant chaque mise à jour, restaure-la ensuite.
+          </div>
+        ):(storage==='postgres'||storage==='render-disk')?(
+          <div style={{fontSize:11,color:'#9FF0D0',marginBottom:10,lineHeight:1.5,padding:'8px 10px',borderRadius:9,background:'rgba(44,196,160,0.08)',border:'1px solid rgba(44,196,160,0.28)'}}>
+            ✅ {storage==='postgres'?'Données stockées dans Postgres : elles survivent aux mises à jour. Sauvegarde automatique chaque jour (30 jours d\'historique).':'Données sur un disque persistant : elles survivent aux mises à jour.'} Pense quand même à télécharger une sauvegarde de temps en temps.
+          </div>
+        ):(
+          <div style={{fontSize:11,color:T.textDim,marginBottom:10,lineHeight:1.5}}>
+            {storage===null?'Vérification du stockage…':'💡 Télécharge une sauvegarde de temps en temps et avant les grosses mises à jour.'}
+          </div>
+        )}
         <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={handleRestore}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
           <button onClick={download} disabled={busy} style={{height:38,borderRadius:10,border:'1px solid rgba(44,196,160,0.35)',background:'rgba(44,196,160,0.08)',color:T.good,fontSize:11,fontWeight:700,cursor:busy?'wait':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:5,opacity:busy?0.5:1}}>
