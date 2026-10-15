@@ -5951,6 +5951,85 @@ function CompLoadLine({ex,isNew,good,down}){
   return <span>Charge max : {ex.prevMaxW}→<b style={{color:ex.wDelta>0?good:ex.wDelta<0?down:neutral}}>{ex.curMaxW}kg</b>{ex.wDelta!==0&&<span style={{color:ex.wDelta>0?good:down}}> ({ex.wDelta>0?'+':''}{ex.wDelta})</span>}</span>;
 }
 
+// Fenêtre « Récap de ta séance » qui s'ouvre en bas depuis la popup de feedback coach : chiffres clés, volume vs
+// la séance précédente du même nom, détail par exercice (mêmes lignes que les autres récaps).
+function FeedbackRecapSheet({recap,onClose}){
+  const{sess,comp,volumeVsPrev}=recap;
+  const DOWN=sess.deload?'#5A8AE0':T.danger;
+  const vol=sessionVolumeOf(sess);
+  const showVol=!!volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current>0;
+  const delta=showVol?Math.round(volumeVsPrev.current-volumeVsPrev.previous):0;
+  const pct=showVol?Math.round(delta/volumeVsPrev.previous*100):0;
+  const volColor=delta>0?T.good:delta<0?DOWN:T.textDim;
+  const rows=comp?comp.exercises:(sess.exercises||[]).map(e=>{const sets=(e.sets||[]);return{name:e.name,status:'new',kind:e.style==='CARDIO'?'cardio':'strength',curMaxW:Math.max(0,...sets.map(x=>x.weight||0)),curSets:sets.length,curVol:sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0)};});
+  const Stat=({v,l,c})=>(<div style={{flex:1,textAlign:'center',padding:'11px 6px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}><div style={{fontSize:18,fontWeight:800,color:c||'#fff',fontFamily:"'Outfit',sans-serif"}}>{v}</div><div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginTop:2}}>{l}</div></div>);
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+      <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)'}}/>
+      <div style={{position:'relative',background:'linear-gradient(180deg,#121a2a,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'14px 18px calc(104px + env(safe-area-inset-bottom))',maxHeight:'86vh',overflowY:'auto',animation:'celebrationPop 0.3s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+        <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 14px'}}/>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',color:'#8FB4F5'}}>📊 Récap de ta séance</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:19,fontWeight:800,color:'#fff',marginTop:2}}>{sess.name}</div>
+            {sess.date&&<div style={{fontSize:11,color:T.textFaint,marginTop:1}}>{new Date(sess.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>}
+          </div>
+          <button onClick={onClose} aria-label="Fermer le récap" style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'#fff',fontSize:16,cursor:'pointer',flexShrink:0}}>✕</button>
+        </div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <Stat v={Math.round(vol).toLocaleString('fr-FR')+' kg'} l="Volume"/>
+          <Stat v={sess.duration?sess.duration+' min':'—'} l="Durée"/>
+          <Stat v={(sess.exercises||[]).length} l="Exercices"/>
+        </div>
+        {showVol&&(
+          <div style={{padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:14,display:'flex',alignItems:'center',gap:12}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:9.5,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Volume vs la dernière « {sess.name} »</div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5,color:T.textDim}}><span>Avant</span><b>{Math.round(volumeVsPrev.previous).toLocaleString('fr-FR')} kg</b></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12.5,color:'#fff',marginTop:3}}><span>Maintenant</span><b>{Math.round(volumeVsPrev.current).toLocaleString('fr-FR')} kg</b></div>
+            </div>
+            <div style={{padding:'8px 12px',borderRadius:12,textAlign:'center',background:volColor+'18',border:'1px solid '+volColor+'44',color:volColor,fontWeight:800,fontSize:13}}>{delta>0?'↑':delta<0?'↓':'='}<div style={{fontSize:12}}>{Math.abs(pct)}%</div></div>
+          </div>
+        )}
+        {!comp&&<div style={{fontSize:11.5,color:T.textDim,marginBottom:10,lineHeight:1.5}}>Première séance « {sess.name} » enregistrée : pas encore de comparaison.</div>}
+        <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Détail par exercice</div>
+        <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.07)',marginBottom:12}}>
+          {rows.map((ex,i)=>{
+            const isNew=ex.status==='new',up=ex.status==='up',down=ex.status==='down';
+            const icon=isNew?'🆕':up?'↑':down?'↓':ex.status==='na'?'·':'=';
+            const col=up?T.good:down?DOWN:'rgba(255,255,255,0.45)';
+            return(
+              <div key={i} style={{padding:'10px 12px',background:ex.isPR?'rgba(191,160,96,0.07)':'rgba(255,255,255,0.02)',borderBottom:i<rows.length-1?'1px solid rgba(255,255,255,0.05)':'none',display:'flex',alignItems:'center',gap:9}}>
+                <span style={{width:20,textAlign:'center',fontSize:14,color:col,flexShrink:0}}>{icon}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:13,fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</span>
+                    {ex.isPR&&<span style={{fontSize:8.5,fontWeight:800,color:T.accent,padding:'1px 6px',borderRadius:999,background:'rgba(191,160,96,0.18)',flexShrink:0}}>PR</span>}
+                  </div>
+                  <div style={{fontSize:10.5,color:'rgba(255,255,255,0.45)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
+                    <CompLoadLine ex={ex} isNew={isNew} good={T.good} down={DOWN}/>
+                    <span>{isNew?ex.curSets:ex.prevSets+'→'+ex.curSets} série{ex.curSets>1?'s':''}</span>
+                    {!isNew&&ex.kind!=='cardio'&&ex.kind!=='hold'&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
+                  </div>
+                </div>
+                {ex.kind==='strength'&&ex.vDelta!=null&&ex.vDelta!==0&&<div style={{fontSize:11,fontWeight:700,color:col,flexShrink:0}}>{ex.vDelta>0?'+':''}{Math.round(ex.vDelta).toLocaleString('fr-FR')} kg</div>}
+              </div>
+            );
+          })}
+        </div>
+        {comp&&comp.totalExercises>0&&(
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            {[{n:comp.upCount,l:'en hausse',c:T.good,i:'↑'},{n:comp.downCount,l:'en baisse',c:DOWN,i:'↓'},{n:comp.sameCount,l:'stable',c:'rgba(255,255,255,0.5)',i:'='}].filter(x=>x.n>0).map((x,i)=>(
+              <div key={i} style={{flex:1,textAlign:'center',padding:'8px 6px',borderRadius:10,background:x.c+'14',border:'1px solid '+x.c+'33'}}><div style={{fontSize:15,fontWeight:800,color:x.c}}>{x.i} {x.n}</div><div style={{fontSize:9,color:x.c,fontWeight:600,textTransform:'uppercase',letterSpacing:0.3}}>{x.l}</div></div>
+            ))}
+          </div>
+        )}
+        <button onClick={onClose} style={{width:'100%',height:48,borderRadius:14,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:'#fff',fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:700,cursor:'pointer'}}>Retour au feedback</button>
+      </div>
+    </div>
+  );
+}
+
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
 // `extraRange` (optionnel) = map nom normalisé → haut de fourchette, issue du PROGRAMME.
 function buildSessionComparison(target,history,extraRange){
@@ -8271,17 +8350,26 @@ function useSessionFeedback(sessionId,initial,onSaved){
   const[feedbackText,setFeedbackText]=React.useState(initial||'');
   const[saving,setSaving]=React.useState(false);
   const[saved,setSaved]=React.useState(false);
+  // Erreur d'envoi : AVANT, l'échec était avalé en silence → le coach croyait avoir envoyé un feedback
+  // que l'athlète ne recevrait jamais. On l'affiche maintenant, et on ne ferme pas le champ.
+  const[feedbackError,setFeedbackError]=React.useState('');
   const submitFeedback=async()=>{
     if(!feedbackText.trim())return;
-    setSaving(true);
+    setSaving(true);setFeedbackError('');
     try{
       await apiCall(`/api/coach/sessions/${sessionId}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
       setSaved(true);setTimeout(()=>setSaved(false),2000);
       if(onSaved)onSaved();
-    }catch{}
+    }catch(e){
+      const code=e&&e.message||'';
+      setFeedbackError(
+        code==='forbidden'?"Cet athlète n'est pas rattaché à ton compte coach : le feedback n'a PAS été transmis."
+        :code==='not_found'?"Séance introuvable (supprimée ?) : le feedback n'a PAS été transmis."
+        :"Envoi impossible : le feedback n'a PAS été transmis. Vérifie ta connexion puis réessaie.");
+    }
     setSaving(false);
   };
-  return{feedbackText,setFeedbackText,saving,saved,submitFeedback};
+  return{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback};
 }
 
 const emptyDay=()=>({meals:NUTRI_MEAL_TEMPLATES.map(t=>({...t,items:[],note:''}))});
@@ -11139,7 +11227,7 @@ function fmtRestLabel(s){
 }
 
 function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
-  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   // Mindset du récap au profil coaching/objectifs DE L'ATHLÈTE (si dispo) — mêmes phrases
   // personnalisées que ce que l'athlète voit de son côté.
@@ -11542,6 +11630,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
             <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:8,width:'100%',height:44,borderRadius:12,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Feedback envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
+            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
           </div>
         </div>
       </div>
@@ -11698,7 +11787,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
   const[moveDate,setMoveDate]=React.useState(()=>ymdKey(new Date(s.date)));
   const[moving,setMoving]=React.useState(false);
   const[moveMsg,setMoveMsg]=React.useState('');
-  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   const doMove=async()=>{
     if(!moveDate)return;
@@ -11810,6 +11899,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
             <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
+            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
           </div>
         </div>
       )}
@@ -17923,9 +18013,25 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     let showedFeedback=false;
     setSessionCoachFeedback(null); // repart propre à chaque démarrage
     if(pendingCoachFeedback&&!coachSessionTarget){
+      // Popup + récap à CHAQUE démarrage de séance tant que le feedback n'est pas acquitté (avant : seulement
+      // si le nom de la séance coïncidait → l'athlète ne le voyait jamais dans les autres cas). Le rappel dépliable
+      // dans la séance, lui, n'est posé que si c'est la même séance que celle commentée.
+      setActiveCoachFeedback(pendingCoachFeedback);setShowFeedbackRecap(false);
       const wn=normSessionKey(w.name);
       const fn=normSessionKey(pendingCoachFeedback.sessionName);
-      if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);setSessionCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
+      if(wn&&fn&&wn===fn)setSessionCoachFeedback(pendingCoachFeedback);
+      showedFeedback=true;
+    }
+    // Feedback déjà lu (popup acquittée) : le rappel dépliable dans la séance reste disponible tant que le
+    // coach a commenté la DERNIÈRE séance de ce nom — c'est la consigne pour celle qu'on démarre.
+    if(!showedFeedback&&!coachSessionTarget){
+      const wn=normSessionKey(w.name);
+      if(wn){
+        const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+        if(last&&last.coachFeedback){
+          setSessionCoachFeedback({sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:'',updates:[]});
+        }
+      }
     }
     // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
     // et seulement pour l'athlète qui démarre POUR LUI (pas le coach qui joue pour un athlète).
@@ -17974,9 +18080,19 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Pop-up de feedback : on l'efface une fois lu, mais le feedback lui-même reste
   // dans la séance (historique) pour consultation ultérieure.
   const ackCoachFeedback=async()=>{
-    setActiveCoachFeedback(null);setPendingCoachFeedback(null);
+    setShowFeedbackRecap(false);setActiveCoachFeedback(null);setPendingCoachFeedback(null);
     try{await apiCall('/api/my-coach-feedback/ack',{method:'POST'});}catch(e){console.error('ack coach feedback',e);}
   };
+  // Récap de la séance commentée (volume vs la précédente + détail par exercice), calculé à partir de
+  // l'historique de l'athlète : affiché dans une fenêtre qui s'ouvre en bas depuis la popup de feedback.
+  const[showFeedbackRecap,setShowFeedbackRecap]=React.useState(false);
+  const feedbackRecap=React.useMemo(()=>{
+    if(!activeCoachFeedback)return null;
+    const sess=(history||[]).find(h=>h&&h.id===activeCoachFeedback.sessionId);
+    if(!sess)return null;
+    const{comp,volumeVsPrev}=buildSessionComparison(sess,history||[],programRangeMap(importedPrograms));
+    return{sess,comp,volumeVsPrev};
+  },[activeCoachFeedback,history,importedPrograms]);
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
@@ -18202,13 +18318,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             </div>
           );
         })()}
-        {/* Pop-up feedback coach — s'affiche UNIQUEMENT quand l'athlète ouvre la séance liée
-            au feedback (dans son historique/calendrier). Le feedback lui-même reste dans la
-            séance après acquittement pour consultation ultérieure. */}
+        {/* Pop-up feedback coach — s'affiche au DÉMARRAGE d'une séance tant qu'il n'est pas acquitté, avec un
+            bouton qui ouvre le récap de la séance commentée dans une fenêtre en bas. Le feedback reste dans
+            la séance après acquittement (historique) et dans le rappel dépliable de la séance du même nom. */}
         {activeCoachFeedback&&(
           <div style={{position:'fixed',inset:0,zIndex:9500,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
             <div onClick={ackCoachFeedback} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
-            <div style={{position:'relative',background:'linear-gradient(180deg,#0f1826,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(28px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+            <div style={{position:'relative',background:'linear-gradient(180deg,#0f1826,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(104px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
               <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
               <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:'rgba(90,138,224,0.15)',border:'1px solid rgba(90,138,224,0.4)',marginBottom:13}}>
                 <span style={{fontSize:10,fontWeight:800,color:'#8FB4F5',letterSpacing:0.5,textTransform:'uppercase'}}>💬 Feedback de {activeCoachFeedback.coachName||'ton coach'}</span>
@@ -18232,11 +18348,15 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   ))}
                 </div>
               </>)}
-              <div style={{fontSize:10.5,color:T.textFaint,marginBottom:4,fontStyle:'italic',textAlign:'center'}}>Tu retrouveras ce feedback dans le récap de ta séance.</div>
+              {feedbackRecap&&(
+                <button onClick={()=>setShowFeedbackRecap(true)} style={{width:'100%',marginTop:6,height:46,borderRadius:13,border:'1px solid rgba(90,138,224,0.45)',background:'rgba(90,138,224,0.1)',color:'#8FB4F5',fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>📊 Voir le récap de ta séance</button>
+              )}
+              <div style={{fontSize:10.5,color:T.textFaint,marginTop:10,marginBottom:4,fontStyle:'italic',textAlign:'center'}}>Tu retrouveras ce feedback dans le récap de ta séance.</div>
               <button onClick={ackCoachFeedback} style={{width:'100%',marginTop:16,height:52,borderRadius:15,border:'none',background:'linear-gradient(135deg,#5A8AE0,#2CC4A0)',color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>Merci, c'est noté 💪</button>
             </div>
           </div>
         )}
+        {activeCoachFeedback&&showFeedbackRecap&&feedbackRecap&&<FeedbackRecapSheet recap={feedbackRecap} onClose={()=>setShowFeedbackRecap(false)}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
           {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);setSessionCoachFeedback(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest} coachFeedback={coachSessionTarget?null:sessionCoachFeedback}/>}
