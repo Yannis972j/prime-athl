@@ -46,11 +46,21 @@ test('feedback sur une séance introuvable : 404 not_found (erreur explicite rel
   assert.equal(r.body.error, 'not_found');
 });
 
-test('front : la popup athlète n\'est plus conditionnée au nom de la séance démarrée', () => {
-  // effet qui ouvre la popup dès que le feedback est connu (hors séance en cours)
-  assert.match(html, /if\(!pendingCoachFeedback\|\|activeCoachFeedback\)return;[\s\S]{0,400}setActiveCoachFeedback\(pendingCoachFeedback\)/);
-  // rappel en séance retrouvé dans l'historique quand la popup a déjà été lue
+test('front : la popup s\'ouvre au DÉMARRAGE de toute séance (plus seulement si le nom coïncide)', () => {
+  // au démarrage : popup ouverte dès qu'un feedback est en attente, sans condition sur le nom de la séance
+  assert.match(html, /if\(pendingCoachFeedback&&!coachSessionTarget\)\{[\s\S]{0,500}setActiveCoachFeedback\(pendingCoachFeedback\);setShowFeedbackRecap\(false\);/);
+  // le nom ne sert plus qu'au rappel dans la séance
+  assert.match(html, /if\(wn&&fn&&wn===fn\)setSessionCoachFeedback\(pendingCoachFeedback\);/);
+  // rappel retrouvé dans l'historique quand la popup a déjà été lue
   assert.match(html, /last&&last\.coachFeedback[\s\S]{0,200}setSessionCoachFeedback/);
+});
+
+test('front : le récap de la séance commentée s\'ouvre dans une fenêtre en bas depuis la popup', () => {
+  assert.match(html, /function FeedbackRecapSheet\(/);
+  assert.match(html, /Voir le récap de ta séance/);
+  assert.match(html, /activeCoachFeedback&&showFeedbackRecap&&feedbackRecap&&<FeedbackRecapSheet/);
+  // le récap est calculé par la comparaison commune (même logique que les autres récaps)
+  assert.match(html, /const feedbackRecap=React\.useMemo\([\s\S]{0,400}buildSessionComparison\(sess,history/);
 });
 
 test('front : un échec d\'envoi du feedback est affiché au coach (plus de catch silencieux)', () => {
