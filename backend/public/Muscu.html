@@ -418,6 +418,23 @@ function IOSStatusBar({dark=false}){
   );
 }
 
+// « Mode mobile » (plein écran) vs « mode ordinateur » (maquette de téléphone centrée).
+// Ne PAS se baser sur la seule largeur : un téléphone en PAYSAGE dépasse 768 px (iPhone 844–932, Android
+// ~800–930). L'app basculait alors en mode ordinateur — l'arbre de l'interface change, TOUT est recréé
+// (séance en cours comprise) — puis revenait en mobile au retour en portrait : l'écran repartait sur un
+// autre exercice. Un appareil tactile dont le petit côté d'écran fait < 768 px reste donc toujours « mobile »
+// (iOS : screen.* ne tourne pas ; Android : screen.* tourne, mais min(largeur, hauteur) est constant).
+// Tablettes (petit côté ≥ 768) et ordinateurs : comportement inchangé.
+function computeIsMobile(){
+  if(typeof window==='undefined')return false;
+  if(window.innerWidth<768)return true;
+  try{
+    const coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);
+    const sw=(window.screen&&window.screen.width)||window.innerWidth;
+    const sh=(window.screen&&window.screen.height)||window.innerHeight;
+    return coarse&&Math.min(sw,sh)<768;
+  }catch(e){return false;}
+}
 function IOSDevice({children,width=402,height=874,dark=false}){
   return(
     <div style={{width,height,borderRadius:48,overflow:'hidden',position:'relative',background:dark?'#000':'#F2F2F7',boxShadow:'0 40px 80px rgba(0,0,0,0.18),0 0 0 1px rgba(0,0,0,0.12)',fontFamily:'-apple-system,system-ui,sans-serif'}}>
@@ -1673,7 +1690,15 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       return{...e,sets:e.sets.map(s=>({...s}))};
     });
   });
-  const[currentEx,setCurrentEx]=React.useState(0);
+  // Exercice affiché : restauré depuis le snapshot local si la séance est recréée (rotation, page rechargée
+  // par iOS/Android après passage en arrière-plan…) — sinon on retombait toujours sur le 1er exercice.
+  const[currentEx,setCurrentEx]=React.useState(()=>{
+    try{
+      const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'null');
+      if(s&&s.workoutName===workout.name&&Number.isInteger(s.currentEx)&&s.currentEx>=0&&Array.isArray(s.exercises)&&s.currentEx<s.exercises.length)return s.currentEx;
+    }catch{}
+    return 0;
+  });
   const[restSeconds,setRestSeconds]=React.useState(0);
   const restEndRef=React.useRef(0);
   const[restTotal,setRestTotal]=React.useState(0);
@@ -1691,7 +1716,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // Persisté localStorage pour respecter le choix utilisateur entre séances
   const[focusMode,setFocusMode]=React.useState(()=>{try{return localStorage.getItem('pa_focus_mode')==='1';}catch{return false;}});
   React.useEffect(()=>{try{localStorage.setItem('pa_focus_mode',focusMode?'1':'0');}catch{}},[focusMode]);
-  React.useEffect(()=>{try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,exercises}));}catch{}},[exercises]);
+  React.useEffect(()=>{try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,exercises,currentEx}));}catch{}},[exercises,currentEx]);
   React.useEffect(()=>{if(!sessionTime||sessionTime%30!==0)return;try{const cur=JSON.parse(localStorage.getItem(SNAP_KEY)||'{}');localStorage.setItem(SNAP_KEY,JSON.stringify({...cur,workoutName:workout.name,sessionTime}));}catch{}},[sessionTime]);
 
   // Per-exercise last-session data for progressive overload hints — clé normalisée (casse/
@@ -17476,7 +17501,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   },[profile,setUser,triggerSave]);
 
   const[history,setHistory]=React.useState([]);
-  const[isMobile,setIsMobile]=React.useState(typeof window!=='undefined'&&window.innerWidth<768);
+  const[isMobile,setIsMobile]=React.useState(computeIsMobile);
 
   // File locale des séances qui n'ont pas pu être synchronisées côté serveur (réseau coupé,
   // 500 ponctuel...) — sans ça, une séance validée pouvait disparaître silencieusement au
@@ -17708,9 +17733,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   },[refreshAll]);
 
   React.useEffect(()=>{
-    const onResize=()=>setIsMobile(window.innerWidth<768);
+    const onResize=()=>setIsMobile(computeIsMobile());
     window.addEventListener('resize',onResize);
-    return()=>window.removeEventListener('resize',onResize);
+    window.addEventListener('orientationchange',onResize);
+    return()=>{window.removeEventListener('resize',onResize);window.removeEventListener('orientationchange',onResize);};
   },[]);
 
   const[unreadMessages,setUnreadMessages]=React.useState(0);
