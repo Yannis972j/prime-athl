@@ -8246,17 +8246,26 @@ function useSessionFeedback(sessionId,initial,onSaved){
   const[feedbackText,setFeedbackText]=React.useState(initial||'');
   const[saving,setSaving]=React.useState(false);
   const[saved,setSaved]=React.useState(false);
+  // Erreur d'envoi : AVANT, l'échec était avalé en silence → le coach croyait avoir envoyé un feedback
+  // que l'athlète ne recevrait jamais. On l'affiche maintenant, et on ne ferme pas le champ.
+  const[feedbackError,setFeedbackError]=React.useState('');
   const submitFeedback=async()=>{
     if(!feedbackText.trim())return;
-    setSaving(true);
+    setSaving(true);setFeedbackError('');
     try{
       await apiCall(`/api/coach/sessions/${sessionId}/feedback`,{method:'POST',body:{feedback:feedbackText.trim()}});
       setSaved(true);setTimeout(()=>setSaved(false),2000);
       if(onSaved)onSaved();
-    }catch{}
+    }catch(e){
+      const code=e&&e.message||'';
+      setFeedbackError(
+        code==='forbidden'?"Cet athlète n'est pas rattaché à ton compte coach : le feedback n'a PAS été transmis."
+        :code==='not_found'?"Séance introuvable (supprimée ?) : le feedback n'a PAS été transmis."
+        :"Envoi impossible : le feedback n'a PAS été transmis. Vérifie ta connexion puis réessaie.");
+    }
     setSaving(false);
   };
-  return{feedbackText,setFeedbackText,saving,saved,submitFeedback};
+  return{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback};
 }
 
 const emptyDay=()=>({meals:NUTRI_MEAL_TEMPLATES.map(t=>({...t,items:[],note:''}))});
@@ -11114,7 +11123,7 @@ function fmtRestLabel(s){
 }
 
 function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
-  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   // Mindset du récap au profil coaching/objectifs DE L'ATHLÈTE (si dispo) — mêmes phrases
   // personnalisées que ce que l'athlète voit de son côté.
@@ -11517,6 +11526,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
             <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:8,width:'100%',height:44,borderRadius:12,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Feedback envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
+            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
           </div>
         </div>
       </div>
@@ -11673,7 +11683,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
   const[moveDate,setMoveDate]=React.useState(()=>ymdKey(new Date(s.date)));
   const[moving,setMoving]=React.useState(false);
   const[moveMsg,setMoveMsg]=React.useState('');
-  const{feedbackText,setFeedbackText,saving,saved,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
+  const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
 
   const doMove=async()=>{
     if(!moveDate)return;
@@ -11785,6 +11795,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
             <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
               {saved?'✓ Envoyé':saving?'Envoi...':'Envoyer le feedback'}
             </button>
+            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
           </div>
         </div>
       )}
@@ -17901,6 +17912,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       const fn=normSessionKey(pendingCoachFeedback.sessionName);
       if(wn&&fn&&wn===fn){setActiveCoachFeedback(pendingCoachFeedback);setSessionCoachFeedback(pendingCoachFeedback);showedFeedback=true;}
     }
+    // Feedback déjà lu (popup acquittée) : le rappel dépliable dans la séance reste disponible tant que le
+    // coach a commenté la DERNIÈRE séance de ce nom — c'est la consigne pour celle qu'on démarre.
+    if(!showedFeedback&&!coachSessionTarget){
+      const wn=normSessionKey(w.name);
+      if(wn){
+        const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+        if(last&&last.coachFeedback){
+          setSessionCoachFeedback({sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:'',updates:[]});
+        }
+      }
+    }
     // Motivation pré-séance : uniquement si aucun feedback coach ne s'affiche (jamais 2 pop-ups),
     // et seulement pour l'athlète qui démarre POUR LUI (pas le coach qui joue pour un athlète).
     // Anti-spam : au plus 1× par jour (sur la 1re séance du jour) — sinon le message se répète à
@@ -17951,6 +17973,18 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     setActiveCoachFeedback(null);setPendingCoachFeedback(null);
     try{await apiCall('/api/my-coach-feedback/ack',{method:'POST'});}catch(e){console.error('ack coach feedback',e);}
   };
+  // Le feedback du coach doit TOUJOURS arriver chez l'athlète. AVANT, la popup ne s'ouvrait que si l'athlète
+  // démarrait une séance du MÊME NOM que celle commentée : sinon il ne voyait jamais rien (le feedback
+  // dormait dans l'historique). Maintenant elle s'affiche dès que le feedback est connu — à l'ouverture de
+  // l'app, ou en direct si l'athlète est déjà dedans — sauf pendant une séance (elle apparaît à la sortie)
+  // et sans recouvrir une autre popup (accès, inactivité, motivation, onboarding).
+  React.useEffect(()=>{
+    if(!pendingCoachFeedback||activeCoachFeedback)return;
+    if(authUser.role==='coach'||coachSessionTarget)return;
+    if(screen==='session'||sessionActive)return;
+    if(showOnboarding||accessPopup||inactivityPopup||preSessionPopup)return;
+    setActiveCoachFeedback(pendingCoachFeedback);
+  },[pendingCoachFeedback,activeCoachFeedback,screen,sessionActive,coachSessionTarget,showOnboarding,accessPopup,inactivityPopup,preSessionPopup,authUser.role]);
 
   const saveSession=async snapshot=>{
     if(!snapshot)return;
@@ -18176,9 +18210,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             </div>
           );
         })()}
-        {/* Pop-up feedback coach — s'affiche UNIQUEMENT quand l'athlète ouvre la séance liée
-            au feedback (dans son historique/calendrier). Le feedback lui-même reste dans la
-            séance après acquittement pour consultation ultérieure. */}
+        {/* Pop-up feedback coach — s'affiche dès que le feedback est reçu (ouverture de l'app ou en direct),
+            jamais pendant une séance. Le feedback lui-même reste dans la séance après acquittement
+            (historique) et dans le rappel dépliable de la séance suivante du même nom. */}
         {activeCoachFeedback&&(
           <div style={{position:'fixed',inset:0,zIndex:9500,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
             <div onClick={ackCoachFeedback} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
