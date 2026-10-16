@@ -5963,10 +5963,10 @@ function FeedbackRecapSheet({recap,onClose}){
   const volColor=delta>0?T.good:delta<0?DOWN:T.textDim;
   const rows=comp?comp.exercises:(sess.exercises||[]).map(e=>{const sets=(e.sets||[]);return{name:e.name,status:'new',kind:e.style==='CARDIO'?'cardio':'strength',curMaxW:Math.max(0,...sets.map(x=>x.weight||0)),curSets:sets.length,curVol:sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0)};});
   const Stat=({v,l,c})=>(<div style={{flex:1,textAlign:'center',padding:'11px 6px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}><div style={{fontSize:18,fontWeight:800,color:c||'#fff',fontFamily:"'Outfit',sans-serif"}}>{v}</div><div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginTop:2}}>{l}</div></div>);
-  return(
+  return ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
       <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)'}}/>
-      <div style={{position:'relative',background:'linear-gradient(180deg,#121a2a,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'14px 18px calc(104px + env(safe-area-inset-bottom))',maxHeight:'86vh',overflowY:'auto',animation:'celebrationPop 0.3s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+      <div style={{position:'relative',background:'linear-gradient(180deg,#121a2a,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'14px 18px calc(24px + env(safe-area-inset-bottom))',boxSizing:'border-box',maxHeight:'86vh',overflowY:'auto',animation:'celebrationPop 0.3s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
         <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 14px'}}/>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
           <div>
@@ -6027,7 +6027,7 @@ function FeedbackRecapSheet({recap,onClose}){
         <button onClick={onClose} style={{width:'100%',height:48,borderRadius:14,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',color:'#fff',fontFamily:"'Outfit',sans-serif",fontSize:14,fontWeight:700,cursor:'pointer'}}>Retour au feedback</button>
       </div>
     </div>
-  );
+  ,document.body);
 }
 
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
@@ -18321,10 +18321,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {/* Pop-up feedback coach — s'affiche au DÉMARRAGE d'une séance tant qu'il n'est pas acquitté, avec un
             bouton qui ouvre le récap de la séance commentée dans une fenêtre en bas. Le feedback reste dans
             la séance après acquittement (historique) et dans le rappel dépliable de la séance du même nom. */}
-        {activeCoachFeedback&&(
+        {activeCoachFeedback&&ReactDOM.createPortal(
           <div style={{position:'fixed',inset:0,zIndex:9500,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
             <div onClick={ackCoachFeedback} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)'}}/>
-            <div style={{position:'relative',background:'linear-gradient(180deg,#0f1826,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(104px + env(safe-area-inset-bottom))',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
+            <div style={{position:'relative',background:'linear-gradient(180deg,#0f1826,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(24px + env(safe-area-inset-bottom))',boxSizing:'border-box',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
               <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
               <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:'rgba(90,138,224,0.15)',border:'1px solid rgba(90,138,224,0.4)',marginBottom:13}}>
                 <span style={{fontSize:10,fontWeight:800,color:'#8FB4F5',letterSpacing:0.5,textTransform:'uppercase'}}>💬 Feedback de {activeCoachFeedback.coachName||'ton coach'}</span>
@@ -18355,7 +18355,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <button onClick={ackCoachFeedback} style={{width:'100%',marginTop:16,height:52,borderRadius:15,border:'none',background:'linear-gradient(135deg,#5A8AE0,#2CC4A0)',color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15,fontWeight:800,cursor:'pointer'}}>Merci, c'est noté 💪</button>
             </div>
           </div>
-        )}
+        ,document.body)}
         {activeCoachFeedback&&showFeedbackRecap&&feedbackRecap&&<FeedbackRecapSheet recap={feedbackRecap} onClose={()=>setShowFeedbackRecap(false)}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
