@@ -69,3 +69,10 @@ test('front : un échec d\'envoi du feedback est affiché au coach (plus de catc
   const hook = html.slice(html.indexOf('function useSessionFeedback('), html.indexOf('function useSessionFeedback(') + 1800);
   assert.doesNotMatch(hook, /\}catch\{\}/, 'catch vide supprimé dans useSessionFeedback');
 });
+
+test('front : popup feedback et fenêtre récap sont rendues via portal sur le body (sinon fixed piégé par willChange du gestureRef → hors écran en paysage)', () => {
+  assert.match(html, /\{activeCoachFeedback&&ReactDOM\.createPortal\(/);
+  const a = html.indexOf('function FeedbackRecapSheet');
+  assert.match(html.slice(a, a + 6000), /return ReactDOM\.createPortal\(/);
+  assert.doesNotMatch(html, /calc\(104px \+ env\(safe-area-inset-bottom\)\)',boxSizing|maxHeight:'8[68]vh'[^}]{0,40}104px/);
+});
