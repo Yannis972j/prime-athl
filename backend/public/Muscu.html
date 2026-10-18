@@ -7355,7 +7355,6 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                         const labelMap={CLASSIQUE:'CLASSIQUE',SUPERSET:'SUPERSET',TRISET:'TRI-SET',ABDOS:'ABDOS',CARDIO:'CARDIO'};
                         const subMap={CLASSIQUE:'',SUPERSET:'· enchaîner sans repos',TRISET:'· enchaîner sans repos',ABDOS:'',CARDIO:''};
                         for(const group of groups){
-                          if(shown>=6)break;
                           els.push(
                             <div key={group.items[0].idx} style={{borderRadius:10,border:`1px solid ${group.color}44`,overflow:'hidden'}}>
                               <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:`${group.color}12`}}>
@@ -7377,8 +7376,6 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                             </div>
                           );shown+=group.items.length;
                         }
-                        const rem=displayExercises.length-shown;
-                        if(rem>0)els.push(<div key="more" style={{fontSize:11,color:T.textFaint,paddingLeft:4}}>+{rem} exercices</div>);
                         return els;
                       })()}
                     </div>

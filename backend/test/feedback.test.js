@@ -76,3 +76,11 @@ test('front : popup feedback et fenêtre récap sont rendues via portal sur le b
   assert.match(html.slice(a, a + 6000), /return ReactDOM\.createPortal\(/);
   assert.doesNotMatch(html, /calc\(104px \+ env\(safe-area-inset-bottom\)\)',boxSizing|maxHeight:'8[68]vh'[^}]{0,40}104px/);
 });
+
+test('front : la carte de la séance du jour affiche TOUS les exercices (plus de « +N exercices » tronqué à 6)', () => {
+  const a = html.indexOf("const labelMap={CLASSIQUE:'CLASSIQUE'");
+  assert.ok(a > 0);
+  const block = html.slice(a, a + 4500);
+  assert.doesNotMatch(block, /shown>=6/);
+  assert.doesNotMatch(block, /\+\{rem\} exercices/);
+});
