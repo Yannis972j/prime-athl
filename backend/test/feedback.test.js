@@ -110,3 +110,8 @@ test('front : la carte de la séance du jour affiche TOUS les exercices (plus de
   assert.doesNotMatch(block, /shown>=6/);
   assert.doesNotMatch(block, /\+\{rem\} exercices/);
 });
+
+test('front : « pas de prog » n\'existe plus dans la liste des athlètes (nom du programme, Séances ou Biblio)', () => {
+  assert.doesNotMatch(html, /pas de prog/);
+  assert.match(html, /function athleteProgramLabel\(/);
+});

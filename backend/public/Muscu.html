@@ -762,6 +762,19 @@ function normExerciseName(name) {
 // "LEGS · FESSIERS" et "Legs fessiers" soient reconnues comme la MÊME séance. Réservé au
 // rapprochement feedback↔séance : ne surtout pas remplacer normExerciseName (utilisé pour
 // l'appariement d'EXERCICES, la progression, le calendrier) où fusionner la ponctuation serait risqué.
+// Libellé du programme d'un athlète dans « Mes athlètes » : le NOM du programme (feuille Excel), où
+// qu'il se trouve — calendrier « Séances » (📅) ou Bibliothèque (📚). « pas de prog » n'existe plus ;
+// seul un athlète sans aucun contenu affiche « Aucun programme ».
+function athleteProgramLabel(a,days){
+  const data=(a&&a.program&&a.program.data)||{};
+  const seanceNames=Object.keys(data).filter(k=>Object.keys(data[k]||{}).length>0);
+  const parts=[];
+  if(seanceNames.length)parts.push('📅 '+seanceNames.join(' · ')+(days?' · '+days+' jour'+(days>1?'s':''):''));
+  const libNames=(a&&a.libraryNames)||[];
+  const libCount=(a&&a.librarySessions)||0;
+  if(libCount>0)parts.push('📚 '+(libNames.length?libNames.join(' · '):'Biblio')+' · '+libCount+' séance'+(libCount>1?'s':''));
+  return parts.length?parts.join('  +  '):'Aucun programme';
+}
 // File d'attente des feedbacks coach (un par séance) : accepte la nouvelle forme (tableau) comme
 // l'ancienne (un seul objet) renvoyées par le serveur.
 function toFeedbackList(src) {
@@ -14101,7 +14114,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.firstName||a.email.split('@')[0]} {a.lastName}</div>
                     <div style={{fontSize:11,color:T.textFaint,marginTop:3,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                      <span>{days?days+' jours':'pas de prog'}</span>
+                      <span>{athleteProgramLabel(a,days)}</span>
                       {a.lastSessionAt&&<><span style={{color:T.textFaint}}>·</span><span style={{color:isNew?T.good:T.textFaint,fontWeight:isNew?700:500}}>{timeAgo(a.lastSessionAt)}</span></>}
                     </div>
                   </div>

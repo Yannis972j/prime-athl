@@ -200,3 +200,22 @@ test('le feedback coach est livré comme pop-up puis acquitté', async () => {
     await s.stop();
   }
 });
+
+test('coach : la liste des athlètes expose les feuilles/séances de la bibliothèque (nom du programme affiché même hors calendrier)', async () => {
+  const login = await api(srv.baseUrl, 'POST', '/api/auth/login', { body: { email: MAIN_COACH_EMAIL, password: MAIN_COACH_PASSWORD } });
+  const token = login.body.token;
+  await api(srv.baseUrl, 'POST', '/api/coach/create-athlete', { token, body: { email: 'libname@test.local', password: 'longenough1' } });
+  const list0 = await api(srv.baseUrl, 'GET', '/api/coach/athletes?limit=100', { token });
+  const a = list0.body.athletes.find(x => x.email === 'libname@test.local');
+  assert.deepEqual(a.libraryNames, []);
+  assert.equal(a.librarySessions, 0);
+  await api(srv.baseUrl, 'PUT', `/api/coach/session-library/${a.id}`, { token, body: { sessions: [
+    { id: 'a', name: 'LUNDI', sheetName: 'PROGRAMME LAURA 3', exercises: [] },
+    { id: 'b', name: 'MARDI', sheetName: 'PROGRAMME LAURA 3', exercises: [] },
+  ] } });
+  const list1 = await api(srv.baseUrl, 'GET', '/api/coach/athletes?limit=100', { token });
+  const b = list1.body.athletes.find(x => x.email === 'libname@test.local');
+  assert.deepEqual(b.libraryNames, ['PROGRAMME LAURA 3']);
+  assert.equal(b.librarySessions, 2);
+});
+
