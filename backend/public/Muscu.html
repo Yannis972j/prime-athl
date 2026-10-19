@@ -763,7 +763,7 @@ function normExerciseName(name) {
 // rapprochement feedback↔séance : ne surtout pas remplacer normExerciseName (utilisé pour
 // l'appariement d'EXERCICES, la progression, le calendrier) où fusionner la ponctuation serait risqué.
 // Libellé du programme d'un athlète dans « Mes athlètes » : le NOM du programme (feuille Excel), où
-// qu'il se trouve — calendrier « Séances » (📅) ou Bibliothèque (📚). « pas de prog » n'existe plus ;
+// qu'il se trouve — calendrier « Séances » (📅) ou Bibliothèque (📚). le libellé vide d'avant n'existe plus ;
 // seul un athlète sans aucun contenu affiche « Aucun programme ».
 function athleteProgramLabel(a,days){
   const data=(a&&a.program&&a.program.data)||{};
