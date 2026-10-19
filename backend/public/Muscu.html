@@ -5938,6 +5938,20 @@ function programRepsStrMap(programData){
 // Ligne « charge » d'un exercice dans les récaps (athlète, historique, coach). Elle dépend du TYPE :
 // muscu chargée → charge max ; assisté → assistance (moins = mieux, couleurs inversées) ;
 // gainage → durée de maintien ; poids du corps → pas de charge ; cardio → rien.
+// Ressentis saisis par l'athlète pendant ses séries (« 💬 Ressenti pendant la série ») : affichés
+// sous chaque exercice dans TOUS les récaps (athlète et coach). `notes` = [{n: n° de série, t: texte}].
+function RecapSetNotes({notes}){
+  if(!notes||!notes.length)return null;
+  return(
+    <div data-testid="recap-ressenti" style={{width:'100%',marginTop:6,display:'flex',flexDirection:'column',gap:3}}>
+      {notes.map((x,i)=>(
+        <div key={i} style={{fontSize:11,lineHeight:1.4,color:'#E8C98A',padding:'4px 8px',borderRadius:8,background:'rgba(232,201,138,0.08)',borderLeft:'2px solid rgba(232,201,138,0.5)',wordBreak:'break-word'}}>
+          💬 <b>Série {x.n}</b> · « {x.t} »
+        </div>
+      ))}
+    </div>
+  );
+}
 function CompLoadLine({ex,isNew,good,down}){
   const kind=ex.kind||'strength';
   const neutral='rgba(255,255,255,0.6)';
@@ -5968,7 +5982,7 @@ function FeedbackRecapSheet({recap,onClose}){
   const delta=showVol?Math.round(volumeVsPrev.current-volumeVsPrev.previous):0;
   const pct=showVol?Math.round(delta/volumeVsPrev.previous*100):0;
   const volColor=delta>0?T.good:delta<0?DOWN:T.textDim;
-  const rows=comp?comp.exercises:(sess.exercises||[]).map(e=>{const sets=(e.sets||[]);return{name:e.name,status:'new',kind:e.style==='CARDIO'?'cardio':'strength',curMaxW:Math.max(0,...sets.map(x=>x.weight||0)),curSets:sets.length,curVol:sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0)};});
+  const rows=comp?comp.exercises:(sess.exercises||[]).map(e=>{const sets=(e.sets||[]);return{name:e.name,status:'new',kind:e.style==='CARDIO'?'cardio':'strength',curMaxW:Math.max(0,...sets.map(x=>x.weight||0)),curSets:sets.length,curVol:sets.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0),setNotes:sets.map((st,si)=>st&&st.note?{n:si+1,t:String(st.note)}:null).filter(Boolean)};});
   const Stat=({v,l,c})=>(<div style={{flex:1,textAlign:'center',padding:'11px 6px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}><div style={{fontSize:18,fontWeight:800,color:c||'#fff',fontFamily:"'Outfit',sans-serif"}}>{v}</div><div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginTop:2}}>{l}</div></div>);
   return ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:9600,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
@@ -5999,6 +6013,7 @@ function FeedbackRecapSheet({recap,onClose}){
           </div>
         )}
         {!comp&&<div style={{fontSize:11.5,color:T.textDim,marginBottom:10,lineHeight:1.5}}>Première séance « {sess.name} » enregistrée : pas encore de comparaison.</div>}
+        {sess.notes&&<div style={{fontSize:12,lineHeight:1.5,color:'#E8C98A',padding:'8px 12px',borderRadius:10,background:'rgba(232,201,138,0.08)',borderLeft:'2px solid rgba(232,201,138,0.5)',marginBottom:12,whiteSpace:'pre-wrap'}}>💬 <b>Ressenti de la séance</b> · {sess.notes}</div>}
         <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Détail par exercice</div>
         <div style={{borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.07)',marginBottom:12}}>
           {rows.map((ex,i)=>{
@@ -6018,6 +6033,7 @@ function FeedbackRecapSheet({recap,onClose}){
                     <span>{isNew?ex.curSets:ex.prevSets+'→'+ex.curSets} série{ex.curSets>1?'s':''}</span>
                     {!isNew&&ex.kind!=='cardio'&&ex.kind!=='hold'&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                   </div>
+                  <RecapSetNotes notes={ex.setNotes}/>
                 </div>
                 {ex.kind==='strength'&&ex.vDelta!=null&&ex.vDelta!==0&&<div style={{fontSize:11,fontWeight:700,color:col,flexShrink:0}}>{ex.vDelta>0?'+':''}{Math.round(ex.vDelta).toLocaleString('fr-FR')} kg</div>}
               </div>
@@ -6114,6 +6130,9 @@ function buildSessionComparison(target,history,extraRange){
     const occ=seenKey[k]||0;seenKey[k]=occ+1;
     const p=(prevByKey[k]||[])[occ];
     const curSets=loggedSetsOf(ex);
+    // Ressentis saisis par série (n° = rang parmi les séries enregistrées), pour tous les récaps.
+    const setNotes=curSets.map((st,si)=>st&&st.note?{n:si+1,t:String(st.note)}:null).filter(Boolean);
+    const pushRow=r=>comp.exercises.push({...r,setNotes});
     const curMaxW=Math.max(0,...curSets.map(s=>s.weight||0));
     const curVol=curSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
     const curTotalReps=curSets.reduce((a,s)=>a+(s.reps||0),0);
@@ -6128,7 +6147,7 @@ function buildSessionComparison(target,history,extraRange){
     // fourchette avec des charges allégées, ce qui déclencherait de fausses propositions de montée.
     // Pas non plus pour un exercice assisté : "monter la charge" y serait l'inverse du progrès.
     const atCap=!target.deload&&!assisted&&!!top&&!cardio&&!hold&&curSets.length>0&&(uni?curSets.every(s=>(s.repsL||0)>=top&&(s.repsR||0)>=top):curSets.every(s=>(s.reps||0)>=top));
-    if(!p){newCount++;comp.exercises.push({name:ex.name,status:'new',kind:cardio?'cardio':assisted?'assisted':hold?'hold':'strength',curMaxW,curVol,curSets:curSets.length,curTotalReps,curHold:hold?(ex.holdSeconds||0):0,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0,assisted});return;}
+    if(!p){newCount++;pushRow({name:ex.name,status:'new',kind:cardio?'cardio':assisted?'assisted':hold?'hold':'strength',curMaxW,curVol,curSets:curSets.length,curTotalReps,curHold:hold?(ex.holdSeconds||0):0,atCap,topReps:top,curE1RM,prevE1RM:0,e1Delta:0,assisted});return;}
     const pSets=loggedSetsOf(p);
     const prevMaxW=Math.max(0,...pSets.map(s=>s.weight||0));
     const prevVol=pSets.reduce((a,s)=>a+(s.weight||0)*(s.reps||0),0);
@@ -6157,7 +6176,7 @@ function buildSessionComparison(target,history,extraRange){
     else{status=vDelta>0?'up':vDelta<0?'down':'same';isPR=curMaxW>0&&wDelta>0;}
     if(isPR)prsCount++;
     if(status==='na')naCount++;else if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-    comp.exercises.push({name:ex.name,status,kind,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,
+    pushRow({name:ex.name,status,kind,isPR,curMaxW,prevMaxW,wDelta,curVol,prevVol,
       // Écart de volume en kg : uniquement pour la muscu chargée (sinon valeur trompeuse ou vide).
       vDelta:kind==='strength'?vDelta:0,
       curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,curHold,prevHold,atCap,topReps:top,curE1RM,prevE1RM,e1Delta:curE1RM-prevE1RM,assisted});
@@ -6977,6 +6996,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                     {isNew&&<span>{ex.curSets} série{ex.curSets>1?'s':''}</span>}
                                     {!isNew&&ex.kind!=='cardio'&&ex.kind!=='hold'&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                                   </div>
+                                  <RecapSetNotes notes={ex.setNotes}/>
                                 </div>
                                 <div style={{textAlign:'right',flexShrink:0}}>
                                   {vd&&<div style={{fontSize:10.5,fontWeight:700,color:sc}}>{vd}</div>}
@@ -11414,6 +11434,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                                 {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                                 {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                               </div>
+                              <RecapSetNotes notes={ex.setNotes}/>
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               {vDeltaStr&&<div style={{fontSize:10.5,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
@@ -11603,6 +11624,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                                       {uni?(<><span>G{st.repsL||0}</span> <span>D{st.repsR||0}</span></>):(<>{st.reps}<span style={{fontSize:10,color:T.textFaint,fontWeight:400}}> ×</span></>)}
                                     </div>
                                     <div style={{fontSize:12,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{Math.round((st.weight||0)*(st.reps||0))}</div>
+                                    {st.note&&<div data-testid="recap-ressenti" style={{gridColumn:'1 / -1',fontSize:11,lineHeight:1.4,color:'#E8C98A',padding:'4px 8px',borderRadius:8,background:'rgba(232,201,138,0.08)',borderLeft:'2px solid rgba(232,201,138,0.5)',wordBreak:'break-word'}}>💬 <b>Ressenti</b> · « {st.note} »</div>}
                                   </div>
                                 );})}
                               </div>
@@ -18084,6 +18106,20 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   };
   // Pop-up de feedback : on l'efface une fois lu, mais le feedback lui-même reste
   // dans la séance (historique) pour consultation ultérieure.
+  // Menu déroulant « Feedback de ton coach » en bas de la séance. Recalculé à partir des données
+  // (et non seulement posé au démarrage) : il survit donc à un rechargement de l'appli en cours de
+  // séance, et reste disponible une fois la popup acquittée. Source : feedback en attente du même nom,
+  // sinon feedback laissé par le coach sur la DERNIÈRE séance de ce nom dans l'historique.
+  const sessionFeedbackBanner=React.useMemo(()=>{
+    if(!sessionActive||coachSessionTarget)return null;
+    if(sessionCoachFeedback)return sessionCoachFeedback;
+    const wn=normSessionKey(workout&&workout.name);
+    if(!wn)return null;
+    const pend=pendingFeedbacks.find(f=>normSessionKey(f.sessionName)===wn);
+    if(pend)return pend;
+    const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+    return last&&last.coachFeedback?{sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:'',updates:[]}:null;
+  },[sessionActive,coachSessionTarget,sessionCoachFeedback,workout&&workout.name,pendingFeedbacks,history]);
   const ackCoachFeedback=async()=>{
     const sid=activeCoachFeedback&&activeCoachFeedback.sessionId;
     setShowFeedbackRecap(false);setActiveCoachFeedback(null);
@@ -18366,7 +18402,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         {activeCoachFeedback&&showFeedbackRecap&&feedbackRecap&&<FeedbackRecapSheet recap={feedbackRecap} onClose={()=>setShowFeedbackRecap(false)}/>}
         {/* Session gardée montée (display:none) pour préserver la progression quand l'utilisateur navigue */}
         <div style={{height:'100%',overflow:'auto',display:screen==='session'?'block':'none'}}>
-          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);setSessionCoachFeedback(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest} coachFeedback={coachSessionTarget?null:sessionCoachFeedback}/>}
+          {sessionActive&&<SessionScreen workout={workout} onUpdateWorkout={setWorkout} onClose={()=>setScreen(null)} onFinish={()=>{setSessionActive(false);setFloatingRest(null);setSessionCoachFeedback(null);try{localStorage.removeItem(SESS_ACTIVE_KEY);localStorage.removeItem('pa_session_snap');}catch{}setCoachSessionTarget(null);setScreen(null);setShowCongrats(true);if(workout.tpMeta){const{programId,weekIndex,sessionIndex}=workout.tpMeta;apiCall('/api/training-programs/'+programId+'/progress',{method:'POST',body:{weekIndex,sessionIndex}}).catch(()=>{});}}} onImportPrograms={updateOwnProgram} onSaveSession={saveSession} history={coachSessionTarget?coachSessionTarget.history:history} firstName={coachSessionTarget?coachSessionTarget.athleteName:profile.firstName} targets={coachSessionTarget?{}:exerciseTargets} importedPrograms={importedPrograms} onRestUpdate={setFloatingRest} coachFeedback={coachSessionTarget?null:sessionFeedbackBanner}/>}
         </div>
         {screen==='editor'&&(
           <div style={{height:'100%',overflow:'auto'}}>
@@ -18574,6 +18610,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                               {!isNew&&(ex.curTotalReps>0||ex.prevTotalReps>0)&&<span>{ex.prevTotalReps}→<b style={{color:ex.curTotalReps>ex.prevTotalReps?T.good:ex.curTotalReps<ex.prevTotalReps?DOWN:'rgba(255,255,255,0.6)'}}>{ex.curTotalReps}</b> reps</span>}
                               {ex.atCap&&<span style={{color:'#A78BFA',fontWeight:700}}>⬆ fourchette au max</span>}
                             </div>
+                            <RecapSetNotes notes={ex.setNotes}/>
                           </div>
                           <div style={{textAlign:'right',flexShrink:0}}>
                             {vDeltaStr&&<div style={{fontSize:11,fontWeight:700,color:statusColor}}>{vDeltaStr}</div>}
