@@ -125,3 +125,24 @@ test('une décharge n\'est jamais la référence', () => {
   const { comp } = build(sess('c', C, [ex('Rowing', [S(100, 10)])]), [deload], {});
   assert.equal(comp, null);
 });
+
+test('ressenti saisi par série : remonté dans chaque ligne du récap (n° de série + texte)', () => {
+  const withNote = (w, r, note) => ({ weight: w, reps: r, done: true, ...(note ? { note } : {}) });
+  const { comp } = compare(
+    [ex('Squat', [S(100, 5), S(100, 5), S(100, 5)])],
+    [ex('Squat', [withNote(105, 5, 'Genou tire'), S(105, 5), withNote(105, 4, 'Trop dur')])]);
+  assert.deepEqual(comp.exercises[0].setNotes, [{ n: 1, t: 'Genou tire' }, { n: 3, t: 'Trop dur' }]);
+  // aussi sur un exercice nouveau (sans équivalent précédent)
+  const fresh = compare([ex('Rowing', [S(50, 10)])], [ex('Curl', [withNote(20, 10, 'Super')])]).comp;
+  assert.deepEqual(fresh.exercises[0].setNotes, [{ n: 1, t: 'Super' }]);
+  // pas de ressenti → tableau vide
+  assert.deepEqual(compare([ex('Squat', [S(100, 5)])], [ex('Squat', [S(100, 5)])]).comp.exercises[0].setNotes, []);
+});
+
+test('front : le ressenti s\'affiche dans les 4 récaps + l\'onglet Séance du coach, et le menu déroulant feedback survit au rechargement', () => {
+  assert.equal((html.match(/<RecapSetNotes notes=\{ex\.setNotes\}\/>/g) || []).length, 4);
+  assert.match(html, /function RecapSetNotes\(/);
+  assert.match(html, /\{st\.note&&<div data-testid="recap-ressenti"/);
+  assert.match(html, /const sessionFeedbackBanner=React\.useMemo\(/);
+  assert.match(html, /coachFeedback=\{coachSessionTarget\?null:sessionFeedbackBanner\}/);
+});
