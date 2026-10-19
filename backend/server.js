@@ -1371,6 +1371,12 @@ function sessionsByUserId() {
   return map;
 }
 
+function libraryInfoOf(userId) {
+  const sessions = DATA.sessionLibrary?.[userId]?.sessions || [];
+  const names = [...new Set(sessions.map(x => String(x.sheetName || '').trim()).filter(Boolean))];
+  return { libraryNames: names, librarySessions: sessions.length };
+}
+
 app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
   const page  = Math.max(1, parseInt(req.query.page)  || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -1388,6 +1394,10 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
       ...profileOf(u),
       program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
       scheduledProgram: sched ? { activateOn: sched.activateOn } : null,
+      // Programme rangé dans la BIBLIOTHÈQUE de l'athlète (et non dans son calendrier « Séances ») :
+      // noms des feuilles + nombre de séances, pour que la liste « Mes athlètes » affiche le nom du
+      // programme où qu'il se trouve, au lieu de « pas de prog ».
+      ...libraryInfoOf(u.id),
       sessionCount: userSessions.length,
       lastSessionAt: lastSession ? lastSession.date : null,
     };
