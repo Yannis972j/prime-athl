@@ -46,13 +46,39 @@ test('feedback sur une séance introuvable : 404 not_found (erreur explicite rel
   assert.equal(r.body.error, 'not_found');
 });
 
-test('front : la popup s\'ouvre au DÉMARRAGE de toute séance (plus seulement si le nom coïncide)', () => {
-  // au démarrage : popup ouverte dès qu'un feedback est en attente, sans condition sur le nom de la séance
-  assert.match(html, /if\(pendingCoachFeedback&&!coachSessionTarget\)\{[\s\S]{0,500}setActiveCoachFeedback\(pendingCoachFeedback\);setShowFeedbackRecap\(false\);/);
-  // le nom ne sert plus qu'au rappel dans la séance
-  assert.match(html, /if\(wn&&fn&&wn===fn\)setSessionCoachFeedback\(pendingCoachFeedback\);/);
+test('front : la popup ne s\'ouvre qu\'au démarrage d\'une séance du MÊME NOM (sinon le feedback attend)', () => {
+  assert.match(html, /const match=wn\?pendingFeedbacks\.find\(f=>normSessionKey\(f\.sessionName\)===wn\):null;\s*if\(match\)\{\s*setActiveCoachFeedback\(match\)/);
+  // plus aucune ouverture inconditionnelle sur n'importe quelle séance
+  assert.doesNotMatch(html, /if\(pendingCoachFeedback&&!coachSessionTarget\)/);
+  // un feedback en attente reste accessible via une carte dans l'onglet Séances
+  assert.match(html, /a commenté « \{f\.sessionName\} »/);
   // rappel retrouvé dans l'historique quand la popup a déjà été lue
   assert.match(html, /last&&last\.coachFeedback[\s\S]{0,200}setSessionCoachFeedback/);
+});
+
+test('file d\'attente : un feedback par séance, un 2e feedback n\'écrase plus le 1er, ack ciblé', async () => {
+  const mk = async (name) => (await api(srv.baseUrl, 'POST', '/api/sessions', { token: athleteToken, body: { name, date: new Date().toISOString(), totalVolume: 50, exercises: [{ name: 'Squat', sets: [{ weight: 100, reps: 5, done: true }] }] } })).body.id;
+  const idPush = await mk('PUSH · POITRINE');
+  const idPull = await mk('PULL · DOS');
+  await api(srv.baseUrl, 'POST', `/api/coach/sessions/${idPush}/feedback`, { token: coachToken, body: { feedback: 'fb push' } });
+  await api(srv.baseUrl, 'POST', `/api/coach/sessions/${idPull}/feedback`, { token: coachToken, body: { feedback: 'fb pull' } });
+  let prog = await api(srv.baseUrl, 'GET', '/api/program', { token: athleteToken });
+  assert.deepEqual(prog.body.pendingCoachFeedbacks.map(f => f.sessionName).sort(), ['PULL · DOS', 'PUSH · POITRINE']);
+  // un feedback plus récent sur une séance de même nom (ponctuation différente) remplace l'ancien
+  const idPush2 = await mk('Push poitrine');
+  await api(srv.baseUrl, 'POST', `/api/coach/sessions/${idPush2}/feedback`, { token: coachToken, body: { feedback: 'fb push v2' } });
+  prog = await api(srv.baseUrl, 'GET', '/api/program', { token: athleteToken });
+  assert.equal(prog.body.pendingCoachFeedbacks.length, 2);
+  assert.equal(prog.body.pendingCoachFeedbacks.find(f => /push/i.test(f.sessionName)).feedback, 'fb push v2');
+  // ack ciblé : seul PUSH disparaît, PULL reste en attente
+  await api(srv.baseUrl, 'POST', '/api/my-coach-feedback/ack', { token: athleteToken, body: { sessionId: idPush2 } });
+  prog = await api(srv.baseUrl, 'GET', '/api/program', { token: athleteToken });
+  assert.deepEqual(prog.body.pendingCoachFeedbacks.map(f => f.feedback), ['fb pull']);
+  assert.equal(prog.body.pendingCoachFeedback.feedback, 'fb pull');
+  // ack sans corps : tout est effacé (anciens clients)
+  await api(srv.baseUrl, 'POST', '/api/my-coach-feedback/ack', { token: athleteToken });
+  prog = await api(srv.baseUrl, 'GET', '/api/program', { token: athleteToken });
+  assert.deepEqual(prog.body.pendingCoachFeedbacks, []);
 });
 
 test('front : le récap de la séance commentée s\'ouvre dans une fenêtre en bas depuis la popup', () => {

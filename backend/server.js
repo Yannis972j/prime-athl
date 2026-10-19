@@ -1311,6 +1311,7 @@ app.get('/api/program', authRequired, (req, res) => {
     // Feedback en attente (bilan écrit du coach sur une séance passée) — inclut les charges
     // montées dans son .updates depuis la fusion des deux mécaniques.
     pendingCoachFeedback: DATA.users[req.user.id]?.pendingCoachFeedback || null,
+    pendingCoachFeedbacks: pendingFeedbackList(DATA.users[req.user.id]),
     scheduleMoves: DATA.scheduleMoves[req.user.id] || {},
     // data incluse (pas juste activateOn) pour que le calendrier puisse déjà prévisualiser les
     // séances du programme en attente sur les jours à venir, avant même son activation.
@@ -2401,6 +2402,22 @@ app.post('/api/share/:token/pdf-download', pdfDownloadLimiter, (req, res) => {
   res.json({ pdfDownloads: sh.pdfDownloads });
 });
 
+// ── File d'attente des feedbacks coach (un par séance) ──
+// Stockée dans user.pendingCoachFeedbacks ; user.pendingCoachFeedback (le plus récent) est gardé
+// pour les anciens clients. Migration douce : un ancien emplacement unique est lu comme une file de 1.
+function sessionNameKey(name) {
+  return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function pendingFeedbackList(u) {
+  if (!u) return [];
+  if (Array.isArray(u.pendingCoachFeedbacks)) return u.pendingCoachFeedbacks;
+  return u.pendingCoachFeedback ? [u.pendingCoachFeedback] : [];
+}
+function setPendingFeedbackList(u, list) {
+  if (list.length) { u.pendingCoachFeedbacks = list; u.pendingCoachFeedback = list[list.length - 1]; }
+  else { delete u.pendingCoachFeedbacks; delete u.pendingCoachFeedback; }
+}
+
 // Coach feedback on athlete session
 app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (req, res) => {
   const s = DATA.sessions[req.params.sessionId];
@@ -2413,8 +2430,16 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   // Feedback en attente sur l'athlète : affiché en pop-up dès son prochain accès à l'app, puis
   // acquitté (ack) et effacé. Sans ça, il restait enfoui dans une séance passée que l'athlète
   // n'ouvrait jamais.
+  // File d'attente : un feedback par SÉANCE (et non plus un seul emplacement par athlète, où un
+  // 2e feedback écrasait le 1er). Le pop-up de l'athlète ne s'ouvre qu'au démarrage d'une séance
+  // du MÊME NOM : un feedback sur « LEGS » attend donc que « LEGS » soit relancée, même si
+  // l'athlète fait d'autres séances entre-temps. Un feedback plus récent sur une séance de même
+  // nom remplace l'ancien (c'est lui, le plus à jour, qui concerne la prochaine fois).
+  const list = pendingFeedbackList(a);
+  const key = sessionNameKey(s.name);
+  let next = list.filter(f => f.sessionId !== s.id && (!key || sessionNameKey(f.sessionName) !== key));
   if (s.coachFeedback) {
-    a.pendingCoachFeedback = {
+    next.push({
       sessionId: s.id,
       sessionName: s.name || 'Séance',
       sessionDate: s.date,
@@ -2425,13 +2450,11 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
       // qui a changé pour sa prochaine séance.
       updates: Array.isArray(s.overloadUpdates) ? s.overloadUpdates : [],
       createdAt: Date.now(),
-    };
-  } else {
-    // Suppression du feedback → on efface aussi le pop-up en attente.
-    if (a.pendingCoachFeedback && a.pendingCoachFeedback.sessionId === s.id) delete a.pendingCoachFeedback;
+    });
   }
+  setPendingFeedbackList(a, next.slice(-10));
   persist();
-  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback, pendingCoachFeedback: a.pendingCoachFeedback || null });
+  io.to('user:' + s.userId).emit('session-feedback', { sessionId: s.id, feedback: s.coachFeedback, pendingCoachFeedback: a.pendingCoachFeedback || null, pendingCoachFeedbacks: pendingFeedbackList(a) });
   // Notification push : indispensable pour que l'athlète soit prévenu qu'un feedback l'attend.
   if (s.coachFeedback) {
     pushToUser(s.userId, {
@@ -2443,12 +2466,18 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   res.json({ ok: true });
 });
 
-// L'athlète acquitte le pop-up de feedback (bouton « Compris ») → on l'efface. Le feedback lui-même
-// reste sur la séance (visible dans son historique), on ne supprime que la notification.
+// L'athlète acquitte le pop-up de feedback (bouton « Merci, c'est noté ») → on l'efface de la file.
+// Avec { sessionId } : seulement CE feedback (les autres, sur d'autres séances, restent en attente).
+// Sans corps : tout est effacé (anciens clients). Le feedback lui-même reste sur la séance
+// (visible dans son historique), on ne supprime que la notification.
 app.post('/api/my-coach-feedback/ack', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
-  if (u && u.pendingCoachFeedback) { delete u.pendingCoachFeedback; persist(); }
-  res.json({ ok: true });
+  if (u) {
+    const sid = typeof req.body?.sessionId === 'string' ? req.body.sessionId : '';
+    setPendingFeedbackList(u, sid ? pendingFeedbackList(u).filter(f => f.sessionId !== sid) : []);
+    persist();
+  }
+  res.json({ ok: true, pendingCoachFeedbacks: u ? pendingFeedbackList(u) : [] });
 });
 
 app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) => {
