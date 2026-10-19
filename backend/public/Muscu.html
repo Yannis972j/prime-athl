@@ -762,6 +762,13 @@ function normExerciseName(name) {
 // "LEGS · FESSIERS" et "Legs fessiers" soient reconnues comme la MÊME séance. Réservé au
 // rapprochement feedback↔séance : ne surtout pas remplacer normExerciseName (utilisé pour
 // l'appariement d'EXERCICES, la progression, le calendrier) où fusionner la ponctuation serait risqué.
+// File d'attente des feedbacks coach (un par séance) : accepte la nouvelle forme (tableau) comme
+// l'ancienne (un seul objet) renvoyées par le serveur.
+function toFeedbackList(src) {
+  if (!src) return [];
+  if (Array.isArray(src.pendingCoachFeedbacks)) return src.pendingCoachFeedbacks;
+  return src.pendingCoachFeedback ? [src.pendingCoachFeedback] : [];
+}
 function normSessionKey(name) {
   return normExerciseName(name).replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -17536,12 +17543,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Elles pré-remplissent la prochaine séance de l'athlète qui contient l'exercice.
   const[exerciseTargets,setExerciseTargets]=React.useState({});
   // Feedback pop-up : bilan écrit du coach sur une séance passée. Deux états :
-  //  · pendingCoachFeedback = donnée du serveur (silencieuse, en attente),
+  //  · pendingFeedbacks = file du serveur (silencieuse, en attente : un feedback par séance),
   //  · activeCoachFeedback = pop-up réellement affiché à l'écran.
-  // Déclencheur : l'athlète clique sur « Démarrer une séance » (n'importe laquelle : programme,
-  // Bibliothèque, planifiée, refaire…). Le contexte est bon — il s'apprête à s'entraîner, il
-  // reçoit d'abord les consignes du coach sur sa précédente séance avant de démarrer.
-  const[pendingCoachFeedback,setPendingCoachFeedback]=React.useState(null);
+  // Déclencheur : l'athlète démarre une séance du MÊME NOM que celle commentée (programme,
+  // Bibliothèque, planifiée, refaire…). Un feedback sur « LEGS » ne s'ouvre pas au démarrage de
+  // « PUSH » : il attend (et reste lisible via la carte de l'onglet Séances).
+  const[pendingFeedbacks,setPendingFeedbacks]=React.useState([]);
   const[activeCoachFeedback,setActiveCoachFeedback]=React.useState(null);
   // Pop-up d'inactivité : si l'athlète n'a rien fait depuis un moment, on l'accueille au
   // prochain ouvert d'app avec un rappel bienveillant → escalade selon le nombre de jours.
@@ -17640,7 +17647,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       if(me)setUser(prev=>({...prev,...me}));
       setImportedPrograms(prog.data||{});
       setExerciseTargets(prog.targets||{});
-      if(prog.pendingCoachFeedback)setPendingCoachFeedback(prog.pendingCoachFeedback);
+      setPendingFeedbacks(toFeedbackList(prog));
       setProgramMeta({assignedAt:prog.assignedAt,assignedBy:prog.assignedBy,scheduledProgram:prog.scheduledProgram||null});
       setScheduleMoves(prog.scheduleMoves||{});
       setHistory(sess);
@@ -17656,7 +17663,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     apiCall('/api/program').then(p=>{
       setImportedPrograms(p.data||{});
       setExerciseTargets(p.targets||{});
-      if(p.pendingCoachFeedback)setPendingCoachFeedback(p.pendingCoachFeedback);
+      setPendingFeedbacks(toFeedbackList(p));
       setProgramMeta({assignedAt:p.assignedAt,assignedBy:p.assignedBy,scheduledProgram:p.scheduledProgram||null});
       setScheduleMoves(p.scheduleMoves||{});
     }).catch(()=>{});
@@ -17860,9 +17867,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       triggerSave();
     },
     // Coach a laissé un feedback sur une séance → mise à jour instantanée de l'historique + pop-up.
-    'session-feedback':({sessionId,feedback,pendingCoachFeedback:pcf})=>{
+    'session-feedback':({sessionId,feedback,pendingCoachFeedback:pcf,pendingCoachFeedbacks:pcl})=>{
       setHistory(h=>h.map(s=>s.id===sessionId?{...s,coachFeedback:feedback,coachFeedbackAt:Date.now()}:s));
-      if(pcf)setPendingCoachFeedback(pcf);
+      setPendingFeedbacks(toFeedbackList({pendingCoachFeedback:pcf,pendingCoachFeedbacks:pcl}));
       triggerSave();
     },
     'my-profile-updated':({profile:p})=>{
@@ -18007,17 +18014,18 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     // Comparaison via normSessionKey : insensible casse/accents/espaces ET ponctuation (ex:
     // "LEGS · FESSIERS" == "Legs fessiers"), pour que le feedback suive bien la même séance.
     // Marche pour toute origine (programme, Bibliothèque, planifiée, refaire…) tant que le nom colle.
+    // Un feedback sur une AUTRE séance reste en attente (carte dans l'onglet Séances), il ne
+    // s'affiche jamais hors de son contexte.
     let showedFeedback=false;
     setSessionCoachFeedback(null); // repart propre à chaque démarrage
-    if(pendingCoachFeedback&&!coachSessionTarget){
-      // Popup + récap à CHAQUE démarrage de séance tant que le feedback n'est pas acquitté (avant : seulement
-      // si le nom de la séance coïncidait → l'athlète ne le voyait jamais dans les autres cas). Le rappel dépliable
-      // dans la séance, lui, n'est posé que si c'est la même séance que celle commentée.
-      setActiveCoachFeedback(pendingCoachFeedback);setShowFeedbackRecap(false);
+    if(!coachSessionTarget){
       const wn=normSessionKey(w.name);
-      const fn=normSessionKey(pendingCoachFeedback.sessionName);
-      if(wn&&fn&&wn===fn)setSessionCoachFeedback(pendingCoachFeedback);
-      showedFeedback=true;
+      const match=wn?pendingFeedbacks.find(f=>normSessionKey(f.sessionName)===wn):null;
+      if(match){
+        setActiveCoachFeedback(match);setShowFeedbackRecap(false);
+        setSessionCoachFeedback(match);
+        showedFeedback=true;
+      }
     }
     // Feedback déjà lu (popup acquittée) : le rappel dépliable dans la séance reste disponible tant que le
     // coach a commenté la DERNIÈRE séance de ce nom — c'est la consigne pour celle qu'on démarre.
@@ -18077,8 +18085,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // Pop-up de feedback : on l'efface une fois lu, mais le feedback lui-même reste
   // dans la séance (historique) pour consultation ultérieure.
   const ackCoachFeedback=async()=>{
-    setShowFeedbackRecap(false);setActiveCoachFeedback(null);setPendingCoachFeedback(null);
-    try{await apiCall('/api/my-coach-feedback/ack',{method:'POST'});}catch(e){console.error('ack coach feedback',e);}
+    const sid=activeCoachFeedback&&activeCoachFeedback.sessionId;
+    setShowFeedbackRecap(false);setActiveCoachFeedback(null);
+    setPendingFeedbacks(l=>sid?l.filter(f=>f.sessionId!==sid):[]);
+    try{await apiCall('/api/my-coach-feedback/ack',{method:'POST',body:sid?{sessionId:sid}:{}});}catch(e){console.error('ack coach feedback',e);}
   };
   // Récap de la séance commentée (volume vs la précédente + détail par exercice), calculé à partir de
   // l'historique de l'athlète : affiché dans une fenêtre qui s'ouvre en bas depuis la popup de feedback.
@@ -18389,6 +18399,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                   refreshing={refreshing} history={history} onRefreshHistory={refreshAll}
                   authToken={authToken} nutriRefreshKey={nutriRefreshKey}
                   onDeleteSession={deleteSession} onUpdateSession={updateSession} sessionLibrary={sessionLibrary}
+                  pendingFeedbacks={pendingFeedbacks} onOpenFeedback={f=>{setShowFeedbackRecap(false);setActiveCoachFeedback(f);}}
                 />
               </UniverseShell>
             )}
@@ -19354,7 +19365,7 @@ function LiveSessionsView({sessions,onStartWorkout}){
 }
 
 // ── Programme Tab (Séances + Bibliothèque + Nutrition réunis) ────────────────
-function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,onUpdateSession,sessionLibrary}){
+function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,authToken,nutriRefreshKey,onDeleteSession,onUpdateSession,sessionLibrary,pendingFeedbacks,onOpenFeedback}){
   const liveSessions=React.useMemo(()=>(history||[]).filter(s=>s.createdByCoach),[history]);
   const tabs=[
     {id:'seances',label:'🏋️ Séances'},
@@ -19380,6 +19391,20 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
       </div>
       {/* Contenu */}
       <div style={{flex:1,overflow:'auto'}}>
+        {sub==='seances'&&pendingFeedbacks&&pendingFeedbacks.length>0&&(
+          <div style={{padding:'12px 16px 0',display:'flex',flexDirection:'column',gap:8}}>
+            {pendingFeedbacks.map(f=>(
+              <button key={f.sessionId} onClick={()=>onOpenFeedback(f)} style={{display:'flex',alignItems:'center',gap:12,width:'100%',textAlign:'left',padding:'12px 14px',borderRadius:14,border:'1px solid rgba(90,138,224,0.4)',background:'rgba(90,138,224,0.1)',cursor:'pointer',color:'inherit'}}>
+                <span style={{fontSize:20}}>💬</span>
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{display:'block',fontSize:13,fontWeight:700,color:'#fff'}}>{f.coachName||'Ton coach'} a commenté « {f.sessionName} »</span>
+                  <span style={{display:'block',fontSize:11,color:T.textFaint,marginTop:2}}>Il s'ouvre aussi quand tu relances cette séance</span>
+                </span>
+                <span style={{fontSize:12,fontWeight:800,color:'#8FB4F5',flexShrink:0}}>Lire</span>
+              </button>
+            ))}
+          </div>
+        )}
         {sub==='seances'&&<HomeScreen
           workout={workout} importedPrograms={importedPrograms} onImportPrograms={onImportPrograms}
           scheduleMoves={scheduleMoves}
