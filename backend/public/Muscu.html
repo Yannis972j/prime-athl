@@ -17670,7 +17670,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // rechargement suivant (elle n'existait qu'en state React le temps de la session).
   const PENDING_SESSIONS_KEY='pa_pending_sessions_'+authUser.id;
   const[pendingSyncCount,setPendingSyncCount]=React.useState(0);
+  const flushingRef=React.useRef(false);
   const flushPendingSessions=React.useCallback(async()=>{
+    // Garde anti-concurrence : mount + événement 'online' + intervalle 20s peuvent se déclencher
+    // en même temps. Sans ce verrou, deux flushs lisent la MÊME file et renvoient les mêmes
+    // séances en parallèle (surtout pendant un cold start Render lent) → doublons côté serveur.
+    if(flushingRef.current)return;
+    flushingRef.current=true;
+    try{
     let queue=[];
     try{queue=JSON.parse(localStorage.getItem(PENDING_SESSIONS_KEY)||'[]');}catch{}
     if(!queue.length)return;
@@ -17683,6 +17690,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     }
     try{localStorage.setItem(PENDING_SESSIONS_KEY,JSON.stringify(remaining));}catch{}
     setPendingSyncCount(remaining.length);
+    }finally{flushingRef.current=false;}
   },[PENDING_SESSIONS_KEY]);
   React.useEffect(()=>{
     flushPendingSessions();
@@ -18203,6 +18211,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       }catch(e){console.error('coach session save',e);alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
       return;
     }
+    // Clé d'idempotence : stable pour CETTE séance, réutilisée par tous les renvois (retries +
+    // file de resync). Le serveur dédoublonne dessus, donc une réponse perdue ne crée jamais 2 séances.
+    if(!snapshot.clientId)snapshot.clientId=uid();
     // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
     // (même logique que le récap ouvert au clic sur le calendrier).
     const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history,programRangeMap(importedPrograms));

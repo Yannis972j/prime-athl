@@ -142,3 +142,9 @@ test('API coach : déplacer l\'une des 2 séances d\'un jour laisse l\'autre en 
   assert.ok(!list.find(x => x.id === s1));
   assert.ok(list.find(x => x.id === s2));
 });
+
+test('front : flushPendingSessions a une garde anti-concurrence + le snapshot porte un clientId', () => {
+  assert.match(html, /flushingRef\.current/);
+  assert.match(html, /if\(flushingRef\.current\)return;/);
+  assert.match(html, /if\(!snapshot\.clientId\)snapshot\.clientId=uid\(\);/);
+});

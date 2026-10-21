@@ -219,3 +219,19 @@ test('coach : la liste des athlètes expose les feuilles/séances de la biblioth
   assert.equal(b.librarySessions, 2);
 });
 
+
+test('idempotence : deux POST /api/sessions avec le même clientId ne créent qu\'UNE séance (anti-doublon resync/retry)', async () => {
+  const body = { clientId: 'cid-xyz-1', name: 'LEGS', date: new Date().toISOString(), totalVolume: 100, exercises: [{ name: 'Squat', sets: [{ weight: 100, reps: 5, done: true }] }] };
+  const r1 = await api(srv.baseUrl, 'POST', '/api/sessions', { token, body });
+  const r2 = await api(srv.baseUrl, 'POST', '/api/sessions', { token, body });
+  assert.equal(r1.status, 200);
+  assert.equal(r2.body.id, r1.body.id, 'même id renvoyé');
+  assert.equal(r2.body.duplicate, true);
+  const list = (await api(srv.baseUrl, 'GET', '/api/sessions', { token })).body;
+  assert.equal(list.filter(s => s.id === r1.body.id).length, 1);
+  // Sans clientId : comportement inchangé (deux POST = deux séances distinctes)
+  const nb = { name: 'PULL', date: new Date().toISOString(), totalVolume: 50, exercises: [{ name: 'Row', sets: [{ weight: 60, reps: 8, done: true }] }] };
+  const a = await api(srv.baseUrl, 'POST', '/api/sessions', { token, body: nb });
+  const b = await api(srv.baseUrl, 'POST', '/api/sessions', { token, body: nb });
+  assert.notEqual(a.body.id, b.body.id);
+});
