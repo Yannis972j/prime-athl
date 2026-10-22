@@ -498,7 +498,7 @@ const MOTIVATION_MESSAGES = [
   "Ta seule limite est celle que tu t'imposes. Dépasse-la aujourd'hui.",
   "Un entraînement de plus vers la meilleure version de toi-même.",
   "La régularité bat le talent. Reste régulier aujourd'hui.",
-  "Le corps que tu veux se construit une séance à la fois.",
+  "Le corps que tu veux se construit séance après séance.",
   "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];

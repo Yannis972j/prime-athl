@@ -5751,7 +5751,7 @@ const STYLE_MINDSET={
 function personalizedSuffix(goals,seed){
   if(!goals||!goals.hasProfile)return '';
   const bits=[];
-  if(goals.objective){bits.push(`Rappelle-toi : ${objectivePhrase(goals.objective)} se construit une séance à la fois.`);}
+  if(goals.objective){bits.push(`Rappelle-toi : ${objectivePhrase(goals.objective)} se construit séance après séance.`);}
   if(goals.deadlineWeeks!=null&&goals.deadlineWeeks<=52){bits.push(`Plus que ${goals.deadlineWeeks} semaine${goals.deadlineWeeks>1?'s':''} avant ton échéance — chaque séance compte double.`);}
   if(!bits.length)return '';
   const idx=seed!=null?hashStr(seed+'|suffix')%bits.length:Math.floor(Math.random()*bits.length);
@@ -18018,12 +18018,12 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         message=`${bd} jours sans séance, ${who} — c'est un rythme normal. Aujourd'hui c'est peut-être le bon jour pour remettre une séance.${deadlineTail}`;
       } else if(bd<=midMax){
         tone='mid';title='Il est temps de s\'y remettre 💪';
-        const midObj=goals?.objective?` Souviens-toi : ${objPhrase} se construit une séance à la fois.`:' Souviens-toi de tes objectifs.';
+        const midObj=goals?.objective?` Souviens-toi : ${objPhrase} se construit séance après séance.`:' Souviens-toi de tes objectifs.';
         message=`${bd} jours sans séance. C'est le moment de reprendre.${midObj}${deadlineTail} Aujourd'hui, tu remets une séance.`;
       } else if(capStrong){
         // Ton ferme mais bienveillant — pas de culpabilisation, on relance sans juger.
         tone='mid';title='On reprend le fil 💪';
-        const objTail2=goals?.objective?` ${objPhrase[0].toUpperCase()+objPhrase.slice(1)} avance une séance à la fois.`:'';
+        const objTail2=goals?.objective?` ${objPhrase[0].toUpperCase()+objPhrase.slice(1)} avance séance après séance.`:'';
         message=`${bd} jours sans séance, ${who}. Pas de reproche — on ne regarde pas derrière.${objTail2}${deadlineTail} La prochaine étape, c'est simplement : aujourd'hui, une séance.`;
       } else {
         tone='strong';title='Il faut se bouger, sérieusement.';

@@ -173,3 +173,10 @@ test('front : « Progression par exercice » lit TOUTES les occurrences/séries 
   // vue d'ensemble : un seul point par séance (max des occurrences)
   assert.match(html, /lastPt\.sid===h\.id&&h\.id/);
 });
+
+test('messages de motivation : plus de tournure ambiguë « se construit une séance à la fois »', () => {
+  const server = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../server.js'), 'utf8');
+  assert.doesNotMatch(server, /une séance à la fois/);
+  assert.doesNotMatch(html, /une séance à la fois/);
+  assert.match(server, /Le corps que tu veux se construit séance après séance\./);
+});
