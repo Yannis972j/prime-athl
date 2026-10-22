@@ -24,7 +24,9 @@ export async function startServer(extraEnv = {}) {
   let lastErr = null;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const port = 3000 + Math.floor(Math.random() * 20000);
+    // Port imposé (extraEnv.PORT) : le frontend vise le port 3001 quand il n'est pas servi en same-origin
+    // (cf. API_BASE) — les tests e2e en navigateur doivent donc tourner sur 3001. Sinon port aléatoire.
+    const port = extraEnv.PORT ? Number(extraEnv.PORT) : 3000 + Math.floor(Math.random() * 20000);
     const child = spawn(process.execPath, [SERVER], {
       env: {
         ...process.env,
