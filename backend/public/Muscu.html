@@ -18363,7 +18363,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     }
     // Clé d'idempotence : stable pour CETTE séance, réutilisée par tous les renvois (retries +
     // file de resync). Le serveur dédoublonne dessus, donc une réponse perdue ne crée jamais 2 séances.
-    if(!snapshot.clientId)snapshot.clientId=uid();
+    // Identifiant autonome : `uid` n'existe pas dans la portée de MainApp (il est défini localement dans
+    // d'autres composants) — l'utiliser ici levait un ReferenceError et empêchait TOUTE validation de séance.
+    if(!snapshot.clientId)snapshot.clientId=(window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
     // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
     // (même logique que le récap ouvert au clic sur le calendrier).
     const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history,programRangeMap(importedPrograms));

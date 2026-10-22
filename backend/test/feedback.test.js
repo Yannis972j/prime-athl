@@ -146,7 +146,7 @@ test('API coach : déplacer l\'une des 2 séances d\'un jour laisse l\'autre en 
 test('front : flushPendingSessions a une garde anti-concurrence + le snapshot porte un clientId', () => {
   assert.match(html, /flushingRef\.current/);
   assert.match(html, /if\(flushingRef\.current\)return;/);
-  assert.match(html, /if\(!snapshot\.clientId\)snapshot\.clientId=uid\(\);/);
+  assert.match(html, /if\(!snapshot\.clientId\)snapshot\.clientId=\(window\.crypto&&crypto\.randomUUID/);
 });
 
 test('front : Stats expose la progression par séance du même nom (courbe/histogramme, ≥2 occurrences)', () => {
@@ -179,4 +179,13 @@ test('messages de motivation : plus de tournure ambiguë « se construit une sé
   assert.doesNotMatch(server, /une séance à la fois/);
   assert.doesNotMatch(html, /une séance à la fois/);
   assert.match(server, /Le corps que tu veux se construit séance après séance\./);
+});
+
+test('régression : saveSession n\'appelle pas uid() (inexistant dans MainApp) — la validation de séance ne doit jamais lever de ReferenceError', () => {
+  const a = html.indexOf('const saveSession=async snapshot=>');
+  assert.ok(a > 0);
+  const end = html.indexOf('const deleteSession=async(sessionId,sessionDate)', a);
+  const body = html.slice(a, end);
+  assert.doesNotMatch(body, /\buid\(\)/);
+  assert.match(body, /snapshot\.clientId=\(window\.crypto&&crypto\.randomUUID/);
 });
