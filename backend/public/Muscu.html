@@ -3665,7 +3665,10 @@ function ExerciseProgressChart({history}){
         const name=canonName(ex.name);
         if(!byName[name])byName[name]={weightPts:[],cardioPts:[]};
         const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
-        if(maxW>0)byName[name].weightPts.push({date:new Date(h.date),value:maxW});
+        // Un exercice peut apparaître 2× dans la MÊME séance (postures différentes, même nom) : un seul
+        // point par séance — la charge max de ses occurrences — comme dans le graphique détaillé.
+        const wp=byName[name].weightPts,lastPt=wp[wp.length-1];
+        if(maxW>0){if(lastPt&&lastPt.sid===h.id&&h.id)lastPt.value=Math.max(lastPt.value,maxW);else wp.push({date:new Date(h.date),value:maxW,sid:h.id});}
         if(ex.cardio){
           const v=+ex.cardio.vitesse||0;
           if(v>0)byName[name].cardioPts.push({date:new Date(h.date),value:v});
@@ -3689,10 +3692,20 @@ function ExerciseProgressChart({history}){
     const pts=[];
     const sorted=[...(history||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
     for(const h of sorted){
-      const ex=(h.exercises||[]).find(e=>canonName(e.name)===selected);
-      if(!ex)continue;
-      const maxW=Math.max(0,...(ex.sets||[]).map(s=>s.weight||0));
-      if(maxW>0)pts.push({date:new Date(h.date),value:maxW,reps:(ex.sets||[]).find(s=>(s.weight||0)===maxW)?.reps||0});
+      // TOUTES les occurrences de l'exercice dans la séance (le nom est identique quelle que soit la
+      // posture entre parenthèses : « Leg press (pieds hauts) » et « (pieds bas) » portent le même
+      // nom et peuvent donc coexister dans une séance) — avant, seule la 1re était lue, et les
+      // séries d'une 2e occurrence (ex: 120 kg à côté de 130 kg) disparaissaient du graphique.
+      const exs=(h.exercises||[]).filter(e=>canonName(e.name)===selected);
+      if(!exs.length)continue;
+      const sets=exs.flatMap(e=>(e.sets||[]).filter(st=>(st.weight||0)>0));
+      if(!sets.length)continue;
+      const ws=sets.map(st=>st.weight||0);
+      const maxW=Math.max(...ws),minW=Math.min(...ws);
+      // Détail « 1×120 · 3×130 » : toutes les charges utilisées, pas seulement la plus lourde.
+      const byW={};sets.forEach(st=>{byW[st.weight]=(byW[st.weight]||0)+1;});
+      const detail=Object.keys(byW).map(Number).sort((a,b)=>a-b).map(w=>({w,n:byW[w]}));
+      pts.push({date:new Date(h.date),value:maxW,minValue:minW,detail,reps:sets.find(st=>(st.weight||0)===maxW)?.reps||0});
     }
     return pts;
   },[history,selected,canonicalMap]);
@@ -3719,8 +3732,11 @@ function ExerciseProgressChart({history}){
   let chart=null;
   if(points.length>1){
     const values=points.map(p=>p.value);
-    const minV=Math.min(...values),maxV=Math.max(...values);
-    const maxIdx=values.indexOf(maxV),minIdx=values.lastIndexOf(minV);
+    // Échelle sur TOUTES les charges (min inclus), pas seulement les maxima : sinon une série plus
+    // légère d'une séance (ex: 120 kg) sortait de l'échelle et restait invisible.
+    const lows=points.map(p=>p.minValue!=null?p.minValue:p.value);
+    const minV=Math.min(...values,...lows),maxV=Math.max(...values);
+    const maxIdx=values.indexOf(maxV),minIdx=lows.lastIndexOf(minV);
     const hasRange=maxV!==minV;
     const range=maxV-minV||1;
     const pts=points.map((p,i)=>{
@@ -3740,6 +3756,13 @@ function ExerciseProgressChart({history}){
           </defs>
           <path d={`${dPath} L ${W-pad} ${H} L ${pad} ${H} Z`} fill="url(#epgFill)"/>
           <path d={dPath} fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 4px ${color}80)`}}/>
+          {/* Moustache : étendue des charges de la séance (de la plus légère à la plus lourde) */}
+          {pts.map((p,i)=>p.p.minValue!=null&&p.p.minValue<p.p.value?(
+            <g key={'w'+i}>
+              <line x1={p.x} y1={p.y} x2={p.x} y2={H-pad-(p.p.minValue-minV)/range*(H-2*pad-4)} stroke={color} strokeOpacity="0.55" strokeWidth="2.4" strokeLinecap="round"/>
+              <circle cx={p.x} cy={H-pad-(p.p.minValue-minV)/range*(H-2*pad-4)} r="2.6" fill={T.bg} stroke={color} strokeWidth="1.6"/>
+            </g>
+          ):null)}
           {pts.map((p,i)=>(
             <circle key={i} cx={p.x} cy={p.y} r="3.5" fill={color} stroke={T.bg} strokeWidth="1.5"/>
           ))}
@@ -3752,6 +3775,17 @@ function ExerciseProgressChart({history}){
           <span style={{color:T.good,fontWeight:700}}>{points[points.length-1].value} {unit}</span>
           <span>{points[points.length-1].date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
         </div>
+        {!isCardio&&(
+          <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Charges utilisées par séance</div>
+            {[...points].reverse().slice(0,10).map((p,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'4px 0',borderTop:i?`1px solid rgba(255,255,255,0.04)`:'none'}}>
+                <span style={{fontSize:11,color:T.textDim}}>{p.date.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>
+                <span style={{fontSize:12,fontWeight:700,color:T.text,textAlign:'right'}}>{(p.detail||[{w:p.value,n:1}]).map(d=>(d.n>1?d.n+'×':'')+d.w).join(' · ')} <span style={{fontSize:10,color:T.textFaint,fontWeight:500}}>kg</span></span>
+              </div>
+            ))}
+          </div>
+        )}
         {points.length>=2&&(()=>{
           const delta=+(points[points.length-1].value-points[0].value).toFixed(1);
           return delta!==0?(

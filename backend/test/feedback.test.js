@@ -162,3 +162,14 @@ test('front : Stats expose la progression par séance du même nom (courbe/histo
   // volume par occurrence, décharge repérée
   assert.match(html, /vol:Math\.round\(h\.totalVolume\|\|sessionVolumeOf\(h\)\|\|0\)/);
 });
+
+test('front : « Progression par exercice » lit TOUTES les occurrences/séries d\'un exercice par séance (min–max + détail des charges)', () => {
+  // filter (et non find) : un exercice de même nom peut apparaître 2× dans une séance (postures différentes)
+  assert.match(html, /const exs=\(h\.exercises\|\|\[\]\)\.filter\(e=>canonName\(e\.name\)===selected\);/);
+  assert.match(html, /minValue:minW,detail,/);
+  assert.match(html, /Charges utilisées par séance/);
+  // échelle sur les minimums aussi (sinon la série la plus légère sort du graphique)
+  assert.match(html, /const lows=points\.map\(p=>p\.minValue!=null\?p\.minValue:p\.value\);/);
+  // vue d'ensemble : un seul point par séance (max des occurrences)
+  assert.match(html, /lastPt\.sid===h\.id&&h\.id/);
+});
