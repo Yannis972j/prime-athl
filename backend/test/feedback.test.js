@@ -115,3 +115,50 @@ test('front : « pas de prog » n\'existe plus dans la liste des athlètes (nom 
   assert.doesNotMatch(html, /pas de prog/);
   assert.match(html, /function athleteProgramLabel\(/);
 });
+
+test('front : le calendrier coach retrouve TOUTES les séances d\'un même jour (voir, déplacer, supprimer chacune)', () => {
+  const a = html.indexOf('const openSession=async(ath,dateStr)');
+  assert.ok(a > 0);
+  const block = html.slice(a, a + 2200);
+  assert.match(block, /\.filter\(x=>x\.date&&ymdKey\(new Date\(x\.date\)\)===dateStr\)/);
+  assert.doesNotMatch(block, /sessions\.find\(x=>x\.date&&ymdKey/);
+  assert.match(html, /const afterSessionGone=\(goneId,msg\)/);
+  assert.match(html, /data-testid="day-session-pick"/);
+  assert.match(html, /n>1\?n\+' séances':'Séance'/);
+});
+
+test('API coach : déplacer l\'une des 2 séances d\'un jour laisse l\'autre en place ; supprimer l\'autre la retire seule', async () => {
+  const mk = async (name, date) => (await api(srv.baseUrl, 'POST', '/api/sessions', { token: athleteToken, body: { name, date, totalVolume: 10, exercises: [{ name: 'Squat', sets: [{ weight: 100, reps: 5, done: true }] }] } })).body.id;
+  const d1 = '2026-03-10T09:00:00.000Z', d2 = '2026-03-10T18:30:00.000Z';
+  const s1 = await mk('MATIN', d1), s2 = await mk('SOIR', d2);
+  const mv = await api(srv.baseUrl, 'PATCH', `/api/coach/sessions/${s2}`, { token: coachToken, body: { date: '2026-03-11T12:00:00.000Z' } });
+  assert.equal(mv.status, 200);
+  let list = (await api(srv.baseUrl, 'GET', '/api/sessions', { token: athleteToken })).body;
+  assert.equal(list.find(x => x.id === s1).date, d1);
+  assert.equal(list.find(x => x.id === s2).date, '2026-03-11T12:00:00.000Z');
+  const del = await api(srv.baseUrl, 'DELETE', `/api/coach/sessions/${s1}`, { token: coachToken });
+  assert.equal(del.status, 200);
+  list = (await api(srv.baseUrl, 'GET', '/api/sessions', { token: athleteToken })).body;
+  assert.ok(!list.find(x => x.id === s1));
+  assert.ok(list.find(x => x.id === s2));
+});
+
+test('front : flushPendingSessions a une garde anti-concurrence + le snapshot porte un clientId', () => {
+  assert.match(html, /flushingRef\.current/);
+  assert.match(html, /if\(flushingRef\.current\)return;/);
+  assert.match(html, /if\(!snapshot\.clientId\)snapshot\.clientId=uid\(\);/);
+});
+
+test('front : Stats expose la progression par séance du même nom (courbe/histogramme, ≥2 occurrences)', () => {
+  assert.match(html, /function SessionProgressChart\(\{points,mode\}\)/);
+  // regroupement par nom normalisé, uniquement les séances faites au moins 2 fois
+  assert.match(html, /const sameNameGroups=React\.useMemo\(/);
+  assert.match(html, /normSessionKey\(h\.name\)/);
+  assert.match(html, /\.filter\(g=>g\.items\.length>=2\)/);
+  // bascule courbe/histogramme + sélecteur de séance
+  assert.match(html, /React\.useState\('line'\)/);
+  assert.match(html, /progMode===m\.k/);
+  assert.match(html, /<SessionProgressChart points=\{progPoints\} mode=\{progMode\}\/>/);
+  // volume par occurrence, décharge repérée
+  assert.match(html, /vol:Math\.round\(h\.totalVolume\|\|sessionVolumeOf\(h\)\|\|0\)/);
+});

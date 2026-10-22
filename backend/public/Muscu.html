@@ -4044,6 +4044,36 @@ function StatsScreen({history,profile,athleteId}){
   },[history]);
   const maxDayVol=React.useMemo(()=>Math.max(1,...Object.values(sessionsByDay).map(d=>d.volume)),[sessionsByDay]);
 
+  // ── Progression par séance du même nom (courbe / histogramme) ──────────────
+  // Regroupe l'historique par nom de séance normalisé (insensible casse/accents/ponctuation, via
+  // normSessionKey — même clé que le rapprochement feedback↔séance). Seules les séances faites au
+  // moins 2 fois sont proposées : une seule occurrence ne donne aucune courbe à tracer.
+  const sameNameGroups=React.useMemo(()=>{
+    const map={};
+    (history||[]).forEach(h=>{
+      if(!h||!h.date)return;
+      const key=normSessionKey(h.name);
+      if(!key)return;
+      (map[key]=map[key]||{key,name:h.name||'Séance',items:[]}).items.push(h);
+    });
+    return Object.values(map)
+      .map(g=>({...g,items:g.items.slice().sort((a,b)=>new Date(a.date)-new Date(b.date))}))
+      .filter(g=>g.items.length>=2)
+      .sort((a,b)=>b.items.length-a.items.length);
+  },[history]);
+  const[progKey,setProgKey]=React.useState(null);
+  const[progMode,setProgMode]=React.useState('line'); // 'line' = courbe · 'bar' = histogramme
+  const progGroup=sameNameGroups.find(g=>g.key===progKey)||sameNameGroups[0]||null;
+  // On trace au plus les 15 dernières occurrences (lisibilité), volume total par séance.
+  const progPoints=React.useMemo(()=>{
+    if(!progGroup)return[];
+    return progGroup.items.slice(-15).map(h=>({
+      date:h.date,
+      vol:Math.round(h.totalVolume||sessionVolumeOf(h)||0),
+      deload:!!h.deload,
+    }));
+  },[progGroup]);
+
   if(history.length===0){
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
@@ -4198,6 +4228,40 @@ function StatsScreen({history,profile,athleteId}){
                 <span style={{fontSize:10,color:T.textFaint}}>Semaine précédente</span>
               </div>
             </div>
+          </GlassCard>
+        </>
+      )}
+
+      {/* ── Progression entre séances du même nom (volume) ── */}
+      {sameNameGroups.length>0&&progGroup&&(
+        <>
+          <SectionHeader title="Progression par séance" icon="chart" iconColor="#2CC4A0"/>
+          <GlassCard padding={16} style={{marginBottom:18}}>
+            {/* Sélecteur de séance + bascule courbe/histogramme */}
+            <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+              <select value={progGroup.key} onChange={e=>setProgKey(e.target.value)} style={{flex:1,minWidth:0,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,fontWeight:600,padding:'0 10px'}}>
+                {sameNameGroups.map(g=>(<option key={g.key} value={g.key}>{g.name} ({g.items.length})</option>))}
+              </select>
+              <div style={{display:'flex',gap:3,padding:3,borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`}}>
+                {[{k:'line',l:'📈'},{k:'bar',l:'📊'}].map(m=>(
+                  <button key={m.k} onClick={()=>setProgMode(m.k)} style={{width:34,height:28,borderRadius:8,border:'none',cursor:'pointer',fontSize:14,background:progMode===m.k?T.accentSoft:'transparent'}}>{m.l}</button>
+                ))}
+              </div>
+            </div>
+            {/* Résumé première → dernière */}
+            {(()=>{
+              const first=progPoints[0].vol,last=progPoints[progPoints.length-1].vol;
+              const delta=last-first, pct=first>0?Math.round(delta/first*100):0;
+              const col=delta>0?T.good:delta<0?T.danger:T.textFaint;
+              return(
+                <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}>
+                  <span style={{fontSize:24,fontWeight:800,color:col,fontFamily:"'Outfit',sans-serif"}}>{delta>0?'+':''}{pct}%</span>
+                  <span style={{fontSize:11,color:T.textFaint}}>volume · {first.toLocaleString('fr-FR')} → {last.toLocaleString('fr-FR')} kg sur {progPoints.length} séances</span>
+                </div>
+              );
+            })()}
+            <SessionProgressChart points={progPoints} mode={progMode}/>
+            <div style={{fontSize:10,color:T.textFaint,marginTop:8,lineHeight:1.4}}>Volume total (kg) de chaque séance « {progGroup.name} », de la plus ancienne à la plus récente. Un point bleu = séance de décharge.</div>
           </GlassCard>
         </>
       )}
@@ -4405,6 +4469,58 @@ function VolumeAreaChart({data}){
       </svg>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
         <span>il y a {data.length}j</span><span>aujourd'hui</span>
+      </div>
+    </div>
+  );
+}
+
+// Progression du volume entre séances DU MÊME NOM, en courbe ou en histogramme.
+// Base 0 (barres/axe honnêtes), couleur verte si la dernière >= première, rouge sinon ; une séance
+// de décharge (volume volontairement bas) est teintée en bleu pour ne pas se lire comme un recul.
+function SessionProgressChart({points,mode}){
+  if(!points||points.length<2)return null;
+  const vals=points.map(p=>p.vol);
+  const max=Math.max(1,...vals);
+  const n=points.length;
+  const up=vals[n-1]>=vals[0];
+  const line=up?'#2CC4A0':T.danger;
+  const w=320,h=128,padX=10,padTop=16,padBot=4;
+  const X=i=>n<=1?w/2:padX+i*(w-2*padX)/(n-1);
+  const Y=v=>padTop+(1-v/max)*(h-padTop-padBot);
+  const fmt=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1).replace('.',',')+'k':String(v);
+  const dLabel=d=>new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+  const showAllLabels=n<=6;
+  const labelFor=i=>showAllLabels||i===0||i===n-1?dLabel(points[i].date):'';
+  return(
+    <div>
+      <svg width="100%" height={h+2} viewBox={`0 0 ${w} ${h+2}`} preserveAspectRatio="none" style={{display:'block'}}>
+        <defs>
+          <linearGradient id="spArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={line} stopOpacity="0.28"/>
+            <stop offset="100%" stopColor={line} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {mode==='bar'?(
+          points.map((p,i)=>{
+            const bw=Math.max(6,(w-2*padX)/n*0.6);
+            const bx=X(i)-bw/2, by=Y(p.vol), bh=h-padBot-by;
+            const c=p.deload?'#5A8AE0':line;
+            return <g key={i}>
+              <rect x={bx} y={by} width={bw} height={Math.max(1,bh)} rx="3" fill={c} fillOpacity="0.85"/>
+              <text x={X(i)} y={by-4} fontSize="9" fill={T.textDim} textAnchor="middle" fontWeight="700">{fmt(p.vol)}</text>
+            </g>;
+          })
+        ):(<>
+          <path d={`M ${points.map((p,i)=>X(i)+' '+Y(p.vol)).join(' L ')} L ${X(n-1)} ${h-padBot} L ${X(0)} ${h-padBot} Z`} fill="url(#spArea)"/>
+          <path d={`M ${points.map((p,i)=>X(i)+' '+Y(p.vol)).join(' L ')}`} fill="none" stroke={line} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round"/>
+          {points.map((p,i)=>(<g key={i}>
+            <circle cx={X(i)} cy={Y(p.vol)} r={p.deload?4:3.4} fill={p.deload?'#5A8AE0':line} stroke="#0c0c12" strokeWidth="1.5"/>
+            {(showAllLabels||i===0||i===n-1)&&<text x={X(i)} y={Y(p.vol)-7} fontSize="9" fill={T.textDim} textAnchor="middle" fontWeight="700">{fmt(p.vol)}</text>}
+          </g>))}
+        </>)}
+      </svg>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4,fontSize:9,color:T.textFaint,fontWeight:600}}>
+        {points.map((p,i)=>(<span key={i} style={{flex:1,textAlign:i===0?'left':i===n-1?'right':'center',overflow:'hidden',whiteSpace:'nowrap'}}>{labelFor(i)}</span>))}
       </div>
     </div>
   );
@@ -10872,6 +10988,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
   const[sessionModal,setSessionModal]=React.useState(null); // {athleteId, athleteName, color, session}
   const[modalLoading,setModalLoading]=React.useState(false);
   const[moveDate,setMoveDate]=React.useState('');
+  const[modalMsg,setModalMsg]=React.useState('');
   const[confirmDelete,setConfirmDelete]=React.useState(false);
   const[deleteMode,setDeleteMode]=React.useState(false);
   const deleteModeRef=React.useRef(false);
@@ -10892,30 +11009,42 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
     setSessionModal({athleteId:ath.id,athleteName:ath.name,color:ath.color,session:null,dateStr});
     setMoveDate(dateStr);
     setConfirmDelete(false);
+    setModalMsg('');
     try{
       const d=await apiCall('/api/coach/athletes/'+ath.id);
-      const sessions=d.sessions||[];
-      const s=sessions.find(x=>x.date&&ymdKey(new Date(x.date))===dateStr);
-      setSessionModal(m=>({...m,session:s||null}));
+      // TOUTES les séances validées ce jour-là (une athlète peut en valider 2 le même jour) —
+      // avant, seule la première était retrouvée : la 2e restait invisible, impossible à déplacer/supprimer.
+      const sessions=(d.sessions||[]).filter(x=>x.date&&ymdKey(new Date(x.date))===dateStr).sort((a,b)=>new Date(a.date)-new Date(b.date));
+      setSessionModal(m=>({...m,sessions,session:sessions[0]||null}));
     }catch(e){console.error(e);}
     setModalLoading(false);
   };
+  // Après un déplacement / une suppression : on retire la séance de la liste du jour et on reste sur
+  // les autres (s'il en reste), sinon on referme.
+  const afterSessionGone=(goneId,msg)=>{
+    const remaining=(sessionModal.sessions||[]).filter(x=>x.id!==goneId);
+    setConfirmDelete(false);
+    if(remaining.length){setSessionModal(m=>({...m,sessions:remaining,session:remaining[0]}));setModalMsg(msg);}
+    else setSessionModal(null);
+    reload();
+  };
+  const pickSession=i=>{setSessionModal(m=>({...m,session:(m.sessions||[])[i]||m.session}));setConfirmDelete(false);setModalMsg('');};
 
   const moveSession=async()=>{
     if(!sessionModal?.session||!moveDate)return;
     try{
-      await apiCall('/api/coach/sessions/'+sessionModal.session.id,{method:'PATCH',body:{date:moveDate+'T12:00:00.000Z'}});
-      setSessionModal(null);
-      reload();
+      const movedId=sessionModal.session.id;
+      await apiCall('/api/coach/sessions/'+movedId,{method:'PATCH',body:{date:moveDate+'T12:00:00.000Z'}});
+      afterSessionGone(movedId,'✓ Séance déplacée au '+new Date(moveDate+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'}));
     }catch(e){alert('Erreur: '+e.message);}
   };
 
   const deleteSession=async()=>{
     if(!sessionModal?.session)return;
     try{
-      await apiCall('/api/coach/sessions/'+sessionModal.session.id,{method:'DELETE'});
-      setSessionModal(null);
-      reload();
+      const goneId=sessionModal.session.id;
+      await apiCall('/api/coach/sessions/'+goneId,{method:'DELETE'});
+      afterSessionGone(goneId,'✓ Séance supprimée');
     }catch(e){alert('Erreur: '+e.message);}
   };
 
@@ -11088,7 +11217,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ath.name}</div>
                             <div style={{display:'flex',gap:6,marginTop:3,flexWrap:'wrap'}}>
-                              {hasSession&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(44,196,160,0.15)',color:'#2CC4A0',border:'1px solid rgba(44,196,160,0.3)'}}>💪 Séance</span>}
+                              {hasSession&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(44,196,160,0.15)',color:'#2CC4A0',border:'1px solid rgba(44,196,160,0.3)'}}>💪 {(()=>{const n=ath.sessionDates.filter(x=>ymdKey(new Date(x))===dateStr).length;return n>1?n+' séances':'Séance';})()}</span>}
                               {hasNutri&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(90,138,224,0.15)',color:'#5A8AE0',border:'1px solid rgba(90,138,224,0.3)'}}>🥗 Nutrition</span>}
                               {hasProg&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:999,background:'rgba(191,160,96,0.12)',color:T.accent,border:'1px solid rgba(191,160,96,0.3)'}}>📋 Programme</span>}
                             </div>
@@ -11123,6 +11252,26 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
               <button onClick={()=>{setSessionModal(null);setConfirmDelete(false);}} style={{width:30,height:30,borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)',color:T.textDim,fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
             </div>
 
+            {!modalLoading&&(sessionModal.sessions||[]).length>1&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:0.4,textTransform:'uppercase',marginBottom:8}}>{sessionModal.sessions.length} séances ce jour-là</div>
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {sessionModal.sessions.map((x,i)=>{
+                    const act=x.id===sessionModal.session?.id;
+                    return(
+                      <button key={x.id} data-testid="day-session-pick" onClick={()=>pickSession(i)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',padding:'9px 12px',borderRadius:11,cursor:'pointer',color:'inherit',border:act?'1px solid '+sessionModal.color:'1px solid rgba(255,255,255,0.08)',background:act?sessionModal.color+'1f':'rgba(255,255,255,0.03)'}}>
+                        <span style={{width:22,height:22,borderRadius:11,background:act?sessionModal.color:'rgba(255,255,255,0.1)',color:act?'#0c0c12':T.textDim,fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</span>
+                        <span style={{flex:1,minWidth:0}}>
+                          <span style={{display:'block',fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.name||'Séance'}</span>
+                          <span style={{display:'block',fontSize:10.5,color:T.textFaint,marginTop:1}}>{new Date(x.date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · {(x.exercises||[]).length} exos{x.totalVolume?' · '+Math.round(x.totalVolume).toLocaleString('fr-FR')+' kg':''}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {modalMsg&&<div role="status" style={{marginBottom:12,padding:'9px 12px',borderRadius:10,background:'rgba(44,196,160,0.12)',border:'1px solid rgba(44,196,160,0.3)',color:'#2CC4A0',fontSize:12,fontWeight:700}}>{modalMsg}</div>}
             {modalLoading?(
               <div style={{padding:30,textAlign:'center',color:T.textFaint,fontSize:13}}>Chargement…</div>
             ):!sessionModal.session?(
@@ -11161,7 +11310,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
 
                 {/* Déplacer */}
                 <div style={{marginBottom:12,padding:12,borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)'}}>
-                  <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,marginBottom:8,textTransform:'uppercase',letterSpacing:0.4}}>📅 Déplacer la séance</div>
+                  <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,marginBottom:8,textTransform:'uppercase',letterSpacing:0.4}}>📅 Déplacer {(sessionModal.sessions||[]).length>1?'« '+(sessionModal.session.name||'cette séance')+' »':'la séance'}</div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     <input type="date" value={moveDate} onChange={e=>setMoveDate(e.target.value)} style={{flex:1,height:36,borderRadius:9,border:'1px solid rgba(90,138,224,0.3)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:12,padding:'0 10px',outline:'none'}}/>
                     <button onClick={moveSession} disabled={moveDate===sessionModal.dateStr} style={{height:36,padding:'0 14px',borderRadius:9,border:'none',background:'linear-gradient(135deg,#5A8AE0,#6090b0)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:moveDate===sessionModal.dateStr?0.4:1}}>Déplacer</button>
@@ -11172,7 +11321,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
                 {!confirmDelete?(
                   <button onClick={()=>setConfirmDelete(true)} style={{width:'100%',height:40,borderRadius:11,border:'1px solid rgba(184,80,112,0.3)',background:'rgba(184,80,112,0.06)',color:T.danger,fontSize:13,fontWeight:700,cursor:'pointer'}}>🗑️ Supprimer la séance</button>
                 ):(
-                  <ConfirmBanner msg="Supprimer cette séance ?" onConfirm={deleteSession} onCancel={()=>setConfirmDelete(false)}/>
+                  <ConfirmBanner msg={'Supprimer '+((sessionModal.sessions||[]).length>1?'« '+(sessionModal.session.name||'cette séance')+' »':'cette séance')+' ?'} onConfirm={deleteSession} onCancel={()=>setConfirmDelete(false)}/>
                 )}
               </>
             )}
@@ -17637,7 +17786,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // rechargement suivant (elle n'existait qu'en state React le temps de la session).
   const PENDING_SESSIONS_KEY='pa_pending_sessions_'+authUser.id;
   const[pendingSyncCount,setPendingSyncCount]=React.useState(0);
+  const flushingRef=React.useRef(false);
   const flushPendingSessions=React.useCallback(async()=>{
+    // Garde anti-concurrence : mount + événement 'online' + intervalle 20s peuvent se déclencher
+    // en même temps. Sans ce verrou, deux flushs lisent la MÊME file et renvoient les mêmes
+    // séances en parallèle (surtout pendant un cold start Render lent) → doublons côté serveur.
+    if(flushingRef.current)return;
+    flushingRef.current=true;
+    try{
     let queue=[];
     try{queue=JSON.parse(localStorage.getItem(PENDING_SESSIONS_KEY)||'[]');}catch{}
     if(!queue.length)return;
@@ -17650,6 +17806,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     }
     try{localStorage.setItem(PENDING_SESSIONS_KEY,JSON.stringify(remaining));}catch{}
     setPendingSyncCount(remaining.length);
+    }finally{flushingRef.current=false;}
   },[PENDING_SESSIONS_KEY]);
   React.useEffect(()=>{
     flushPendingSessions();
@@ -18170,6 +18327,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       }catch(e){console.error('coach session save',e);alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
       return;
     }
+    // Clé d'idempotence : stable pour CETTE séance, réutilisée par tous les renvois (retries +
+    // file de resync). Le serveur dédoublonne dessus, donc une réponse perdue ne crée jamais 2 séances.
+    if(!snapshot.clientId)snapshot.clientId=uid();
     // Comparaison complète "vs la dernière séance de même nom" — via le helper partagé
     // (même logique que le récap ouvert au clic sur le calendrier).
     const{comp,volumeVsPrev:vvp}=buildSessionComparison(snapshot,history,programRangeMap(importedPrograms));

@@ -2219,8 +2219,18 @@ function consumeExerciseTargets(userId, exercises) {
 }
 
 app.post('/api/sessions', authRequired, accessActive, (req, res) => {
-  const id = uid();
   const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
+  // Idempotence : le client attache un clientId stable à la séance. Si le serveur a déjà créé une
+  // séance avec ce clientId pour cet utilisateur, on renvoie l'existante sans en créer une 2e.
+  // Indispensable : saveSession retente jusqu'à 5 fois puis met la séance en file de resync — si
+  // la 1re requête a bien atteint le serveur mais que la RÉPONSE s'est perdue (coupure réseau
+  // mobile, cold start Render qui dépasse le timeout), tous ces renvois créaient des DOUBLONS.
+  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.slice(0, 64) : '';
+  if (clientId) {
+    const existing = Object.values(DATA.sessions).find(x => x.userId === req.user.id && x.clientId === clientId);
+    if (existing) return res.json({ id: existing.id, duplicate: true });
+  }
+  const id = uid();
   // Un nom par défaut plutôt qu'un rejet pur : une séance sans nom (programme généré par l'IA
   // sans champ "name", etc.) n'a aucune raison de se perdre silencieusement. Avant ce correctif,
   // le 400 ici faisait échouer la sauvegarde à chaque tentative (retries + resync inclus) sans
@@ -2272,6 +2282,7 @@ app.post('/api/sessions', authRequired, accessActive, (req, res) => {
     name: safeName.slice(0, 100),
     totalVolume: safeVolume,
     exercises: safeExercises,
+    ...(clientId ? { clientId } : {}),
   };
   if (rpe != null && !isNaN(parseFloat(rpe))) session.rpe = Math.min(10, Math.max(1, Math.round(parseFloat(rpe))));
   if (notes) session.notes = String(notes).slice(0, 500);
