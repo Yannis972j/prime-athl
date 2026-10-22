@@ -4044,6 +4044,36 @@ function StatsScreen({history,profile,athleteId}){
   },[history]);
   const maxDayVol=React.useMemo(()=>Math.max(1,...Object.values(sessionsByDay).map(d=>d.volume)),[sessionsByDay]);
 
+  // ── Progression par séance du même nom (courbe / histogramme) ──────────────
+  // Regroupe l'historique par nom de séance normalisé (insensible casse/accents/ponctuation, via
+  // normSessionKey — même clé que le rapprochement feedback↔séance). Seules les séances faites au
+  // moins 2 fois sont proposées : une seule occurrence ne donne aucune courbe à tracer.
+  const sameNameGroups=React.useMemo(()=>{
+    const map={};
+    (history||[]).forEach(h=>{
+      if(!h||!h.date)return;
+      const key=normSessionKey(h.name);
+      if(!key)return;
+      (map[key]=map[key]||{key,name:h.name||'Séance',items:[]}).items.push(h);
+    });
+    return Object.values(map)
+      .map(g=>({...g,items:g.items.slice().sort((a,b)=>new Date(a.date)-new Date(b.date))}))
+      .filter(g=>g.items.length>=2)
+      .sort((a,b)=>b.items.length-a.items.length);
+  },[history]);
+  const[progKey,setProgKey]=React.useState(null);
+  const[progMode,setProgMode]=React.useState('line'); // 'line' = courbe · 'bar' = histogramme
+  const progGroup=sameNameGroups.find(g=>g.key===progKey)||sameNameGroups[0]||null;
+  // On trace au plus les 15 dernières occurrences (lisibilité), volume total par séance.
+  const progPoints=React.useMemo(()=>{
+    if(!progGroup)return[];
+    return progGroup.items.slice(-15).map(h=>({
+      date:h.date,
+      vol:Math.round(h.totalVolume||sessionVolumeOf(h)||0),
+      deload:!!h.deload,
+    }));
+  },[progGroup]);
+
   if(history.length===0){
     return(
       <div style={{padding:'18px 18px 100px',color:T.text}}>
@@ -4198,6 +4228,40 @@ function StatsScreen({history,profile,athleteId}){
                 <span style={{fontSize:10,color:T.textFaint}}>Semaine précédente</span>
               </div>
             </div>
+          </GlassCard>
+        </>
+      )}
+
+      {/* ── Progression entre séances du même nom (volume) ── */}
+      {sameNameGroups.length>0&&progGroup&&(
+        <>
+          <SectionHeader title="Progression par séance" icon="chart" iconColor="#2CC4A0"/>
+          <GlassCard padding={16} style={{marginBottom:18}}>
+            {/* Sélecteur de séance + bascule courbe/histogramme */}
+            <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+              <select value={progGroup.key} onChange={e=>setProgKey(e.target.value)} style={{flex:1,minWidth:0,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'rgba(255,255,255,0.05)',color:T.text,fontSize:12,fontWeight:600,padding:'0 10px'}}>
+                {sameNameGroups.map(g=>(<option key={g.key} value={g.key}>{g.name} ({g.items.length})</option>))}
+              </select>
+              <div style={{display:'flex',gap:3,padding:3,borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`}}>
+                {[{k:'line',l:'📈'},{k:'bar',l:'📊'}].map(m=>(
+                  <button key={m.k} onClick={()=>setProgMode(m.k)} style={{width:34,height:28,borderRadius:8,border:'none',cursor:'pointer',fontSize:14,background:progMode===m.k?T.accentSoft:'transparent'}}>{m.l}</button>
+                ))}
+              </div>
+            </div>
+            {/* Résumé première → dernière */}
+            {(()=>{
+              const first=progPoints[0].vol,last=progPoints[progPoints.length-1].vol;
+              const delta=last-first, pct=first>0?Math.round(delta/first*100):0;
+              const col=delta>0?T.good:delta<0?T.danger:T.textFaint;
+              return(
+                <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}>
+                  <span style={{fontSize:24,fontWeight:800,color:col,fontFamily:"'Outfit',sans-serif"}}>{delta>0?'+':''}{pct}%</span>
+                  <span style={{fontSize:11,color:T.textFaint}}>volume · {first.toLocaleString('fr-FR')} → {last.toLocaleString('fr-FR')} kg sur {progPoints.length} séances</span>
+                </div>
+              );
+            })()}
+            <SessionProgressChart points={progPoints} mode={progMode}/>
+            <div style={{fontSize:10,color:T.textFaint,marginTop:8,lineHeight:1.4}}>Volume total (kg) de chaque séance « {progGroup.name} », de la plus ancienne à la plus récente. Un point bleu = séance de décharge.</div>
           </GlassCard>
         </>
       )}
@@ -4405,6 +4469,58 @@ function VolumeAreaChart({data}){
       </svg>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:6,fontSize:10,color:T.textFaint,fontWeight:600}}>
         <span>il y a {data.length}j</span><span>aujourd'hui</span>
+      </div>
+    </div>
+  );
+}
+
+// Progression du volume entre séances DU MÊME NOM, en courbe ou en histogramme.
+// Base 0 (barres/axe honnêtes), couleur verte si la dernière >= première, rouge sinon ; une séance
+// de décharge (volume volontairement bas) est teintée en bleu pour ne pas se lire comme un recul.
+function SessionProgressChart({points,mode}){
+  if(!points||points.length<2)return null;
+  const vals=points.map(p=>p.vol);
+  const max=Math.max(1,...vals);
+  const n=points.length;
+  const up=vals[n-1]>=vals[0];
+  const line=up?'#2CC4A0':T.danger;
+  const w=320,h=128,padX=10,padTop=16,padBot=4;
+  const X=i=>n<=1?w/2:padX+i*(w-2*padX)/(n-1);
+  const Y=v=>padTop+(1-v/max)*(h-padTop-padBot);
+  const fmt=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1).replace('.',',')+'k':String(v);
+  const dLabel=d=>new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+  const showAllLabels=n<=6;
+  const labelFor=i=>showAllLabels||i===0||i===n-1?dLabel(points[i].date):'';
+  return(
+    <div>
+      <svg width="100%" height={h+2} viewBox={`0 0 ${w} ${h+2}`} preserveAspectRatio="none" style={{display:'block'}}>
+        <defs>
+          <linearGradient id="spArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={line} stopOpacity="0.28"/>
+            <stop offset="100%" stopColor={line} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {mode==='bar'?(
+          points.map((p,i)=>{
+            const bw=Math.max(6,(w-2*padX)/n*0.6);
+            const bx=X(i)-bw/2, by=Y(p.vol), bh=h-padBot-by;
+            const c=p.deload?'#5A8AE0':line;
+            return <g key={i}>
+              <rect x={bx} y={by} width={bw} height={Math.max(1,bh)} rx="3" fill={c} fillOpacity="0.85"/>
+              <text x={X(i)} y={by-4} fontSize="9" fill={T.textDim} textAnchor="middle" fontWeight="700">{fmt(p.vol)}</text>
+            </g>;
+          })
+        ):(<>
+          <path d={`M ${points.map((p,i)=>X(i)+' '+Y(p.vol)).join(' L ')} L ${X(n-1)} ${h-padBot} L ${X(0)} ${h-padBot} Z`} fill="url(#spArea)"/>
+          <path d={`M ${points.map((p,i)=>X(i)+' '+Y(p.vol)).join(' L ')}`} fill="none" stroke={line} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round"/>
+          {points.map((p,i)=>(<g key={i}>
+            <circle cx={X(i)} cy={Y(p.vol)} r={p.deload?4:3.4} fill={p.deload?'#5A8AE0':line} stroke="#0c0c12" strokeWidth="1.5"/>
+            {(showAllLabels||i===0||i===n-1)&&<text x={X(i)} y={Y(p.vol)-7} fontSize="9" fill={T.textDim} textAnchor="middle" fontWeight="700">{fmt(p.vol)}</text>}
+          </g>))}
+        </>)}
+      </svg>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4,fontSize:9,color:T.textFaint,fontWeight:600}}>
+        {points.map((p,i)=>(<span key={i} style={{flex:1,textAlign:i===0?'left':i===n-1?'right':'center',overflow:'hidden',whiteSpace:'nowrap'}}>{labelFor(i)}</span>))}
       </div>
     </div>
   );

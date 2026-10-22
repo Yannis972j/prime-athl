@@ -148,3 +148,17 @@ test('front : flushPendingSessions a une garde anti-concurrence + le snapshot po
   assert.match(html, /if\(flushingRef\.current\)return;/);
   assert.match(html, /if\(!snapshot\.clientId\)snapshot\.clientId=uid\(\);/);
 });
+
+test('front : Stats expose la progression par séance du même nom (courbe/histogramme, ≥2 occurrences)', () => {
+  assert.match(html, /function SessionProgressChart\(\{points,mode\}\)/);
+  // regroupement par nom normalisé, uniquement les séances faites au moins 2 fois
+  assert.match(html, /const sameNameGroups=React\.useMemo\(/);
+  assert.match(html, /normSessionKey\(h\.name\)/);
+  assert.match(html, /\.filter\(g=>g\.items\.length>=2\)/);
+  // bascule courbe/histogramme + sélecteur de séance
+  assert.match(html, /React\.useState\('line'\)/);
+  assert.match(html, /progMode===m\.k/);
+  assert.match(html, /<SessionProgressChart points=\{progPoints\} mode=\{progMode\}\/>/);
+  // volume par occurrence, décharge repérée
+  assert.match(html, /vol:Math\.round\(h\.totalVolume\|\|sessionVolumeOf\(h\)\|\|0\)/);
+});
