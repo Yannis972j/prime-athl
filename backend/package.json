@@ -9,7 +9,8 @@
     "dev": "node --watch server.js",
     "build": "node build.js",
     "postinstall": "node build.js",
-    "test": "node --test --test-concurrency=1"
+    "test": "node --test --test-concurrency=1",
+    "e2e": "node --test --test-concurrency=1 e2e/*.e2e.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
@@ -29,5 +30,8 @@
     "stripe": "^16.12.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
   }
 }

@@ -30,6 +30,17 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # Test de bout en bout en vrai navigateur : démarrer, valider et terminer une séance, puis
+      # parcourir les onglets athlète/coach SANS aucune erreur JS. Ce parcours est le plus critique de
+      # l'app : un bug ici (ex: ReferenceError à la validation) empêche tous les athlètes de s'entraîner,
+      # et les tests unitaires ne le voient pas. Le job `deploy` dépend de `test` : s'il échoue, rien
+      # n'est déployé.
+      - name: Install Chromium (e2e)
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Run e2e (parcours critique en navigateur)
+        run: npm run e2e
+
   # Déploiement automatique sur Render après un merge sur main (CI verte uniquement).
   # Évite le « Manual Deploy » : le déploiement auto de Render ne se déclenche pas toujours.
   # Prérequis (une seule fois) : Render > service prime-athl > Settings > Deploy Hook → copier
