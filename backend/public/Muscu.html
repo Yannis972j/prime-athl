@@ -1612,6 +1612,112 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
 // ── Session Screen ────────────────────────────────────────
 
+// ── Audio de l'app (bips de décompte + sonnerie de fin de repos) ─────────────────────────────
+// Pourquoi ce module : la sonnerie ne sonnait pas chez certains utilisateurs. Causes corrigées ici :
+//  1. iPhone en mode silencieux : l'API Web Audio est coupée par le contacteur latéral. La sonnerie
+//     passe donc par un élément <audio> (canal « média », qui sonne même en silencieux) et on active
+//     `navigator.audioSession.type='playback'` (iOS 16.4+) pour que les bips suivent aussi.
+//  2. AudioContext « suspended » / « interrupted » (écran verrouillé, appel, changement d'app) :
+//     `resume()` n'était appelé qu'à l'état « suspended » et jamais après un geste → plus aucun son.
+//     Désormais on reprend à CHAQUE geste de l'utilisateur et dès qu'un son est demandé, et on
+//     recrée le contexte s'il a été fermé.
+//  3. Sonnerie en cascade de setTimeout (dérive/gel quand l'onglet est ralenti) : les bips sont
+//     maintenant planifiés sur l'horloge audio, et la sonnerie est un seul fichier généré.
+const PrimeAudio=(()=>{
+  let ctx=null,ringEl=null,ringUrl=null,ringReady=false;
+  const SR=22050;
+  const getCtx=()=>{
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return null;
+      if(!ctx||ctx.state==='closed')ctx=new AC();
+      return ctx;
+    }catch{return null;}
+  };
+  const resumeCtx=c=>{
+    try{if(c&&c.state!=='running'){const p=c.resume();if(p&&p.catch)p.catch(()=>{});}}catch{}
+  };
+  // Sonnerie : 3 doubles-bips (880 Hz puis 1175 Hz décalé de 0,2 s), un toutes les 0,6 s.
+  const buildRingBlob=()=>{
+    const n=Math.floor(SR*2.4),pcm=new Int16Array(n);
+    const tone=(t0,f,len)=>{
+      const a=Math.floor(t0*SR),b=Math.min(n,Math.floor((t0+len)*SR));
+      for(let i=a;i<b;i++){
+        const t=(i-a)/SR,env=Math.min(1,t/0.01)*Math.min(1,(len-t)/0.04);
+        pcm[i]=Math.max(-32767,Math.min(32767,pcm[i]+Math.sin(2*Math.PI*f*t)*env*0.45*32767));
+      }
+    };
+    for(let k=0;k<3;k++){tone(k*0.6,880,0.35);tone(k*0.6+0.2,1175,0.35);}
+    const buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
+    const w=(o,str)=>{for(let i=0;i<str.length;i++)v.setUint8(o+i,str.charCodeAt(i));};
+    w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);
+    v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,SR,true);v.setUint32(28,SR*2,true);
+    v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+    for(let i=0;i<n;i++)v.setInt16(44+i*2,pcm[i],true);
+    return new Blob([buf],{type:'audio/wav'});
+  };
+  const getRingEl=()=>{
+    try{
+      if(ringEl)return ringEl;
+      ringUrl=URL.createObjectURL(buildRingBlob());
+      ringEl=new Audio(ringUrl);
+      ringEl.preload='auto';
+      ringEl.volume=1;
+      return ringEl;
+    }catch{return null;}
+  };
+  const beep=(freq,gain,duration,delay)=>{
+    try{
+      const a=getCtx();
+      if(!a)return;
+      resumeCtx(a);
+      const t0=a.currentTime+(delay||0);
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.frequency.value=freq;
+      g.gain.setValueAtTime(0.001,t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.002,gain),t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+duration);
+      o.start(t0);o.stop(t0+duration+0.05);
+    }catch{}
+  };
+  const ringWithWebAudio=()=>{for(let k=0;k<3;k++){beep(880,1,0.35,k*0.6);beep(1175,1,0.35,k*0.6+0.2);}};
+  return{
+    // À appeler pendant un GESTE de l'utilisateur (tap) : débloque l'audio pour la suite de la séance.
+    unlock(){
+      try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback';}catch{}
+      const c=getCtx();
+      resumeCtx(c);
+      try{if(c){const b=c.createBuffer(1,1,SR),src=c.createBufferSource();src.buffer=b;src.connect(c.destination);src.start(0);}}catch{}
+      // L'élément de la sonnerie est « béni » par ce geste (lecture muette puis pause) : il pourra
+      // ensuite être relancé sans geste, au moment où le repos se termine.
+      try{
+        const el=getRingEl();
+        if(el&&!ringReady){
+          el.muted=true;
+          const done=()=>{try{el.pause();el.currentTime=0;}catch{}el.muted=false;ringReady=true;};
+          const p=el.play();
+          if(p&&p.then)p.then(done).catch(()=>{el.muted=false;});else done();
+        }
+      }catch{}
+    },
+    beep(freq,gain,duration){beep(freq,gain,duration,0);},
+    // Sonnerie de fin de repos : élément <audio> d'abord (sonne en silencieux sur iPhone), Web Audio en secours.
+    ring(){
+      const el=getRingEl();
+      if(el){
+        try{
+          el.muted=false;el.volume=1;el.currentTime=0;
+          const p=el.play();
+          if(p&&p.catch)p.catch(()=>ringWithWebAudio());
+          return;
+        }catch{}
+      }
+      ringWithWebAudio();
+    },
+  };
+})();
+
 function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportPrograms,onSaveSession,history,firstName,targets={},importedPrograms,onRestUpdate,coachFeedback}){
   const SNAP_KEY='pa_session_snap';
   const[showRpe,setShowRpe]=React.useState(false);
@@ -1950,30 +2056,21 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   // Vibration + bip de décompte (10s → 0), puis sonnerie de fin de repos
   const prevRestRef=React.useRef(0);
-  // Un seul AudioContext réutilisé (créer/résumer un nouveau contexte à chaque bip
-  // échoue silencieusement sur mobile : limite de contextes + politique d'autoplay).
-  const audioCtxRef=React.useRef(null);
-  const getAudioCtx=React.useCallback(()=>{
-    try{
-      const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC)return null;
-      if(!audioCtxRef.current)audioCtxRef.current=new AC();
-      if(audioCtxRef.current.state==='suspended')audioCtxRef.current.resume();
-      return audioCtxRef.current;
-    }catch{return null;}
+  // Audio : voir PrimeAudio (module commun). `getAudioCtx()` = débloquer l'audio pendant un geste.
+  const getAudioCtx=React.useCallback(()=>{PrimeAudio.unlock();},[]);
+  const playBeep=React.useCallback((freq,gain,duration)=>{PrimeAudio.beep(freq,gain,duration);},[]);
+  // Repos passé volontairement (« Passer le repos », changement d'exercice) : pas de sonnerie.
+  const restSkippedRef=React.useRef(false);
+  const[restDoneFlash,setRestDoneFlash]=React.useState(false);
+  const skipRest=React.useCallback(()=>{restSkippedRef.current=true;setRestSeconds(0);},[]);
+  // Tout geste de l'utilisateur (tap) ré-arme l'audio : un contexte « suspended/interrupted » (écran
+  // verrouillé, appel, retour d'une autre app) ne peut être repris que depuis un geste sur iOS.
+  React.useEffect(()=>{
+    const arm=()=>PrimeAudio.unlock();
+    document.addEventListener('touchend',arm,{passive:true});
+    document.addEventListener('click',arm,{passive:true});
+    return()=>{document.removeEventListener('touchend',arm);document.removeEventListener('click',arm);};
   },[]);
-  const playBeep=React.useCallback((freq,gain,duration)=>{
-    try{
-      const a=getAudioCtx();
-      if(!a)return;
-      const o=a.createOscillator();const g=a.createGain();
-      o.connect(g);g.connect(a.destination);
-      o.frequency.value=freq;g.gain.setValueAtTime(0.001,a.currentTime);
-      g.gain.exponentialRampToValueAtTime(gain,a.currentTime+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+duration);
-      o.start();o.stop(a.currentTime+duration+0.05);
-    }catch{}
-  },[getAudioCtx]);
   React.useEffect(()=>{
     if(restSeconds>0&&restSeconds<=10){
       // Décompte intensif : bip + vibration de plus en plus forts à l'approche de 0
@@ -1981,15 +2078,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       try{if(navigator.vibrate)navigator.vibrate(30+intensity*70);}catch{}
       playBeep(700+intensity*400,0.25+intensity*0.35,0.12);
     }else if(prevRestRef.current>0&&restSeconds===0){
-      // Fin de repos : sonnerie forte type réveil — 3 doubles-bips répétés au volume max
-      try{if(navigator.vibrate)navigator.vibrate([300,100,300,100,300,100,300,100,300,100,600]);}catch{}
-      for(let i=0;i<3;i++){
-        setTimeout(()=>{
-          playBeep(880,1,0.35);
-          setTimeout(()=>playBeep(1175,1,0.35),200);
-        },i*600);
+      if(restSkippedRef.current){
+        // repos passé volontairement : silence
+        restSkippedRef.current=false;
+      }else{
+        // Fin de repos : sonnerie forte type réveil — 3 doubles-bips au volume max + signal visuel
+        // (pour un téléphone en silencieux / sans vibration, l'écran l'indique aussi).
+        try{if(navigator.vibrate)navigator.vibrate([300,100,300,100,300,100,300,100,300,100,600]);}catch{}
+        PrimeAudio.ring();
+        setRestDoneFlash(true);
+        setTimeout(()=>setRestDoneFlash(false),4000);
       }
     }
+    // Un nouveau repos qui démarre efface un éventuel « skip » resté armé.
+    if(prevRestRef.current===0&&restSeconds>0)restSkippedRef.current=false;
     prevRestRef.current=restSeconds;
   },[restSeconds,playBeep]);
 
@@ -2193,6 +2295,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const goToEx=React.useCallback(idx=>{
     setTimerActiveRef.current=false;
     setSetTimerSecs(0);
+    restSkippedRef.current=true;
     setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);
   },[]);
 
@@ -2266,6 +2369,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // block, et l'overlay se centre par rapport à la hauteur totale de la liste d'exercices
   // (souvent bien plus grande que l'écran) au lieu de l'écran visible — le compte à rebours se
   // retrouvait hors-champ, seul le libellé du haut dépassant tout en bas de l'écran.
+  // Signal visuel de fin de repos (téléphone en silencieux, sans vibration) — rendu dans les DEUX modes
+  // d'affichage de la séance (focus et normal), d'où sa définition ici plutôt que dans un seul return.
+  const restDoneToast=restDoneFlash&&restSeconds<=0&&ReactDOM.createPortal(
+    <div role="status" style={{position:'fixed',top:'calc(env(safe-area-inset-top) + 14px)',left:'50%',transform:'translateX(-50%)',zIndex:60,padding:'12px 20px',borderRadius:999,background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",boxShadow:'0 6px 24px rgba(44,196,160,0.45)',animation:'celebrationPop 0.3s ease',pointerEvents:'none',whiteSpace:'nowrap'}}>⏱ Repos terminé — c'est reparti !</div>,
+    document.body
+  );
   const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
       <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours{holdSideRef.current?` · côté ${holdSideRef.current==='G'?'gauche':'droit'}`:''}</div>
@@ -2330,7 +2439,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             </div>
             <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
               <button onClick={()=>setRestSeconds(s=>s+30)} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>+30s</button>
-              <button onClick={()=>setRestSeconds(0)} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(44,196,160,0.35)'}}>Passer le repos</button>
+              <button onClick={skipRest} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#000',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(44,196,160,0.35)'}}>Passer le repos</button>
             </div>
           </div>,
           document.body
@@ -2338,6 +2447,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
         {/* Overlay compte à rebours de série — plein écran (factorisé, voir setTimerOverlay) */}
         {setTimerOverlay}
+        {restDoneToast}
 
         {/* Header minimal */}
         <div style={{padding:'8px 18px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -2517,6 +2627,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
       {/* Overlay compte à rebours de série — plein écran, aussi visible hors mode focus */}
       {setTimerOverlay}
+      {restDoneToast}
       {/* Image illustrative — bandeau borné en haut (s'adapte à la taille du téléphone, plus jamais trop gros) */}
       {(()=>{const u=exerciseImageURL(ex.name);return u?(
         <div key={ex.id||ex.name} style={{position:'absolute',top:0,left:0,right:0,height:'clamp(140px, 22vh, 200px)',zIndex:0,overflow:'hidden',pointerEvents:'none'}}>
@@ -2618,7 +2729,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                   <Icon name="refresh" size={15} stroke={T.textDim}/>
                 </button>
                 {restSeconds>0&&(
-                  <button onClick={()=>setRestSeconds(0)} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:8,minHeight:44,padding:'0 14px 0 10px',borderRadius:999,border:'1px solid rgba(191,160,96,0.4)',background:'linear-gradient(135deg,rgba(191,160,96,0.22),rgba(184,80,112,0.12))',color:T.accent,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 14px rgba(191,160,96,0.25)',animation:'celebrationPop 0.35s ease'}}>
+                  <button onClick={skipRest} title="Passer le repos" style={{display:'flex',alignItems:'center',gap:8,minHeight:44,padding:'0 14px 0 10px',borderRadius:999,border:'1px solid rgba(191,160,96,0.4)',background:'linear-gradient(135deg,rgba(191,160,96,0.22),rgba(184,80,112,0.12))',color:T.accent,cursor:'pointer',flexShrink:0,boxShadow:'0 4px 14px rgba(191,160,96,0.25)',animation:'celebrationPop 0.35s ease'}}>
                     <svg width="22" height="22" viewBox="0 0 24 24" style={{transform:'rotate(-90deg)',flexShrink:0}}>
                       <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="2.6"/>
                       <circle cx="12" cy="12" r="10" fill="none" stroke="#BFA060" strokeWidth="2.6" strokeLinecap="round"

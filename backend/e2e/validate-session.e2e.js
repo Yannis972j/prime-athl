@@ -99,3 +99,51 @@ test('e2e : parcours des onglets athlète puis coach sans erreur JS', async () =
   assert.deepEqual(await run(EMAIL, PASSWORD, ['Coaching', 'Séances', 'Biblio', 'Nutrition', 'STATS', 'PROFIL', 'CHAT']), [], 'athlète : aucune erreur JS');
   assert.deepEqual(await run(MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD, ['COACH', 'STATS', 'PROFIL', 'CHAT']), [], 'coach : aucune erreur JS');
 });
+
+test('e2e : la sonnerie sonne à la fin NATURELLE du repos (+ message à l\'écran), mais pas quand on « passe le repos »', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // Compte les lectures audibles de la sonnerie (<audio> non muet) ; la lecture muette de déblocage est ignorée.
+  await ctx.addInitScript(() => {
+    window.__rings = 0;
+    const orig = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.muted) window.__rings++;
+      return orig.apply(this, arguments);
+    };
+  });
+  const pg = await ctx.newPage();
+  pg.setDefaultTimeout(8000);
+  const jsErrors = [];
+  pg.on('pageerror', e => jsErrors.push(String(e)));
+  await pg.goto(srv.baseUrl + '/Muscu.html');
+  await pg.fill('input[type=email]', EMAIL);
+  await pg.fill('input[type=password]', PASSWORD);
+  await pg.keyboard.press('Enter');
+  await pg.waitForTimeout(3500);
+  const click = async t => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: 3000 }); await pg.waitForTimeout(700); return true; } catch { return false; } };
+  for (const t of ['Passer', 'Plus tard', 'Coaching', 'Biblio', 'E2E', 'E2E PULL', 'Commencer la séance', "C'est parti"]) await click(t);
+  const validateSet = () => pg.evaluate(() => {
+    const ok = [...document.querySelectorAll('button')].find(b => b.style.width === '38px' && b.style.height === '38px' && b.parentElement.querySelector('button[style*="26px"]'));
+    if (ok) { ok.click(); return true; }
+    return false;
+  });
+  const rings = () => pg.evaluate(() => window.__rings);
+
+  // 1) fin naturelle : valider une série → repos de 5 s → la sonnerie doit jouer
+  assert.equal(await validateSet(), true, 'série validée');
+  await pg.waitForTimeout(1000);
+  assert.equal(await rings(), 0, 'pas de sonnerie pendant le repos');
+  await pg.waitForTimeout(6000);
+  assert.ok((await rings()) >= 1, 'sonnerie jouée à la fin du repos');
+  assert.match(await pg.evaluate(() => document.body.innerText), /Repos terminé/, 'message visuel de fin de repos');
+  const afterNatural = await rings();
+
+  // 2) repos passé volontairement : aucune sonnerie
+  assert.equal(await validateSet(), true, '2e série validée');
+  await pg.waitForTimeout(800);
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Passer le repos' || b.title === 'Passer le repos'); if (b) b.click(); });
+  await pg.waitForTimeout(1500);
+  assert.equal(await rings(), afterNatural, 'pas de sonnerie quand on passe le repos');
+  assert.deepEqual(jsErrors, []);
+  await ctx.close();
+});
