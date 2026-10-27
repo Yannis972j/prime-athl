@@ -108,7 +108,9 @@ test('invitation aux notifications : proposée à l\'athlète dans Séances, « 
   const ctx = await mobile();
   const pg = await openApp('pop-push@test.local', ctx);
   await click(pg, 'Coaching');
-  await pg.waitForTimeout(1500);
+  // La carte apparaît après des appels asynchrones (service worker prêt, clé VAPID, abonnement) : sur un
+  // runner CI lent, 1,5 s ne suffit pas → on attend l'apparition (jusqu'à 15 s) au lieu d'un délai fixe.
+  await pg.waitForFunction(() => /Active les notifications/.test(document.body.innerText), null, { timeout: 15000 });
   assert.match(await pg.text(), /Active les notifications/);
   assert.match(await pg.text(), /Feedback de ton coach, nouvelle séance, fin de repos/);
   assert.equal(await click(pg, 'Plus tard'), true);
