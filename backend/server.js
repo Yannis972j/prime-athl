@@ -18,6 +18,8 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import XLSX from 'xlsx';
+import { dueAccessReminders, accessReminderPayload } from './access-reminders.js';
+import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
@@ -502,16 +504,7 @@ const MOTIVATION_MESSAGES = [
   "Personne ne le fera à ta place. Aujourd'hui, c'est ton jour.",
   "Petite victoire du jour : se bouger. Le reste suit.",
 ];
-// Heure Martinique (0-23) — fuseau America/Martinique, UTC-4 toute l'année (pas de
-// changement d'heure). Facile à ajuster si Yannis veut un autre créneau.
-const MOTIVATION_TZ = 'America/Martinique';
-const MOTIVATION_HOUR = 5;
-const MOTIVATION_MINUTE = 0;
-// 'YYYY-MM-DD' (heure Martinique) du dernier envoi — évite un double envoi si la minute cible est
-// revérifiée deux fois (démarrage serveur pile à ce moment, horloge qui dérive...). En mémoire
-// seulement (pas persisté) : au pire un redémarrage pile sur ce créneau saute un jour, pas plus.
-let lastMotivationSentDate = null;
-
+// Fuseau/heure d'envoi : voir motivation.js (MOTIVATION_TZ = America/Martinique, UTC-4 toute l'année).
 function sendDailyMotivation() {
   const recipients = Object.values(DATA.users).filter(u => (u.role === 'athlete' || u.role === 'coach') && u.status === 'active');
   if (!recipients.length) return;
@@ -524,22 +517,38 @@ function sendDailyMotivation() {
   console.log(`[motivation] Notification envoyée à ${nAthletes} athlète(s) et ${nCoaches} coach(s)`);
 }
 
+// Vérification chaque minute, mais l'envoi est « rattrapable » (cf. motivation.js) : un tick manqué ou
+// un redémarrage serveur ne fait plus perdre la notification du jour. La date du dernier envoi est
+// PERSISTÉE (DATA.meta) pour ne pas renvoyer après un redéploiement.
 setInterval(() => {
-  // Intl plutôt qu'une lib de dates : évite une dépendance juste pour lire l'heure Martinique
-  // (le serveur tourne en UTC sur Render, l'heure locale du navigateur n'entre pas en jeu ici).
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: MOTIVATION_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date());
-  const get = t => parts.find(p => p.type === t)?.value;
-  const dateStr = `${get('year')}-${get('month')}-${get('day')}`;
-  const hour = parseInt(get('hour'), 10);
-  const minute = parseInt(get('minute'), 10);
-  if (hour === MOTIVATION_HOUR && minute === MOTIVATION_MINUTE && lastMotivationSentDate !== dateStr) {
-    lastMotivationSentDate = dateStr;
+  const parts = zonedParts(new Date(), MOTIVATION_TZ);
+  const last = DATA.meta?.motivationLastSent || null;
+  if (shouldSendMotivation(parts, last, MOTIVATION_HOUR)) {
+    DATA.meta = DATA.meta || {};
+    DATA.meta.motivationLastSent = parts.dateStr;
+    persist();
     sendDailyMotivation();
   }
+  // Rappels d'expiration d'accès (J-3/J-2/J-1) : même créneau quotidien, un envoi par palier.
+  const lastAccess = DATA.meta?.accessRemindersLastRun || null;
+  if (shouldSendMotivation(parts, lastAccess, MOTIVATION_HOUR)) {
+    DATA.meta = DATA.meta || {};
+    DATA.meta.accessRemindersLastRun = parts.dateStr;
+    sendAccessReminders();
+    persist();
+  }
 }, 60 * 1000);
+
+function sendAccessReminders() {
+  const due = dueAccessReminders(DATA.users);
+  for (const r of due) {
+    const u = DATA.users[r.userId];
+    const coachName = (u.coachId && DATA.users[u.coachId]?.firstName) || 'Ton coach';
+    pushToUser(u.id, accessReminderPayload(r.palier, coachName));
+    u.accessReminded = { ...(u.accessReminded || {}), [r.palier]: r.expiresAt };
+  }
+  if (due.length) console.log(`[access] ${due.length} rappel(s) d'expiration d'accès envoyé(s)`);
+}
 
 // ── Helpers ─────────────────────────────────────────
 const uid        = () => crypto.randomBytes(8).toString('hex') + Date.now().toString(36);

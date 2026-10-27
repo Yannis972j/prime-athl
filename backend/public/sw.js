@@ -61,7 +61,11 @@ self.addEventListener('push', e => {
       // Badge barre d'état Android : logo monochrome à fond transparent (silhouette).
       badge: data.badge || '/notif-badge.png',
       image: data.image || undefined,
-      tag: data.tag || 'prime-athl',
+      // Tag UNIQUE par notification (sauf si le serveur en impose un, ex: messages d'une conversation).
+      // Avant, toutes partageaient le tag 'prime-athl' : chaque nouvelle notification REMPLAÇAIT la
+      // précédente → un athlète qui recevait « Nouveau programme » puis « Feedback » ne voyait que la
+      // dernière, l'autre disparaissait avant d'être lue.
+      tag: data.tag || ('prime-athl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
       renotify: true,
       data: { url: data.url || '/Muscu.html' },
     })
