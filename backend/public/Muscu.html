@@ -17969,13 +17969,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   const[accessPopup,setAccessPopup]=React.useState(null);
   const profile=authUser; // profile is the auth user
   // Accès à durée limitée fixé par le coach. Jours restants (null = illimité), et blocage une
-  // fois la date dépassée — jamais pour un coach ni pour un accès complet (fullAccess).
+  // fois la date dépassée — jamais pour un coach. L'accès complet (fullAccess) ne dispense pas de la durée.
   const accessDaysLeft=React.useMemo(()=>{
-    if(!profile||profile.role==='coach'||profile.fullAccess||!profile.accessExpiresAt)return null;
+    if(!profile||profile.role==='coach'||!profile.accessExpiresAt)return null;
     const t=new Date(profile.accessExpiresAt).getTime();
     if(isNaN(t))return null;
     return Math.ceil((t-Date.now())/86400000);
-  },[profile?.accessExpiresAt,profile?.role,profile?.fullAccess]);
+  },[profile?.accessExpiresAt,profile?.role]);
   const accessExpired=accessDaysLeft!=null&&accessDaysLeft<=0;
   // Rappel à J-3 / J-2 / J-1 : une seule fois par palier (ack en localStorage à la fermeture).
   React.useEffect(()=>{

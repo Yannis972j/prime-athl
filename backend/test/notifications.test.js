@@ -75,7 +75,7 @@ test('service worker : un tag imposé par le serveur (messages d\'une conversati
 });
 
 // ── rappels d'expiration d'accès J-3/J-2/J-1 (push) ──
-import { accessDaysLeft, dueAccessReminders, accessReminderPayload } from '../access-reminders.js';
+import { accessDaysLeft, dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from '../access-reminders.js';
 const NOW = new Date('2026-10-28T09:00:00Z').getTime();
 const inDays = (n, h = 0) => new Date(NOW + n * 86400000 + h * 3600000).toISOString();
 const ath = (over) => ({ id: 'u1', role: 'athlete', status: 'active', ...over });
@@ -89,7 +89,7 @@ test('accès : rappel à J-3, J-2 et J-1 seulement, pas avant, pas après', () =
   assert.deepEqual(dueAccessReminders({ u1: ath({ accessExpiresAt: inDays(-1) }) }, NOW), [], 'déjà expiré : pas de rappel');
 });
 
-test('accès : exemptés = coach, accès complet, accès illimité, compte inactif', () => {
+test('accès : exemptés = coach, accès illimité, compte inactif — PAS l\'accès complet (Kenji : « accès complet jusqu\'au 1er nov. »)', () => {
   const exp = inDays(2);
   const users = {
     a: ath({ id: 'a', accessExpiresAt: exp, role: 'coach' }),
@@ -98,7 +98,29 @@ test('accès : exemptés = coach, accès complet, accès illimité, compte inact
     d: ath({ id: 'd', accessExpiresAt: exp, status: 'pending' }),
     e: ath({ id: 'e', accessExpiresAt: exp }),
   };
-  assert.deepEqual(dueAccessReminders(users, NOW).map(d => d.userId), ['e']);
+  // l'accès complet reçoit bien le rappel (la durée s'applique toujours)
+  assert.deepEqual(dueAccessReminders(users, NOW).map(d => d.userId).sort(), ['b', 'e']);
+});
+
+test('accès complet + date de fin : bloqué à la date (avant il ne l\'était jamais)', () => {
+  const kenji = { role: 'athlete', email: 'k@x', fullAccess: true, accessExpiresAt: inDays(6) };
+  assert.equal(isAccessExpiredFor(kenji, NOW), false, '6 jours restants : accès actif');
+  assert.equal(isAccessExpiredFor(kenji, NOW + 6 * 86400000 + 1000), true, 'après le 1er nov. : bloqué');
+  assert.equal(isAccessExpiredFor({ ...kenji, fullAccess: false }, NOW + 7 * 86400000), true, 'sans accès complet : idem');
+  assert.equal(isAccessExpiredFor({ ...kenji, accessExpiresAt: null }, NOW + 999 * 86400000), false, 'illimité');
+  assert.equal(isAccessExpiredFor({ ...kenji, role: 'coach' }, NOW + 999 * 86400000), false, 'coach exempté');
+  assert.equal(isAccessExpiredFor({ ...kenji, email: 'boss@x' }, NOW + 999 * 86400000, 'boss@x'), false, 'coach principal exempté');
+});
+
+test('migration : les dates DÉJÀ dépassées en accès complet sont repérées (pour ne bloquer personne au déploiement), pas les futures', () => {
+  const users = {
+    past: { id: 'past', role: 'athlete', fullAccess: true, accessExpiresAt: inDays(-3) },
+    future: { id: 'future', role: 'athlete', fullAccess: true, accessExpiresAt: inDays(6) },
+    noFull: { id: 'noFull', role: 'athlete', fullAccess: false, accessExpiresAt: inDays(-3) },
+    unlimited: { id: 'unlimited', role: 'athlete', fullAccess: true, accessExpiresAt: null },
+    coach: { id: 'coach', role: 'coach', fullAccess: true, accessExpiresAt: inDays(-3) },
+  };
+  assert.deepEqual(staleFullAccessExpiries(users, NOW), ['past']);
 });
 
 test('accès : un palier n\'est rappelé qu\'une fois ; une prolongation remet les paliers à zéro', () => {

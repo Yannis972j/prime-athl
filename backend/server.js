@@ -18,7 +18,7 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import XLSX from 'xlsx';
-import { dueAccessReminders, accessReminderPayload } from './access-reminders.js';
+import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
@@ -154,15 +154,10 @@ function userHasAccess(u, universe) {
 
 // Accès à durée limitée fixé par le coach (accessExpiresAt). Renvoie true quand la fenêtre
 // d'accès de l'athlète est écoulée → l'app le bloque (écran « contacte ton coach »).
-// Jamais pour un coach / le coach principal / un accès complet (fullAccess), et jamais quand
-// aucune date n'est posée (= accès illimité, comportement par défaut historique).
+// Jamais pour un coach / le coach principal, et jamais quand aucune date n'est posée (= illimité).
+// L'accès complet (fullAccess) ne dispense PAS de la durée (cf. access-reminders.js).
 function isAccessExpired(u) {
-  if (!u) return false;
-  if (u.role === 'coach' || u.email === MAIN_COACH_EMAIL) return false;
-  if (u.fullAccess) return false;
-  if (!u.accessExpiresAt) return false;
-  const t = new Date(u.accessExpiresAt).getTime();
-  return !isNaN(t) && t <= Date.now();
+  return isAccessExpiredFor(u, Date.now(), MAIN_COACH_EMAIL);
 }
 // Middleware : refuse l'écriture quand l'accès de l'athlète est expiré (défense côté serveur,
 // en plus du blocage UI). L'athlète garde la lecture de /api/me (pour afficher l'écran de fin).
@@ -365,6 +360,20 @@ function persist() {
     }, Math.max(0, Math.min(PG_DEBOUNCE_MS, MAX_DEBOUNCE_MS - elapsed)));
   }
 }
+
+// Migration (idempotente) : l'accès complet ne dispense plus de la durée d'accès. Les athlètes en accès
+// complet dont la date de fin est DÉJÀ passée n'ont jamais été bloqués jusqu'ici ; on efface ces dates
+// périmées (accès illimité = ce qu'ils vivaient) pour ne bloquer personne au déploiement.
+// Appelée APRÈS la définition de persist() (qui dépend de variables `let` déclarées juste avant).
+function migrateStaleFullAccessExpiries() {
+  const stale = staleFullAccessExpiries(DATA.users);
+  for (const id of stale) DATA.users[id].accessExpiresAt = null;
+  if (stale.length) {
+    persist();
+    console.log(`[migration] ${stale.length} athlète(s) en accès complet avec une date de fin déjà dépassée : date effacée (accès illimité conservé)`);
+  }
+}
+migrateStaleFullAccessExpiries();
 
 // ── Daily auto-backup (Postgres uniquement) ─────────
 if (USE_PG) {
