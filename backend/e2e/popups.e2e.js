@@ -3,7 +3,7 @@
 // et ne reviennent pas après fermeture.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './browser.js';
 import webpush from 'web-push';
 import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from '../test/helpers/server.js';
 
@@ -16,7 +16,7 @@ before(async () => {
   srv = await startServer({ PORT: '3001', VAPID_PUBLIC_KEY: vapid.publicKey, VAPID_PRIVATE_KEY: vapid.privateKey });
   const login = await api(srv.baseUrl, 'POST', '/api/auth/login', { body: { email: MAIN_COACH_EMAIL, password: MAIN_COACH_PASSWORD } });
   coachToken = login.body.token;
-  browser = await chromium.launch({ executablePath: process.env.E2E_CHROMIUM || undefined, args: ['--no-sandbox'] });
+  browser = await launchBrowser();
 });
 after(async () => { if (browser) await browser.close(); if (srv) await srv.stop(); });
 

@@ -6,7 +6,7 @@
 // (sinon le navigateur géré par playwright-core).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './browser.js';
 import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from '../test/helpers/server.js';
 
 let srv, browser, athleteId, athleteToken, coachToken;
@@ -32,7 +32,7 @@ before(async () => {
       { name: 'Rowing', muscle: 'DOS', style: 'CLASSIQUE', restSeconds: 5, sets: [set(60, 10), set(60, 10)] },
     ] }] },
   });
-  browser = await chromium.launch({ executablePath: process.env.E2E_CHROMIUM || undefined, args: ['--no-sandbox'] });
+  browser = await launchBrowser();
 });
 after(async () => { if (browser) await browser.close(); if (srv) await srv.stop(); });
 
