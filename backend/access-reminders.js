@@ -4,8 +4,12 @@
 // recevait rien. Ce module décide, de façon pure et testable, qui doit recevoir une notification push.
 
 // Jours restants (arrondi au supérieur, comme le pop-up du front). null = pas d'expiration / exempté.
+//
+// L'« accès complet » (fullAccess) ne dispense PAS de la durée : il déverrouille les univers, la durée fixée
+// par le coach (accessExpiresAt) s'applique toujours — avant, un athlète en accès complet affichait
+// « 6 jours restants » mais n'était ni prévenu ni bloqué à la date de fin.
 export function accessDaysLeft(u, now = Date.now()) {
-  if (!u || u.role === 'coach' || u.fullAccess || !u.accessExpiresAt) return null;
+  if (!u || u.role === 'coach' || !u.accessExpiresAt) return null;
   const t = new Date(u.accessExpiresAt).getTime();
   if (isNaN(t)) return null;
   return Math.ceil((t - now) / 86400000);
@@ -33,4 +37,27 @@ export function accessReminderPayload(palier, coachName) {
     body: `${coachName || 'Ton coach'} peut le prolonger : écris-lui avant la fin pour ne pas être bloqué.`,
     url: '/Muscu.html',
   };
+}
+
+// Fenêtre d'accès écoulée ? Jamais pour un coach / le coach principal, jamais sans date (= illimité).
+export function isAccessExpiredFor(u, now = Date.now(), mainCoachEmail = '') {
+  if (!u) return false;
+  if (u.role === 'coach' || (mainCoachEmail && u.email === mainCoachEmail)) return false;
+  if (!u.accessExpiresAt) return false;
+  const t = new Date(u.accessExpiresAt).getTime();
+  return !isNaN(t) && t <= now;
+}
+
+// Migration au démarrage : jusqu'ici l'accès complet exemptait de la durée, donc un athlète en accès
+// complet dont la date était DÉJÀ dépassée n'a jamais été bloqué. Maintenant que la durée s'applique
+// aussi à lui, on efface ces dates périmées (= accès illimité, ce qu'ils vivaient déjà) pour qu'aucun
+// athlète ne soit bloqué d'un coup au déploiement. Les dates FUTURES gardent leur effet.
+export function staleFullAccessExpiries(users, now = Date.now()) {
+  const ids = [];
+  for (const u of Object.values(users || {})) {
+    if (!u || u.role === 'coach' || !u.fullAccess || !u.accessExpiresAt) continue;
+    const t = new Date(u.accessExpiresAt).getTime();
+    if (!isNaN(t) && t <= now) ids.push(u.id);
+  }
+  return ids;
 }

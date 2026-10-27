@@ -78,6 +78,14 @@ test('rappel d\'accès : pop-up « Plus que 2 jours d\'accès » à J-2, ne revi
   await ctx.close();
 });
 
+test('accès complet + 2 jours restants : le rappel s\'affiche aussi (cas Kenji)', async () => {
+  await newAthlete('pop-full@test.local', { accessDays: 2, onboarded: true }); // accès complet (par défaut) + durée
+  const ctx = await mobile();
+  const pg = await openApp('pop-full@test.local', ctx);
+  assert.match(await pg.text(), /Plus que \d jours? d'accès/i);
+  await ctx.close();
+});
+
 test('rappel d\'accès : aucun pop-up pour un accès lointain (9 jours)', async () => {
   await newAthlete('pop-far@test.local', { accessDays: 9, onboarded: true, full: false });
   const ctx = await mobile();
