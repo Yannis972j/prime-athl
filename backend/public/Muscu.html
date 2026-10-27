@@ -4934,6 +4934,81 @@ function PushNotifToggle(){
 }
 
 // ── Versions compactes pour le bloc Préférences du profil ──
+// Invitation à activer les notifications push (athlète). Jusqu'ici l'activation n'existait que dans
+// Profil → Notifications : la plupart des athlètes ne la trouvaient jamais, et ne recevaient donc AUCUNE
+// notification (feedback du coach, nouvelle séance, fin de repos, rappels d'accès) alors que le serveur
+// les envoyait bien. Cette carte, en haut de l'onglet Séances, propose l'activation en 1 tap.
+function PushPromptCard(){
+  const DISMISS_KEY='pa_push_prompt_until';
+  const[state,setState]=React.useState('hidden'); // hidden | ask | ios | working
+  const[error,setError]=React.useState(null);
+  React.useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        const until=parseInt(localStorage.getItem(DISMISS_KEY)||'0',10);
+        if(until&&Date.now()<until)return;
+      }catch{}
+      const isIOS=/iph|ipod|ipad/i.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone;
+      if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+        // iPhone dans Safari : le push web n'existe que dans l'app installée sur l'écran d'accueil.
+        if(isIOS&&!standalone&&alive)setState('ios');
+        return;
+      }
+      if(typeof Notification==='undefined'||Notification.permission==='denied')return;
+      try{
+        const{key}=await apiCall('/api/push/vapid-public-key');
+        if(!key)return; // serveur sans notifications : on ne propose rien
+        const reg=await navigator.serviceWorker.ready;
+        const sub=await reg.pushManager.getSubscription();
+        if(sub){ // déjà abonné sur cet appareil : on s'assure que le serveur le sait
+          try{const st=await apiCall('/api/push/status');if(!st.subscribed)await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});}catch{}
+          return;
+        }
+        if(alive)setState('ask');
+      }catch{}
+    })();
+    return()=>{alive=false;};
+  },[]);
+  const later=()=>{try{localStorage.setItem(DISMISS_KEY,String(Date.now()+7*86400000));}catch{}setState('hidden');};
+  const enable=async()=>{
+    setState('working');setError(null);
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){setState('hidden');return;}
+      const reg=await navigator.serviceWorker.ready;
+      const{key}=await apiCall('/api/push/vapid-public-key');
+      const raw=atob(key.replace(/-/g,'+').replace(/_/g,'/'));
+      const vapidKey=new Uint8Array(raw.split('').map(c=>c.charCodeAt(0)));
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:vapidKey});
+      await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+      setState('hidden');
+    }catch(e){setError(e.message||'Erreur');setState('ask');}
+  };
+  if(state==='hidden')return null;
+  return(
+    <div data-testid="push-prompt" style={{margin:'12px 16px 0',padding:'14px 16px',borderRadius:16,border:'1px solid rgba(191,160,96,0.35)',background:'linear-gradient(180deg,rgba(191,160,96,0.10),rgba(191,160,96,0.04))'}}>
+      <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+        <span style={{fontSize:22,lineHeight:1}}>🔔</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:800,color:'#fff'}}>{state==='ios'?'Installe l\'app pour recevoir les notifications':'Active les notifications'}</div>
+          <div style={{fontSize:11.5,color:T.textDim,lineHeight:1.5,marginTop:3}}>
+            {state==='ios'
+              ?<>Sur iPhone : touche <b style={{color:T.text}}>Partager</b> puis <b style={{color:T.text}}>Sur l'écran d'accueil</b>, ouvre l'app depuis l'icône, puis active les notifications dans <b style={{color:T.text}}>Profil</b>.</>
+              :'Feedback de ton coach, nouvelle séance, fin de repos, rappels : reçois-les même quand l\'app est fermée.'}
+          </div>
+          {error&&<div role="alert" style={{fontSize:11,color:T.danger,marginTop:6}}>{error}</div>}
+          <div style={{display:'flex',gap:8,marginTop:10}}>
+            {state!=='ios'&&<button onClick={enable} disabled={state==='working'} style={{height:36,padding:'0 16px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:12.5,fontWeight:800,cursor:'pointer'}}>{state==='working'?'…':'Activer'}</button>}
+            <button onClick={later} style={{height:36,padding:'0 14px',borderRadius:10,border:`1px solid ${T.border}`,background:'transparent',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer'}}>{state==='ios'?'Compris':'Plus tard'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfilePushRow(){
   const[status,setStatus]=React.useState('loading');
   const[error,setError]=React.useState(null);
@@ -19748,6 +19823,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
       </div>
       {/* Contenu */}
       <div style={{flex:1,overflow:'auto'}}>
+        {sub==='seances'&&profile&&profile.role!=='coach'&&<PushPromptCard/>}
         {sub==='seances'&&pendingFeedbacks&&pendingFeedbacks.length>0&&(
           <div style={{padding:'12px 16px 0',display:'flex',flexDirection:'column',gap:8}}>
             {pendingFeedbacks.map(f=>(
