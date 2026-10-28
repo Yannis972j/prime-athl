@@ -88,12 +88,13 @@ test('navigateur sans Web Audio ni audioSession : aucune exception', () => {
   assert.doesNotThrow(() => { PrimeAudio.unlock(); PrimeAudio.beep(880, 1, 0.3); PrimeAudio.ring(); });
 });
 
-test('front : « Passer le repos » et le changement d\'exercice ne déclenchent pas la sonnerie ; toast visuel de fin de repos', () => {
+test('front : « Passer le repos » et le changement d\'exercice ne déclenchent pas la sonnerie ; pas de toast « Repos terminé » en doublon', () => {
   assert.match(html, /const skipRest=React\.useCallback\(\(\)=>\{restSkippedRef\.current=true;setRestSeconds\(0\);\},\[\]\);/);
   assert.equal((html.match(/onClick=\{skipRest\}/g) || []).length, 2, 'les 2 boutons « passer le repos »');
   assert.match(html, /title="Passer le repos"/);
   assert.match(html, /restSkippedRef\.current=true;\s*setCurrentEx\(idx\);setRestSeconds\(0\);setRestTotal\(0\);/);
-  assert.match(html, /Repos terminé — c'est reparti !/);
+  assert.doesNotMatch(html, /c'est reparti !/);
+  assert.doesNotMatch(html, /restDoneToast|restDoneFlash/);
   // tout tap ré-arme l'audio
   assert.match(html, /document\.addEventListener\('touchend',arm/);
 });

@@ -2061,7 +2061,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const playBeep=React.useCallback((freq,gain,duration)=>{PrimeAudio.beep(freq,gain,duration);},[]);
   // Repos passé volontairement (« Passer le repos », changement d'exercice) : pas de sonnerie.
   const restSkippedRef=React.useRef(false);
-  const[restDoneFlash,setRestDoneFlash]=React.useState(false);
   const skipRest=React.useCallback(()=>{restSkippedRef.current=true;setRestSeconds(0);},[]);
   // Tout geste de l'utilisateur (tap) ré-arme l'audio : un contexte « suspended/interrupted » (écran
   // verrouillé, appel, retour d'une autre app) ne peut être repris que depuis un geste sur iOS.
@@ -2082,12 +2081,9 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         // repos passé volontairement : silence
         restSkippedRef.current=false;
       }else{
-        // Fin de repos : sonnerie forte type réveil — 3 doubles-bips au volume max + signal visuel
-        // (pour un téléphone en silencieux / sans vibration, l'écran l'indique aussi).
+        // Fin de repos : sonnerie forte type réveil — 3 doubles-bips au volume max + vibration.
         try{if(navigator.vibrate)navigator.vibrate([300,100,300,100,300,100,300,100,300,100,600]);}catch{}
         PrimeAudio.ring();
-        setRestDoneFlash(true);
-        setTimeout(()=>setRestDoneFlash(false),4000);
       }
     }
     // Un nouveau repos qui démarre efface un éventuel « skip » resté armé.
@@ -2369,12 +2365,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // block, et l'overlay se centre par rapport à la hauteur totale de la liste d'exercices
   // (souvent bien plus grande que l'écran) au lieu de l'écran visible — le compte à rebours se
   // retrouvait hors-champ, seul le libellé du haut dépassant tout en bas de l'écran.
-  // Signal visuel de fin de repos (téléphone en silencieux, sans vibration) — rendu dans les DEUX modes
-  // d'affichage de la séance (focus et normal), d'où sa définition ici plutôt que dans un seul return.
-  const restDoneToast=restDoneFlash&&restSeconds<=0&&ReactDOM.createPortal(
-    <div role="status" style={{position:'fixed',top:'calc(env(safe-area-inset-top) + 14px)',left:'50%',transform:'translateX(-50%)',zIndex:60,padding:'12px 20px',borderRadius:999,background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",boxShadow:'0 6px 24px rgba(44,196,160,0.45)',animation:'celebrationPop 0.3s ease',pointerEvents:'none',whiteSpace:'nowrap'}}>⏱ Repos terminé — c'est reparti !</div>,
-    document.body
-  );
   const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
       <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours{holdSideRef.current?` · côté ${holdSideRef.current==='G'?'gauche':'droit'}`:''}</div>
@@ -2447,7 +2437,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
         {/* Overlay compte à rebours de série — plein écran (factorisé, voir setTimerOverlay) */}
         {setTimerOverlay}
-        {restDoneToast}
 
         {/* Header minimal */}
         <div style={{padding:'8px 18px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -2627,7 +2616,6 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
     <div style={{color:T.text,height:'100%',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
       {/* Overlay compte à rebours de série — plein écran, aussi visible hors mode focus */}
       {setTimerOverlay}
-      {restDoneToast}
       {/* Image illustrative — bandeau borné en haut (s'adapte à la taille du téléphone, plus jamais trop gros) */}
       {(()=>{const u=exerciseImageURL(ex.name);return u?(
         <div key={ex.id||ex.name} style={{position:'absolute',top:0,left:0,right:0,height:'clamp(140px, 22vh, 200px)',zIndex:0,overflow:'hidden',pointerEvents:'none'}}>

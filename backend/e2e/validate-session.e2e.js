@@ -135,7 +135,7 @@ test('e2e : la sonnerie sonne à la fin NATURELLE du repos (+ message à l\'écr
   assert.equal(await rings(), 0, 'pas de sonnerie pendant le repos');
   await pg.waitForTimeout(6000);
   assert.ok((await rings()) >= 1, 'sonnerie jouée à la fin du repos');
-  assert.match(await pg.evaluate(() => document.body.innerText), /Repos terminé/, 'message visuel de fin de repos');
+  assert.doesNotMatch(await pg.evaluate(() => document.body.innerText), /c'est reparti/, 'pas de toast en doublon');
   const afterNatural = await rings();
 
   // 2) repos passé volontairement : aucune sonnerie
