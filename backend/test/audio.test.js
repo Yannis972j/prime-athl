@@ -37,11 +37,12 @@ function makeEnv({ ctxState = 'running', playRejects = false, audioSession = tru
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
 
-test('unlock : passe la session audio iOS en « playback » (sonne même en mode silencieux) et bénit l\'élément de sonnerie', async () => {
+test('unlock : passe la session audio iOS en « ambient » (cohabite avec la musique, ne la coupe pas) et bénit l\'élément de sonnerie', async () => {
   const { PrimeAudio, log } = makeEnv();
   PrimeAudio.unlock();
   await tick();
-  assert.equal(log.sessionType, 'playback');
+  assert.equal(log.sessionType, 'ambient');
+  assert.notEqual(log.sessionType, 'playback', 'ne doit plus réclamer le canal audio en exclusif');
   assert.equal(log.audioPlays.length, 1, 'lecture muette de déblocage');
   assert.equal(log.audioPlays[0].muted, true);
 });
