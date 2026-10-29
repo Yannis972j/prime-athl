@@ -1614,9 +1614,13 @@ function WorkoutEditorScreen({workout,onChange,onClose,onImportPrograms,imported
 
 // ── Audio de l'app (bips de décompte + sonnerie de fin de repos) ─────────────────────────────
 // Pourquoi ce module : la sonnerie ne sonnait pas chez certains utilisateurs. Causes corrigées ici :
-//  1. iPhone en mode silencieux : l'API Web Audio est coupée par le contacteur latéral. La sonnerie
-//     passe donc par un élément <audio> (canal « média », qui sonne même en silencieux) et on active
-//     `navigator.audioSession.type='playback'` (iOS 16.4+) pour que les bips suivent aussi.
+//  1. iPhone : la session audio est en « ambient » (iOS 16.4+) pour COHABITER avec la musique de
+//     l'utilisateur (Spotify/Apple Music). Avant on forçait « playback », qui réclame le canal audio
+//     en exclusif et COUPAIT la musique pendant toute la séance. « ambient » se mélange à la musique
+//     sans l'interrompre ; les bips passent par Web Audio et la sonnerie par un élément <audio>.
+//     Contrepartie assumée : « ambient » respecte le contacteur silencieux, donc sans musique et en
+//     mode silencieux, les bips peuvent être muets (quand l'athlète écoute de la musique, le son
+//     joué prouve que le téléphone n'est pas en silencieux, donc bips et sonnerie s'entendent).
 //  2. AudioContext « suspended » / « interrupted » (écran verrouillé, appel, changement d'app) :
 //     `resume()` n'était appelé qu'à l'état « suspended » et jamais après un geste → plus aucun son.
 //     Désormais on reprend à CHAQUE geste de l'utilisateur et dès qu'un son est demandé, et on
@@ -1685,7 +1689,7 @@ const PrimeAudio=(()=>{
   return{
     // À appeler pendant un GESTE de l'utilisateur (tap) : débloque l'audio pour la suite de la séance.
     unlock(){
-      try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback';}catch{}
+      try{if(navigator.audioSession&&navigator.audioSession.type!=='ambient')navigator.audioSession.type='ambient';}catch{}
       const c=getCtx();
       resumeCtx(c);
       try{if(c){const b=c.createBuffer(1,1,SR),src=c.createBufferSource();src.buffer=b;src.connect(c.destination);src.start(0);}}catch{}
