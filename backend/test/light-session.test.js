@@ -11,7 +11,7 @@ import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from './helpe
 
 const html = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/Muscu.html'), 'utf8');
 const slice = (startMarker, endMarker) => { const a = html.indexOf(startMarker); const b = html.indexOf(endMarker, a); assert.ok(a > 0 && b > a, startMarker); return html.slice(a, b); };
-const SRC = slice('const DELOAD_WEIGHT_PCT', '// Boutons d\'allègement');
+const SRC = slice('const DELOAD_WEIGHT_PCT', '// Réglages d\'allègement');
 const { lightenExercise } = new Function(SRC + '\nreturn { lightenExercise };')();
 
 const ex = () => ({ name: 'Squat', weightStr: '100', repsStr: '8', restSeconds: 120,
@@ -41,8 +41,13 @@ test('aucun mode : exercice inchangé ; une seule série reste une série', () =
 });
 
 test('front : boutons dans la Bibliothèque et le calendrier, drapeaux transmis à la séance', () => {
-  assert.match(html, /<SessionLightToggles mode=\{lightMode\} onChange=\{setLightMode\} showMenstrual=\{gender!=='h'\}\/>/);
-  assert.match(html, /<SessionLightToggles mode=\{dayLightFor\(selectedDay\.dateStr\)\}/);
+  // Bibliothèque : décharge séance + règles douloureuses (femmes uniquement)
+  assert.match(html, /<LightToggleCard items=\{gender==='f'\?\['deload','menstrual'\]:\['deload'\]\} value=\{lightMode\}/);
+  // Calendrier : règles douloureuses (femmes uniquement) sur le jour ; décharge semaine avec l'icône calendrier
+  assert.match(html, /profile\?\.gender==='f'&&\(\s*<LightToggleCard items=\{\['menstrual'\]\}/);
+  assert.match(html, /<LightToggleCard items=\{\['week'\]\} value=\{deloadMode\?'week':null\} onChange=\{toggleDeload\}\/>/);
+  assert.match(html, /week: \{ icon: 'calendar', label: 'Décharge semaine'/);
+  assert.match(html, /deload: \{ icon: 'arrowDown', label: 'Décharge séance'/);
   assert.match(html, /lightReason:lightMode==='menstrual'\?'menstrual':'session'/);
   assert.match(html, /lightReason:light==='menstrual'\?'menstrual':'session'/);
   assert.match(html, /\.\.\.\(workout\.lightReason\?\{lightReason:workout\.lightReason\}:\{\}\)/);
