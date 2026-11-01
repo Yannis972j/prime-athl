@@ -570,6 +570,7 @@ const inviteCode = () => 'PA-' + crypto.randomBytes(5).toString('hex').toUpperCa
 // Sans ce filtre, une clé comme "__proto__" ou "constructor" permet d'écrire directement sur
 // Object.prototype (ex: {mealId:"fullAccess"} rend TOUT utilisateur fullAccess) voire de
 // planter le process entier (ex: {mealId:"toString"} casse String(x) pour tout le monde).
+const safeLightReason = v => (v === 'session' || v === 'menstrual') ? v : null;
 const DANGEROUS_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 function isSafeObjectKey(k) {
   return typeof k === 'string' && k.length > 0 && k.length <= 60 && !DANGEROUS_OBJECT_KEYS.has(k);
@@ -1436,7 +1437,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
     pendingSessions: DATA.pendingSessions[u.id] || [],
@@ -2156,7 +2157,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
     // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
     // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, overloadApplied: !!s.overloadApplied }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
   res.json(list);
 });
 
@@ -2308,6 +2309,10 @@ app.post('/api/sessions', authRequired, accessActive, (req, res) => {
   // Semaine de décharge : le récap (côté athlète et coach) neutralise la comparaison de perf
   // pour ne pas pénaliser une baisse de charge volontaire.
   if (deload) session.deload = true;
+  // Raison d'un allègement ponctuel (séance de décharge isolée / douleurs menstruelles) : adapte
+  // le message du récap. Liste fermée.
+  const lr = safeLightReason(req.body?.lightReason);
+  if (deload && lr) session.lightReason = lr;
   DATA.sessions[id] = session;
   // Une charge cible posée par le coach est « consommée » dès que l'athlète enregistre une séance
   // avec cet exercice : elle a joué son rôle de pré-remplissage, on ne la re-propose pas ensuite.
@@ -2654,6 +2659,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     createdAt: Date.now(),
     // Séance de décharge : le récap ne pénalise pas la baisse volontaire (même drapeau que /api/sessions).
     ...(deload ? { deload: true } : {}),
+    ...(deload && safeLightReason(req.body?.lightReason) ? { lightReason: safeLightReason(req.body?.lightReason) } : {}),
   };
   DATA.sessions[id] = session;
   // La séance enregistrée consomme les charges cibles posées sur ces exercices (cf. /overload).

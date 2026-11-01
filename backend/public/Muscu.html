@@ -206,6 +206,8 @@ function Icon({name,size=22,stroke='currentColor',strokeWidth=1.6,fill='none',st
     plus:<><path d="M12 5v14"/><path d="M5 12h14"/></>,
     minus:<path d="M5 12h14"/>,
     check:<path d="M5 12l5 5 9-11"/>,
+    arrowDown:<><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></>,
+    droplet:<path d="M12 3c3.5 4.2 6 7.6 6 10.8A6 6 0 0 1 6 13.8C6 10.6 8.5 7.2 12 3z"/>,
     chevronRight:<path d="M9 6l6 6-6 6"/>,
     chevronLeft:<path d="M15 6l-6 6 6 6"/>,
     chevronUp:<path d="M6 15l6-6 6 6"/>,
@@ -671,22 +673,73 @@ const roundPlate = v => Math.round(v / 2.5) * 2.5;
 // ×60 %, arrondie à 2,5 kg. Séries −40 %. Reps/repos/cardio inchangés. "PDC"/vide reste tel quel.
 // On ne se base PAS sur une feuille DECHARGE importée (appariement par position peu fiable) ni sur
 // l'historique : le poids programme est la source directe, comme la feuille du coach.
-function computeDeload(ex) {
+function computeDeload(ex, wPct = DELOAD_WEIGHT_PCT, sPct = DELOAD_SETS_PCT) {
   const scaleWeight = str => {
     const s = String(str == null ? '' : str);
     if (!s || !/\d/.test(s)) return s;
-    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * DELOAD_WEIGHT_PCT)));
+    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * wPct)));
   };
   const sets = ex.sets || [];
-  const nDeload = Math.max(1, Math.round(sets.length * DELOAD_SETS_PCT));
+  const nDeload = Math.max(1, Math.round(sets.length * sPct));
   return {
     weightStr: scaleWeight(ex.weightStr),
     repsStr: ex.repsStr,
     restSeconds: ex.restSeconds,
     holdSeconds: ex.holdSeconds,
     cardio: ex.cardio,
-    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: roundPlate((s.weight || 0) * DELOAD_WEIGHT_PCT) })),
+    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: roundPlate((s.weight || 0) * wPct) })),
   };
+}
+// Séance allégée « douleurs menstruelles / endométriose » : déclenchée par l'athlète pour UNE séance.
+// Moins forte qu'une décharge : charges à 70 %, séries −30 % (arrondi, min 1). Reps/repos inchangés.
+const MENSTRUAL_WEIGHT_PCT = 0.7;
+const MENSTRUAL_SETS_PCT = 0.7;
+// Allège un exercice selon le mode : 'deload' (valeurs de la feuille DECHARGE si renseignées, sinon
+// 60 % / −40 %) ou 'menstrual' (70 % / −30 %). null → exercice inchangé.
+function lightenExercise(ex, mode) {
+  if (!mode || !ex) return ex;
+  let d;
+  if (mode === 'menstrual') d = computeDeload(ex, MENSTRUAL_WEIGHT_PCT, MENSTRUAL_SETS_PCT);
+  else {
+    const dl = ex.deload;
+    const hasVal = dl && String(dl.weightStr == null ? '' : dl.weightStr).trim() !== '';
+    d = hasVal ? dl : computeDeload(ex);
+  }
+  return { ...ex, weightStr: d.weightStr, repsStr: d.repsStr, restSeconds: d.restSeconds, holdSeconds: d.holdSeconds, cardio: d.cardio, sets: d.sets };
+}
+// Réglages d'allègement façon « réglages iOS » : une carte, une ligne par option (pastille icône,
+// libellé court, interrupteur). Options exclusives entre elles. items : [{key,icon,label,color}].
+const LIGHT_OPTS = {
+  week: { icon: 'calendar', label: 'Décharge semaine', color: '#5A8AE0' },
+  deload: { icon: 'arrowDown', label: 'Décharge séance', color: '#5A8AE0' },
+  menstrual: { icon: 'droplet', label: 'Douleurs de cycle', color: '#E88AB0' },
+};
+function LightSwitch({ on, color }) {
+  return (
+    <span aria-hidden style={{ position: 'relative', width: 40, height: 24, borderRadius: 12, flexShrink: 0, background: on ? color : 'rgba(255,255,255,0.12)', transition: 'background .2s ease' }}>
+      <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 20, height: 20, borderRadius: 10, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.35)', transition: 'left .2s cubic-bezier(.16,1,.3,1)' }} />
+    </span>
+  );
+}
+function LightToggleCard({ items, value, onChange, style }) {
+  if (!items || !items.length) return null;
+  return (
+    <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 14, ...style }}>
+      {items.map((k, i) => {
+        const o = LIGHT_OPTS[k], on = value === k;
+        return (
+          <button key={k} type="button" role="switch" aria-checked={on} onClick={() => onChange(on ? null : k)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '11px 14px', border: 'none', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none', background: on ? `${o.color}14` : 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', transition: 'background .2s ease' }}>
+            <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${o.color}22` }}>
+              <Icon name={o.icon} size={16} stroke={o.color} strokeWidth={2} />
+            </span>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600, letterSpacing: -0.1 }}>{o.label}</span>
+            <LightSwitch on={on} color={o.color} />
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 // Accord grammatical : rend la forme féminine si gender==='f', sinon la forme masculine
 // (défaut quand le sexe n'est pas précisé). Centralise tous les accords des messages.
@@ -696,13 +749,22 @@ function gg(gender, masc, fem){ return gender === 'f' ? fem : masc; }
 // punitif — une baisse de charge en décharge est voulue, pas un recul à sanctionner.
 // (name, g) → g = sexe de l'athlète pour l'accord.
 const DELOAD_CONGRATS = [
-  (name,g) => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus ${gg(g,'fort','forte')}. C'est exactement ce qu'il faut faire cette semaine.`,
-  (name,g) => `Décharge validée, ${name}. Cette semaine, l'objectif c'est de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
+  (name,g) => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus ${gg(g,'fort','forte')}. C'est exactement ce qu'il fallait faire.`,
+  (name,g) => `Décharge validée, ${name}. L'objectif c'était de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
 ];
 // Entrées mindset : string OU (g)=>string quand la phrase porte un accord. motivationQuote résout.
 const DELOAD_MINDSET = [
   "La décharge n'est pas du temps perdu : c'est là que le corps transforme le travail des semaines dures en muscle et en force. Léger, mais sérieux.",
-  g => `Reculer d'un pas pour mieux sauter. La semaine prochaine tu repars sur tes vrais poids, plus ${gg(g,'frais','fraîche')} et plus ${gg(g,'fort','forte')}.`,
+  g => `Reculer d'un pas pour mieux sauter. Bientôt tu repars sur tes vrais poids, plus ${gg(g,'frais','fraîche')} et plus ${gg(g,'fort','forte')}.`,
+];
+// Séance allégée pour douleurs menstruelles / endométriose : ton doux, zéro jugement.
+const MENSTRUAL_CONGRATS = [
+  (name) => `Bravo ${name}, tu es venue malgré la douleur et tu as adapté ta séance à ton corps. C'est ça, être régulière intelligemment.`,
+  (name) => `Séance allégée bouclée, ${name}. Écouter son corps les jours difficiles, c'est une force — la constance se construit aussi comme ça.`,
+];
+const MENSTRUAL_MINDSET = [
+  "S'entraîner léger un jour de douleur vaut mieux que ne rien faire : tu gardes le rythme sans te mettre dans le rouge.",
+  "Ton corps a ses cycles : adapter l'intensité n'est pas un recul, c'est de la gestion. Les grosses séances reviendront.",
 ];
 // Messages APRÈS une semaine de décharge : la précédente séance était en décharge, celle-ci ne l'est
 // plus. L'athlète revient sur ses vrais poids — c'est la 1ère séance de relance. Ton = accueil + coup
@@ -718,12 +780,20 @@ const POST_DELOAD_MINDSET = [
   "La reprise après décharge, ce n'est pas juste \"remettre les vrais poids\". C'est aussi remettre l'intensité, la concentration, l'ambition. Tu as récupéré pour ça.",
 ];
 // Bandeau de récap affiché à la place de l'alerte de régression quand la séance est une décharge.
-function DeloadRecapBanner({ coach }) {
+function DeloadRecapBanner({ coach, reason }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 13px', borderRadius: 11, background: 'rgba(90,138,224,0.13)', border: '1px solid rgba(90,138,224,0.4)', marginBottom: 12 }}>
-      <span style={{ fontSize: 17, flexShrink: 0 }}>🌊</span>
+      <span style={{ fontSize: 17, flexShrink: 0 }}>{reason === 'menstrual' ? '🌸' : '🌊'}</span>
       <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
-        {coach
+        {reason === 'menstrual'
+          ? (coach
+            ? <>Séance allégée (douleurs de cycle) — charges réduites à la demande de l'athlète. <span style={{ color: '#8FB4F5' }}>RAS</span> : pas un recul, comparaison de perf en pause.</>
+            : <>Séance allégée (douleurs de cycle) — tu as adapté ta séance à ton corps. La baisse est <b>normale</b> : ça ne compte pas comme un recul.</>)
+          : reason === 'session'
+          ? (coach
+            ? <>Séance de décharge — charges allégées pour cette séance. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est voulue, pas un recul. Comparaison de perf en pause.</>
+            : <>Séance de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : tu laisses ton corps récupérer.</>)
+          : coach
           ? <>Semaine de décharge — charges allégées comme prévu. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est planifiée, pas un recul. Comparaison de perf en pause.</>
           : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : tu laisses ton corps récupérer pour revenir plus fort.</>}
       </div>
@@ -1749,6 +1819,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
         // Marqueur "semaine de décharge" : le récap (buildSessionComparison + affichages) s'en
         // sert pour NE PAS pénaliser l'athlète (poids allégés = baisse normale et voulue).
         ...(workout.deload?{deload:true}:{}),
+        ...(workout.lightReason?{lightReason:workout.lightReason}:{}),
         totalVolume,
         duration:Math.round(sessionTime/60),
         exercises:exercises.map(e=>({
@@ -5937,7 +6008,7 @@ function personalizedSuffix(goals,seed){
 }
 
 function congratsMessage(name,volumeVsPrev,comp,opts){
-  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null,gender='',coach=null}=opts||{};
+  const {sessionName='',hasVolume=true,seed=null,isDeload=false,isPostDeload=false,goals=null,gender='',coach=null,lightReason=null}=opts||{};
   const sn=sessionName||'séance';
   // Profil coaching : surnom à la place du prénom, et ton adouci si l'élève a demandé « pas
   // culpabilisant » / « doux » (on ne lui sert jamais le message sévère d'une baisse).
@@ -5946,6 +6017,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
+  if(isDeload&&lightReason==='menstrual')return pick(MENSTRUAL_CONGRATS)(name,gender);
   if(isDeload)return pick(DELOAD_CONGRATS)(name,gender);
   // 1ère séance APRÈS une décharge : message de reprise, prime sur la comparaison (qui serait
   // faussement flatteuse : les vrais poids d'aujourd'hui vs les 60% de la semaine dernière = +40%).
@@ -6142,11 +6214,12 @@ function mindsetPoolFor(cat,coach){
 // phrase de mindset « bougeait » toute seule.
 function hashStr(s){s=String(s==null?'':s);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return Math.abs(h|0);}
 
-function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gender='',coach=null){
+function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gender='',coach=null,lightReason=null){
   // seed fourni (id/date de séance) → citation FIGÉE pour cette séance ; sinon aléatoire (compat).
   // Une entrée de pool peut être une string OU une fonction (g)=>string (accord grammatical) : on résout.
   const pick=arr=>{const v=arr[(seed!=null?hashStr(seed+'|mindset'):Math.floor(Math.random()*arr.length))%arr.length];return typeof v==='function'?v(gender):v;};
   // Séance de décharge : mindset dédié, jamais un message de recul/pique.
+  if(isDeload&&lightReason==='menstrual')return pick(MENSTRUAL_MINDSET);
   if(isDeload)return pick(DELOAD_MINDSET);
   if(isPostDeload)return pick(POST_DELOAD_MINDSET);
   // Fiche « Mes objectifs » remplie avec un style → on tire dans le pool spécifique à ce
@@ -6199,7 +6272,7 @@ function isFirstSessionAfterDeload(target,history){
   const tTime=new Date(target.date||0).getTime();
   const prior=(history||[]).filter(h=>h&&h!==target&&(target.id?h.id!==target.id:true)&&new Date(h.date||0).getTime()<tTime)
     .sort((a,b)=>new Date(b.date||0).getTime()-new Date(a.date||0).getTime());
-  return prior.length>0 && !!prior[0].deload;
+  return prior.length>0 && !!prior[0].deload && prior[0].lightReason!=='menstrual';
 }
 
 // ── Récap mensuel (Option A : agrégation 100 % client à partir des séances validées) ──────
@@ -6799,6 +6872,16 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     setDeloadModeState(next);
     try{if(sheet)localStorage.setItem('pa_deload_'+sheet,next?'1':'0');}catch{}
   };
+  // Allègement d'UNE séance du calendrier (décharge ponctuelle / douleurs menstruelles), lié à la
+  // date choisie : changer de jour le remet à zéro. Ignoré si la semaine entière est en décharge.
+  const[dayLight,setDayLight]=React.useState({date:null,mode:null});
+  const dayLightFor=dateStr=>(!deloadMode&&dayLight.date===dateStr)?dayLight.mode:null;
+  // Une seule carte regroupe les 3 allègements (semaine / séance / cycle), exclusifs entre eux.
+  const lightValueFor=dateStr=>deloadMode?'week':dayLightFor(dateStr);
+  const onLightChange=(dateStr,k)=>{
+    if(k==='week'){if(!deloadMode)toggleDeload();setDayLight({date:null,mode:null});}
+    else{if(deloadMode)toggleDeload();setDayLight({date:dateStr,mode:k});}
+  };
   const movesByTarget=scheduleMoves||{};
   const suppressedSources=React.useMemo(()=>{
     const s=new Set();
@@ -7060,14 +7143,16 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     // à cette date-là (logDate) au lieu d'aujourd'hui — l'athlète/coach peut ainsi logger une séance
     // oubliée un jour précédent (ex : on est le 5, je valide la séance du 1er).
     const isPast=dateStr&&dateStr<ymdKey();
+    const light=dayLightFor(dateStr);
     onStartWorkout({
       name:sessionTitleFrom(d,dayName),
       muscles:d.category||'',
       // La séance hérite du mode décharge actif → le récap saura qu'il ne faut pas pénaliser.
       ...(deloadMode?{deload:true}:{}),
+      ...(light?{deload:true,lightReason:light==='menstrual'?'menstrual':'session'}:{}),
       ...(isPast?{logDate:dateStr}:{}),
       exercises:d.exercises.map(ex=>{
-        const src=applyDeload(ex);
+        const src=lightenExercise(applyDeload(ex),light);
         return{...src,id:uid(),sets:src.sets.map(s=>({...s,reps:0,done:false}))};
       }),
     });
@@ -7285,8 +7370,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               {histRecap&&(histRecap.comp||histRecap.showVolCompare)&&(
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.date||viewHistSession.id,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||'',coach:computeCoachCtx(profile)})}</div>
-                  {histRecap.isDeload&&<DeloadRecapBanner/>}
+                  <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.date||viewHistSession.id,isDeload:histRecap.isDeload,lightReason:viewHistSession.lightReason,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||'',coach:computeCoachCtx(profile)})}</div>
+                  {histRecap.isDeload&&<DeloadRecapBanner reason={viewHistSession.lightReason}/>}
                   {histRecap.isPostDeload&&<PostDeloadRecapBanner/>}
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
@@ -7364,7 +7449,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   )}
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
-                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.date||viewHistSession.id,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'',computeCoachCtx(profile))}"</div>
+                    <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.date||viewHistSession.id,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'',computeCoachCtx(profile),viewHistSession.lightReason)}"</div>
                   </div>
                 </div>
               )}
@@ -7594,12 +7679,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
           l'app calcule 60 % du poids et −40 % de séries à la volée (computeDeload), sans dépendre
           d'une feuille "DECHARGE" dans l'Excel. Réversible — retaper dessus revient aux valeurs
           normales, rien n'est perdu. Les séances validées en décharge ne pénalisent pas le récap. */}
-      {hasDeload&&(
-        <button onClick={toggleDeload} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',height:44,marginBottom:14,borderRadius:14,border:deloadMode?'1px solid rgba(90,138,224,0.5)':'1px solid rgba(255,255,255,0.1)',background:deloadMode?'linear-gradient(135deg,#5A8AE0,#8AADEE)':'rgba(255,255,255,0.04)',color:deloadMode?'#fff':T.textDim,fontSize:13,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:deloadMode?'0 6px 18px rgba(90,138,224,0.4)':'none',transition:'background 0.2s,border-color 0.2s'}}>
-          <span style={{width:9,height:9,borderRadius:5,background:deloadMode?'#fff':'rgba(255,255,255,0.2)',flexShrink:0}}/>
-          DÉCHARGE {deloadMode?'· ACTIVÉE (poids à 60 %)':'· semaine allégée'}
-        </button>
-      )}
+      {/* Carte des allègements dans le détail du jour ; ici seulement si aucun jour à venir n'est ouvert. */}
+      {hasDeload&&!(selectedDay&&daysForDate(selectedDay.dateStr)[selectedDay.dayName]&&!doneDates.has(selectedDay.dateStr))&&<LightToggleCard items={['week']} value={deloadMode?'week':null} onChange={toggleDeload}/>}
 
       {/* Calendar */}
       {(sheetNames.length>0||Object.keys(planned).length>0)&&(
@@ -7689,7 +7770,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const isDone=doneDates.has(selectedDay.dateStr);
             // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
             const histSession=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===selectedDay.dateStr);
-            const displayExercises=d?d.exercises.map(applyDeload):(histSession?.exercises||null);
+            const displayExercises=d?d.exercises.map(ex=>lightenExercise(applyDeload(ex),dayLightFor(selectedDay.dateStr))):(histSession?.exercises||null);
             const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
             // Jour déjà passé (avant aujourd'hui) → on propose de VALIDER la séance à cette date.
@@ -7749,6 +7830,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                         return els;
                       })()}
                     </div>
+                    {d&&!isDone&&(
+                      <LightToggleCard items={['week','deload',...(profile?.gender==='f'?['menstrual']:[])]} value={lightValueFor(selectedDay.dateStr)} onChange={k=>onLightChange(selectedDay.dateStr,k)}/>
+                    )}
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
                       <div style={{display:'flex',gap:8}}>
                         {isDone&&histSession&&(
@@ -11742,9 +11826,9 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
-              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.date||s.id,isDeload,isPostDeload,gender:athleteGender,coach:athCoach})}</div>
+              <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(firstName,volumeVsPrev,comp,{sessionName:s.name,hasVolume,seed:s.date||s.id,isDeload,isPostDeload,gender:athleteGender,coach:athCoach,lightReason:s.lightReason})}</div>
               {/* Semaine de décharge : bandeau neutre à la place de l'alerte de régression */}
-              {isDeload&&<DeloadRecapBanner coach/>}
+              {isDeload&&<DeloadRecapBanner coach reason={s.lightReason}/>}
               {isPostDeload&&<PostDeloadRecapBanner coach/>}
               {/* Alerte régression */}
               {isRegression&&(
@@ -11897,7 +11981,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
               {/* Mindset */}
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
-                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.date||s.id,isDeload,isPostDeload,athGoals,athleteGender,athCoach)}"</div>
+                <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.date||s.id,isDeload,isPostDeload,athGoals,athleteGender,athCoach,s.lightReason)}"</div>
               </div>
             </div>
           )}
@@ -18901,13 +18985,13 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <img src="/logo.svg" alt="Prime Athl" style={{width:64,height:64,borderRadius:18,objectFit:'cover',marginBottom:14,boxShadow:'0 8px 32px rgba(191,160,96,0.5)'}}/>
               <div style={{fontSize:11,color:T.good,fontWeight:700,letterSpacing:1.2,textTransform:'uppercase',marginBottom:6}}>Séance validée ✓</div>
               <div style={{fontSize:26,fontWeight:800,letterSpacing:-0.5,lineHeight:1.15,marginBottom:6,color:'#fff',maxWidth:340,overflowWrap:'break-word',wordBreak:'break-word',textWrap:'balance'}}>{_s?.name||'Séance'}</div>
-              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.date||_s?.id,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,gender:congratsGender||profile.gender||'',coach:congratsCoach})}</div>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.55)',lineHeight:1.5,maxWidth:340}}>{congratsMessage(congratsName||profile.firstName||'champion',volumeVsPrev,sessionComparison,{sessionName:_s?.name,hasVolume,seed:_s?.date||_s?.id,isDeload:isDeloadSession,lightReason:_s?.lightReason,isPostDeload:isPostDeloadSession,gender:congratsGender||profile.gender||'',coach:congratsCoach})}</div>
             </div>
 
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
             {isDeloadSession&&(
               <div style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}}>
-                <DeloadRecapBanner/>
+                <DeloadRecapBanner reason={_s?.lightReason}/>
               </div>
             )}
             {/* Reprise après décharge — bandeau d'accueil (comparaison de perf en pause) */}
@@ -19056,7 +19140,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Phrase de motivation / développement personnel */}
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
-              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.date||_s?.id,isDeloadSession,isPostDeloadSession,congratsGoals||computeGoalsCtx(profile),congratsGender||profile.gender||'',congratsCoach)}"</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.date||_s?.id,isDeloadSession,isPostDeloadSession,congratsGoals||computeGoalsCtx(profile),congratsGender||profile.gender||'',congratsCoach,_s?.lightReason)}"</div>
             </div>
 
             {/* Bouton continuer */}
@@ -19168,7 +19252,10 @@ function MainApp({authUser,onLogout,setUser,authToken}){
 }
 
 // ── Bibliothèque de séances (partagée par le coach, sans calendrier) ──────────
-function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSession}){
+function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSession,gender}){
+  // Allègement de LA séance ouverte (décharge ponctuelle / douleurs menstruelles) — remis à zéro
+  // à chaque nouvelle séance ouverte : il ne s'applique qu'à la séance en question.
+  const[lightMode,setLightMode]=React.useState(null);
   const IA='#6366f1',IA2='#8b5cf6';
   const DAYS=['LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI','DIMANCHE'];
   const[coachSessions,setCoachSessions]=React.useState(sessionLibrary?.sessions||[]);
@@ -19215,10 +19302,14 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
   const prevM=()=>{if(calM===0){setCalY(y=>y-1);setCalM(11);}else setCalM(m=>m-1);setCalSel(null);};
   const nextM=()=>{if(calM===11){setCalY(y=>y+1);setCalM(0);}else setCalM(m=>m+1);setCalSel(null);};
 
+  React.useEffect(()=>{setLightMode(null);},[preview]);
   const launchSession=s=>{
     if(!s||!s.exercises||s.exercises.length===0)return;
-    // Les exercices viennent directement du parseur Excel ou de l'IA, même format que workout
-    onStartWorkout({name:s.name,muscles:s.category||s.muscles||'',exercises:s.exercises});
+    // Les exercices viennent directement du parseur Excel ou de l'IA, même format que workout.
+    // Allègement éventuel appliqué à cette séance seulement ; drapeau deload → le récap ne pénalise pas.
+    onStartWorkout({name:s.name,muscles:s.category||s.muscles||'',
+      ...(lightMode?{deload:true,lightReason:lightMode==='menstrual'?'menstrual':'session'}:{}),
+      exercises:lightMode?s.exercises.map(ex=>lightenExercise(ex,lightMode)):s.exercises});
     setPreview(null);
   };
 
@@ -19273,7 +19364,7 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
         </div>
         <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Exercices</div>
         <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:20}}>
-          {preview.exercises.map((ex,i)=>{
+          {preview.exercises.map(ex0=>lightenExercise(ex0,lightMode)).map((ex,i)=>{
             const sc2=STYLE_COLORS[ex.style||'CLASSIQUE']||T.textFaint;
             return(
               <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
@@ -19290,6 +19381,7 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
             );
           })}
         </div>
+        <LightToggleCard items={gender==='f'?['deload','menstrual']:['deload']} value={lightMode} onChange={setLightMode}/>
         <button onClick={()=>launchSession(preview)} style={{width:'100%',height:54,borderRadius:16,border:'none',background:`linear-gradient(135deg,${sc},${preview.source==='mine'?IA2:'#9090c4'})`,color:'#fff',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:`0 10px 28px ${sc}55`,display:'flex',alignItems:'center',justifyContent:'center',gap:10,letterSpacing:0.2,marginBottom:preview.source==='mine'?10:0}}>
           <Icon name="play" size={18} stroke="#fff"/>Commencer la séance
         </button>
@@ -19844,7 +19936,7 @@ function ProgrammeTab({workout,importedPrograms,onImportPrograms,scheduleMoves,o
           onDeleteSession={onDeleteSession} onUpdateSession={onUpdateSession}
         />}
         {sub==='live'&&<LiveSessionsView sessions={liveSessions} onStartWorkout={onStartWorkout}/>}
-        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} onDeleteSession={onDeleteSession} />}
+        {sub==='biblio'&&<BibliothequeScreen sessionLibrary={sessionLibrary} onStartWorkout={w=>{onStartWorkout(w);}} history={history} onDeleteSession={onDeleteSession} gender={profile?.gender||''} />}
         {sub==='nutrition'&&<NutritionScreen key={nutriRefreshKey} authToken={authToken} profile={profile} onRefresh={onRefresh} refreshing={refreshing}/>}
       </div>
     </div>
