@@ -14639,11 +14639,12 @@ const FICHE_CONF={
     {t:'5. Santé & antécédents',f:[{k:'Zones sensibles',type:'chips',opts:['Épaules','Dos','Genoux','Poignets','Aucune']},{k:'Blessures / opérations',type:'area'},{k:'Santé / traitement',type:'text'},{k:'Certificat médical ?',type:'radio',opts:['Oui','Non']}]},
     {t:'6. Mode de vie',f:[{k:'Repas / jour',type:'num'},{k:'Allergies / régime',type:'text'},{k:'Sommeil',type:'text'},{k:'Tabac / alcool',type:'radio',opts:['Non','Occasionnel','Régulier']},{k:'Stress',type:'text'}]},
     {t:'7. Disponibilité',f:[{k:'Séances / semaine',type:'num'},{k:'Jours & créneaux',type:'text'},{k:'Où t\'entraînes-tu ?',type:'chips',opts:['Salle','Maison','Extérieur']},{k:'Matériel',type:'text'}]},
-    {t:'8. Motivation',f:[{k:'Pourquoi la musculation ?',type:'area'},{k:'Motivation (1 à 10)',type:'radio',opts:['1-3','4-6','7-8','9-10']},{k:'Ce qui t\'a fait lâcher avant',type:'text'}]},
+    {t:'8. Motivation',f:[{k:'Pourquoi la musculation ?',type:'area'},{k:'Motivation (1 à 10)',type:'radio',opts:['1-3','4-6','7-8','9-10']}]},
+    {t:'9. Tes freins',f:[{k:'Ce qui te bloque aujourd\'hui',type:'chips',opts:['Manque de temps','Manque de motivation','Alimentation','Pas de résultats visibles','Je ne sais pas quoi faire','Blessure / douleur','Fatigue / sommeil','Stress','Budget']},{k:'Pourquoi, selon toi, tu ne progresses pas ?',type:'area'},{k:'Ce qui t\'a fait lâcher avant',type:'area'}]},
   ]},
   alim:{name:'Fiche alimentaire',sections:[
     {t:'1. Profil',f:[{k:'Nom / Prénom',type:'text',req:true},{k:'Âge',type:'num'},{k:'Taille (cm)',type:'num'},{k:'Poids actuel (kg)',type:'num'},{k:'Poids visé (kg)',type:'num'},{k:'Masse grasse %',type:'num'},{k:'Profession',type:'text'},{k:'Sexe',type:'radio',opts:['Homme','Femme']}]},
-    {t:'2. Objectif',f:[{k:'Objectif principal',type:'radio',opts:OBJ_OPTS},{k:'Échéance',type:'text'},{k:'Objectif (tes mots)',type:'area'},{k:'Régimes déjà suivis',type:'area'}]},
+    {t:'2. Objectif',f:[{k:'Objectif principal',type:'radio',opts:OBJ_OPTS},{k:'Échéance',type:'text'},{k:'Objectif (tes mots)',type:'area'},{k:'Régimes déjà suivis',type:'area'},{k:'Ce qui te bloque côté alimentation',type:'area'},{k:'Pourquoi, selon toi, ça ne marche pas ?',type:'area'}]},
     {t:'3. Santé & restrictions',f:[{k:'Problèmes de santé',type:'chips',opts:['Diabète','Cholestérol','Hypertension','Thyroïde','Aucun']},{k:'Traitements',type:'text'},{k:'Digestion',type:'chips',opts:['Ballonnements','Reflux','Constipation','Aucun']},{k:'Intolérances',type:'text'},{k:'Allergies',type:'text'},{k:'Règles régulières ? (femmes)',type:'radio',opts:['Oui','Non / absentes +3 mois','Non concerné']}]},
     {t:'4. Habitudes alimentaires',f:[{k:'Repas / jour',type:'num'},{k:'Heure 1er repas',type:'text'},{k:'Heure dernier repas',type:'text'},{k:'Petit-déjeuner',type:'radio',opts:['Sucré','Salé','Les deux','Je saute']},{k:'Tu cuisines',type:'radio',opts:['Toujours','Souvent','Parfois','Rarement']},{k:'Tu pèses tes aliments ?',type:'radio',opts:['Oui','Parfois','Jamais']},{k:'Grignotage',type:'radio',opts:['Jamais','Parfois','Souvent','Tout le temps']},{k:'Si oui, quels aliments',type:'text'}]},
     {t:'Fréquence de consommation',f:[{k:'Fréquence',type:'freq'}]},
@@ -14754,8 +14755,10 @@ function StartFichesModal({onClose}){
         {tab==='pres'&&(
           <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid '+T.border,borderRadius:14,padding:14,margin:'6px 0 8px'}}>
             <div style={{fontSize:13,color:'#E88AB0',fontWeight:800,marginBottom:8}}>Mon accompagnement</div>
-            <div style={{fontSize:12.5,color:T.text,fontWeight:700}}>Programme sportif — 150 € pour démarrer, puis 100 €/mois</div>
-            <div style={{fontSize:12,color:T.textDim,marginTop:2,lineHeight:1.5}}>• Programme personnalisé : 50 € (ajustable) · un autre programme : 50 €<br/>• Accès appli + suivi, stats &amp; retour du coach sur tes séances : 100 €/mois</div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700}}>Accès à l'application — 100 €/mois</div>
+            <div style={{fontSize:12,color:T.textDim,marginTop:2,lineHeight:1.5}}>Suivi de tes séances, stats de progression &amp; retours du coach</div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Programme personnalisé — 50 € <span style={{color:T.textDim,fontWeight:400}}>(ajustable · un autre programme : 50 €)</span></div>
+            <div style={{fontSize:11.5,color:T.textDim,marginTop:2}}>Pour démarrer : 150 € (programme + 1er mois)</div>
             <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Plan alimentaire — 100 € <span style={{color:T.textDim,fontWeight:400}}>(ajustable si gros changement de poids ou d'objectif ; sinon valable 2 à 4 mois)</span></div>
             <div style={{fontSize:12.5,color:T.text,fontWeight:700}}>Séance en présentiel — 30 € <span style={{color:T.textDim,fontWeight:400}}>(optionnelle)</span></div>
           </div>
