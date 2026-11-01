@@ -26,7 +26,7 @@ test('décharge ponctuelle : charges à 60 % (arrondi 2,5 kg), séries −40 %',
   assert.equal(r.restSeconds, 120);
 });
 
-test('douleurs menstruelles : charges à 70 %, séries −30 %', () => {
+test('douleurs de cycle : charges à 70 %, séries −30 %', () => {
   const r = lightenExercise(ex(), 'menstrual');
   assert.equal(r.sets.length, 3);           // 4 × 0,7 = 2,8 → 3
   assert.equal(r.sets[0].weight, 70);
@@ -43,9 +43,10 @@ test('aucun mode : exercice inchangé ; une seule série reste une série', () =
 test('front : boutons dans la Bibliothèque et le calendrier, drapeaux transmis à la séance', () => {
   // Bibliothèque : décharge séance + règles douloureuses (femmes uniquement)
   assert.match(html, /<LightToggleCard items=\{gender==='f'\?\['deload','menstrual'\]:\['deload'\]\} value=\{lightMode\}/);
-  // Calendrier : règles douloureuses (femmes uniquement) sur le jour ; décharge semaine avec l'icône calendrier
-  assert.match(html, /profile\?\.gender==='f'&&\(\s*<LightToggleCard items=\{\['menstrual'\]\}/);
+  // Calendrier : une seule carte regroupe semaine / séance / cycle (cycle = femmes uniquement)
+  assert.match(html, /<LightToggleCard items=\{\['week','deload',\.\.\.\(profile\?\.gender==='f'\?\['menstrual'\]:\[\]\)\]\}/);
   assert.match(html, /<LightToggleCard items=\{\['week'\]\} value=\{deloadMode\?'week':null\} onChange=\{toggleDeload\}\/>/);
+  assert.match(html, /label: 'Douleurs de cycle'/);
   assert.match(html, /week: \{ icon: 'calendar', label: 'Décharge semaine'/);
   assert.match(html, /deload: \{ icon: 'arrowDown', label: 'Décharge séance'/);
   assert.match(html, /lightReason:lightMode==='menstrual'\?'menstrual':'session'/);

@@ -712,7 +712,7 @@ function lightenExercise(ex, mode) {
 const LIGHT_OPTS = {
   week: { icon: 'calendar', label: 'Décharge semaine', color: '#5A8AE0' },
   deload: { icon: 'arrowDown', label: 'Décharge séance', color: '#5A8AE0' },
-  menstrual: { icon: 'droplet', label: 'Règles douloureuses', color: '#E88AB0' },
+  menstrual: { icon: 'droplet', label: 'Douleurs de cycle', color: '#E88AB0' },
 };
 function LightSwitch({ on, color }) {
   return (
@@ -787,8 +787,8 @@ function DeloadRecapBanner({ coach, reason }) {
       <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
         {reason === 'menstrual'
           ? (coach
-            ? <>Séance allégée (douleurs menstruelles) — charges réduites à la demande de l'athlète. <span style={{ color: '#8FB4F5' }}>RAS</span> : pas un recul, comparaison de perf en pause.</>
-            : <>Séance allégée (douleurs menstruelles) — tu as adapté ta séance à ton corps. La baisse est <b>normale</b> : ça ne compte pas comme un recul.</>)
+            ? <>Séance allégée (douleurs de cycle) — charges réduites à la demande de l'athlète. <span style={{ color: '#8FB4F5' }}>RAS</span> : pas un recul, comparaison de perf en pause.</>
+            : <>Séance allégée (douleurs de cycle) — tu as adapté ta séance à ton corps. La baisse est <b>normale</b> : ça ne compte pas comme un recul.</>)
           : reason === 'session'
           ? (coach
             ? <>Séance de décharge — charges allégées pour cette séance. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est voulue, pas un recul. Comparaison de perf en pause.</>
@@ -6876,6 +6876,12 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // date choisie : changer de jour le remet à zéro. Ignoré si la semaine entière est en décharge.
   const[dayLight,setDayLight]=React.useState({date:null,mode:null});
   const dayLightFor=dateStr=>(!deloadMode&&dayLight.date===dateStr)?dayLight.mode:null;
+  // Une seule carte regroupe les 3 allègements (semaine / séance / cycle), exclusifs entre eux.
+  const lightValueFor=dateStr=>deloadMode?'week':dayLightFor(dateStr);
+  const onLightChange=(dateStr,k)=>{
+    if(k==='week'){if(!deloadMode)toggleDeload();setDayLight({date:null,mode:null});}
+    else{if(deloadMode)toggleDeload();setDayLight({date:dateStr,mode:k});}
+  };
   const movesByTarget=scheduleMoves||{};
   const suppressedSources=React.useMemo(()=>{
     const s=new Set();
@@ -7673,7 +7679,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
           l'app calcule 60 % du poids et −40 % de séries à la volée (computeDeload), sans dépendre
           d'une feuille "DECHARGE" dans l'Excel. Réversible — retaper dessus revient aux valeurs
           normales, rien n'est perdu. Les séances validées en décharge ne pénalisent pas le récap. */}
-      {hasDeload&&<LightToggleCard items={['week']} value={deloadMode?'week':null} onChange={toggleDeload}/>}
+      {/* Carte des allègements dans le détail du jour ; ici seulement si aucun jour à venir n'est ouvert. */}
+      {hasDeload&&!(selectedDay&&daysForDate(selectedDay.dateStr)[selectedDay.dayName]&&!doneDates.has(selectedDay.dateStr))&&<LightToggleCard items={['week']} value={deloadMode?'week':null} onChange={toggleDeload}/>}
 
       {/* Calendar */}
       {(sheetNames.length>0||Object.keys(planned).length>0)&&(
@@ -7823,8 +7830,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                         return els;
                       })()}
                     </div>
-                    {d&&!isDone&&!deloadMode&&profile?.gender==='f'&&(
-                      <LightToggleCard items={['menstrual']} value={dayLightFor(selectedDay.dateStr)} onChange={m=>setDayLight({date:selectedDay.dateStr,mode:m})}/>
+                    {d&&!isDone&&(
+                      <LightToggleCard items={['week','deload',...(profile?.gender==='f'?['menstrual']:[])]} value={lightValueFor(selectedDay.dateStr)} onChange={k=>onLightChange(selectedDay.dateStr,k)}/>
                     )}
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
                       <div style={{display:'flex',gap:8}}>
