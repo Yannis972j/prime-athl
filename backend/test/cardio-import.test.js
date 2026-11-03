@@ -19,11 +19,11 @@ const dep = name => {
   for (; j < html.length; j++) { if (html[j] === '{') d++; if (html[j] === '}') { d--; if (!d) break; } }
   return html.slice(i, j + 1) + '\n';
 };
-const HELPERS = ['fixCardioVal', 'cardioHasVal', 'fixCardioDuree', 'cardioDureeLabel', 'cardioShowsSpeed',
+const HELPERS = ['fixCardioVal', 'cardioHasVal', 'fixCardioDuree', 'cardioDureeLabel', 'cardioShowsSpeed', 'cardioSeconds',
   'parseRestDuration', 'isHoldExercise', 'fmtHoldDuration', 'isUnilateralName', 'isAssistedName', 'isSideHoldEx'].map(dep).join('');
 const a = html.indexOf('function parseDureeSeconds');
 const b = html.indexOf('function excelExport');
-const factory = new Function('XLSX', 'FileReader', HELPERS + html.slice(a, b) + '\nreturn { parseYannisExcel, cardioDureeLabel, cardioShowsSpeed };');
+const factory = new Function('XLSX', 'FileReader', HELPERS + html.slice(a, b) + '\nreturn { parseYannisExcel, cardioDureeLabel, cardioShowsSpeed, cardioSeconds };');
 
 const HEAD = ['Jour', 'Style', 'Exercices', 'Muscles', 'Charge KG', 'Distance km', 'Vitesse', 'Inclinaison', 'Durée', 'Series', 'Repetions', 'Temps de repos'];
 const row = (o) => HEAD.map((h, i) => o[i] ?? '');
@@ -68,4 +68,19 @@ test('affichage : minutes pour 5\' / 2\', secondes pour 10" ; vitesse/inclinaiso
   assert.equal(cardioShowsSpeed({ name: 'TAPIS DE COURSE', cardio: {} }), true);
   assert.equal(cardioShowsSpeed({ name: 'SKIERG', cardio: { duree: "5'" } }), false);
   assert.equal(cardioShowsSpeed({ name: 'VELO', cardio: { vitesse: '25' } }), true);
+});
+
+test('chrono : durée cardio → secondes (5\' = 5 min, 10\" = 10 s, 1\'30 = 90 s, nombre nu = minutes, plage = pas de chrono)', () => {
+  const { cardioSeconds } = factory(XLSX, class {});
+  assert.equal(cardioSeconds("5'"), 300);
+  assert.equal(cardioSeconds('10"'), 10);
+  assert.equal(cardioSeconds('10 sec'), 10);
+  assert.equal(cardioSeconds("2'"), 120);
+  assert.equal(cardioSeconds("1'30"), 90);
+  assert.equal(cardioSeconds('1:30'), 90);
+  assert.equal(cardioSeconds('20'), 1200);
+  assert.equal(cardioSeconds('1,5'), 90);
+  assert.equal(cardioSeconds(''), 0);
+  assert.equal(cardioSeconds('4-5'), 0);
+  assert.equal(cardioSeconds('à fond'), 0);
 });
