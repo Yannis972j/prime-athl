@@ -6377,8 +6377,10 @@ function recapPersonalLines(o){
   // Exercice préféré / détesté réellement présent dans la séance (jamais de moquerie).
   const fav=coach.favExercise?findEx(coach.favExercise):null;
   const hated=coach.hatedExercise?findEx(coach.hatedExercise):null;
-  if(hated)out.push(`${hated.name} était au programme, et tu l'as fait quand même. C'est ça qui fait la différence.`);
-  else if(fav)out.push(`${fav.name}, ton exercice préféré, était au programme — tu t'es fait plaisir.`);
+  // Pas de « tu t'es fait plaisir » sur un exercice préféré qui a reculé ou sur une séance en dessous.
+  const favDown=fav&&cexs.some(e=>e.status==='down'&&normExerciseName(e.name)===normExerciseName(fav.name));
+  if(hated)out.push(`Au programme aujourd'hui : ${hated.name}. Et tu l'as fait quand même — c'est ça qui fait la différence.`);
+  else if(fav&&!bad&&!favDown)out.push(`Au programme aujourd'hui : ${fav.name}, ton exercice préféré. Tu t'es fait plaisir.`);
   return out.slice(0,2);
 }
 function RecapPersonal({lines,style}){

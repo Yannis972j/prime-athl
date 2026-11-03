@@ -67,9 +67,15 @@ test('vanne : expression fétiche seulement si l\'humour est permis', () => {
 });
 
 test('exercice préféré / détesté : seulement s\'il est dans la séance', () => {
-  assert.match(lines({ cpFavExercise: 'squat' }, { comp: goodComp, session: sess('Squat barre') })[0], /Squat barre.*préféré/);
-  assert.match(lines({ cpHatedExercise: 'Burpees' }, { comp: goodComp, session: sess('Burpees', 'Squat') })[0], /Burpees.*quand même/);
+  assert.match(lines({ cpFavExercise: 'squat' }, { comp: goodComp, session: sess('Squat barre') })[0], /Squat barre, ton exercice préféré/);
+  assert.match(lines({ cpHatedExercise: 'Burpees' }, { comp: goodComp, session: sess('Burpees', 'Squat') })[0], /Au programme aujourd'hui : Burpees\. Et tu l'as fait quand même/);
   assert.deepEqual(lines({ cpFavExercise: 'Soulevé de terre' }, { comp: goodComp, session: sess('Squat') }), []);
+});
+
+test('exercice préféré : pas de « plaisir » sur une séance en dessous ou s\'il a reculé', () => {
+  assert.deepEqual(lines({ cpFavExercise: 'Squat' }, { comp: badComp, volumeVsPrev: volDown, session: sess('Squat') }), []);
+  const mixed = { prsCount: 0, upCount: 2, downCount: 1, sameCount: 0, totalExercises: 3, exercises: [{ name: 'Squat', status: 'down' }, { name: 'Tirage', status: 'up' }, { name: 'Curl', status: 'up' }] };
+  assert.deepEqual(lines({ cpFavExercise: 'Squat' }, { comp: mixed, volumeVsPrev: volUp, session: sess('Squat', 'Tirage') }), []);
 });
 
 test('décharge / reprise : aucune ligne', () => {

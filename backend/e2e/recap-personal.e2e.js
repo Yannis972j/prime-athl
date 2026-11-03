@@ -61,7 +61,7 @@ test('récap athlète : « Pour toi » = ce qui a été rempli dans le profil co
   await pg.screenshot({ path: process.env.SHOT || '/tmp/recap.png' });
   assert.match(txt, /pour toi/i);
   assert.match(txt, /En chiffres : \+\d+ % de volume/);
-  assert.match(txt, /Rowing, ton exercice préféré/);
+  assert.match(txt, /Au programme aujourd'hui : Rowing, ton exercice préféré/);
   assert.deepEqual(errs, []);
   await ctx.close();
 });
