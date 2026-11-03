@@ -595,6 +595,20 @@ function cardioHasVal(v) {
 function fixCardioDuree(v) {
   return fixCardioVal(v).replace(/['’′ʼ]+\s*$/, '').trim();
 }
+// Durée cardio prête à afficher : « 5' » → « 5 min », « 10" » / « 10 sec » → « 10 s ».
+// (Un sprint de 10 secondes ne doit pas s'afficher « 10 min ».)
+function cardioDureeLabel(v) {
+  const raw = fixCardioVal(v).trim();
+  if (/(["”″]|''|sec|\bs)\s*$/i.test(raw)) return raw.replace(/(["”″]|''|sec\w*|\bs)\s*$/i, '').trim() + ' s';
+  return fixCardioDuree(raw) + ' min';
+}
+// Vitesse / inclinaison n'ont de sens que pour un tapis (ou si le programme les renseigne) : un
+// SKIERG, un rameur… n'affichent que la durée.
+function cardioShowsSpeed(ex) {
+  const c = (ex && ex.cardio) || {};
+  const n = String((ex && ex.name) || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return /tapis|course|marche|footing|jogging|run|treadmill/.test(n) || cardioHasVal(c.vitesse) || cardioHasVal(c.inclinaison);
+}
 
 // Échappe le HTML pour toute donnée utilisateur (nom de produit importé, nom de repas...) injectée
 // dans un template HTML généré côté client (export PDF via document.write dans une popup same-origin).
@@ -1070,7 +1084,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // (et assimilés), qui reste suivi en distance/vitesse via l'objet cardio ci-dessous.
           const dureeTxt = cellText(colDuree);
           const isTapis = /tapis/.test(norm(exName));
-          const isHold = !isTapis && (!!dureeTxt || isHoldExercise(exNameRaw));
+          // Style CARDIO explicite dans le tableau (SKIERG, rameur, vélo…) : c'est du cardio, même avec
+          // une Durée. Avant, toute ligne avec une Durée devenait un compte à rebours (gainage) — seul
+          // le tapis y échappait — donc un SKIERG « CARDIO / 5' » n'apparaissait pas en cardio, et son
+          // « 5' » était lu comme 5 secondes (la colonne Durée d'un gainage est en secondes).
+          const isCardioStyle = styleVal === 'CARDIO';
+          const isHold = !isTapis && !isCardioStyle && (!!dureeTxt || isHoldExercise(exNameRaw));
 
           // Cardio "vrai" (tapis, vélo...) : suivi en distance/vitesse, jamais en compte à
           // rebours. On utilise .w (texte formaté) pour préserver les plages comme "4-5" qu'Excel
@@ -1084,7 +1103,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
 
           // 1 série uniquement pour le cardio "vrai" (bouton "terminé" unique) ; un compte à
           // rebours (gainage, chaise, jumping jacks minutés...) suit le nombre de séries du tableau.
-          const numSets = cardio ? 1 : (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
+          const numSets = cardio ? ((!isNaN(seriesNum) && seriesNum > 1) ? Math.min(Math.round(seriesNum), 20) : 1) : (!isNaN(seriesNum) && seriesNum > 0) ? Math.round(seriesNum) : lastSeriesCount;
           if (!isNaN(seriesNum) && seriesNum > 0 && !cardio) lastSeriesCount = numSets;
 
           // Même piège que la colonne Répétitions : une plage tapée dans la colonne Charge
@@ -2856,6 +2875,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           sans ça rien ne distinguait ces champs d'un simple texte affiché. Largeur
                           élargie (44px→68px) : une plage comme "10-11" était tronquée dans la
                           box précédente, trop étroite pour ce genre de valeur réelle. */}
+                      {cardioShowsSpeed(ex)&&<>
                       <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
                         <div style={{display:'flex',alignItems:'baseline',justifyContent:'center'}}>
@@ -2870,6 +2890,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           <span style={{fontSize:11,color:T.textDim,marginLeft:2,flexShrink:0}}>%</span>
                         </div>
                       </div>
+                      </>}
                       <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
                         <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
                         <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{width:'100%',minWidth:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
@@ -3163,7 +3184,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                           {cardioHasVal(c.distance)&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>📍 {fixCardioVal(c.distance)} km</span>}
                           {cardioHasVal(c.vitesse)&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⚡ {fixCardioVal(c.vitesse)} km/h</span>}
                           {cardioHasVal(c.inclinaison)&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⛰ {fixCardioVal(c.inclinaison)}%</span>}
-                          {cardioHasVal(c.duree)&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {fixCardioVal(c.duree)}</span>}
+                          {cardioHasVal(c.duree)&&<span style={{fontSize:10,color:color,fontWeight:700,background:`${color}15`,padding:'1px 7px',borderRadius:5}}>⏱ {cardioDureeLabel(c.duree)}</span>}
                         </div>
                         {isActive&&<Pill color={color} style={{marginTop:4}}>NOW</Pill>}
                       </button>
@@ -6707,7 +6728,7 @@ function exportSessionPDF(session){
         const parts=[];
         if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
         if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
-        if(cardioHasVal(c.duree))parts.push(`Durée : ${fixCardioDuree(c.duree)} min`);
+        if(cardioHasVal(c.duree))parts.push(`Durée : ${cardioDureeLabel(c.duree)}`);
         if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
         doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
         doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
@@ -7497,7 +7518,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                             {cardioHasVal(ex.cardio?.vitesse)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
                             {cardioHasVal(ex.cardio?.inclinaison)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
-                            {cardioHasVal(ex.cardio?.duree)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {fixCardioDuree(ex.cardio.duree)} min</div>}
+                            {cardioHasVal(ex.cardio?.duree)&&<div style={{padding:'4px 10px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {cardioDureeLabel(ex.cardio.duree)}</div>}
                           </div>
                         ):ex.holdSeconds>0?(
                           <div style={{display:'flex',flexDirection:'column',gap:0}}>
@@ -11588,7 +11609,7 @@ function CoachCalendarView({authToken,athletes,onBack,onOpenAthlete,refreshKey})
                         <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
                           {cardioHasVal(ex.cardio?.vitesse)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</span>}
                           {cardioHasVal(ex.cardio?.inclinaison)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</span>}
-                          {cardioHasVal(ex.cardio?.duree)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>⏱ {fixCardioDuree(ex.cardio.duree)} min</span>}
+                          {cardioHasVal(ex.cardio?.duree)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:999,background:'rgba(200,144,64,0.1)',color:'#C89040',border:'1px solid rgba(200,144,64,0.2)'}}>⏱ {cardioDureeLabel(ex.cardio.duree)}</span>}
                         </div>
                       ):(
                         <>
@@ -12036,7 +12057,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                               <div style={{padding:'8px 14px',display:'flex',gap:8,flexWrap:'wrap'}}>
                                 {cardioHasVal(e.cardio?.vitesse)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {fixCardioVal(e.cardio.vitesse)} km/h</div>}
                                 {cardioHasVal(e.cardio?.inclinaison)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {fixCardioVal(e.cardio.inclinaison)}%</div>}
-                                {cardioHasVal(e.cardio?.duree)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {fixCardioDuree(e.cardio.duree)} min</div>}
+                                {cardioHasVal(e.cardio?.duree)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {cardioDureeLabel(e.cardio.duree)}</div>}
                               </div>
                             ):(e.sets||[]).length>0&&(()=>{
                               // Fourchette de reps prescrite par le coach (ex: "8-12") : sert à juger
@@ -12334,7 +12355,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
                     <div style={{textAlign:'right',flexShrink:0}}>
                       {exType(e)==='cardio'?(
                         <div style={{fontSize:10,color:'#C89040',fontWeight:700}}>
-                          {[cardioHasVal(e.cardio?.vitesse)&&`${fixCardioVal(e.cardio.vitesse)} km/h`,cardioHasVal(e.cardio?.inclinaison)&&`${fixCardioVal(e.cardio.inclinaison)}%`,cardioHasVal(e.cardio?.duree)&&`${fixCardioDuree(e.cardio.duree)} min`].filter(Boolean).join(' · ')}
+                          {[cardioHasVal(e.cardio?.vitesse)&&`${fixCardioVal(e.cardio.vitesse)} km/h`,cardioHasVal(e.cardio?.inclinaison)&&`${fixCardioVal(e.cardio.inclinaison)}%`,cardioHasVal(e.cardio?.duree)&&cardioDureeLabel(e.cardio.duree)].filter(Boolean).join(' · ')}
                         </div>
                       ):(e.sets||[]).map((st,si)=>(
                         <div key={si} style={{fontSize:10,color:T.textDim,fontVariantNumeric:'tabular-nums'}}>{st.weight}kg×{st.reps}</div>
@@ -13139,7 +13160,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
                       <div onClick={()=>openEditSet(ex.idx,0)} style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'8px 10px',borderRadius:10,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.22)',cursor:'pointer'}}>
                         {cardioHasVal(ex.cardio?.vitesse)&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</span>}
                         {cardioHasVal(ex.cardio?.inclinaison)&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</span>}
-                        {cardioHasVal(ex.cardio?.duree)&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>⏱ {fixCardioDuree(ex.cardio.duree)} min</span>}
+                        {cardioHasVal(ex.cardio?.duree)&&<span style={{fontSize:11,fontWeight:700,color:'#C89040'}}>⏱ {cardioDureeLabel(ex.cardio.duree)}</span>}
                         <Icon name="edit" size={12} stroke="#C89040" style={{marginLeft:'auto'}}/>
                       </div>
                     </div>
@@ -14150,7 +14171,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                 const accent=grouped?gc:sc2;
                                 const isCardio=ex.style==='CARDIO'&&ex.cardio;
                                 const setsArr=ex.sets||[];
-                                const repsDisplay=isCardio?(cardioHasVal(ex.cardio.duree)?fixCardioDuree(ex.cardio.duree)+'min':'—')
+                                const repsDisplay=isCardio?(cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'—')
                                   :ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds)
                                   :setsArr.length?(setsArr[0].reps||'?'):'?';
                                 return(
@@ -14170,7 +14191,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
                                         {cardioHasVal(ex.cardio.vitesse)&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⚡ {fixCardioVal(ex.cardio.vitesse)} km/h</div>}
                                         {cardioHasVal(ex.cardio.inclinaison)&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📐 {fixCardioVal(ex.cardio.inclinaison)}%</div>}
-                                        {cardioHasVal(ex.cardio.duree)&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⏱ {fixCardioDuree(ex.cardio.duree)} min</div>}
+                                        {cardioHasVal(ex.cardio.duree)&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>⏱ {cardioDureeLabel(ex.cardio.duree)}</div>}
                                         {cardioHasVal(ex.cardio.distance)&&<div style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>📏 {fixCardioVal(ex.cardio.distance)} km</div>}
                                       </div>
                                     )}
@@ -19374,7 +19395,7 @@ function BibliothequeScreen({sessionLibrary,onStartWorkout,history,onDeleteSessi
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.posture?` · 📍 ${ex.posture}`:''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{seriesCount(ex)||'?'}×{ex.repsStr||(ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds):'?')}{isSideHoldEx(ex)?'/côté':''}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:sc2}}>{ex.style==='CARDIO'&&ex.cardio?((seriesCount(ex)>1?seriesCount(ex)+'× ':'')+(cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'Cardio')):<>{seriesCount(ex)||'?'}×{ex.repsStr||(ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds):'?')}{isSideHoldEx(ex)?'/côté':''}</>}</div>
                   <div style={{fontSize:10,color:T.textFaint}}>{ex.rest}</div>
                 </div>
               </div>
