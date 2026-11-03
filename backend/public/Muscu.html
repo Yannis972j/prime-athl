@@ -602,6 +602,23 @@ function cardioDureeLabel(v) {
   if (/(["”″]|''|sec|\bs)\s*$/i.test(raw)) return raw.replace(/(["”″]|''|sec\w*|\bs)\s*$/i, '').trim() + ' s';
   return fixCardioDuree(raw) + ' min';
 }
+// Durée cardio → secondes, pour le chrono : « 5' » = 5 min, « 10" » / « 10 sec » = 10 s, « 1'30 » = 90 s,
+// « 1:30 », « 5 » (nombre nu = minutes). Plage (« 4-5 ») ou texte inconnu → 0 (pas de chrono proposé).
+function cardioSeconds(v) {
+  const raw = fixCardioVal(v).trim();
+  if (!raw) return 0;
+  let m = raw.match(/^(\d+)\s*(?:["”″]|''|sec\w*|s)$/i);
+  if (m) return parseInt(m[1]);
+  m = raw.match(/^(\d+)\s*['’′]\s*(\d{1,2})$/);
+  if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
+  m = raw.match(/^(\d+):(\d{2})$/);
+  if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
+  m = raw.match(/^(\d+(?:[.,]\d+)?)\s*(?:['’′]|min\w*)?$/i);
+  if (m) return Math.round(parseFloat(m[1].replace(',', '.')) * 60);
+  return 0;
+}
+const CARDIO_PREP_SECONDS = 10; // décompte « prépare-toi » avant le départ du chrono cardio
+const fmtClock = secs => Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
 // Vitesse / inclinaison n'ont de sens que pour un tapis (ou si le programme les renseigne) : un
 // SKIERG, un rameur… n'affichent que la durée.
 function cardioShowsSpeed(ex) {
@@ -2193,12 +2210,26 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const validateSetRef=React.useRef(null);
   const holdTimerExRef=React.useRef(null);
   const holdSideRef=React.useRef(null);
+  // Chrono cardio : 'prep' (décompte de 10 s avant le départ) puis 'run' (durée de l'exercice).
+  const cardioPhaseRef=React.useRef(null);
+  const cardioRunSecsRef=React.useRef(0);
   const finishSideRef=React.useRef(null);
   exercisesRef.current=exercises;
   currentExRef.current=currentEx;
   React.useEffect(()=>{
+    if(setTimerActiveRef.current&&prevSetTimerRef.current>0&&setTimerSecs===0&&cardioPhaseRef.current==='prep'){
+      // Fin du décompte de préparation → GO : le chrono de l'exercice démarre.
+      cardioPhaseRef.current='run';
+      try{if(navigator.vibrate)navigator.vibrate([120,60,120]);}catch{}
+      playBeep(1100,0.9,0.5);
+      setSetTimerTotal(cardioRunSecsRef.current);
+      setSetTimerSecs(cardioRunSecsRef.current);
+      prevSetTimerRef.current=0;
+      return;
+    }
     if(setTimerActiveRef.current&&prevSetTimerRef.current>0&&setTimerSecs===0){
       setTimerActiveRef.current=false;
+      cardioPhaseRef.current=null;
       try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch{}
       playBeep(660,0.8,0.4);
       setTimeout(()=>playBeep(880,0.8,0.35),300);
@@ -2219,12 +2250,37 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   },[setTimerSecs,playBeep]);
   const startSetTimer=React.useCallback((secs,side)=>{
     getAudioCtx();
+    cardioPhaseRef.current=null;
     holdSideRef.current=side||null;
     setTimerActiveRef.current=true;
     holdTimerExRef.current=currentExRef.current;
     setSetTimerTotal(secs);
     setSetTimerSecs(secs);
   },[getAudioCtx]);
+  // Cardio chronométré (SKIERG, rameur…) : 10 s de préparation, puis compte à rebours de la durée.
+  const startCardioTimer=React.useCallback(secs=>{
+    if(!(secs>0))return;
+    getAudioCtx();
+    holdSideRef.current=null;
+    setTimerActiveRef.current=true;
+    holdTimerExRef.current=currentExRef.current;
+    cardioPhaseRef.current='prep';
+    cardioRunSecsRef.current=secs;
+    setSetTimerTotal(CARDIO_PREP_SECONDS);
+    setSetTimerSecs(CARDIO_PREP_SECONDS);
+  },[getAudioCtx]);
+  const skipCardioPrep=()=>{
+    if(cardioPhaseRef.current!=='prep')return;
+    cardioPhaseRef.current='run';
+    setSetTimerTotal(cardioRunSecsRef.current);
+    setSetTimerSecs(cardioRunSecsRef.current);
+  };
+  // Bips 3-2-1 avant le départ et avant la fin du chrono cardio.
+  React.useEffect(()=>{
+    if(!cardioPhaseRef.current||setTimerSecs<=0||setTimerSecs>3)return;
+    try{if(navigator.vibrate)navigator.vibrate(40);}catch{}
+    playBeep(cardioPhaseRef.current==='prep'?800:700,0.5,0.15);
+  },[setTimerSecs,playBeep]);
 
   React.useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTo({top:0,behavior:'smooth'});},[currentEx]);
   // ── Wake Lock : empêche la mise en veille de l'écran pendant la séance ──
@@ -2312,6 +2368,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   const validateSet=si=>{
     // Annuler le timer de série s'il est en cours
     setTimerActiveRef.current=false;
+    cardioPhaseRef.current=null;
     setSetTimerSecs(0);
     // Débloquer/créer l'AudioContext pendant ce geste utilisateur (requis sur iOS)
     // pour que la sonnerie de fin de repos puisse jouer plus tard.
@@ -2368,6 +2425,8 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
       }
     }
 
+    // Dernière série d'un cardio terminée : rien à récupérer avant l'exercice suivant.
+    if(ex.style==='CARDIO'&&updatedExercises[currentEx].sets.every(s=>s.done))return;
     // Exercice classique (CLASSIQUE / ABDOS / CARDIO) → chrono repos normal
     const rest=ex.restSeconds||90;
     setRestSeconds(rest);setRestTotal(rest);
@@ -2384,6 +2443,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
 
   const goToEx=React.useCallback(idx=>{
     setTimerActiveRef.current=false;
+    cardioPhaseRef.current=null;
     setSetTimerSecs(0);
     restSkippedRef.current=true;
     setCurrentEx(idx);setRestSeconds(0);setRestTotal(0);
@@ -2461,29 +2521,29 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
   // retrouvait hors-champ, seul le libellé du haut dépassant tout en bas de l'écran.
   const setTimerOverlay=setTimerSecs>0&&setTimerTotal>0&&ReactDOM.createPortal(
     <div style={{position:'fixed',inset:0,zIndex:50,background:'radial-gradient(ellipse at 50% 40%,rgba(90,138,224,0.22) 0%,rgba(6,6,10,0.97) 60%)',backdropFilter:'blur(12px)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,animation:'fadeIn 0.2s ease'}}>
-      <div style={{fontSize:11,color:'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Série en cours{holdSideRef.current?` · côté ${holdSideRef.current==='G'?'gauche':'droit'}`:''}</div>
+      <div style={{fontSize:11,color:cardioPhaseRef.current==='prep'?'#2CC4A0':cardioPhaseRef.current==='run'?'#C89040':'#5A8AE0',fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>{cardioPhaseRef.current==='prep'?'Prépare-toi · départ dans':cardioPhaseRef.current==='run'?(ex.sets.length>1?`Cardio · série ${Math.max(1,ex.sets.findIndex(s=>!s.done)+1)}/${ex.sets.length}`:'Cardio en cours'):<>Série en cours{holdSideRef.current?` · côté ${holdSideRef.current==='G'?'gauche':'droit'}`:''}</>}</div>
       <div style={{fontSize:13,color:T.textDim,marginBottom:18,maxWidth:220,textAlign:'center',lineHeight:1.4}}>{ex.name}</div>
       <div style={{position:'relative',width:240,height:240,marginBottom:24}}>
         <svg width="240" height="240" style={{transform:'rotate(-90deg)'}}>
           <circle cx="120" cy="120" r="108" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10"/>
-          <circle cx="120" cy="120" r="108" fill="none" stroke="#5A8AE0" strokeWidth="10" strokeLinecap="round"
+          <circle cx="120" cy="120" r="108" fill="none" stroke={cardioPhaseRef.current==='prep'?'#2CC4A0':cardioPhaseRef.current==='run'?'#C89040':'#5A8AE0'} strokeWidth="10" strokeLinecap="round"
             strokeDasharray={2*Math.PI*108}
             strokeDashoffset={2*Math.PI*108*(setTimerSecs/setTimerTotal)}
             style={{transition:'stroke-dashoffset 1s linear',filter:'drop-shadow(0 0 12px rgba(90,138,224,0.7))'}}/>
         </svg>
         <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
-          <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{setTimerSecs}</div>
-          <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>secondes</div>
+          <div style={{fontSize:72,fontWeight:800,fontVariantNumeric:'tabular-nums',letterSpacing:-2,lineHeight:1,color:'#fff'}}>{cardioPhaseRef.current==='run'&&setTimerTotal>=60?fmtClock(setTimerSecs):setTimerSecs}</div>
+          <div style={{fontSize:12,color:T.textDim,fontWeight:600,letterSpacing:0.5,marginTop:6,textTransform:'uppercase'}}>{cardioPhaseRef.current==='run'&&setTimerTotal>=60?'min : sec':'secondes'}</div>
         </div>
       </div>
-      {/* Ajuster le temps restant à la volée */}
-      <div style={{display:'flex',gap:10,width:'100%',maxWidth:340,marginBottom:14}}>
+      {/* Ajuster le temps restant à la volée (pas pendant le décompte de préparation) */}
+      {cardioPhaseRef.current!=='prep'&&<div style={{display:'flex',gap:10,width:'100%',maxWidth:340,marginBottom:14}}>
         <button onClick={()=>adjustSetTimer(-15)} disabled={setTimerSecs<=1} style={{flex:1,minHeight:44,padding:'0 12px',borderRadius:12,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:setTimerSecs<=1?T.textFaint:T.text,fontSize:13,fontWeight:700,cursor:setTimerSecs<=1?'default':'pointer',opacity:setTimerSecs<=1?0.4:1}}>−15s</button>
         <button onClick={()=>adjustSetTimer(15)} style={{flex:1,minHeight:44,padding:'0 12px',borderRadius:12,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(90,138,224,0.08)',color:'#8AADEE',fontSize:13,fontWeight:700,cursor:'pointer'}}>+15s</button>
-      </div>
+      </div>}
       <div style={{display:'flex',gap:10,width:'100%',maxWidth:340}}>
-        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
-        <button onClick={()=>{setTimerActiveRef.current=false;setSetTimerSecs(0);const si=ex.sets.findIndex(s=>!s.done);const sd=holdSideRef.current;holdSideRef.current=null;if(sd)finishSide(si,sd);else validateSet(si);}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>✓ FAIT</button>
+        <button onClick={()=>{setTimerActiveRef.current=false;cardioPhaseRef.current=null;setSetTimerSecs(0);}} style={{flex:1,minHeight:52,padding:'0 16px',borderRadius:14,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,cursor:'pointer'}}>Annuler</button>
+        <button onClick={()=>{if(cardioPhaseRef.current==='prep'){skipCardioPrep();return;}setTimerActiveRef.current=false;cardioPhaseRef.current=null;setSetTimerSecs(0);const si=ex.sets.findIndex(s=>!s.done);const sd=holdSideRef.current;holdSideRef.current=null;if(sd)finishSide(si,sd);else validateSet(si);}} style={{flex:2,minHeight:52,padding:'0 16px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#BFA060,#B85070)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',letterSpacing:0.4,boxShadow:'0 6px 18px rgba(191,160,96,0.35)'}}>{cardioPhaseRef.current==='prep'?'Passer le décompte':'✓ FAIT'}</button>
       </div>
     </div>,
     document.body
@@ -2593,7 +2653,20 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           )}
 
           {/* Steppers poids + reps (gros) — édition de la série en cours */}
-          {!allExDone&&(
+          {/* Cardio chronométré (SKIERG…) : durée + chrono avec 10 s de préparation, à la place de poids/reps */}
+          {!allExDone&&ex.style==='CARDIO'&&ex.cardio&&(
+            <div style={{padding:'18px 14px',borderRadius:18,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.3)',textAlign:'center',marginBottom:24}}>
+              <div style={{fontSize:11,color:'#C89040',fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>Cardio{totalSetsEx>1?` · série ${setNumber}/${totalSetsEx}`:''}</div>
+              <div style={{fontSize:34,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'—'}</div>
+              {cardioSeconds(ex.cardio.duree)>0&&setTimerSecs===0&&(
+                <button onClick={()=>startCardioTimer(cardioSeconds(ex.cardio.duree))} style={{marginTop:14,width:'100%',minHeight:54,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 22px rgba(44,196,160,0.3)'}}>
+                  ▶ Lancer le chrono
+                  <div style={{fontSize:10.5,fontWeight:700,opacity:0.75,letterSpacing:0.3,marginTop:1}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</div>
+                </button>
+              )}
+            </div>
+          )}
+          {!allExDone&&!(ex.style==='CARDIO'&&ex.cardio)&&(
             <div style={{display:'flex',gap:12,justifyContent:'center',marginBottom:32}}>
               {/* ── POIDS ── */}
               <div style={{flex:1,padding:'16px 8px',borderRadius:18,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',textAlign:'center'}}>
@@ -2896,6 +2969,12 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{width:'100%',minWidth:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
                       </div>
                     </div>
+                    {!allDone&&cardioSeconds(c.duree)>0&&(
+                      <button onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0} style={{width:'100%',minHeight:54,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:1,boxShadow:'0 8px 22px rgba(44,196,160,0.3)'}}>
+                        <span>▶ Lancer le chrono · {cardioDureeLabel(c.duree)}{ex.sets.length>1?` · série ${ex.sets.findIndex(x=>!x.done)+1}/${ex.sets.length}`:''}</span>
+                        <span style={{fontSize:10.5,fontWeight:700,opacity:0.75,letterSpacing:0.3}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</span>
+                      </button>
+                    )}
                     <button onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }} style={{width:'100%',height:46,borderRadius:13,border:'none',background:allDone?'rgba(255,255,255,0.06)':`linear-gradient(135deg,${sc},#BFA060)`,color:allDone?T.textDim:'#fff',fontSize:14,fontWeight:700,cursor:allDone?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
                       {allDone?<><Icon name="check" size={16} stroke={T.textDim} strokeWidth={2.5}/> Cardio terminé</>:<><Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/> Marquer comme terminé</>}
                     </button>
