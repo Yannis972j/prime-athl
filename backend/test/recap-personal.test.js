@@ -13,7 +13,7 @@ const SRC = slice('function normExerciseName', '// Clé de comparaison de NOMS D
   + slice('const CONGRATS_MESSAGES', 'function computeGoalsCtx') + '\n'
   + slice('function computeCoachCtx', 'function RecapPersonal') + '\n'
   + slice('// Hash déterministe', 'function sessionVolumeOf');
-const L = new Function('gg', SRC + '\nreturn { computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
+const L = new Function('gg', SRC + '\nreturn { athleteRegressionText, computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
 
 const ctx = p => L.computeCoachCtx(p);
 const sess = (...names) => ({ exercises: names.map(n => ({ name: n, sets: [{ weight: 50, reps: 10 }] })) });
@@ -114,6 +114,20 @@ test('message de récap : pas de blague (😏 😉 😅) si « trop familier » 
   for (const m of out) assert.doesNotMatch(m, /😏|😉|😅/, m);
   assert.match(L.congratsMessage('Laura', null, mixed, { coach: null, seed: 'a' }), /😏/, 'sans limite, la vanne reste');
   assert.match(L.congratsMessage('Laura', null, mixedUp, { coach: null, seed: 'a' }), /😉/, 'sans limite, la vanne reste');
+});
+
+test('bandeau « séance en baisse » de l\'athlète : doux si « culpabilisant » / « trop agressif » / chambrage faible', () => {
+  for (const hist of [false, true]) {
+    for (const p of [{ cpDontDo: ['Culpabilisant'] }, { cpDontDo: ['Trop agressif'] }, { cpBanterLevel: 1 }]) {
+      const t = L.athleteRegressionText(ctx(p), 2, hist);
+      assert.match(t, /Pas de reproche/);
+      assert.doesNotMatch(t, /se reprendre|tu donnes tout|remets ça à l'endroit/);
+      assert.match(t, /2 exercices/);
+    }
+    assert.doesNotMatch(L.athleteRegressionText(ctx({ cpBanterLevel: 4 }), 2, hist), /Pas de reproche/);
+    assert.doesNotMatch(L.athleteRegressionText(null, 0, hist), /Pas de reproche/);
+  }
+  assert.match(L.athleteRegressionText(null, 2, false), /tu donnes tout/);
 });
 
 test('les trois récaps (athlète, historique, coach) affichent le bloc « Pour toi »', () => {

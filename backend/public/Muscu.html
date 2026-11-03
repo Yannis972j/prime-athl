@@ -6383,6 +6383,14 @@ function recapPersonalLines(o){
   else if(fav&&!bad&&!favDown)out.push(`Au programme aujourd'hui : ${fav.name}, ton exercice préféré. Tu t'es fait plaisir.`);
   return out.slice(0,2);
 }
+// Bandeau rouge « séance en baisse » vu PAR L'ATHLÈTE : même respect des limites que le reste du récap
+// (« Culpabilisant », « Trop agressif », ton doux) — jamais de « il faut te reprendre » dans ce cas.
+function athleteRegressionText(coach,down,hist){
+  const soft=!!coach&&(coach.noGuilt||coach.wantsSoft||coach.intensity<=2);
+  if(soft)return `Séance en ${hist?'recul':'baisse'}${down>0?` — ${down} exercice${down>1?'s':''} en ${hist?'baisse':'recul'}`:''}. Pas de reproche : ça arrive, on repart de l'avant à la prochaine.`;
+  if(hist)return `Séance en recul${down>0?` — ${down} exercice${down>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.`;
+  return `Séance en baisse${down>0?` — ${down} exercice${down>1?'s':''} en recul`:''}. Là il faut se reprendre : la prochaine, tu donnes tout.`;
+}
 function RecapPersonal({lines,style}){
   if(!lines||!lines.length)return null;
   return(
@@ -7560,7 +7568,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                       <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
-                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{histRecap.comp&&histRecap.comp.downCount>0?` — ${histRecap.comp.downCount} exercice${histRecap.comp.downCount>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.</div>
+                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>{athleteRegressionText(computeCoachCtx(profile),histRecap.comp?histRecap.comp.downCount:0,true)}</div>
                     </div>
                   )}
                   {histRecap.showVolCompare&&(()=>{
@@ -19194,7 +19202,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {isRegression&&(
               <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
                 <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
-                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en baisse{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en recul`:''}. Là il faut se reprendre : la prochaine, tu donnes tout.</div>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>{athleteRegressionText(congratsCoach,regDown,false)}</div>
               </div>
             )}
 
