@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_CATCHUP_MS } from './daily-activity.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
@@ -546,7 +547,70 @@ setInterval(() => {
     sendAccessReminders();
     persist();
   }
+  // Message du SOIR : prépare l'athlète à la séance de demain + félicitation / relance selon son activité (20 h → 23 h).
+  const act = shouldSendActivityNotif(Date.now(), DATA.meta?.activityNotifLastRun || null);
+  if (act.due) {
+    DATA.meta = DATA.meta || {};
+    DATA.meta.activityNotifLastRun = act.dateStr;
+    persist();
+    sendDailyActivity();
+  }
+  // Message APRÈS la séance : envoyé à l'heure qui suit la fin de séance (18 h / 20 h / 1 h après), cf. daily-activity.js.
+  sendPostSessionNotifications();
 }, 60 * 1000);
+
+// Message envoyé À CEUX QUI SE SONT ENTRAÎNÉS aujourd'hui, après leur séance : 18 h si séance le matin (avant 12 h),
+// 20 h si séance entre 12 h et 18 h, 1 h après si séance entre 20 h et 23 h. Choisi parmi 5 messages selon l'activité et
+// la régularité. Une seule fois par jour et par athlète (date persistée), rattrapable jusqu'à minuit.
+function sendPostSessionNotifications() {
+  const now = Date.now();
+  const lt = zonedParts(new Date(now), MOTIVATION_TZ);
+  if (lt.hour < 18) return; // aucun envoi possible avant 18 h : on évite de parcourir les séances toute la journée
+  const byUser = {};
+  for (const s of Object.values(DATA.sessions)) { if (s && s.userId) (byUser[s.userId] = byUser[s.userId] || []).push(s); }
+  let changed = false;
+  for (const u of Object.values(DATA.users)) {
+    if (!u || u.role !== 'athlete' || u.status !== 'active' || isAccessExpired(u)) continue;
+    if (u.postSessionNotified === lt.dateStr || toneLimits(u).tooMany) continue;
+    const sum = activitySummary(byUser[u.id] || [], now);
+    if (!sum.todaySessions.length) continue;
+    const sendAt = postSessionSendAt(sum.lastTodayAt);
+    if (sendAt === null || now < sendAt || now - sendAt > POST_SESSION_CATCHUP_MS) continue;
+    const data = { programs: DATA.programs, scheduleMoves: DATA.scheduleMoves, plannedSessions: DATA.plannedSessions };
+    const plan = tomorrowPlan(data, u.id, sum.today);
+    const msg = pickPostSessionMessage(sum, u, plan, { cadence: weeklyCadence(u, data) });
+    u.postSessionNotified = lt.dateStr;
+    changed = true;
+    pushToUser(u.id, { title: msg.title, body: msg.body, url: msg.url, tag: msg.tag });
+    console.log(`[activity] message après séance → ${u.id} (message ${msg.idx + 1}, demain : ${msg.plan})`);
+  }
+  if (changed) persist();
+}
+
+// Un message par athlète actif : annonce la séance de demain (ou le jour de repos) avec une consigne de préparation
+// mentale, et reconnaît ce qu'il a fait (ou pas) aujourd'hui : félicitation si séance du jour / objectif de la
+// semaine atteint, relance bienveillante sinon. Pas d'envoi aux coachs, ni à un athlète dont l'accès a
+// expiré (il est déjà prévenu par les rappels d'accès, et une relance « entraîne-toi » serait absurde).
+function sendDailyActivity() {
+  const now = Date.now();
+  const byUser = {};
+  for (const s of Object.values(DATA.sessions)) { if (s && s.userId) (byUser[s.userId] = byUser[s.userId] || []).push(s); }
+  const counts = {};
+  let n = 0;
+  for (const u of Object.values(DATA.users)) {
+    if (!u || u.role !== 'athlete' || u.status !== 'active' || isAccessExpired(u)) continue;
+    const sum = activitySummary(byUser[u.id] || [], now);
+    // Séance faite aujourd'hui → il reçoit le message « après séance » (horaire propre) ; « trop de messages » → rien.
+    if (sum.todaySessions.length || toneLimits(u).tooMany) continue;
+    const plan = tomorrowPlan({ programs: DATA.programs, scheduleMoves: DATA.scheduleMoves, plannedSessions: DATA.plannedSessions }, u.id, sum.today);
+    const msg = pickDailyMessage(sum, u, now, plan);
+    pushToUser(u.id, { title: msg.title, body: msg.body, url: msg.url, tag: msg.tag });
+    const ck = msg.plan + '/' + msg.kind;
+    counts[ck] = (counts[ck] || 0) + 1;
+    n++;
+  }
+  if (n) console.log(`[activity] message quotidien envoyé à ${n} athlète(s) :`, JSON.stringify(counts));
+}
 
 function sendAccessReminders() {
   const due = dueAccessReminders(DATA.users);
