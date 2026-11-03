@@ -56,6 +56,8 @@ test('séance faite un mardi où le lundi a été déplacé : intitulé et muscl
   assert.match(txt, /· QUADRICEPS/, 'muscles de la séance faite');
   assert.doesNotMatch(txt, /HAUT DU CORPS 1/, 'pas la catégorie du jour du programme');
   assert.deepEqual(errs, []);
+  await pg.locator('text=/Mardi|Mercredi|Jeudi/').first().scrollIntoViewIfNeeded().catch(() => {});
+  await pg.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await pg.screenshot({ path: process.env.SHOT || '/tmp/cal.png' });
   await ctx.close();
 });
