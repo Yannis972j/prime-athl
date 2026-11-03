@@ -28,11 +28,17 @@ export function activitySummary(sessions, now = Date.now(), tz = MOTIVATION_TZ) 
   const dayOf = s => zonedParts(new Date(s.date), tz).dateStr;
   const todaySessions = list.filter(s => dayOf(s) === today);
   const weekCount = list.filter(s => now - new Date(s.date).getTime() < 7 * DAY).length;
+  const diff = (a, b) => Math.max(0, Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / DAY));
   let daysSince = null;
-  if (list.length) daysSince = Math.max(0, Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(dayOf(list[0]) + 'T00:00:00Z')) / DAY));
+  if (list.length) daysSince = diff(today, dayOf(list[0]));
+  const prev = list.find(s => dayOf(s) < today); // séance la plus récente AVANT aujourd'hui
+  const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - DAY).toISOString().slice(0, 10);
   return {
     today, total: list.length, weekCount, daysSince, todaySessions,
     todayVolume: todaySessions.reduce((v, s) => v + (+s.totalVolume || 0), 0),
+    daysSincePrev: prev ? diff(today, dayOf(prev)) : null,
+    trainedYesterday: list.some(s => dayOf(s) === yesterday),
+    lastTodayAt: todaySessions.length ? new Date(todaySessions[0].date).getTime() : null,
   };
 }
 
@@ -140,4 +146,81 @@ export function pickDailyMessage(sum, user, now = Date.now(), plan = { kind: 'un
   }
   // tag fixe : le message d'hier encore non lu est remplacé par celui d'aujourd'hui au lieu de s'empiler.
   return { kind, plan: plan.kind, title: cut(title, 48), body: cut(body, 170), url: '/Muscu.html', tag: 'daily-activity' };
+}
+
+// ── Message APRÈS la séance : envoyé quand l'athlète a terminé sa séance du jour ─────────────────────────────────
+// Les 5 messages de Yannis, mot pour mot. Choisis selon l'activité et la régularité de l'athlète.
+export const POST_SESSION_MESSAGES = [
+  'Demain, une nouvelle bataille t\'attend. Prépare ton mental, ton corps suivra.',
+  'Tu as assuré aujourd\'hui. Demain, on remet ça. La régularité forge les champions.',
+  'Le repos de ce soir prépare la performance de demain. Reste déterminé.',
+  'Demain, ne cherche pas d\'excuses. Souviens-toi pourquoi tu as commencé.',
+  'Une journée de plus, un pas de plus vers ton objectif. Demain, on avance !',
+];
+
+// Heure d'envoi selon l'heure de FIN de séance (heure locale) :
+//   avant 12 h → 18 h · 12 h–18 h → 20 h · 18 h–20 h → 20 h (ou 1 h après si plus tard) · 20 h–23 h → 1 h après
+//   · à partir de 23 h → pas d'envoi (l'athlète va dormir).
+export function postSessionSendAt(finishedAtMs, tz = MOTIVATION_TZ) {
+  const p = zonedParts(new Date(finishedAtMs), tz);
+  const finishMin = p.hour * 60 + p.minute;
+  let targetMin;
+  if (p.hour < 12) targetMin = 18 * 60;
+  else if (p.hour < 18) targetMin = 20 * 60;
+  else if (p.hour < 20) targetMin = Math.max(20 * 60, finishMin + 60);
+  else if (p.hour < 23) targetMin = finishMin + 60;
+  else return null;
+  const secMs = new Date(finishedAtMs).getUTCSeconds() * 1000 + new Date(finishedAtMs).getUTCMilliseconds();
+  return finishedAtMs - secMs + (targetMin - finishMin) * 60000;
+}
+
+// Un envoi manqué (serveur arrêté) n'est rattrapé que dans cette fenêtre : au-delà, le message serait hors de propos.
+export const POST_SESSION_CATCHUP_MS = 3 * 3600000;
+
+// Rythme attendu : objectif hebdo du profil, sinon nombre de jours d'entraînement du programme, sinon 3.
+export function weeklyCadence(user, data) {
+  const t = user && user.goalWeeklyTarget > 0 ? user.goalWeeklyTarget : 0;
+  if (t) return t;
+  const prog = data && data.programs && data.programs[user && user.id];
+  let best = 0;
+  if (prog && prog.data) for (const sheet of Object.values(prog.data)) best = Math.max(best, Object.values(sheet || {}).filter(d => d && Array.isArray(d.exercises) && d.exercises.length).length);
+  return best >= 1 ? best : 3;
+}
+
+// Limites de ton déclarées par l'athlète (fiche « Mon Profil Coaching », même lecture que l'application).
+export function toneLimits(user) {
+  const dont = Array.isArray(user && user.cpDontDo) ? user.cpDontDo : [];
+  return { noGuilt: dont.includes('Culpabilisant'), soft: dont.includes('Trop agressif') || dont.includes('Trop de messages'), tooMany: dont.includes('Trop de messages') };
+}
+
+// Choisit parmi les 5 messages selon l'activité et la périodicité :
+//   séance tardive (≥ 20 h) → « le repos de ce soir » · demain séance + en retard sur son rythme → « pas d'excuses »
+//   (jamais pour qui a demandé un ton doux) · demain séance + régulier → « la régularité forge » · sinon → « une
+//   nouvelle bataille » ; demain repos / inconnu → « un pas de plus ».
+export function pickPostSessionMessage(sum, user, plan = { kind: 'unknown' }, opts = {}) {
+  const u = user || {};
+  const cadence = opts.cadence || 3;
+  const limits = toneLimits(u);
+  const finishHour = sum.lastTodayAt ? zonedParts(new Date(sum.lastTodayAt), opts.tz || MOTIVATION_TZ).hour : 12;
+  const onTrack = sum.weekCount >= cadence;
+  // « En retard » = vrai décrochage de périodicité : l'écart depuis la séance précédente dépasse nettement l'espacement
+  // attendu (7 / rythme hebdo, +2 jours), et au moins 4 jours. Le nombre de séances sur 7 jours glissants n'est PAS
+  // utilisé : en milieu de semaine il sous-estime toujours le rythme et accuserait à tort un athlète régulier.
+  const gapLimit = Math.max(4, Math.ceil(7 / cadence) + 2);
+  const behind = sum.daysSincePrev !== null && sum.daysSincePrev >= gapLimit;
+  let idx;
+  if (finishHour >= 20) idx = 2;
+  else if (plan.kind === 'session') {
+    // Il a enchaîné hier + aujourd'hui, ou tient son rythme → on salue la régularité (jamais de reproche) ;
+    // sinon, en retard sur son rythme → rappel du « pourquoi » (sauf ton doux demandé) ; sinon message d'entrain.
+    if (sum.trainedYesterday || onTrack) idx = 1;
+    else if (behind && !limits.soft && !limits.noGuilt) idx = 3;
+    else idx = 0;
+  } else idx = 4;
+  const nm = String(u.cpNickname || u.firstName || '').trim();
+  let title;
+  if (plan.kind === 'session') title = `🌙 Demain : ${plan.label ? cut(plan.label, 30) : 'ta séance'}`;
+  else if (plan.kind === 'rest') title = '🌙 Demain : récupération';
+  else title = `💪 Séance validée${nm ? ', ' + nm : ''}`;
+  return { kind: 'post_session', idx, plan: plan.kind, title: cut(title, 48), body: POST_SESSION_MESSAGES[idx], url: '/Muscu.html', tag: 'daily-activity' };
 }

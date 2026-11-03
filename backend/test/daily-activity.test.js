@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSendActivityNotif, activitySummary, sessionOnDate, tomorrowPlan, pickDailyMessage } from '../daily-activity.js';
+import { shouldSendActivityNotif, activitySummary, sessionOnDate, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_MESSAGES } from '../daily-activity.js';
 
 // « Maintenant » = 4 nov. 2026 (mercredi) 20:30 en Martinique = 5 nov. 00:30 UTC
 const NOW = Date.UTC(2026, 10, 5, 0, 30);
@@ -127,4 +127,87 @@ test('serveur : branché sur le planificateur, athlètes actifs seulement, accè
   assert.match(src, /DATA\.meta\.activityNotifLastRun = act\.dateStr;\s*persist\(\);\s*sendDailyActivity\(\)/, 'date du dernier envoi persistée AVANT l\'envoi');
   assert.match(src, /u\.role !== 'athlete' \|\| u\.status !== 'active' \|\| isAccessExpired\(u\)/);
   assert.match(src, /tomorrowPlan\(\{ programs: DATA\.programs, scheduleMoves: DATA\.scheduleMoves, plannedSessions: DATA\.plannedSessions \}/);
+});
+
+// ── Message APRÈS la séance ──────────────────────────────────────────────────────────────────────────────────
+const local = (h, m = 0, dayOfNov = 4) => Date.UTC(2026, 10, dayOfNov, h + 4, m); // heure locale Martinique (UTC-4)
+const hm = ms => { const d = new Date(ms - 4 * 3600000); return String(d.getUTCDate()).padStart(2, '0') + ' ' + String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };
+
+test('après séance : heure d\'envoi selon l\'heure de fin (avant 12 h → 18 h ; 12-18 h → 20 h ; 20-23 h → +1 h ; ≥ 23 h → rien)', () => {
+  assert.equal(hm(postSessionSendAt(local(7, 15))), '04 18:00', 'séance du matin → 18 h');
+  assert.equal(hm(postSessionSendAt(local(11, 59))), '04 18:00', 'juste avant midi → 18 h');
+  assert.equal(hm(postSessionSendAt(local(12, 0))), '04 20:00', 'midi pile → 20 h');
+  assert.equal(hm(postSessionSendAt(local(17, 59))), '04 20:00', 'avant 18 h → 20 h');
+  assert.equal(hm(postSessionSendAt(local(18, 30))), '04 20:00', '18-20 h : pas avant 20 h');
+  assert.equal(hm(postSessionSendAt(local(19, 40))), '04 20:40', '19 h 40 → 1 h après (jamais moins d\'1 h)');
+  assert.equal(hm(postSessionSendAt(local(20, 0))), '04 21:00', '20 h → 21 h');
+  assert.equal(hm(postSessionSendAt(local(21, 45))), '04 22:45', '1 h après');
+  assert.equal(hm(postSessionSendAt(local(22, 59))), '04 23:59', 'dernière minute encore le même jour');
+  assert.equal(postSessionSendAt(local(23, 0)), null, 'à partir de 23 h : pas d\'envoi');
+  // les secondes de fin de séance ne décalent pas l'heure pile
+  assert.equal(hm(postSessionSendAt(local(10, 0) + 37000)), '04 18:00');
+});
+
+test('après séance : choix du message selon activité et régularité (5 messages, textes exacts)', () => {
+  assert.equal(POST_SESSION_MESSAGES.length, 5);
+  assert.equal(POST_SESSION_MESSAGES[0], 'Demain, une nouvelle bataille t\'attend. Prépare ton mental, ton corps suivra.');
+  assert.equal(POST_SESSION_MESSAGES[3], 'Demain, ne cherche pas d\'excuses. Souviens-toi pourquoi tu as commencé.');
+  const sessionTmr = { kind: 'session', label: 'DOS', exCount: 5 };
+  const at = (h, sessions, user, plan, cadence = 3) => {
+    // « maintenant » = juste après la séance du jour (à l'heure h)
+    const sess = sessions.map(x => x.__today ? { ...x, date: new Date(local(h, 0)).toISOString() } : x);
+    const now = local(h, 5);
+    return pickPostSessionMessage(activitySummary(sess, now), { id: 'u', firstName: 'Léa', ...user }, plan, { cadence });
+  };
+  const T = { id: 't', __today: true, name: 'PUSH', totalVolume: 1 };
+  const old = d => ({ id: 'o' + d, date: new Date(local(10, 0) - d * 86400000).toISOString(), name: 'X' });
+  assert.equal(at(10, [T, old(1), old(2)], {}, sessionTmr).idx, 1, 'régulier (3 séances/7 j) + séance demain → « la régularité forge »');
+  assert.equal(at(10, [T, old(1)], {}, sessionTmr, 5).idx, 1, 'enchaîne 2 jours de suite → « la régularité forge »');
+  assert.equal(at(10, [T, old(3)], {}, sessionTmr, 3).idx, 0, 'rythme normal, séance demain → « nouvelle bataille »');
+  assert.equal(at(10, [T, old(3)], {}, sessionTmr, 4).idx, 0, 'séance il y a 3 jours avec un rythme de 4/semaine : pas en retard (pas de reproche)');
+  assert.equal(at(10, [T, old(5)], {}, sessionTmr, 4).idx, 3, 'écart de 5 jours avec un rythme de 4/semaine → décrochage');
+  assert.equal(at(10, [T, old(4)], {}, sessionTmr, 3).idx, 0, '4 jours d\'écart avec un rythme de 3/semaine : seuil de décrochage = 5 jours, donc pas en retard');
+  assert.equal(at(10, [T, old(4)], {}, sessionTmr, 2).idx, 1, 'rythme de 2/semaine tenu (2 séances sur 7 jours) → régularité');
+  assert.equal(at(10, [T, old(8)], {}, sessionTmr).idx, 3, 'reprise après une pause + séance demain → « pas d\'excuses »');
+  assert.equal(at(10, [T, old(1), old(2)], {}, { kind: 'rest' }).idx, 4, 'demain repos → « un pas de plus »');
+  assert.equal(at(10, [T, old(2)], {}, { kind: 'unknown' }).idx, 4, 'sans programme → « un pas de plus »');
+  assert.equal(at(21, [T, old(1)], {}, sessionTmr).idx, 2, 'séance tardive (≥ 20 h) → « le repos de ce soir »');
+  assert.equal(at(21, [T, old(8)], {}, { kind: 'rest' }).idx, 2, 'séance tardive, même demain repos');
+});
+
+test('après séance : « pas d\'excuses » jamais pour qui a demandé un ton doux ; « trop de messages » repéré', () => {
+  const sess = [{ id: 't', date: new Date(local(10, 0)).toISOString(), name: 'P', totalVolume: 1 }, { id: 'o', date: new Date(local(10, 0) - 8 * 86400000).toISOString(), name: 'X' }];
+  const sum = activitySummary(sess, local(10, 5));
+  const plan = { kind: 'session', label: 'DOS' };
+  assert.equal(pickPostSessionMessage(sum, { id: 'a' }, plan).idx, 3);
+  for (const dont of [['Culpabilisant'], ['Trop agressif'], ['Trop de messages']]) {
+    assert.notEqual(pickPostSessionMessage(sum, { id: 'a', cpDontDo: dont }, plan).idx, 3, dont[0]);
+  }
+  assert.equal(toneLimits({ cpDontDo: ['Trop de messages'] }).tooMany, true);
+  assert.equal(toneLimits({}).tooMany, false);
+});
+
+test('après séance : titre = séance de demain / récupération / « Séance validée » ; rythme attendu lu dans le profil ou le programme', () => {
+  const sum = activitySummary([{ id: 't', date: new Date(local(10, 0)).toISOString(), name: 'P' }], local(10, 5));
+  assert.equal(pickPostSessionMessage(sum, { id: 'a' }, { kind: 'session', label: 'JAMBES' }).title, '🌙 Demain : JAMBES');
+  assert.equal(pickPostSessionMessage(sum, { id: 'a' }, { kind: 'rest' }).title, '🌙 Demain : récupération');
+  assert.equal(pickPostSessionMessage(sum, { id: 'a', firstName: 'Léa' }, { kind: 'unknown' }).title, '💪 Séance validée, Léa');
+  assert.equal(weeklyCadence({ id: 'a', goalWeeklyTarget: 5 }, {}), 5);
+  const programs = { a: { data: { S1: { LUNDI: day('A'), MERCREDI: day('B'), VENDREDI: day('C'), SAMEDI: day('D') } } } };
+  assert.equal(weeklyCadence({ id: 'a' }, { programs }), 4, 'nombre de jours du programme');
+  assert.equal(weeklyCadence({ id: 'b' }, { programs }), 3, 'défaut');
+});
+
+test('après séance : une séance saisie rétroactivement (jour passé) ne déclenche rien aujourd\'hui', () => {
+  const retro = { id: 'r', date: new Date(local(12, 0, 2)).toISOString(), name: 'Rétro', totalVolume: 1 }; // midi le 2 nov.
+  assert.equal(activitySummary([retro], local(21, 0)).todaySessions.length, 0);
+});
+
+test('serveur : envoi après séance une fois par jour (date persistée), fenêtre de rattrapage, accès expiré/« trop de messages » exclus', () => {
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../server.js'), 'utf8');
+  assert.match(src, /sendPostSessionNotifications\(\);\s*\}, 60 \* 1000\)/, 'appelé par le planificateur à la minute');
+  assert.match(src, /u\.postSessionNotified === lt\.dateStr \|\| toneLimits\(u\)\.tooMany/);
+  assert.match(src, /now < sendAt \|\| now - sendAt > POST_SESSION_CATCHUP_MS/);
+  assert.match(src, /u\.postSessionNotified = lt\.dateStr;/);
+  assert.match(src, /if \(sum\.todaySessions\.length \|\| toneLimits\(u\)\.tooMany\) continue;/, 'le message de 20 h ne vise que ceux qui ne se sont pas entraînés');
 });
