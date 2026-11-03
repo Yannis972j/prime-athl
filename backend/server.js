@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage } from './daily-activity.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
@@ -546,7 +547,38 @@ setInterval(() => {
     sendAccessReminders();
     persist();
   }
+  // Message du SOIR : prépare l'athlète à la séance de demain + félicitation / relance selon son activité (20 h → 23 h).
+  const act = shouldSendActivityNotif(Date.now(), DATA.meta?.activityNotifLastRun || null);
+  if (act.due) {
+    DATA.meta = DATA.meta || {};
+    DATA.meta.activityNotifLastRun = act.dateStr;
+    persist();
+    sendDailyActivity();
+  }
 }, 60 * 1000);
+
+// Un message par athlète actif : annonce la séance de demain (ou le jour de repos) avec une consigne de préparation
+// mentale, et reconnaît ce qu'il a fait (ou pas) aujourd'hui : félicitation si séance du jour / objectif de la
+// semaine atteint, relance bienveillante sinon. Pas d'envoi aux coachs, ni à un athlète dont l'accès a
+// expiré (il est déjà prévenu par les rappels d'accès, et une relance « entraîne-toi » serait absurde).
+function sendDailyActivity() {
+  const now = Date.now();
+  const byUser = {};
+  for (const s of Object.values(DATA.sessions)) { if (s && s.userId) (byUser[s.userId] = byUser[s.userId] || []).push(s); }
+  const counts = {};
+  let n = 0;
+  for (const u of Object.values(DATA.users)) {
+    if (!u || u.role !== 'athlete' || u.status !== 'active' || isAccessExpired(u)) continue;
+    const sum = activitySummary(byUser[u.id] || [], now);
+    const plan = tomorrowPlan({ programs: DATA.programs, scheduleMoves: DATA.scheduleMoves, plannedSessions: DATA.plannedSessions }, u.id, sum.today);
+    const msg = pickDailyMessage(sum, u, now, plan);
+    pushToUser(u.id, { title: msg.title, body: msg.body, url: msg.url, tag: msg.tag });
+    const ck = msg.plan + '/' + msg.kind;
+    counts[ck] = (counts[ck] || 0) + 1;
+    n++;
+  }
+  if (n) console.log(`[activity] message quotidien envoyé à ${n} athlète(s) :`, JSON.stringify(counts));
+}
 
 function sendAccessReminders() {
   const due = dueAccessReminders(DATA.users);
