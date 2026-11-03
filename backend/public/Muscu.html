@@ -5917,6 +5917,11 @@ const VOLUME_DOWN_MILD_MESSAGES=[
   (name,kg)=>`Petit coup de mou (-${kg}kg), ${name} ? Ça arrive. L'important, c'est que t'étais là. La prochaine, tu reprends le lead 💪`,
   (name,kg)=>`${name}, -${kg}kg aujourd'hui. Ton canapé a dû te manquer 😏 On se rattrape la prochaine, tranquille.`,
 ];
+// Même baisse légère, version sans blague (profil « trop familier » / « ne me chambre jamais »).
+const VOLUME_DOWN_PLAIN_MESSAGES=[
+  (name,kg)=>`${kg}kg de moins que la dernière fois, ${name}. Ça arrive : l'important, c'est que tu étais là. On repart de l'avant à la prochaine.`,
+  (name,kg)=>`-${kg}kg aujourd'hui, ${name}. Une séance plus légère ne change pas ta trajectoire — on vise mieux la prochaine.`,
+];
 // Baisse NETTE (≥8%) : ton sérieux, ferme, SANS humour — c'est un vrai recul, pas un jour sans.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
   (name,kg)=>`-${kg}kg par rapport à ta dernière séance, ${name}. Ce n'est pas un jour sans : tu n'as pas donné ce qu'il fallait. La prochaine, tu reviens avec l'intention de bosser.`,
@@ -6114,6 +6119,8 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // culpabilisant » / « doux » (on ne lui sert jamais le message sévère d'une baisse).
   if(coach&&coach.nickname)name=coach.nickname;
   const soft=coach&&(coach.noGuilt||coach.wantsSoft||coach.intensity<=2);
+  const noJoke=coachNoJoke(coach);
+  const MILD=noJoke?VOLUME_DOWN_PLAIN_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
@@ -6126,7 +6133,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
   // Exception : profil « doux / pas culpabilisant » → version légère plutôt que sévère.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
-    return pick(soft?VOLUME_DOWN_MILD_MESSAGES:VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
+    return pick(soft?MILD:VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
   }
   // Si on a une comparaison complète, message basé sur la vraie performance
   if(comp&&comp.totalExercises>0){
@@ -6157,9 +6164,9 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
         : `Séance "${sn}" bouclée, ${name}. Pas de charge à battre ici, mais la régularité sur ce travail-là, c'est ça qui paie.`;
     }
     // Mix avec régression au moins équivalente aux hausses → léger, on lance la revanche
-    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Match nul aujourd'hui — la revanche, c'est la prochaine séance 😏`;
+    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Match nul aujourd'hui — la revanche, c'est la prochaine séance${noJoke?'.':' 😏'}`;
     // Mix net positif mais avec des baisses → féliciter et pointer gentiment les reculs
-    if(downCount>0)return `${upCount} en hausse, ${downCount} en baisse, ${name}. Globalement ça pousse ! Reste juste ${downCount>1?'ces exos-là':'cet exo-là'} à convaincre la prochaine fois 😉`;
+    if(downCount>0)return `${upCount} en hausse, ${downCount} en baisse, ${name}. Globalement ça pousse ! Reste juste ${downCount>1?'ces exos-là':'cet exo-là'} à convaincre la prochaine fois${noJoke?'.':' 😉'}`;
     // Que des hausses partielles
     return `${upCount} exo${upCount>1?'s':''} en hausse, ${name}. Continue de pousser, mais va chercher les autres aussi.`;
   }
@@ -6170,7 +6177,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     if(delta<0){
       const kg=Math.abs(delta);
       const pct=volumeVsPrev.previous>0?kg/volumeVsPrev.previous*100:0;
-      const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
+      const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:MILD;
       return pick(list)(name,kg);
     }
     return pick(VOLUME_SAME_MESSAGES)(name);
@@ -6308,6 +6315,81 @@ function mindsetPoolFor(cat,coach){
   }
   return pool;
 }
+// ── Limites explicites du profil appliquées aux phrases du récap ──────────────────────────
+// « Commenter mon physique » / « Me comparer aux autres » : on retire des pools les phrases qui
+// le font. Repli sur le pool doux (lui aussi filtré) si plus rien ne reste — jamais de violation.
+const RECAP_BODY_RE=/physique|miroir|corps de rêve|silhouette/i;
+const RECAP_COMPARE_RE=/\bgens\b|ceux qui|ceux qu[ei]|la majorité|les autres|spectateur|ordinaires/i;
+function recapPoolFor(pool,coach){
+  if(!coach||(!coach.noBodyComment&&!coach.noCompare))return pool;
+  const okP=arr=>arr.filter(x=>{const t=typeof x==='function'?String(x('')):String(x);return !(coach.noBodyComment&&RECAP_BODY_RE.test(t))&&!(coach.noCompare&&RECAP_COMPARE_RE.test(t));});
+  const f=okP(pool);
+  return f.length?f:okP(MINDSET_SOFT);
+}
+// Pas de blague si l'élève a coché « Trop familier » ou demandé qu'on ne le chambre jamais (≤ 1/5).
+function coachNoJoke(coach){return !!coach&&(coach.dontDo.includes('Trop familier')||(coach.banter!=null&&coach.banter<=1));}
+// Lignes « Pour toi » du récap : reliées à ce que l'élève a RÉELLEMENT rempli dans « Mon profil
+// coaching » (réaction au succès / à une séance en dessous, moteurs, exercice préféré / détesté,
+// expression fétiche) et aux données de la séance. Max 2 lignes, [] si rien n'est rempli ou si la
+// séance est une décharge. Toutes les limites cochées (culpabilisant, physique, comparaison, ton
+// trop familier, trop agressif) sont respectées. Déterministe par séance (seed).
+function recapPersonalLines(o){
+  const{coach,goals,comp,volumeVsPrev,session,isDeload,isPostDeload,seed,name}=o||{};
+  if(!coach||!coach.hasProfile||isDeload||isPostDeload)return [];
+  const who=coach.nickname||name||'';
+  const pickI=(arr,tag)=>arr[(seed!=null?hashStr(seed+'|'+tag):0)%arr.length];
+  const prs=(comp&&comp.prsCount)||0,up=(comp&&comp.upCount)||0,down=(comp&&comp.downCount)||0,tot=(comp&&comp.totalExercises)||0;
+  const vp=volumeVsPrev&&volumeVsPrev.previous>0?volumeVsPrev:null;
+  const volDown=!!vp&&vp.current<vp.previous*0.92;
+  const bad=volDown||(tot>0&&down/tot>=0.5);
+  const good=!bad&&(prs>0||(tot>0&&up/tot>=0.5)||(!tot&&!!vp&&vp.current>vp.previous));
+  const exs=((session&&session.exercises)||[]).filter(e=>(e.sets||[]).length>0);
+  const findEx=label=>{const k=normExerciseName(label);if(k.length<3)return null;return exs.find(e=>{const n=normExerciseName(e.name);return n.length>=3&&(n.includes(k)||k.includes(n));})||null;};
+  const cexs=(comp&&comp.exercises)||[];
+  const softTone=coach.noGuilt||coach.wantsSoft;
+  const has=(arr,v)=>(arr||[]).includes(v);
+  const cands=[];
+  if(good){
+    const sr=coach.successReaction||[];
+    const star=cexs.find(e=>e.isPR)||cexs.find(e=>e.status==='up');
+    if(has(sr,'Une statistique')){
+      if(vp){const pct=Math.round((vp.current-vp.previous)/vp.previous*100);cands.push(`En chiffres : ${pct>=0?'+':''}${pct} % de volume par rapport à ta dernière séance (${Math.round(vp.current).toLocaleString('fr-FR')} kg).`);}
+      else if(tot>0)cands.push(`En chiffres : ${up} exercice${up>1?'s':''} en hausse sur ${tot}.`);
+    }
+    if((has(sr,'Un nouveau défi')||has(coach.drives,'Être challengé'))&&star)cands.push(`Ton défi pour la prochaine fois : ${star.name}, une rep de plus sur chaque série.`);
+    if(has(sr,'Une petite vanne')&&!coachNoJoke(coach)){const cp=coach.catchphrase||coach.funnyPhrase;if(cp)cands.push(`Comme tu dis : « ${cp} » 😏`);}
+    if(has(sr,'Une grosse félicitation')&&(prs>0||(tot>0&&up/tot>=0.7)))cands.push(`Franchement${who?', '+who:''} : grosse séance. Bravo, c'est mérité.`);
+    if(has(coach.drives,'Battre mon record')&&prs>0)cands.push(`Un record battu : c'est exactement ce qui te fait avancer.`);
+    if(has(coach.drives,'Être fier de moi'))cands.push(`Tu as de quoi être fier de toi aujourd'hui.`);
+    if(has(coach.drives,'Ne pas abandonner'))cands.push(`Tu n'as rien lâché — c'est ça, ta force.`);
+    if(has(coach.drives,'Voir mon physique changer')&&!coach.noBodyComment)cands.push(`Chaque séance comme celle-ci te rapproche du physique que tu vises.`);
+  }else if(bad){
+    const mr=coach.missedReaction||[];
+    const worst=cexs.find(e=>e.status==='down');
+    if(has(mr,'Me remettre au travail'))cands.push(`La prochaine séance : on se remet au travail, simplement.`);
+    if(has(mr,'Relativiser'))cands.push(`Une séance en dessous ne change pas ta trajectoire : on relativise et on repart.`);
+    if(has(mr,'Me challenger')&&!softTone&&worst)cands.push(`Ton défi : à la prochaine, ramène ${worst.name} au niveau d'avant.`);
+    if(has(mr,'Rappeler mon objectif')&&goals&&goals.objective)cands.push(`Rappelle-toi : ${objectivePhrase(goals.objective)} se construit aussi sur les séances moins faciles.`);
+    if(has(mr,'Me laisser puis relancer'))cands.push(`Laisse cette séance derrière toi ce soir — on relance à la prochaine.`);
+  }
+  const out=[];
+  if(cands.length)out.push(pickI(cands,'plr'));
+  // Exercice préféré / détesté réellement présent dans la séance (jamais de moquerie).
+  const fav=coach.favExercise?findEx(coach.favExercise):null;
+  const hated=coach.hatedExercise?findEx(coach.hatedExercise):null;
+  if(hated)out.push(`${hated.name} était au programme, et tu l'as fait quand même. C'est ça qui fait la différence.`);
+  else if(fav)out.push(`${fav.name}, ton exercice préféré, était au programme — tu t'es fait plaisir.`);
+  return out.slice(0,2);
+}
+function RecapPersonal({lines,style}){
+  if(!lines||!lines.length)return null;
+  return(
+    <div style={{padding:'12px 16px',borderRadius:14,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.18)',textAlign:'center',...(style||{})}}>
+      <div style={{fontSize:10.5,fontWeight:800,color:'#5A8AE0',letterSpacing:0.9,textTransform:'uppercase',marginBottom:6,opacity:0.85}}>🎯 Pour toi</div>
+      {lines.map((l,i)=><div key={i} style={{fontSize:12.5,color:T.textDim,lineHeight:1.55,marginTop:i?4:0}}>{l}</div>)}
+    </div>
+  );
+}
 // Hash déterministe d'une chaîne (petit FNV-like) → index stable. Sert à figer une citation/
 // un message par séance : sans ça, le tirage aléatoire change à chaque rendu (re-render au
 // clic, à la frappe du feedback, en rouvrant la fiche…), ce qui donnait l'impression que la
@@ -6328,7 +6410,7 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
   if(goals&&goals.hasProfile&&goals.style&&STYLE_MINDSET[goals.style]){
     // Le 3e cas des mindsets génériques garde sa place pour rester surprenant.
     const roll=seed!=null?hashStr(seed+'|mind-roll')%3:Math.floor(Math.random()*3);
-    if(roll<2)return pick(STYLE_MINDSET[goals.style]);
+    if(roll<2)return pick(recapPoolFor(STYLE_MINDSET[goals.style],coach));
   }
   // On détermine d'abord la CATÉGORIE de performance, puis mindsetPoolFor() choisit le pool en
   // tenant compte du profil coaching (intensité voulue, humour autorisé, pas de culpabilisation).
@@ -6353,7 +6435,7 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
     else if(delta<0)cat=pctDown>=0.15?'hard':'pique';
     else cat='neutral';
   }else cat='first';
-  return pick(mindsetPoolFor(cat,coach));
+  return pick(recapPoolFor(mindsetPoolFor(cat,coach),coach));
 }
 
 // Volume total (kg) d'une séance : utilise totalVolume si présent, sinon recalcule depuis les séries.
@@ -7550,6 +7632,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
                     <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.date||viewHistSession.id,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'',computeCoachCtx(profile),viewHistSession.lightReason)}"</div>
+                  <RecapPersonal style={{marginTop:10}} lines={recapPersonalLines({coach:computeCoachCtx(profile),goals:computeGoalsCtx(profile),comp:histRecap.comp,volumeVsPrev:histRecap.volumeVsPrev,session:viewHistSession,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,seed:viewHistSession.date||viewHistSession.id,name:profile?.firstName})}/>
                   </div>
                 </div>
               )}
@@ -12086,6 +12169,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
                 <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.date||s.id,isDeload,isPostDeload,athGoals,athleteGender,athCoach,s.lightReason)}"</div>
               </div>
+              <RecapPersonal style={{marginTop:10}} lines={recapPersonalLines({coach:athCoach,goals:athGoals,comp,volumeVsPrev,session:s,isDeload,isPostDeload,seed:s.date||s.id,name:firstName})}/>
             </div>
           )}
           {/* Première séance de ce nom (aucune comparaison possible) */}
@@ -19245,6 +19329,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
               <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.date||_s?.id,isDeloadSession,isPostDeloadSession,congratsGoals||computeGoalsCtx(profile),congratsGender||profile.gender||'',congratsCoach,_s?.lightReason)}"</div>
             </div>
+            <RecapPersonal style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}} lines={recapPersonalLines({coach:congratsCoach,goals:congratsGoals||computeGoalsCtx(profile),comp:sessionComparison,volumeVsPrev,session:_s,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,seed:_s?.date||_s?.id,name:congratsName||profile.firstName})}/>
 
             {/* Bouton continuer */}
             <button onClick={()=>{setShowCongrats(false);setSessionComparison(null);if(authUser.email==='yannisgym972@gmail.com'&&lastFinishedSession)setShowAddToProgramme(true);}} style={{width:'100%',maxWidth:380,height:52,borderRadius:14,border:'1px solid rgba(191,160,96,0.3)',background:'rgba(191,160,96,0.10)',color:T.accent,fontSize:15,fontWeight:700,cursor:'pointer',marginTop:8}}>
