@@ -13,7 +13,7 @@ const SRC = slice('function normExerciseName', '// Clé de comparaison de NOMS D
   + slice('const CONGRATS_MESSAGES', 'function computeGoalsCtx') + '\n'
   + slice('function computeCoachCtx', 'function RecapPersonal') + '\n'
   + slice('// Hash déterministe', 'function sessionVolumeOf');
-const L = new Function('gg', SRC + '\nreturn { athleteRegressionText, computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
+const L = new Function('gg', SRC + '\nreturn { biasMindsetPool, athleteRegressionText, computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
 
 const ctx = p => L.computeCoachCtx(p);
 const sess = (...names) => ({ exercises: names.map(n => ({ name: n, sets: [{ weight: 50, reps: 10 }] })) });
@@ -30,27 +30,24 @@ test('profil vide ou absent : aucune ligne « Pour toi »', () => {
   assert.deepEqual(L.recapPersonalLines({ coach: null, comp: goodComp }), []);
 });
 
-test('succès : la ligne suit la préférence « quand tu réussis »', () => {
-  assert.match(lines({ cpSuccessReaction: ['Une statistique'] }, { comp: goodComp, volumeVsPrev: volUp })[0], /\+13 % de volume.*9[\s  ]?000 kg/);
-  assert.match(lines({ cpSuccessReaction: ['Un nouveau défi'] }, { comp: goodComp, volumeVsPrev: volUp })[0], /défi.*Squat.*une rep de plus/i);
-  assert.match(lines({ cpSuccessReaction: ['Une grosse félicitation'] }, { comp: goodComp, volumeVsPrev: volUp })[0], /grosse séance/);
-  assert.deepEqual(lines({ cpSuccessReaction: ['Un message simple'] }, { comp: goodComp, volumeVsPrev: volUp }), []);
+test('une seule ligne, factuelle : la préférence « quand tu réussis » choisit laquelle', () => {
+  const ok = (p, re) => { const l = lines(p, { comp: goodComp, volumeVsPrev: volUp }); assert.equal(l.length, 1); assert.match(l[0], re); };
+  ok({ cpSuccessReaction: ['Une statistique'] }, /\+13 % de volume.*9[\s\u202f\u00a0]?000 kg/);
+  ok({ cpSuccessReaction: ['Un nouveau défi'] }, /défi.*Squat.*une rep de plus/i);
+  // pas de morale ni de félicitation répétée : ces préférences n'ajoutent plus de ligne
+  for (const p of [{ cpSuccessReaction: ['Une grosse félicitation'] }, { cpSuccessReaction: ['Un message simple'] }, { cpDrives: ['Être fier de moi', 'Ne pas abandonner', 'Battre mon record'] }])
+    assert.deepEqual(lines(p, { comp: goodComp, volumeVsPrev: volUp }), []);
+  // plusieurs préférences → toujours UNE seule ligne
+  assert.equal(lines({ cpSuccessReaction: ['Une statistique', 'Un nouveau défi', 'Une petite vanne'], cpCatchphrase: 'Allez' }, { comp: goodComp, volumeVsPrev: volUp }).length, 1);
 });
 
-test('moteurs : record, fierté — et jamais le physique si « Commenter mon physique » est coché', () => {
-  assert.match(lines({ cpDrives: ['Battre mon record'] }, { comp: goodComp })[0], /record/);
-  assert.match(lines({ cpDrives: ['Voir mon physique changer'] }, { comp: goodComp })[0], /physique/);
-  assert.deepEqual(lines({ cpDrives: ['Voir mon physique changer'], cpDontDo: ['Commenter mon physique'] }, { comp: goodComp }), []);
-});
-
-test('séance en dessous : réaction choisie, jamais de défi si « culpabilisant » ou « trop agressif »', () => {
-  assert.match(lines({ cpMissedReaction: ['Relativiser'] }, { comp: badComp, volumeVsPrev: volDown })[0], /trajectoire/);
+test('séance en dessous : défi seulement si ni « culpabilisant » ni « trop agressif » ; « relativiser » n\'ajoute pas de ligne', () => {
   assert.match(lines({ cpMissedReaction: ['Me challenger'] }, { comp: badComp })[0], /Squat/);
   assert.deepEqual(lines({ cpMissedReaction: ['Me challenger'], cpDontDo: ['Culpabilisant'] }, { comp: badComp }), []);
   assert.deepEqual(lines({ cpMissedReaction: ['Me challenger'], cpDontDo: ['Trop agressif'] }, { comp: badComp }), []);
-  // une réaction « succès » n'apparaît jamais sur une mauvaise séance, et inversement
+  assert.deepEqual(lines({ cpMissedReaction: ['Relativiser', 'Me remettre au travail'] }, { comp: badComp, volumeVsPrev: volDown }), []);
   assert.deepEqual(lines({ cpSuccessReaction: ['Une statistique'] }, { comp: badComp, volumeVsPrev: volDown }), []);
-  assert.deepEqual(lines({ cpMissedReaction: ['Relativiser'] }, { comp: goodComp, volumeVsPrev: volUp }), []);
+  assert.deepEqual(lines({ cpMissedReaction: ['Me challenger'] }, { comp: goodComp, volumeVsPrev: volUp }), []);
 });
 
 test('rappel d\'objectif seulement si la fiche objectifs est remplie', () => {
@@ -66,16 +63,29 @@ test('vanne : expression fétiche seulement si l\'humour est permis', () => {
   assert.deepEqual(lines({ ...p, cpBanterLevel: 1 }, { comp: goodComp }), []);
 });
 
-test('exercice préféré / détesté : seulement s\'il est dans la séance', () => {
+test('exercice préféré / détesté : seulement s\'il est dans la séance, et jamais « plaisir » s\'il a reculé', () => {
   assert.match(lines({ cpFavExercise: 'squat' }, { comp: goodComp, session: sess('Squat barre') })[0], /Squat barre, ton exercice préféré/);
   assert.match(lines({ cpHatedExercise: 'Burpees' }, { comp: goodComp, session: sess('Burpees', 'Squat') })[0], /Au programme aujourd'hui : Burpees\. Et tu l'as fait quand même/);
   assert.deepEqual(lines({ cpFavExercise: 'Soulevé de terre' }, { comp: goodComp, session: sess('Squat') }), []);
-});
-
-test('exercice préféré : pas de « plaisir » sur une séance en dessous ou s\'il a reculé', () => {
   assert.deepEqual(lines({ cpFavExercise: 'Squat' }, { comp: badComp, volumeVsPrev: volDown, session: sess('Squat') }), []);
   const mixed = { prsCount: 0, upCount: 2, downCount: 1, sameCount: 0, totalExercises: 3, exercises: [{ name: 'Squat', status: 'down' }, { name: 'Tirage', status: 'up' }, { name: 'Curl', status: 'up' }] };
   assert.deepEqual(lines({ cpFavExercise: 'Squat' }, { comp: mixed, volumeVsPrev: volUp, session: sess('Squat', 'Tirage') }), []);
+  // la ligne factuelle prime sur l'exercice préféré (une seule ligne)
+  assert.match(lines({ cpFavExercise: 'Squat', cpSuccessReaction: ['Une statistique'] }, { comp: goodComp, volumeVsPrev: volUp, session: sess('Squat') })[0], /En chiffres/);
+});
+
+test('les préférences orientent la phrase de Mindset (sans doublon, sans nouvelle phrase)', () => {
+  const pool = ['A fier de toi.', 'B constance.', 'C autre.'];
+  assert.deepEqual(L.biasMindsetPool(pool, ctx({ cpDrives: ['Être fier de moi'] }), 'good'), ['A fier de toi.']);
+  assert.deepEqual(L.biasMindsetPool(pool, ctx({ cpDrives: ['Ne pas abandonner'] }), 'elite'), ['B constance.']);
+  assert.equal(L.biasMindsetPool(pool, ctx({ cpDrives: ['Être fier de moi'] }), 'hard'), pool, 'pas de « fierté » sur une séance en dessous');
+  assert.equal(L.biasMindsetPool(pool, ctx({ cpNickname: 'x' }), 'good'), pool, 'sans préférence : inchangé');
+  assert.equal(L.biasMindsetPool(['X', 'Y'], ctx({ cpDrives: ['Être fier de moi'] }), 'good').length, 2, 'aucune phrase correspondante : inchangé');
+  assert.ok(L.biasMindsetPool(['Pas de reproche : on regarde devant.', 'Autre chose.'], ctx({ cpMissedReaction: ['Relativiser'] }), 'hard').length === 1);
+  // réel : un élève qui dit être motivé par la fierté voit une phrase de fierté sur une belle séance
+  let fier = 0;
+  for (let i = 0; i < 30; i++) if (/fier/i.test(L.motivationQuote(goodComp, volUp, 'q' + i, false, false, null, '', ctx({ cpDrives: ['Être fier de moi'] })))) fier++;
+  assert.ok(fier > 0, 'au moins une séance sur 30 tombe sur une phrase de fierté');
 });
 
 test('décharge / reprise : aucune ligne', () => {
@@ -130,7 +140,7 @@ test('bandeau « séance en baisse » de l\'athlète : doux si « culpabilisant 
   assert.match(L.athleteRegressionText(null, 2, false), /tu donnes tout/);
 });
 
-test('les trois récaps (athlète, historique, coach) affichent le bloc « Pour toi »', () => {
+test('les trois récaps (athlète, historique, coach) affichent la ligne dans la carte Mindset', () => {
   assert.equal((html.match(/<RecapPersonal /g) || []).length, 3);
   assert.equal((html.match(/recapPersonalLines\(\{/g) || []).length >= 3, true);
 });

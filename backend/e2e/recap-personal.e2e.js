@@ -27,7 +27,7 @@ before(async () => {
 });
 after(async () => { if (browser) await browser.close(); if (srv) await srv.stop(); });
 
-test('récap athlète : « Pour toi » = ce qui a été rempli dans le profil coaching', async () => {
+test('récap athlète : une ligne personnelle dans la carte Mindset, issue du profil coaching', async () => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const pg = await ctx.newPage();
   pg.setDefaultTimeout(8000);
@@ -56,12 +56,12 @@ test('récap athlète : « Pour toi » = ce qui a été rempli dans le profil co
   await pg.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Passer'); if (b) b.click(); }); // RPE : passer
   await pg.waitForTimeout(3500);
   const txt = await pg.evaluate(() => document.body.innerText);
-  await pg.evaluate(() => { const el = [...document.querySelectorAll('div')].find(d => d.innerText && /^🎯\s*pour toi/i.test(d.innerText.trim()) && d.children.length >= 2); if (el) el.scrollIntoView({ block: 'center' }); });
+  await pg.evaluate(() => { const el = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Continuer'); if (el) el.scrollIntoView({ block: 'end' }); });
   await pg.waitForTimeout(400);
   await pg.screenshot({ path: process.env.SHOT || '/tmp/recap.png' });
-  assert.match(txt, /pour toi/i);
-  assert.match(txt, /En chiffres : \+\d+ % de volume/);
-  assert.match(txt, /Au programme aujourd'hui : Rowing, ton exercice préféré/);
+    assert.match(txt, /En chiffres : \+\d+ % de volume/);
+  assert.doesNotMatch(txt, /Au programme aujourd'hui : Rowing/, 'une seule ligne : la statistique prime sur l\'exercice préféré');
+  assert.doesNotMatch(txt, /pour toi/i, 'plus de bloc séparé : la ligne est dans la carte Mindset');
   assert.deepEqual(errs, []);
   await ctx.close();
 });
