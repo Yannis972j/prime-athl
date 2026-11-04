@@ -20,7 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
-import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_CATCHUP_MS } from './daily-activity.js';
+import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_CATCHUP_MS, eligibleForActivityNotifs, wantsEveningNudge } from './daily-activity.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
 
@@ -570,7 +570,7 @@ function sendPostSessionNotifications() {
   for (const s of Object.values(DATA.sessions)) { if (s && s.userId) (byUser[s.userId] = byUser[s.userId] || []).push(s); }
   let changed = false;
   for (const u of Object.values(DATA.users)) {
-    if (!u || u.role !== 'athlete' || u.status !== 'active' || isAccessExpired(u)) continue;
+    if (!eligibleForActivityNotifs(u) || isAccessExpired(u)) continue;
     if (u.postSessionNotified === lt.dateStr || toneLimits(u).tooMany) continue;
     const sum = activitySummary(byUser[u.id] || [], now);
     if (!sum.todaySessions.length) continue;
@@ -598,8 +598,9 @@ function sendDailyActivity() {
   const counts = {};
   let n = 0;
   for (const u of Object.values(DATA.users)) {
-    if (!u || u.role !== 'athlete' || u.status !== 'active' || isAccessExpired(u)) continue;
+    if (!eligibleForActivityNotifs(u) || isAccessExpired(u)) continue;
     const sum = activitySummary(byUser[u.id] || [], now);
+    if (!wantsEveningNudge(u, sum.total)) continue;
     // Séance faite aujourd'hui → il reçoit le message « après séance » (horaire propre) ; « trop de messages » → rien.
     if (sum.todaySessions.length || toneLimits(u).tooMany) continue;
     const plan = tomorrowPlan({ programs: DATA.programs, scheduleMoves: DATA.scheduleMoves, plannedSessions: DATA.plannedSessions }, u.id, sum.today);

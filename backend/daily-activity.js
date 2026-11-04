@@ -177,6 +177,18 @@ export function postSessionSendAt(finishedAtMs, tz = MOTIVATION_TZ) {
 // Un envoi manqué (serveur arrêté) n'est rattrapé que dans cette fenêtre : au-delà, le message serait hors de propos.
 export const POST_SESSION_CATCHUP_MS = 3 * 3600000;
 
+// Qui reçoit les notifications du soir : les athlètes actifs ET le coach principal, qui s'entraîne aussi
+// (il a son propre profil coaching et ses propres séances). Un autre coach n'en reçoit pas.
+export function eligibleForActivityNotifs(u) {
+  if (!u || u.status !== 'active') return false;
+  return u.role === 'athlete' || (u.role === 'coach' && !!u.isMainCoach);
+}
+// Le message de 20 h (pour ceux qui ne se sont pas entraînés aujourd'hui) : jamais au coach qui n'a encore
+// enregistré aucune séance — il n'est pas un « débutant à relancer », il n'utilise simplement pas l'app pour s'entraîner.
+export function wantsEveningNudge(u, totalSessions) {
+  return u && u.role === 'coach' ? totalSessions > 0 : true;
+}
+
 // Rythme attendu : objectif hebdo du profil, sinon nombre de jours d'entraînement du programme, sinon 3.
 export function weeklyCadence(user, data) {
   const t = user && user.goalWeeklyTarget > 0 ? user.goalWeeklyTarget : 0;

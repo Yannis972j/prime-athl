@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSendActivityNotif, activitySummary, sessionOnDate, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_MESSAGES } from '../daily-activity.js';
+import { shouldSendActivityNotif, activitySummary, sessionOnDate, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_MESSAGES, eligibleForActivityNotifs, wantsEveningNudge } from '../daily-activity.js';
 
 // « Maintenant » = 4 nov. 2026 (mercredi) 20:30 en Martinique = 5 nov. 00:30 UTC
 const NOW = Date.UTC(2026, 10, 5, 0, 30);
@@ -125,7 +125,7 @@ test('serveur : branché sur le planificateur, athlètes actifs seulement, accè
   const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../server.js'), 'utf8');
   assert.match(src, /shouldSendActivityNotif\(Date\.now\(\), DATA\.meta\?\.activityNotifLastRun/);
   assert.match(src, /DATA\.meta\.activityNotifLastRun = act\.dateStr;\s*persist\(\);\s*sendDailyActivity\(\)/, 'date du dernier envoi persistée AVANT l\'envoi');
-  assert.match(src, /u\.role !== 'athlete' \|\| u\.status !== 'active' \|\| isAccessExpired\(u\)/);
+  assert.match(src, /!eligibleForActivityNotifs\(u\) \|\| isAccessExpired\(u\)/);
   assert.match(src, /tomorrowPlan\(\{ programs: DATA\.programs, scheduleMoves: DATA\.scheduleMoves, plannedSessions: DATA\.plannedSessions \}/);
 });
 
@@ -201,6 +201,18 @@ test('après séance : titre = séance de demain / récupération / « Séance v
 test('après séance : une séance saisie rétroactivement (jour passé) ne déclenche rien aujourd\'hui', () => {
   const retro = { id: 'r', date: new Date(local(12, 0, 2)).toISOString(), name: 'Rétro', totalVolume: 1 }; // midi le 2 nov.
   assert.equal(activitySummary([retro], local(21, 0)).todaySessions.length, 0);
+});
+
+test('qui reçoit les notifications du soir : athlètes actifs + coach principal (qui s\'entraîne aussi), pas les autres coachs', () => {
+  assert.equal(eligibleForActivityNotifs({ role: 'athlete', status: 'active' }), true);
+  assert.equal(eligibleForActivityNotifs({ role: 'athlete', status: 'inactive' }), false);
+  assert.equal(eligibleForActivityNotifs({ role: 'coach', status: 'active', isMainCoach: true }), true);
+  assert.equal(eligibleForActivityNotifs({ role: 'coach', status: 'active' }), false);
+  assert.equal(eligibleForActivityNotifs(null), false);
+  // le coach sans aucune séance enregistrée ne reçoit pas la relance de 20 h ; un athlète oui
+  assert.equal(wantsEveningNudge({ role: 'coach', isMainCoach: true }, 0), false);
+  assert.equal(wantsEveningNudge({ role: 'coach', isMainCoach: true }, 12), true);
+  assert.equal(wantsEveningNudge({ role: 'athlete' }, 0), true);
 });
 
 test('serveur : envoi après séance une fois par jour (date persistée), fenêtre de rattrapage, accès expiré/« trop de messages » exclus', () => {
