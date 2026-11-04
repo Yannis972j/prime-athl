@@ -5917,6 +5917,11 @@ const VOLUME_DOWN_MILD_MESSAGES=[
   (name,kg)=>`Petit coup de mou (-${kg}kg), ${name} ? Ça arrive. L'important, c'est que t'étais là. La prochaine, tu reprends le lead 💪`,
   (name,kg)=>`${name}, -${kg}kg aujourd'hui. Ton canapé a dû te manquer 😏 On se rattrape la prochaine, tranquille.`,
 ];
+// Même baisse légère, version sans blague (profil « trop familier » / « ne me chambre jamais »).
+const VOLUME_DOWN_PLAIN_MESSAGES=[
+  (name,kg)=>`${kg}kg de moins que la dernière fois, ${name}. Ça arrive : l'important, c'est que tu étais là. On repart de l'avant à la prochaine.`,
+  (name,kg)=>`-${kg}kg aujourd'hui, ${name}. Une séance plus légère ne change pas ta trajectoire — on vise mieux la prochaine.`,
+];
 // Baisse NETTE (≥8%) : ton sérieux, ferme, SANS humour — c'est un vrai recul, pas un jour sans.
 const VOLUME_DOWN_SEVERE_MESSAGES=[
   (name,kg)=>`-${kg}kg par rapport à ta dernière séance, ${name}. Ce n'est pas un jour sans : tu n'as pas donné ce qu'il fallait. La prochaine, tu reviens avec l'intention de bosser.`,
@@ -6114,6 +6119,8 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // culpabilisant » / « doux » (on ne lui sert jamais le message sévère d'une baisse).
   if(coach&&coach.nickname)name=coach.nickname;
   const soft=coach&&(coach.noGuilt||coach.wantsSoft||coach.intensity<=2);
+  const noJoke=coachNoJoke(coach);
+  const MILD=noJoke?VOLUME_DOWN_PLAIN_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
   // seed fourni → message FIGÉ pour cette séance (voir motivationQuote / hashStr).
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
@@ -6126,7 +6133,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   // toute la logique par exercice — une vraie baisse ne se félicite pas et ne se blague pas.
   // Exception : profil « doux / pas culpabilisant » → version légère plutôt que sévère.
   if(hasVolume&&volumeVsPrev&&volumeVsPrev.previous>0&&volumeVsPrev.current<volumeVsPrev.previous*0.92){
-    return pick(soft?VOLUME_DOWN_MILD_MESSAGES:VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
+    return pick(soft?MILD:VOLUME_DOWN_SEVERE_MESSAGES)(name,Math.round(volumeVsPrev.previous-volumeVsPrev.current));
   }
   // Si on a une comparaison complète, message basé sur la vraie performance
   if(comp&&comp.totalExercises>0){
@@ -6157,9 +6164,9 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
         : `Séance "${sn}" bouclée, ${name}. Pas de charge à battre ici, mais la régularité sur ce travail-là, c'est ça qui paie.`;
     }
     // Mix avec régression au moins équivalente aux hausses → léger, on lance la revanche
-    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Match nul aujourd'hui — la revanche, c'est la prochaine séance 😏`;
+    if(downCount>=upCount&&downCount>0)return `${downCount} exo${downCount>1?'s':''} en baisse pour ${upCount} en hausse, ${name}. Match nul aujourd'hui — la revanche, c'est la prochaine séance${noJoke?'.':' 😏'}`;
     // Mix net positif mais avec des baisses → féliciter et pointer gentiment les reculs
-    if(downCount>0)return `${upCount} en hausse, ${downCount} en baisse, ${name}. Globalement ça pousse ! Reste juste ${downCount>1?'ces exos-là':'cet exo-là'} à convaincre la prochaine fois 😉`;
+    if(downCount>0)return `${upCount} en hausse, ${downCount} en baisse, ${name}. Globalement ça pousse ! Reste juste ${downCount>1?'ces exos-là':'cet exo-là'} à convaincre la prochaine fois${noJoke?'.':' 😉'}`;
     // Que des hausses partielles
     return `${upCount} exo${upCount>1?'s':''} en hausse, ${name}. Continue de pousser, mais va chercher les autres aussi.`;
   }
@@ -6170,7 +6177,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
     if(delta<0){
       const kg=Math.abs(delta);
       const pct=volumeVsPrev.previous>0?kg/volumeVsPrev.previous*100:0;
-      const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:VOLUME_DOWN_MILD_MESSAGES;
+      const list=pct>=15?VOLUME_DOWN_SEVERE_MESSAGES:MILD;
       return pick(list)(name,kg);
     }
     return pick(VOLUME_SAME_MESSAGES)(name);
@@ -6308,6 +6315,97 @@ function mindsetPoolFor(cat,coach){
   }
   return pool;
 }
+// ── Limites explicites du profil appliquées aux phrases du récap ──────────────────────────
+// « Commenter mon physique » / « Me comparer aux autres » : on retire des pools les phrases qui
+// le font. Repli sur le pool doux (lui aussi filtré) si plus rien ne reste — jamais de violation.
+const RECAP_BODY_RE=/physique|miroir|corps de rêve|silhouette/i;
+const RECAP_COMPARE_RE=/\bgens\b|ceux qui|ceux qu[ei]|la majorité|les autres|spectateur|ordinaires/i;
+function recapPoolFor(pool,coach){
+  if(!coach||(!coach.noBodyComment&&!coach.noCompare))return pool;
+  const okP=arr=>arr.filter(x=>{const t=typeof x==='function'?String(x('')):String(x);return !(coach.noBodyComment&&RECAP_BODY_RE.test(t))&&!(coach.noCompare&&RECAP_COMPARE_RE.test(t));});
+  const f=okP(pool);
+  return f.length?f:okP(MINDSET_SOFT);
+}
+// Pas de blague si l'élève a coché « Trop familier » ou demandé qu'on ne le chambre jamais (≤ 1/5).
+function coachNoJoke(coach){return !!coach&&(coach.dontDo.includes('Trop familier')||(coach.banter!=null&&coach.banter<=1));}
+// Une SEULE ligne personnelle, intégrée à la carte Mindset (pas de bloc à part → pas de doublon ni de
+// surcharge de lecture). Elle ne dit que du FACTUEL propre à l'élève, jamais de morale (c'est le rôle de
+// la phrase de Mindset, qui, elle, est orientée par les préférences — voir biasMindsetPool) :
+// statistique, défi, expression fétiche, rappel d'objectif, exercice préféré / détesté présent dans la séance.
+// [] si rien de pertinent, ou séance de décharge / de reprise. Limites du profil respectées. Déterministe (seed).
+function recapPersonalLines(o){
+  const{coach,goals,comp,volumeVsPrev,session,isDeload,isPostDeload,seed}=o||{};
+  if(!coach||!coach.hasProfile||isDeload||isPostDeload)return [];
+  const pickI=(arr,tag)=>arr[(seed!=null?hashStr(seed+'|'+tag):0)%arr.length];
+  const prs=(comp&&comp.prsCount)||0,up=(comp&&comp.upCount)||0,down=(comp&&comp.downCount)||0,tot=(comp&&comp.totalExercises)||0;
+  const vp=volumeVsPrev&&volumeVsPrev.previous>0?volumeVsPrev:null;
+  const volDown=!!vp&&vp.current<vp.previous*0.92;
+  const bad=volDown||(tot>0&&down/tot>=0.5);
+  const good=!bad&&(prs>0||(tot>0&&up/tot>=0.5)||(!tot&&!!vp&&vp.current>vp.previous));
+  const exs=((session&&session.exercises)||[]).filter(e=>(e.sets||[]).length>0);
+  const findEx=label=>{const k=normExerciseName(label);if(k.length<3)return null;return exs.find(e=>{const n=normExerciseName(e.name);return n.length>=3&&(n.includes(k)||k.includes(n));})||null;};
+  const cexs=(comp&&comp.exercises)||[];
+  const softTone=coach.noGuilt||coach.wantsSoft;
+  const has=(arr,v)=>(arr||[]).includes(v);
+  const cands=[];
+  if(good){
+    const sr=coach.successReaction||[];
+    const star=cexs.find(e=>e.isPR)||cexs.find(e=>e.status==='up');
+    if((has(sr,'Un nouveau défi')||has(coach.drives,'Être challengé'))&&star)cands.push(`Ton défi pour la prochaine fois : ${star.name}, une rep de plus sur chaque série.`);
+    if(has(sr,'Une statistique')){
+      if(vp){const pct=Math.round((vp.current-vp.previous)/vp.previous*100);cands.push(`En chiffres : ${pct>=0?'+':''}${pct} % de volume par rapport à ta dernière séance (${Math.round(vp.current).toLocaleString('fr-FR')} kg).`);}
+      else if(tot>0)cands.push(`En chiffres : ${up} exercice${up>1?'s':''} en hausse sur ${tot}.`);
+    }
+    if(has(sr,'Une petite vanne')&&!coachNoJoke(coach)){const cp=coach.catchphrase||coach.funnyPhrase;if(cp)cands.push(`Comme tu dis : « ${cp} » 😏`);}
+  }else if(bad){
+    const mr=coach.missedReaction||[];
+    const worst=cexs.find(e=>e.status==='down');
+    if(has(mr,'Me challenger')&&!softTone&&worst)cands.push(`Ton défi : à la prochaine, ramène ${worst.name} au niveau d'avant.`);
+    if(has(mr,'Rappeler mon objectif')&&goals&&goals.objective)cands.push(`Rappelle-toi : ${objectivePhrase(goals.objective)} se construit aussi sur les séances moins faciles.`);
+  }
+  if(cands.length)return [pickI(cands,'plr')];
+  // Exercice préféré / détesté réellement présent (jamais de moquerie ; pas de « plaisir » si ça a reculé).
+  const fav=coach.favExercise?findEx(coach.favExercise):null;
+  const hated=coach.hatedExercise?findEx(coach.hatedExercise):null;
+  const favDown=fav&&cexs.some(e=>e.status==='down'&&normExerciseName(e.name)===normExerciseName(fav.name));
+  if(hated)return [`Au programme aujourd'hui : ${hated.name}. Et tu l'as fait quand même — c'est ça qui fait la différence.`];
+  if(fav&&!bad&&!favDown)return [`Au programme aujourd'hui : ${fav.name}, ton exercice préféré. Tu t'es fait plaisir.`];
+  return [];
+}
+// Oriente la phrase de Mindset (sans en ajouter de nouvelles) vers ce que l'élève dit le motiver / l'aider :
+// parmi les phrases DÉJÀ autorisées, on privilégie celles qui parlent de fierté, de constance, de record,
+// ou qui relativisent après une séance en dessous. Aucune correspondance → pool inchangé.
+const MINDSET_BIAS_GOOD=[['Être fier de moi',/fier/i],['Ne pas abandonner',/régularité|constance|reviens|même quand|pointes|quand même/i],['Battre mon record',/\bPR\b|record/i]];
+const MINDSET_BIAS_DOWN=[['Relativiser',/ça arrive|pas grave|pas de reproche|ça n'est pas|reculer arrive|tout le monde/i],['Me remettre au travail',/prochaine|remets|reprends|repars/i]];
+function biasMindsetPool(pool,coach,cat){
+  if(!coach)return pool;
+  const down=cat==='hard'||cat==='pique';
+  const rules=down?MINDSET_BIAS_DOWN:(cat==='good'||cat==='elite'||cat==='mixed')?MINDSET_BIAS_GOOD:[];
+  const prefs=down?coach.missedReaction:coach.drives;
+  for(const [label,re] of rules){
+    if(!(prefs||[]).includes(label))continue;
+    const sub=pool.filter(x=>re.test(typeof x==='function'?String(x('')):String(x)));
+    if(sub.length)return sub;
+  }
+  return pool;
+}
+// Bandeau rouge « séance en baisse » vu PAR L'ATHLÈTE : même respect des limites que le reste du récap
+// (« Culpabilisant », « Trop agressif », ton doux) — jamais de « il faut te reprendre » dans ce cas.
+function athleteRegressionText(coach,down,hist){
+  const soft=!!coach&&(coach.noGuilt||coach.wantsSoft||coach.intensity<=2);
+  if(soft)return `Séance en ${hist?'recul':'baisse'}${down>0?` — ${down} exercice${down>1?'s':''} en ${hist?'baisse':'recul'}`:''}. Pas de reproche : ça arrive, on repart de l'avant à la prochaine.`;
+  if(hist)return `Séance en recul${down>0?` — ${down} exercice${down>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.`;
+  return `Séance en baisse${down>0?` — ${down} exercice${down>1?'s':''} en recul`:''}. Là il faut se reprendre : la prochaine, tu donnes tout.`;
+}
+// Ligne personnelle affichée DANS la carte Mindset (séparée par un fin trait) — jamais un bloc à part.
+function RecapPersonal({lines,style}){
+  if(!lines||!lines.length)return null;
+  return(
+    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(191,160,96,0.15)',fontSize:12,color:T.text,lineHeight:1.5,...(style||{})}}>
+      <span style={{marginRight:6}}>🎯</span>{lines[0]}
+    </div>
+  );
+}
 // Hash déterministe d'une chaîne (petit FNV-like) → index stable. Sert à figer une citation/
 // un message par séance : sans ça, le tirage aléatoire change à chaque rendu (re-render au
 // clic, à la frappe du feedback, en rouvrant la fiche…), ce qui donnait l'impression que la
@@ -6328,7 +6426,7 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
   if(goals&&goals.hasProfile&&goals.style&&STYLE_MINDSET[goals.style]){
     // Le 3e cas des mindsets génériques garde sa place pour rester surprenant.
     const roll=seed!=null?hashStr(seed+'|mind-roll')%3:Math.floor(Math.random()*3);
-    if(roll<2)return pick(STYLE_MINDSET[goals.style]);
+    if(roll<2)return pick(recapPoolFor(STYLE_MINDSET[goals.style],coach));
   }
   // On détermine d'abord la CATÉGORIE de performance, puis mindsetPoolFor() choisit le pool en
   // tenant compte du profil coaching (intensité voulue, humour autorisé, pas de culpabilisation).
@@ -6353,7 +6451,7 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
     else if(delta<0)cat=pctDown>=0.15?'hard':'pique';
     else cat='neutral';
   }else cat='first';
-  return pick(mindsetPoolFor(cat,coach));
+  return pick(biasMindsetPool(recapPoolFor(mindsetPoolFor(cat,coach),coach),coach,cat));
 }
 
 // Volume total (kg) d'une séance : utilise totalVolume si présent, sinon recalcule depuis les séries.
@@ -7476,7 +7574,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
                       <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
-                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en recul{histRecap.comp&&histRecap.comp.downCount>0?` — ${histRecap.comp.downCount} exercice${histRecap.comp.downCount>1?'s':''} en baisse`:''}. La prochaine, tu remets ça à l'endroit.</div>
+                      <div style={{fontSize:12,color:'#fff',fontWeight:600,lineHeight:1.4}}>{athleteRegressionText(computeCoachCtx(profile),histRecap.comp?histRecap.comp.downCount:0,true)}</div>
                     </div>
                   )}
                   {histRecap.showVolCompare&&(()=>{
@@ -7550,6 +7648,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                     <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset</div>
                     <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(histRecap.comp,histRecap.volumeVsPrev,viewHistSession.date||viewHistSession.id,histRecap.isDeload,histRecap.isPostDeload,computeGoalsCtx(profile),profile?.gender||'',computeCoachCtx(profile),viewHistSession.lightReason)}"</div>
+                  <RecapPersonal lines={recapPersonalLines({coach:computeCoachCtx(profile),goals:computeGoalsCtx(profile),comp:histRecap.comp,volumeVsPrev:histRecap.volumeVsPrev,session:viewHistSession,isDeload:histRecap.isDeload,isPostDeload:histRecap.isPostDeload,seed:viewHistSession.date||viewHistSession.id,name:profile?.firstName})}/>
                   </div>
                 </div>
               )}
@@ -12085,6 +12184,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
               <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(191,160,96,0.15)'}}>
                 <div style={{fontSize:9,fontWeight:700,color:T.accent,letterSpacing:0.8,textTransform:'uppercase',marginBottom:5,opacity:0.7}}>💬 Mindset à transmettre</div>
                 <div style={{fontSize:12,color:T.textDim,lineHeight:1.55,fontStyle:'italic'}}>"{motivationQuote(comp,volumeVsPrev,s.date||s.id,isDeload,isPostDeload,athGoals,athleteGender,athCoach,s.lightReason)}"</div>
+              <RecapPersonal lines={recapPersonalLines({coach:athCoach,goals:athGoals,comp,volumeVsPrev,session:s,isDeload,isPostDeload,seed:s.date||s.id,name:firstName})}/>
               </div>
             </div>
           )}
@@ -19108,7 +19208,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {isRegression&&(
               <div style={{width:'100%',maxWidth:380,padding:'12px 14px',borderRadius:12,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.4)',marginBottom:16,display:'flex',alignItems:'center',gap:10,boxSizing:'border-box'}}>
                 <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
-                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>Séance en baisse{regDown>0?` — ${regDown} exercice${regDown>1?'s':''} en recul`:''}. Là il faut se reprendre : la prochaine, tu donnes tout.</div>
+                <div style={{fontSize:12.5,color:'#fff',fontWeight:600,lineHeight:1.4}}>{athleteRegressionText(congratsCoach,regDown,false)}</div>
               </div>
             )}
 
@@ -19244,6 +19344,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             <div style={{width:'100%',maxWidth:380,padding:'16px 18px',borderRadius:14,background:'linear-gradient(135deg, rgba(191,160,96,0.08) 0%, rgba(191,160,96,0.03) 100%)',border:'1px solid rgba(191,160,96,0.15)',marginBottom:16,textAlign:'center'}}>
               <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:1,textTransform:'uppercase',marginBottom:8,opacity:0.7}}>💬 Mindset</div>
               <div style={{fontSize:13,color:'rgba(255,255,255,0.7)',lineHeight:1.6,fontStyle:'italic'}}>"{motivationQuote(sessionComparison,volumeVsPrev,_s?.date||_s?.id,isDeloadSession,isPostDeloadSession,congratsGoals||computeGoalsCtx(profile),congratsGender||profile.gender||'',congratsCoach,_s?.lightReason)}"</div>
+            <RecapPersonal style={{textAlign:'center',fontSize:13,color:'rgba(255,255,255,0.8)'}} lines={recapPersonalLines({coach:congratsCoach,goals:congratsGoals||computeGoalsCtx(profile),comp:sessionComparison,volumeVsPrev,session:_s,isDeload:isDeloadSession,isPostDeload:isPostDeloadSession,seed:_s?.date||_s?.id,name:congratsName||profile.firstName})}/>
             </div>
 
             {/* Bouton continuer */}
