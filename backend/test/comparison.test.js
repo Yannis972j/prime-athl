@@ -20,7 +20,7 @@ function extractFn(name) {
   }
   return html.slice(start, i + 1);
 }
-const names = ['normExerciseName', 'isUnilateralName', 'isUnilateralEx', 'isAssistedName', 'isAssistedEx', 'sessionVolumeOf', 'buildSessionComparison'];
+const names = ['normExerciseName', 'isUnilateralName', 'isUnilateralEx', 'isAssistedName', 'isAssistedEx', 'sessionVolumeOf', 'setDistanceM', 'cardioDistanceTotal', 'buildSessionComparison'];
 const build = new Function(`${names.map(extractFn).join('\n')}\nreturn buildSessionComparison;`)();
 
 const S = (weight, reps) => ({ weight, reps, done: true });
