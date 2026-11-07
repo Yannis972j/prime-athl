@@ -12,8 +12,9 @@ const slice = (a, b) => { const i = html.indexOf(a), j = html.indexOf(b, i); ass
 const SRC = slice('function normExerciseName', '// Clé de comparaison de NOMS DE SÉANCE') + '\n'
   + slice('const CONGRATS_MESSAGES', 'function computeGoalsCtx') + '\n'
   + slice('function computeCoachCtx', 'function RecapPersonal') + '\n'
-  + slice('// Hash déterministe', 'function sessionVolumeOf');
-const L = new Function('gg', SRC + '\nreturn { biasMindsetPool, athleteRegressionText, computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
+  + slice('// Hash déterministe', 'function sessionVolumeOf') + '\n'
+  + [slice('const DELOAD_MINDSET', '];\n') + '];', slice('const POST_DELOAD_MINDSET', '];\n') + '];', slice('const MENSTRUAL_MINDSET', '];\n') + '];'].join('\n');
+const L = new Function('gg', SRC + '\nreturn { mindsetPoolFor, coachPreSessionMessage, STYLE_MINDSET, MIND_PERSEVERE, MIND_ESPRIT, MIND_PERF, MIND_SIGNAUX, MIND_MAX, MINDSET_INTENSE, biasMindsetPool, athleteRegressionText, computeCoachCtx, recapPersonalLines, recapPoolFor, congratsMessage, motivationQuote, MOTIVATION_ELITE, MOTIVATION_GOOD, MINDSET_HARSH };')((g, a, b) => b);
 
 const ctx = p => L.computeCoachCtx(p);
 const sess = (...names) => ({ exercises: names.map(n => ({ name: n, sets: [{ weight: 50, reps: 10 }] })) });
@@ -143,4 +144,86 @@ test('bandeau « séance en baisse » de l\'athlète : doux si « culpabilisant 
 test('les trois récaps (athlète, historique, coach) affichent la ligne dans la carte Mindset', () => {
   assert.equal((html.match(/<RecapPersonal /g) || []).length, 3);
   assert.equal((html.match(/recapPersonalLines\(\{/g) || []).length >= 3, true);
+});
+
+// ── Phrases « mentalité de performance » du coach, réparties selon le profil et la performance ────────────────
+const NEW5 = () => [L.MIND_PERSEVERE, L.MIND_ESPRIT, L.MIND_PERF, L.MIND_SIGNAUX, L.MIND_MAX];
+const CATS = ['hard', 'pique', 'elite', 'good', 'mixed', 'neutral', 'first'];
+const textOf = x => (typeof x === 'function' ? x('') : x);
+const neutralComp = { prsCount: 0, upCount: 0, downCount: 0, sameCount: 3, totalExercises: 3, exercises: [] };
+
+test('phrases de perf : exactes (texte du coach) et présentes dans les pools prévus', () => {
+  assert.equal(L.MIND_PERSEVERE, "Tu te dois de voir jusqu'où tu peux aller si tu n'abandonnes pas.");
+  assert.equal(L.MIND_MAX, "Ton maximum, c'est le minimum de quelqu'un d'autre. Travaille plus dur.");
+  const pool = (cat, p) => L.mindsetPoolFor(cat, p === undefined ? null : ctx(p)).map(textOf);
+  assert.ok(pool('elite').includes(L.MIND_MAX));
+  assert.ok(pool('good').includes(L.MIND_PERSEVERE));
+  assert.ok(pool('pique').includes(L.MIND_ESPRIT) && pool('pique').includes(L.MIND_PERF));
+  assert.ok(pool('hard').includes(L.MIND_ESPRIT));
+  assert.ok(pool('neutral').includes(L.MIND_PERF) && pool('neutral').includes(L.MIND_SIGNAUX));
+  assert.ok(pool('first').includes(L.MIND_SIGNAUX));
+  // une baisse nette ne reçoit ni « grosse séance » ni la comparaison avec les autres
+  assert.ok(!pool('hard').includes(L.MIND_MAX));
+  assert.ok(!pool('good').includes(L.MIND_ESPRIT));
+});
+
+test('profil « intense » (chambrage 5, sans humour interdit) : les 5 phrases sont dans son pool', () => {
+  const intense = ctx({ cpBanterLevel: 5, cpPersonality: ['Compétiteur'] });
+  for (const cat of ['neutral', 'first']) {
+    const pool = L.mindsetPoolFor(cat, intense).map(textOf);
+    for (const ph of NEW5()) assert.ok(pool.includes(ph), cat + ' : ' + ph);
+  }
+  // séance en dessous, humour permis : pool de base (mental + perf)
+  const pq = L.mindsetPoolFor('pique', intense).map(textOf);
+  assert.ok(pq.includes(L.MIND_ESPRIT) && pq.includes(L.MIND_PERF));
+  // séance en dessous, humour interdit : pool intense complet
+  const pq2 = L.mindsetPoolFor('pique', ctx({ cpBanterLevel: 5, cpDontDo: ['Trop familier'] })).map(textOf);
+  for (const ph of NEW5()) assert.ok(pq2.includes(ph));
+  // et elles sortent réellement (tirage déterministe par séance) : chacune apparaît sur 300 séances « plateau »
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) seen.add(L.motivationQuote(neutralComp, { previous: 8000, current: 8000 }, 'n' + i, false, false, null, '', intense));
+  for (const ph of NEW5()) assert.ok(seen.has(ph), 'jamais tirée : ' + ph);
+});
+
+test('profil « doux » (≤ 2, « trop agressif », chambrage ≤ 1) : jamais une de ces phrases, quelle que soit la performance', () => {
+  const softs = [{ cpDontDo: ['Trop agressif'] }, { cpBanterLevel: 1 }, { cpBanterLevel: 2 }, { cpCoachStyle: ['Qui reste calme'], cpBanterLevel: 2 }];
+  for (const sp of softs) for (const cat of CATS) {
+    const pool = L.mindsetPoolFor(cat, ctx(sp)).map(textOf);
+    for (const ph of NEW5()) assert.ok(!pool.includes(ph), JSON.stringify(sp) + ' / ' + cat + ' : ' + ph);
+  }
+  const mixed = { prsCount: 0, upCount: 2, downCount: 1, sameCount: 2, totalExercises: 5, exercises: [] };
+  for (let i = 0; i < 200; i++) for (const [comp, vol] of [[neutralComp, { previous: 8000, current: 8000 }], [null, { previous: 9000, current: 6000 }], [mixed, null], [null, null]])
+    for (const sp of softs) assert.ok(!NEW5().includes(L.motivationQuote(comp, vol, 's' + i, false, false, null, '', ctx(sp))), JSON.stringify(sp));
+});
+
+test('« culpabilisant » : aucune de ces phrases sur une baisse ; « me comparer aux autres » : jamais la phrase de comparaison', () => {
+  const ng = ctx({ cpDontDo: ['Culpabilisant'], cpBanterLevel: 4 });
+  const hard = L.mindsetPoolFor('hard', ng).map(textOf);
+  for (const ph of NEW5()) assert.ok(!hard.includes(ph));
+  // idem sur une séance « un peu en dessous » : aucune phrase qui pousse (mental / perf), même avec un chambrage élevé
+  for (const prof of [{ cpDontDo: ['Culpabilisant'], cpBanterLevel: 4 }, { cpDontDo: ['Culpabilisant', 'Trop familier'], cpBanterLevel: 5 }]) {
+    const pq = L.mindsetPoolFor('pique', ctx(prof)).map(textOf);
+    assert.ok(pq.length > 0 && !pq.includes(L.MIND_ESPRIT) && !pq.includes(L.MIND_PERF), JSON.stringify(prof));
+  }
+  const nc = ctx({ cpDontDo: ['Me comparer aux autres'], cpBanterLevel: 5 });
+  for (const cat of ['elite', 'good', 'pique', 'neutral', 'first']) assert.ok(!L.recapPoolFor(L.mindsetPoolFor(cat, nc), nc).map(textOf).includes(L.MIND_MAX), cat);
+  assert.ok(L.recapPoolFor(L.mindsetPoolFor('elite', ctx({ cpBanterLevel: 5 })), ctx({ cpBanterLevel: 5 })).map(textOf).includes(L.MIND_MAX), 'sans la limite, elle reste');
+});
+
+test('décharge / reprise / douleurs de cycle et pools « style » : jamais ces phrases', () => {
+  const intense = ctx({ cpBanterLevel: 5 });
+  for (let i = 0; i < 100; i++) {
+    for (const [d, post, why] of [[true, false, null], [true, false, 'menstrual'], [false, true, null]])
+      assert.ok(!NEW5().includes(L.motivationQuote(neutralComp, null, 'd' + i, d, post, null, 'f', intense, why)));
+  }
+  for (const arr of Object.values(L.STYLE_MINDSET)) for (const t of arr) assert.ok(!NEW5().includes(t));
+});
+
+test('avant la séance : ces phrases sortent pour un profil standard/intense, jamais pour un profil doux', () => {
+  const run = prof => { const out = new Set(); for (let i = 0; i < 400; i++) { const m = L.coachPreSessionMessage(ctx(prof), null, 'Laura', String(1000 + i)); out.add(m.message); } return out; };
+  const mid = run({ cpNickname: 'Lau' });
+  const hard = run({ cpBanterLevel: 5 });
+  for (const ph of [L.MIND_PERF, L.MIND_SIGNAUX, L.MIND_ESPRIT, L.MIND_PERSEVERE]) { assert.ok(mid.has(ph) || hard.has(ph), ph); }
+  const soft = run({ cpBanterLevel: 1 });
+  for (const ph of NEW5()) assert.ok(!soft.has(ph));
 });
