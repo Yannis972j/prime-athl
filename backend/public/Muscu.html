@@ -6020,7 +6020,20 @@ function coachName(coachCtx,firstName){
 // Phrases pré-séance « discipline / donne tout » ajoutées par le coach. Ton ferme et universel
 // (pas de surnom) : injectées dans les pools mid (intensité 3) et hard (4-5), jamais soft — un
 // profil ayant demandé un ton doux / non culpabilisant ne doit pas recevoir « pas d'excuses ».
+// Phrases « mentalité de performance » fournies par le coach. Elles sont DURES (elles poussent) : on ne les
+// ajoute donc QU'aux pools de base — que mindsetPoolFor() remplace par les pools doux (SOFT / FIRM_KIND)
+// dès que l'élève est « doux » (intensité ≤ 2, « trop agressif », « culpabilisant » sur une baisse) — et au
+// pool INTENSE (intensité 4-5). Jamais aux pools propres au style (STYLE_MINDSET), qui ignorent le profil.
+const MIND_PERSEVERE="Tu te dois de voir jusqu'où tu peux aller si tu n'abandonnes pas.";
+const MIND_ESPRIT="Ton corps peut tout supporter, c'est uniquement ton esprit qu'il faut convaincre.";
+const MIND_PERF="Tu es ici pour une seule chose… Chercher de la perf. Donne-toi à fond.";
+const MIND_SIGNAUX="Tu es ici pour envoyer à ton corps des signaux. Donne-toi à fond.";
+const MIND_MAX="Ton maximum, c'est le minimum de quelqu'un d'autre. Travaille plus dur."; // comparaison → filtrée si « Me comparer aux autres »
 const PRESESSION_PUSH=[
+  {title:'Cherche la perf',message:MIND_PERF},
+  {title:'Des signaux à ton corps',message:MIND_SIGNAUX},
+  {title:'Convaincs ton esprit',message:MIND_ESPRIT},
+  {title:'Va voir jusqu\'où tu peux aller',message:MIND_PERSEVERE},
   {title:'Donne tout',message:`Tu es venu pour progresser, pas pour faire semblant. Donne tout.`},
   {title:'Ne la gâche pas',message:`Chaque séance est une occasion de devenir plus fort. Ne la gâche pas.`},
   {title:'Laisse tes excuses au lit',message:`Laisse tes excuses dans ton lit. Aujourd'hui, tu passes à l'action.`},
@@ -6202,12 +6215,14 @@ const MOTIVATION_ELITE=[
   "Tu deviens ce que tu répètes. Et là, tu répètes l'excellence. Continue, c'est exactement comme ça qu'on se construit.",
   "Ta progression ne doit rien à la chance. C'est ta discipline qui parle. Respecte ça.",
   "Ceux qui disent que c'est de la génétique ne t'ont jamais vu à l'entraînement.",
+  MIND_MAX,
 ];
 const MOTIVATION_GOOD=[
   "La progression se cache dans la régularité. T'es sur la bonne voie, continue de te pointer.",
   "Tu fais ce que la majorité des gens reporte à demain. Ça compte plus que tu crois.",
   "T'es pas là pour être parfait. T'es là pour être meilleur qu'hier. Et c'est le cas.",
   "La différence entre toi et quelqu'un qui stagne ? Toi, tu te pointes même quand c'est dur.",
+  MIND_PERSEVERE,
 ];
 // Séance MITIGÉE : du progrès (record / exos en hausse) ET au moins un exo en retrait. On reconnaît
 // les deux — ni fête (il y a un recul), ni consolation (il y a de vrais gains).
@@ -6217,12 +6232,16 @@ const MOTIVATION_MIXED=[
   "Bilan positif, mais pas parfait. La prochaine fois, ramène l'exo en retrait au niveau des autres.",
   "Ce qui monte compte autant que ce qui baisse. Capitalise sur tes hausses, et règle son compte à l'exercice en retrait.",
   "Une séance mitigée reste une séance de progrès si tu en tires quelque chose. Qu'est-ce que tu corriges la prochaine fois ?",
+  MIND_PERSEVERE,
+  MIND_SIGNAUX,
 ];
 const MOTIVATION_PIQUE=[
   "T'avais un peu plus dans le réservoir aujourd'hui, on le sait tous les deux 😏 La prochaine, tu vides le tank.",
   "Les chiffres mentent pas, mais ils pardonnent. La prochaine séance, montre-leur qui commande.",
   "Séance correcte. Mais 'correct', c'est pas pour ça que t'as installé l'app, si ? 😉",
   "Le confort t'a fait un câlin aujourd'hui. La prochaine, tu lui dis poliment non. 💪",
+  MIND_ESPRIT,
+  MIND_PERF,
 ];
 // Régression franche (baisse nette) → ton sérieux, ferme, SANS humour. On ne félicite pas un recul.
 const MOTIVATION_HARD=[
@@ -6231,17 +6250,23 @@ const MOTIVATION_HARD=[
   "Reculer arrive. S'en contenter, non. Range cette séance dans les erreurs à ne pas répéter.",
   "Le niveau ne se maintient pas tout seul. Ce que tu n'entretiens pas, tu le perds — ne gâche pas ce que tu as construit.",
   "Tu n'es pas venu cocher une case, tu es venu progresser. Aujourd'hui ce n'était pas le cas. La prochaine, tu le prouves.",
+  MIND_ESPRIT,
 ];
 const MOTIVATION_NEUTRAL=[
   "La constance, c'est un super pouvoir sous-estimé. Mais stable trop longtemps, ça veut dire que t'oses pas monter.",
   "Ton corps s'adapte. Si tu lui donnes toujours le même stimulus, il te donnera toujours le même résultat.",
   "Rester stable, c'est bien. Mais toi, t'es pas venu ici pour rester au même niveau, si ?",
   "Le plateau, c'est un message : il est temps de changer quelque chose. Une charge, un tempo, un exo.",
+  MIND_PERF,
+  MIND_SIGNAUX,
+  MIND_PERSEVERE,
 ];
 const MOTIVATION_FIRST=[
   "Première brique posée. À partir de maintenant, chaque séance écrit l'histoire. Fais-en une bonne.",
   "Y'a pas de comparaison encore, mais y'a un point de départ. Et la seule direction qui compte, c'est vers le haut.",
   "Le plus dur c'est de commencer. C'est fait. Maintenant, la seule règle : revenir.",
+  MIND_SIGNAUX,
+  MIND_PERSEVERE,
 ];
 // ── Pools de mindset ADAPTÉS AU PROFIL COACHING (fiche « Mon Profil Coaching ») ──────────
 // Choisis par mindsetPoolFor() selon l'intensité voulue et les limites (humour, culpabilisation).
@@ -6268,6 +6293,11 @@ const MINDSET_INTENSE=[
   "Va jusqu'à l'échec. Contrains ton muscle à s'adapter à ta volonté. Ne lui laisse pas le choix.",
   "L'échec, c'est là où ton muscle abandonne. La croissance, c'est là où toi tu refuses.",
   "Ton muscle ne grandit pas quand c'est facile. Il grandit quand il n'a plus le choix.",
+  MIND_PERSEVERE,
+  MIND_ESPRIT,
+  MIND_PERF,
+  MIND_SIGNAUX,
+  MIND_MAX,
 ];
 // FIRM_KIND : utilisé à la place du ton dur quand l'élève a demandé « pas culpabilisant » / « doux ».
 // Ferme sur le cap, bienveillant sur la personne — on corrige sans juger.
@@ -6313,13 +6343,16 @@ function mindsetPoolFor(cat,coach){
   }else if(cat==='first'){
     if(soft)pool=MINDSET_SOFT;else if(intense)pool=MINDSET_INTENSE;
   }
+  // « Culpabilisant » coché : sur une séance en dessous, pas de phrase qui pousse (« chercher de la perf »,
+  // « convaincre ton esprit ») — elles sonnent comme un reproche. Les pools restent non vides.
+  if(coach.noGuilt&&(cat==='pique'||cat==='hard')){const f=pool.filter(x=>x!==MIND_ESPRIT&&x!==MIND_PERF);if(f.length)pool=f;}
   return pool;
 }
 // ── Limites explicites du profil appliquées aux phrases du récap ──────────────────────────
 // « Commenter mon physique » / « Me comparer aux autres » : on retire des pools les phrases qui
 // le font. Repli sur le pool doux (lui aussi filtré) si plus rien ne reste — jamais de violation.
 const RECAP_BODY_RE=/physique|miroir|corps de rêve|silhouette/i;
-const RECAP_COMPARE_RE=/\bgens\b|ceux qui|ceux qu[ei]|la majorité|les autres|spectateur|ordinaires/i;
+const RECAP_COMPARE_RE=/\bgens\b|ceux qui|ceux qu[ei]|la majorité|les autres|quelqu'un d'autre|spectateur|ordinaires/i;
 function recapPoolFor(pool,coach){
   if(!coach||(!coach.noBodyComment&&!coach.noCompare))return pool;
   const okP=arr=>arr.filter(x=>{const t=typeof x==='function'?String(x('')):String(x);return !(coach.noBodyComment&&RECAP_BODY_RE.test(t))&&!(coach.noCompare&&RECAP_COMPARE_RE.test(t));});
@@ -6375,7 +6408,7 @@ function recapPersonalLines(o){
 // Oriente la phrase de Mindset (sans en ajouter de nouvelles) vers ce que l'élève dit le motiver / l'aider :
 // parmi les phrases DÉJÀ autorisées, on privilégie celles qui parlent de fierté, de constance, de record,
 // ou qui relativisent après une séance en dessous. Aucune correspondance → pool inchangé.
-const MINDSET_BIAS_GOOD=[['Être fier de moi',/fier/i],['Ne pas abandonner',/régularité|constance|reviens|même quand|pointes|quand même/i],['Battre mon record',/\bPR\b|record/i]];
+const MINDSET_BIAS_GOOD=[['Être fier de moi',/fier/i],['Ne pas abandonner',/régularité|constance|reviens|même quand|pointes|quand même|abandonn/i],['Battre mon record',/\bPR\b|record/i]];
 const MINDSET_BIAS_DOWN=[['Relativiser',/ça arrive|pas grave|pas de reproche|ça n'est pas|reculer arrive|tout le monde/i],['Me remettre au travail',/prochaine|remets|reprends|repars/i]];
 function biasMindsetPool(pool,coach,cat){
   if(!coach)return pool;
