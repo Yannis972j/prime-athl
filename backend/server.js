@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { feedbackStats, pendingFeedbackSessions } from './athlete-activity.js';
 import { universeOverride, applyUniverseChange, cleanUniverseAccess } from './universe-access.js';
 import { validCatalogPriceCents } from './catalog-price.js';
 import { applyMove, cancelMove } from './schedule-moves.js';
@@ -1528,6 +1529,8 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
       ...libraryInfoOf(u.id),
       sessionCount: userSessions.length,
       lastSessionAt: lastSession ? lastSession.date : null,
+      // Onglets « Aujourd'hui » / « À commenter » de la liste coach.
+      ...feedbackStats(userSessions, { tz: MOTIVATION_TZ }),
     };
   });
   res.json({ athletes, total, page, limit, pages: Math.ceil(total / limit) });
@@ -1546,7 +1549,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
     pendingSessions: DATA.pendingSessions[u.id] || [],
@@ -2253,7 +2256,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
     // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
     // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
   res.json(list);
 });
 
@@ -2562,6 +2565,28 @@ function setPendingFeedbackList(u, list) {
   else { delete u.pendingCoachFeedbacks; delete u.pendingCoachFeedback; }
 }
 
+// « Ne pas commenter » : le coach écarte une séance de la liste « À commenter » (ou la remet : skip=false).
+app.post('/api/coach/sessions/:sessionId/feedback-skip', authRequired, coachOnly, (req, res) => {
+  const s = DATA.sessions[req.params.sessionId];
+  if (!s) return res.status(404).json({ error: 'not_found' });
+  const a = DATA.users[s.userId];
+  if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
+  if (typeof req.body?.skip !== 'boolean') return res.status(400).json({ error: 'invalid_skip' });
+  if (req.body.skip) { s.feedbackSkipped = true; s.feedbackSkippedAt = Date.now(); }
+  else { delete s.feedbackSkipped; delete s.feedbackSkippedAt; }
+  persist();
+  res.json({ ok: true, feedbackSkipped: !!s.feedbackSkipped });
+});
+// Idem pour TOUTES les séances encore à commenter d'un athlète (bouton de la carte dans l'onglet « À commenter »).
+app.post('/api/coach/athletes/:athleteId/feedback-skip', authRequired, coachOnly, (req, res) => {
+  const a = DATA.users[req.params.athleteId];
+  if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
+  const list = pendingFeedbackSessions(Object.values(DATA.sessions).filter(x => x.userId === a.id));
+  for (const s of list) { s.feedbackSkipped = true; s.feedbackSkippedAt = Date.now(); }
+  if (list.length) persist();
+  res.json({ ok: true, skipped: list.length });
+});
+
 // Coach feedback on athlete session
 app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (req, res) => {
   const s = DATA.sessions[req.params.sessionId];
@@ -2570,6 +2595,7 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   s.coachFeedback = typeof req.body.feedback === 'string' ? req.body.feedback.slice(0, 500) : '';
   s.coachFeedbackAt = Date.now();
+  if (s.coachFeedback) delete s.feedbackSkipped; // répondre annule « ne pas commenter »
   const coachName = coachDisplayName(DATA.users[req.user.id]);
   s.coachFeedbackBy = coachName;
   // Feedback en attente sur l'athlète : affiché en pop-up dès son prochain accès à l'app, puis

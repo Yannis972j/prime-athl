@@ -9303,6 +9303,15 @@ const uploadFile=fd=>apiCall('/api/upload',{method:'POST',body:fd});
 // rappel de ce qui a déjà été envoyé et de quand. Utilisée dans les deux fiches séance côté coach.
 function CoachFeedbackBox({s,fb}){
   const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=fb;
+  // « Ne pas commenter » : la séance sort de la liste « À commenter » (réversible avec « Reprendre »).
+  const[skipped,setSkipped]=React.useState(!!s.feedbackSkipped);
+  const[skipBusy,setSkipBusy]=React.useState(false);
+  React.useEffect(()=>{setSkipped(!!s.feedbackSkipped);},[s.id,s.feedbackSkipped]);
+  const toggleSkip=async()=>{
+    if(skipBusy)return;setSkipBusy(true);
+    try{const r=await apiCall(`/api/coach/sessions/${s.id}/feedback-skip`,{method:'POST',body:{skip:!skipped}});setSkipped(!!r.feedbackSkipped);try{window.dispatchEvent(new Event('pa-athletes-stale'));}catch{}}catch(e){}
+    setSkipBusy(false);
+  };
   const sentAt=s.coachFeedbackAt&&validDate(s.coachFeedbackAt)?new Date(s.coachFeedbackAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'';
   const dirty=feedbackText.trim()!==(s.coachFeedback||'').trim();
   const can=!!feedbackText.trim()&&dirty&&!saving;
@@ -9327,6 +9336,16 @@ function CoachFeedbackBox({s,fb}){
         {saved?'✓ Feedback envoyé':saving?'Envoi…':s.coachFeedback?'Mettre à jour le feedback':'Envoyer le feedback'}
       </button>
       {feedbackError&&<div role="alert" style={{marginTop:8,padding:'10px 12px',borderRadius:10,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:13,fontWeight:600,lineHeight:1.45}}>✗ {feedbackError}</div>}
+      {!s.coachFeedback&&(
+        skipped?(
+          <div data-testid="feedback-skipped" style={{marginTop:10,display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)'}}>
+            <span style={{flex:1,fontSize:12.5,color:T.textDim,lineHeight:1.4}}>Tu as choisi de <b style={{color:T.text}}>ne pas commenter</b> cette séance : elle n'apparaît plus dans « À commenter ».</span>
+            <button data-testid="feedback-resume" onClick={toggleSkip} disabled={skipBusy} style={{height:34,padding:'0 12px',borderRadius:9,border:'1px solid rgba(232,147,74,0.45)',background:'rgba(232,147,74,0.1)',color:'#E8934A',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>Reprendre</button>
+          </div>
+        ):(
+          <button data-testid="feedback-skip" onClick={toggleSkip} disabled={skipBusy} style={{marginTop:10,width:'100%',minHeight:42,borderRadius:12,border:'1px solid rgba(255,255,255,0.14)',background:'transparent',color:T.textDim,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Ne pas commenter cette séance</button>
+        )
+      )}
     </div>
   );
 }
@@ -11816,6 +11835,14 @@ function CoachNutritionMirror({athleteId,athleteName,authToken,onPlanApplied}){
 }
 
 // ── Coach Screen ──────────────────────────────────────────
+// Vues de « Mes athlètes » : « Aujourd'hui » = séance faite aujourd'hui (la plus récente d'abord) ;
+// « À commenter » = séance sans retour du coach (la plus ANCIENNE d'abord : c'est la plus urgente).
+function coachListViews(athletes){
+  const list=athletes||[];
+  const today=list.filter(a=>a.todaySessionCount>0).sort((a,b)=>new Date(b.todayLastAt)-new Date(a.todayLastAt));
+  const pending=list.filter(a=>a.pendingFeedbackCount>0&&a.latestPendingSession).sort((a,b)=>new Date(a.latestPendingSession.date)-new Date(b.latestPendingSession.date));
+  return{all:list,today,pending};
+}
 function timeAgo(ts){
   if(!ts)return null;
   const d=Date.now()-new Date(ts).getTime();
@@ -13992,6 +14019,16 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
 
   const[available,setAvailable]=React.useState([]);
   const[showAvailable,setShowAvailable]=React.useState(false);
+  // Onglet de « Mes athlètes » : tous / séance faite aujourd'hui / à commenter (retenu d'une visite à l'autre).
+  const loadRef=React.useRef(null);
+  const[listTab,setListTabRaw]=React.useState(()=>{try{const v=localStorage.getItem('pa_coach_list_tab');return['all','today','pending'].includes(v)?v:'all';}catch{return'all';}});
+  const setListTab=t=>{setListTabRaw(t);try{localStorage.setItem('pa_coach_list_tab',t);}catch{}};
+  // La liste se rafraîchit quand une fiche séance change l'état « à commenter » (sans fermer la fiche).
+  React.useEffect(()=>{const h=()=>{try{loadRef.current&&loadRef.current(true);}catch{}};window.addEventListener('pa-athletes-stale',h);return()=>window.removeEventListener('pa-athletes-stale',h);},[]);
+  // « Ne pas commenter » en bloc : écarte les séances encore à commenter de cet athlète (réversible séance par séance).
+  const skipAthleteFeedback=async a=>{
+    try{const r=await apiCall(`/api/coach/athletes/${a.id}/feedback-skip`,{method:'POST',body:{}});await load();flash(`✓ ${r.skipped>1?r.skipped+' séances écartées':'Séance écartée'} · ${a.firstName||'athlète'}`);}catch(e){flash('✗ '+(e.message||e));}
+  };
   const[pending,setPending]=React.useState([]);
   const[coachView,setCoachView]=React.useState(initialCoachView||'athletes'); // 'athletes'|'calendar'|'programs'
   const isMain=authUser&&authUser.isMainCoach;
@@ -14015,6 +14052,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
     }catch(e){console.error(e);}
     if(!silent)setLoading(false);
   },[isMain]);
+  loadRef.current=load;
   React.useEffect(()=>{load();},[load]);
 
   const approveUser=(p,role='athlete')=>{
@@ -15195,9 +15233,29 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             + Générer un code
           </button>
         </div>
-      ):(
+      ):(()=>{
+        const views=coachListViews(athletes);
+        const shown=views[listTab]||views.all;
+        const TABS=[{k:'all',label:'Tous',n:views.all.length,color:'#BFA060'},{k:'today',label:"Aujourd'hui",n:views.today.length,color:'#2CC4A0'},{k:'pending',label:'À commenter',n:views.pending.length,color:'#E8934A'}];
+        const EMPTY={today:["Personne n'a encore fait de séance aujourd'hui","Les athlètes qui s'entraînent aujourd'hui apparaîtront ici dès qu'ils terminent leur séance."],pending:['Tout est à jour 🎉',"Tous tes athlètes ont reçu un retour sur leurs dernières séances (14 derniers jours)."]};
+        return(<>
+        <div role="tablist" aria-label="Filtrer les athlètes" data-testid="coach-list-tabs" style={{display:'flex',gap:4,padding:4,marginBottom:12,borderRadius:16,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',position:'sticky',top:0,zIndex:5,backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)'}}>
+          {TABS.map(t=>{const on=listTab===t.k;return(
+            <button key={t.k} role="tab" aria-selected={on} data-testid={'tab-'+t.k} onClick={()=>setListTab(t.k)}
+              style={{flex:1,minWidth:0,minHeight:46,padding:'6px 4px',borderRadius:12,border:'none',cursor:'pointer',fontFamily:'inherit',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,
+                background:on?`linear-gradient(135deg,${t.color}2e,${t.color}14)`:'transparent',boxShadow:on?`inset 0 0 0 1px ${t.color}66`:'none',transition:'background .15s'}}>
+              <span style={{fontSize:17,fontWeight:800,lineHeight:1,fontVariantNumeric:'tabular-nums',color:on?t.color:(t.n>0&&t.k==='pending'?'#E8934A':T.textDim)}}>{t.n}</span>
+              <span style={{fontSize:11,fontWeight:on?800:600,letterSpacing:0.1,color:on?T.text:T.textFaint,whiteSpace:'nowrap'}}>{t.label}</span>
+            </button>);})}
+        </div>
+        {shown.length===0&&EMPTY[listTab]&&(
+          <div data-testid="coach-list-empty" style={{padding:'34px 22px',borderRadius:20,background:'rgba(255,255,255,0.025)',border:'1px dashed rgba(255,255,255,0.12)',textAlign:'center'}}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{EMPTY[listTab][0]}</div>
+            <div style={{fontSize:12.5,color:T.textDim,lineHeight:1.55,maxWidth:280,margin:'0 auto'}}>{EMPTY[listTab][1]}</div>
+          </div>
+        )}
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {athletes.map(a=>{
+          {shown.map(a=>{
             const days=Object.values(a.program?.data||{}).reduce((s,d)=>s+Object.keys(d).length,0);
             const isNew=highlighted.has(a.id);
             return(
@@ -15224,6 +15282,15 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                       <span>{athleteProgramLabel(a,days)}</span>
                       {a.lastSessionAt&&<><span style={{color:T.textFaint}}>·</span><span style={{color:isNew?T.good:T.textFaint,fontWeight:isNew?700:500}}>{timeAgo(a.lastSessionAt)}</span></>}
                     </div>
+                    {/* Pastilles d'état : fait aujourd'hui / séances sans retour (détail selon l'onglet) */}
+                    {(a.todaySessionCount>0||a.pendingFeedbackCount>0)&&(
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:7}}>
+                        {a.todaySessionCount>0&&<span data-testid="chip-today" style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:999,fontSize:10.5,fontWeight:700,background:'rgba(44,196,160,0.13)',border:'1px solid rgba(44,196,160,0.35)',color:T.good}}>✓ {listTab==='today'?`${a.todaySessionCount>1?a.todaySessionCount+' séances':'Séance faite'} · ${new Date(a.todayLastAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`:"Fait aujourd'hui"}</span>}
+                        {a.pendingFeedbackCount>0&&a.latestPendingSession&&<span data-testid="chip-pending" style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:999,fontSize:10.5,fontWeight:700,whiteSpace:'nowrap',background:'rgba(232,147,74,0.13)',border:'1px solid rgba(232,147,74,0.38)',color:'#E8934A'}}>💬 {a.pendingFeedbackCount>1?a.pendingFeedbackCount+' à commenter':'À commenter'}</span>}
+                      </div>
+                    )}
+                    {listTab==='pending'&&a.latestPendingSession&&<div data-testid="pending-detail" style={{marginTop:6,fontSize:11.5,color:T.textDim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.latestPendingSession.name} · {timeAgo(a.latestPendingSession.date)}</div>}
+                    {listTab==='pending'&&a.pendingFeedbackCount>0&&<button data-testid="skip-athlete" onClick={e=>{e.stopPropagation();skipAthleteFeedback(a);}} onMouseDown={e=>e.stopPropagation()} onTouchStart={e=>e.stopPropagation()} style={{marginTop:8,minHeight:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>✕ Ne pas commenter{a.pendingFeedbackCount>1?` (${a.pendingFeedbackCount})`:''}</button>}
                   </div>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,marginRight:4,flexShrink:0}}>
                     <div style={{
@@ -15244,7 +15311,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
             );
           })}
         </div>
-      )}
+        </>);
+      })()}
 
       {/* Menu appui long */}
     {longPressMenu&&(
