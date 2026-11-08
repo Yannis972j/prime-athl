@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { sanitizePhrases, seedSwimPhrases } from './personal-mindset.js';
 import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_CATCHUP_MS, eligibleForActivityNotifs, wantsEveningNudge } from './daily-activity.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
 let Stripe; try { Stripe = (await import('stripe')).default; } catch(e) { console.warn('[stripe] package not available:', e.message); }
@@ -375,6 +376,12 @@ function migrateStaleFullAccessExpiries() {
   }
 }
 migrateStaleFullAccessExpiries();
+// Citations de natation d'Inaya : posées une seule fois sur son compte (cf. personal-mindset.js). Après persist().
+{
+  const r = seedSwimPhrases(DATA.users);
+  if (r.changed) { persist(); console.log('[mindset] citations de natation posées sur le compte', r.userId); }
+  else if (r.count > 1) console.warn('[mindset] plusieurs athlètes prénommés Inaya : citations de natation non posées (à assigner par le coach)');
+}
 
 // ── Daily auto-backup (Postgres uniquement) ─────────
 if (USE_PG) {
@@ -678,6 +685,7 @@ const profileOf = u => u && {
   cpHatedExercise: u.cpHatedExercise || '',   // exercice détesté
   cpWeakness: u.cpWeakness || '',             // petite faiblesse
   cpMotivationKiller: u.cpMotivationKiller || '', // ce qui tue la motivation
+  mindsetPhrases: Array.isArray(u.mindsetPhrases) ? u.mindsetPhrases : [], // citations de mindset personnalisées (posées par le coach)
   cpNickname: u.cpNickname || '',             // surnom
   cpCatchphrase: u.cpCatchphrase || '',       // expression fétiche
   cpTeaseMe: u.cpTeaseMe || '',               // truc sur lequel on peut le taquiner
@@ -1641,6 +1649,12 @@ app.patch('/api/coach/athletes/:id', authRequired, coachOnly, async (req, res) =
           u[k] = val;
         }
       }
+    }
+    // Citations de mindset personnalisées : le COACH seul les pose (liste vide = retour aux phrases génériques).
+    if (req.body.mindsetPhrases !== undefined) {
+      const ph = sanitizePhrases(req.body.mindsetPhrases);
+      if (ph === null) return res.status(400).json({ error: 'invalid_mindset_phrases' });
+      u.mindsetPhrases = ph;
     }
     if (req.body.email) {
       const newEmail = req.body.email.toLowerCase().trim();
