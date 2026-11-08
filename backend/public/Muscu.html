@@ -6144,7 +6144,9 @@ function computeCoachCtx(profile){
   const relation=arrM(profile.cpRelation);
   const tone=arrM(profile.cpTonePreference);
 
-  const has=personality.length||coachStyle.length||humor.length||drives.length||dontDo.length||
+  // Citations de mindset PERSONNALISÉES posées par le coach pour CET athlète (ex. nageuse) : remplacent les phrases génériques.
+  const personalPhrases=Array.isArray(profile.mindsetPhrases)?profile.mindsetPhrases.map(x=>String(x||'').trim()).filter(Boolean):[];
+  const has=personalPhrases.length||personality.length||coachStyle.length||humor.length||drives.length||dontDo.length||
     banter!=null||topLevers.length||nickname||catchphrase||funnyPhrase||pressurePhrase||teaseMe||
     favExercise||hatedExercise||motivationKiller||missedReaction.length||successReaction.length||relation.length||tone.length;
   if(!has)return null;
@@ -6170,6 +6172,7 @@ function computeCoachCtx(profile){
     nickname,catchphrase,funnyPhrase,pressurePhrase,teaseMe,favExercise,hatedExercise,
     motivationKiller,missedReaction,successReaction,relation,tone,
     humorOk,noHumor,noGuilt,noBodyComment,noCompare,wantsSoft,
+    personalPhrases,
     intensity,hasProfile:true,
   };
 }
@@ -6615,6 +6618,9 @@ function motivationQuote(comp,volumeVsPrev,seed,isDeload,isPostDeload,goals,gend
   if(isDeload&&lightReason==='menstrual')return pick(MENSTRUAL_MINDSET);
   if(isDeload)return pick(DELOAD_MINDSET);
   if(isPostDeload)return pick(POST_DELOAD_MINDSET);
+  // Citations personnalisées de CET athlète (posées par le coach) : elles remplacent les phrases génériques, quelle que
+  // soit la performance. Les limites cochées (physique, comparaison) restent filtrées par recapPoolFor.
+  if(coach&&coach.personalPhrases&&coach.personalPhrases.length)return pick(recapPoolFor(coach.personalPhrases,coach));
   // Fiche « Mes objectifs » remplie avec un style → on tire dans le pool spécifique à ce
   // style (hypertrophie/powerlifting/bien-être/fonctionnel/hybride) ~2 fois sur 3 pour garder
   // un peu de variation, sinon on tombe sur les pools génériques ci-dessous.
@@ -13644,6 +13650,27 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
 
 const ATHLETE_DETAIL_TAB_IDS=['profil','sport','nutrition','historique','biblio','album'];
 
+// Citations de mindset PERSONNALISÉES d'un athlète (ex. nageuse) : une par ligne. Remplacent les phrases génériques du
+// Mindset du récap de CET athlète, et de lui seul. Liste vide → retour aux phrases génériques.
+function CoachMindsetPhrases({phrases,onSave}){
+  const initial=(phrases||[]).join('\n');
+  const[text,setText]=React.useState(initial);
+  const[saved,setSaved]=React.useState(false);
+  React.useEffect(()=>{setText(initial);},[initial]);
+  const n=text.split('\n').map(x=>x.trim()).filter(Boolean).length;
+  return(
+    <div data-testid="coach-mindset-phrases">
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
+        <div style={{fontSize:10,fontWeight:800,letterSpacing:0.8,textTransform:'uppercase',color:T.textDim}}>💬 Citations de mindset perso</div>
+        <div style={{fontSize:10,color:T.textFaint}}>{n} citation{n>1?'s':''}</div>
+      </div>
+      <div style={{fontSize:11,color:T.textFaint,lineHeight:1.45,marginBottom:8}}>Une par ligne. Elles remplacent les phrases génériques du récap de cet athlète, et de lui seul. Vide = phrases génériques.</div>
+      <textarea value={text} onChange={e=>{setText(e.target.value);setSaved(false);}} rows={6} placeholder="Ex : Plonge avec ambition. Entraîne-toi avec discipline."
+        style={{width:'100%',boxSizing:'border-box',background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:T.text,fontSize:12.5,fontFamily:'inherit',padding:'9px 10px',lineHeight:1.5,outline:'none',resize:'vertical'}}/>
+      <button data-testid="coach-mindset-save" onClick={()=>{onSave(text.split('\n').map(x=>x.trim()).filter(Boolean));setSaved(true);}} style={{marginTop:8,width:'100%',height:36,borderRadius:10,border:'1px solid rgba(191,160,96,0.4)',background:saved?'rgba(44,196,160,0.12)':'rgba(191,160,96,0.1)',color:saved?T.good:T.accent,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>{saved?'✓ Enregistré':'Enregistrer'}</button>
+    </div>
+  );
+}
 function CoachProfileField({label,value,onCommit,suffix,type='text'}){
   const[v,setV]=React.useState(value||'');
   React.useEffect(()=>setV(value||''),[value]);
@@ -14225,6 +14252,9 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                     );
                   })}
                 </div>
+              </GlassCard>
+              <GlassCard padding={12} style={{marginBottom:12}}>
+                <CoachMindsetPhrases phrases={a.mindsetPhrases} onSave={ph=>patchAthlete({mindsetPhrases:ph})}/>
               </GlassCard>
 
               {/* Stats rapides */}
