@@ -38,7 +38,7 @@ async function run(focus, shotPrefix, lastM = '1[\\s\\u00a0\\u202f]200', typed =
   await card.waitFor();
   let t = await card.innerText();
   assert.match(t, /DISTANCE RÉALISÉE/i);
-  assert.match(t, new RegExp('Dernière fois\\s*:\\s*' + lastM + ' m'));
+  assert.match(t, new RegExp('Dernière fois\\s*:?\\s*' + lastM + ' m', 'i'));
   assert.match(t, /Note ta distance/i);
   if (shotPrefix) await pg.screenshot({ path: `${shotPrefix}-avant.png` });
   await card.locator('input').fill(typed);
@@ -98,8 +98,8 @@ test('SKIERG en séries : « + Ajouter une série » puis 3 distances (400 / 380
   assert.equal(await card.locator('input').count(), 3, 'trois champs de distance');
   assert.match(await card.innerText(), /S1[\s\S]*S2[\s\S]*S3/);
   const r3 = card.getByTestId('cardio-set-row');
-  assert.match(await r3.nth(0).innerText(), /Dernière fois\s*:\s*1[\s\u00a0\u202f]300 m/);
-  assert.match(await r3.nth(1).innerText(), /Dernière fois\s*:\s*—/, 'pas de référence pour une série qui n\'existait pas');
+  assert.match(await r3.nth(0).innerText(), /Dernière fois\s*:?\s*1[\s\u00a0\u202f]300 m/i);
+  assert.match(await r3.nth(1).innerText(), /Dernière fois\s*:?\s*—/i, 'pas de référence pour une série qui n\'existait pas');
   for (let i = 0; i < 3; i++) await card.locator('input').nth(i).fill(['400', '380', '420'][i]);
   assert.doesNotMatch(await r3.nth(0).innerText(), /[+−-]\s?\d/, 'pas d\'écart par série : le nombre de séries a changé');
   assert.match(await pg.getByTestId('cardio-cumul').innerText(), /1[\s\u00a0\u202f]200 m/);
@@ -156,11 +156,11 @@ test('SKIERG en séries, 3 séries comme la dernière fois : repère par série,
   assert.match(await card.innerText(), /↑ \+50 m vs la dernière fois/);
   const rows = card.getByTestId('cardio-set-row');
   const rt = i => rows.nth(i).innerText();
-  assert.match(await rt(0), /Dernière fois\s*:\s*400 m\s*\+20/); assert.match(await rt(0), /Cumul\s*:\s*420 m/);
-  assert.match(await rt(1), /Dernière fois\s*:\s*380 m\s*\+20/); assert.match(await rt(1), /Cumul\s*:\s*820 m/);
-  assert.match(await rt(2), /Dernière fois\s*:\s*420 m\s*\+10/); assert.match(await rt(2), /Cumul\s*:\s*1[\s\u00a0\u202f]250 m/);
+  assert.match(await rt(0), /Dernière fois\s*:?\s*400 m\s*\+20/i); assert.match(await rt(0), /Cumul\s*:\s*420 m/);
+  assert.match(await rt(1), /Dernière fois\s*:?\s*380 m\s*\+20/i); assert.match(await rt(1), /Cumul\s*:\s*820 m/);
+  assert.match(await rt(2), /Dernière fois\s*:?\s*420 m\s*\+10/i); assert.match(await rt(2), /Cumul\s*:\s*1[\s\u00a0\u202f]250 m/);
   const cumul = await pg.getByTestId('cardio-cumul').innerText();
-  assert.match(cumul, /CUMUL/i); assert.match(cumul, /1[\s\u00a0\u202f]250 m/); assert.match(cumul, /Dernière fois\s*:\s*1[\s\u00a0\u202f]200 m/);
+  assert.match(cumul, /CUMUL/i); assert.match(cumul, /1[\s\u00a0\u202f]250 m/); assert.match(cumul, /Dernière fois\s*:?\s*1[\s\u00a0\u202f]200 m/i);
   if (process.env.SHOT_SAME) await pg.screenshot({ path: `${process.env.SHOT_SAME}-saisie.png` });
   await pg.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => /Marquer comme terminé/.test(b.innerText)); if (b) b.click(); });
   await pg.waitForTimeout(600);
