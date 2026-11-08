@@ -15218,7 +15218,7 @@ const OBJ_OPTS=['Perte de gras','Prise de masse','Recomposition','Performance'];
 // Config data-driven des 2 fiches. types: text|tel|email|num|area|radio|chips|freq|meals
 const FICHE_CONF={
   pres:{name:'Fiche de présentation',sections:[
-    {t:'Ce qui m\'intéresse',f:[{k:'Intéressé par',type:'chips',opts:['Programme sportif','Plan alimentaire','Présentiel','Tout']}]},
+    {t:'Ce qui m\'intéresse',f:[{k:'Intéressé par',type:'chips',opts:['Programme sportif','Plan alimentaire','Présentiel','Importation de mon programme','Tout']}]},
     {t:'1. Informations personnelles',f:[{k:'Nom / Prénom',type:'text',req:true},{k:'Âge',type:'num'},{k:'Téléphone',type:'tel'},{k:'Email',type:'email'},{k:'Profession',type:'text'}]},
     {t:'2. Données physiques',f:[{k:'Poids actuel (kg)',type:'num'},{k:'Taille (cm)',type:'num'},{k:'Poids visé (kg)',type:'num'}]},
     {t:'3. Niveau & expérience',f:[{k:'Es-tu sportif ?',type:'radio',opts:['Oui','Un peu','Non / débutant']},{k:'Déjà en salle ?',type:'radio',opts:['Jamais','Un peu','Oui, régulièrement']},{k:'Sports déjà pratiqués',type:'area'},{k:'Depuis combien de temps',type:'text'}]},
@@ -15347,7 +15347,7 @@ function StartFichesModal({onClose}){
             <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Programme personnalisé — 50 € <span style={{color:T.textDim,fontWeight:400}}>(ajustable · un autre programme : 50 €)</span></div>
             <div style={{fontSize:11.5,color:T.textDim,marginTop:2}}>Pour démarrer : 150 € (programme + 1er mois)</div>
             <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Plan alimentaire — 100 € <span style={{color:T.textDim,fontWeight:400}}>(ajustable si gros changement de poids ou d'objectif ; sinon valable 2 à 4 mois)</span></div>
-            <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Importation de ta séance — 20 €/mois</div>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Importation de ton programme — 20 €/mois</div>
             <div style={{fontSize:12.5,color:T.text,fontWeight:700,marginTop:6}}>Séance en présentiel — 30 € <span style={{color:T.textDim,fontWeight:400}}>(optionnelle)</span></div>
           </div>
         )}
