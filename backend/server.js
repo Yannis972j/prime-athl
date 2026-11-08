@@ -2664,10 +2664,14 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
 app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
-  const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+  const allUpdates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+  // Surcharge progressive d'un CARDIO (SKIERG RESISTANCE…) : { name, distance, from } = objectif en mètres
+  // PAR SÉRIE pour la prochaine séance. Pas de poids → traité à part (jamais écrit dans le programme).
+  const distUpdates = allUpdates.filter(u => +u?.distance > 0);
+  const updates = allUpdates.filter(u => !(+u?.distance > 0));
   const sessionName = String(req.body?.sessionName || '');
   const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
-  if (!updates.length) return res.status(400).json({ error: 'no_updates' });
+  if (!allUpdates.length) return res.status(400).json({ error: 'no_updates' });
   const norm = normExName;
   const wByName = {}, assistedByName = {};
   for (const u of updates) { const n = norm(u.name); if (n) { wByName[n] = Math.max(0, Math.min(500, +u.weight || 0)); assistedByName[n] = !!u.assisted; } }
@@ -2712,11 +2716,18 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
     a.exerciseTargets[k] = { name: String(u.name || '').slice(0, 100), weight: wByName[k], assisted: assistedByName[k], sessionName: sessionName.slice(0, 100), updatedAt: Date.now() };
     targetsWritten++;
   }
+  for (const u of distUpdates) {
+    const k = norm(u.name);
+    if (!k) continue;
+    a.exerciseTargets[k] = { name: String(u.name || '').slice(0, 100), distance: Math.max(1, Math.min(100000, Math.round(+u.distance))), from: Math.max(0, Math.round(+u.from || 0)), unit: 'm', sessionName: sessionName.slice(0, 100), updatedAt: Date.now() };
+    targetsWritten++;
+  }
   if (data && applied.size) prog.assignedAt = Date.now();
   // Récap des charges montées attaché à la séance : c'est ce que le pop-up « feedback » injectera
   // dans son affichage (ancien → nouveau). Remplace l'ancien mécanisme a.coachSessionNote qui
   // faisait doublon avec le feedback — voir fusion #.
-  const overloadRecap = updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)], assisted: !!u.assisted })).filter(u => u.name && u.to != null);
+  const overloadRecap = updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)], assisted: !!u.assisted })).filter(u => u.name && u.to != null)
+    .concat(distUpdates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, Math.round(+u.from || 0)), to: Math.max(1, Math.min(100000, Math.round(+u.distance))), unit: 'm' })).filter(u => u.name));
   if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
     DATA.sessions[sessionId].overloadApplied = true;
     DATA.sessions[sessionId].overloadUpdates = overloadRecap;
@@ -2725,8 +2736,13 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets });
   const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
-  const allAssisted = updates.every(u => u.assisted);
+  const allAssisted = updates.length > 0 && updates.every(u => u.assisted);
   const someAssisted = updates.some(u => u.assisted);
+  if (!updates.length && distUpdates.length) {
+    const d = distUpdates[0];
+    pushToUser(req.params.athleteId, { title: '⬆ Objectif augmenté', body: `${coachName} a fixé ton objectif : ${String(d.name || '').slice(0, 60)} ${Math.round(+d.distance)} m par série. Prêt pour ta prochaine séance !`, url: '/Muscu.html' });
+    return res.json({ ok: true, applied: applied.size, targets: targetsWritten, data: data || {} });
+  }
   const pushTitle = allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
   const pushBody = allAssisted
     ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
