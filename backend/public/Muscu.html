@@ -475,6 +475,16 @@ const API_BASE=(()=>{
   return `${l.protocol}//${l.hostname}:3001`;
 })();
 
+// Filet de sécurité : une séance sans date valide ferait planter tout l'écran (« Invalid time value »).
+// Le serveur les répare/refuse désormais, mais on ne dépend pas de lui pour ne pas crasher.
+const validDate=v=>v!=null&&v!==''&&!isNaN(new Date(v).getTime());
+function dropBadDates(path,data){
+  try{
+    if(Array.isArray(data)&&/^\/api\/sessions(\?|$)/.test(path))return data.filter(s=>s&&validDate(s.date));
+    if(data&&typeof data==='object'&&Array.isArray(data.sessions)&&/^\/api\/coach\/athletes\/[^/]+(\?|$)/.test(path))return{...data,sessions:data.sessions.filter(s=>s&&validDate(s.date))};
+  }catch{}
+  return data;
+}
 function apiCall(path,opts={}){
   const isJson=opts.body&&typeof opts.body==='object'&&!(opts.body instanceof FormData);
   return fetch(API_BASE+path,{
@@ -492,7 +502,7 @@ function apiCall(path,opts={}){
     const ct=r.headers.get('content-type')||'';
     const data=ct.includes('application/json')?await r.json():await r.text();
     if(!r.ok)throw Object.assign(new Error((data&&data.error)||('http_'+r.status)),{status:r.status,data});
-    return data;
+    return dropBadDates(path,data);
   });
 }
 
@@ -3466,14 +3476,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
             <button onClick={()=>setFbOpen(o=>!o)} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'13px 14px',background:'transparent',border:'none',cursor:'pointer'}}>
               <div style={{width:30,height:30,borderRadius:9,background:'rgba(90,138,224,0.15)',border:'1px solid rgba(90,138,224,0.35)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>💬</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:10,color:'#8FB4F5',fontWeight:800,letterSpacing:0.4,textTransform:'uppercase'}}>Feedback de {coachFeedback.coachName||'ton coach'}</div>
+                <div style={{fontSize:10,color:'#8FB4F5',fontWeight:800,letterSpacing:0.4,textTransform:'uppercase'}}>Feedback de {coachFeedback.coachName||'Ton coach'}</div>
                 {!fbOpen&&<div style={{fontSize:12,color:T.textDim,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{coachFeedback.feedback}</div>}
               </div>
               <div style={{flexShrink:0,color:T.textFaint,transform:fbOpen?'rotate(180deg)':'none',transition:'transform 0.2s'}}><Icon name="chevronDown" size={16} stroke={T.textFaint}/></div>
             </button>
             {fbOpen&&(
               <div style={{padding:'0 14px 14px'}}>
-                <div style={{fontSize:13,lineHeight:1.6,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 10px 10px 0',padding:'12px 14px',whiteSpace:'pre-wrap'}}>{coachFeedback.feedback}</div>
+                <div style={{fontSize:15,lineHeight:1.65,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 12px 12px 0',padding:'14px 16px',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{coachFeedback.feedback}</div>
                 {coachFeedback.updates&&coachFeedback.updates.length>0&&(<>
                   <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:'#8FB4F5',margin:'12px 0 8px',display:'flex',alignItems:'center',gap:5}}>⬆ Charges mises à jour</div>
                   <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -7440,6 +7450,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
   const[selectedDay,setSelectedDay]=React.useState(null); // {date, dayName}
+  const[histPick,setHistPick]=React.useState({}); // date → index de la séance affichée (plusieurs séances le même jour)
 
   // ── Long-press drag to duplicate session ──
   const[dragSrc,setDragSrc]=React.useState(null);   // {dateStr, dayName, exercises}
@@ -7479,6 +7490,8 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     const src=dragSrc;
     setDragSrc(null);setDragOver(null);
     if(!target||!src||target===src.dateStr)return;
+    // Une séance « faite » ne peut pas être datée dans le futur (le serveur la refuserait / la daterait d'aujourd'hui).
+    if(target>ymdKey()){setImportMsg('✗ Impossible de copier vers une date future');setTimeout(()=>setImportMsg(null),3000);return;}
     // Dupliquer : sauvegarder une session complète à la date cible
     const cloned={
       name:src.dayName,
@@ -7491,7 +7504,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     try{
       await apiCall('/api/sessions',{method:'POST',body:cloned});
       if(onRefreshHistory)onRefreshHistory();
-      setImportMsg(`✓ Séance copiée au ${new Date(target).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}`);
+      setImportMsg(`✓ Séance copiée au ${new Date(target+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}`);
       setTimeout(()=>setImportMsg(null),3000);
     }catch(e){setImportMsg('✗ Erreur lors de la copie');setTimeout(()=>setImportMsg(null),3000);}
   },[dragOver,dragSrc,onRefreshHistory]);
@@ -7996,9 +8009,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                 <div style={{marginTop:12,padding:'12px 14px',borderRadius:14,background:'rgba(90,138,224,0.07)',border:'1px solid rgba(90,138,224,0.25)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
                     <span style={{fontSize:13}}>💬</span>
-                    <span style={{fontSize:9,color:'#5A8AE0',fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Feedback de ton coach</span>
+                    <span style={{fontSize:11,color:'#8FB4F5',fontWeight:800,letterSpacing:0.4,textTransform:'uppercase'}}>Feedback de {viewHistSession.coachFeedbackBy||'Ton coach'}</span>
                   </div>
-                  <div style={{fontSize:13,color:T.text,lineHeight:1.5}}>{viewHistSession.coachFeedback}</div>
+                  <div style={{fontSize:15,color:'#E8E6EF',lineHeight:1.65,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{viewHistSession.coachFeedback}</div>
                 </div>
               )}
             </div>
@@ -8198,7 +8211,10 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const isDone=doneDates.has(selectedDay.dateStr);
             const isDeloadSel=isDone&&deloadDates.has(selectedDay.dateStr);
             // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
-            const histSession=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===selectedDay.dateStr);
+            // Plusieurs séances le même jour : toutes consultables (puce de choix), de la plus ancienne à la plus récente.
+            const histList=(history||[]).filter(h=>h.date&&validDate(h.date)&&ymdKey(new Date(h.date))===selectedDay.dateStr).sort((a,b)=>new Date(a.date)-new Date(b.date));
+            const histIdx=Math.min(Math.max(0,histPick[selectedDay.dateStr]||0),Math.max(0,histList.length-1));
+            const histSession=histList[histIdx];
             const displayExercises=d?d.exercises.map(ex=>lightenExercise(applyDeload(ex),dayLightFor(selectedDay.dateStr))):(histSession?.exercises||null);
             const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
@@ -8226,6 +8242,14 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   </div>
                   <div data-testid="day-status" style={{padding:'3px 10px',borderRadius:20,fontSize:10,fontWeight:700,background:isDone?(isDeloadSel?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.15)'):'rgba(191,160,96,0.15)',color:isDone?(isDeloadSel?DELOAD_CAL:'#2CC4A0'):'#BFA060'}}>{isDone?(isDeloadSel?'🪶 Fait · Décharge':'✓ Fait'):'À faire'}</div>
                 </div>
+                {isDone&&histList.length>1&&(
+                  <div data-testid="hist-sess-chips" style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+                    {histList.map((x,i)=>{const on=i===histIdx;const t=new Date(x.date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});return(
+                      <button key={x.id||i} data-testid="hist-sess-chip" onClick={()=>setHistPick(p=>({...p,[selectedDay.dateStr]:i}))} style={{padding:'7px 11px',borderRadius:11,border:`1px solid ${on?(x.deload?DELOAD_CAL:'#2CC4A0'):'rgba(255,255,255,0.12)'}`,background:on?(x.deload?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.16)'):'rgba(255,255,255,0.03)',color:on?T.text:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',maxWidth:'100%',textAlign:'left',lineHeight:1.25}}>
+                        <span style={{opacity:0.7,marginRight:5}}>{i+1}/{histList.length}</span>{x.name||'Séance'}<span style={{opacity:0.6,fontWeight:600}}> · {t}</span>
+                      </button>);})}
+                  </div>
+                )}
                 {displayExercises&&(
                   <>
                     <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:14}}>
@@ -9226,6 +9250,37 @@ function MonthCalendar({year,month,onPrevMonth,onNextMonth,selected,onSelectDay,
   );
 }
 const uploadFile=fd=>apiCall('/api/upload',{method:'POST',body:fd});
+// Feedback du coach sur une séance : zone de saisie confortable (texte 15 px, interligne aéré, compteur),
+// rappel de ce qui a déjà été envoyé et de quand. Utilisée dans les deux fiches séance côté coach.
+function CoachFeedbackBox({s,fb}){
+  const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=fb;
+  const sentAt=s.coachFeedbackAt&&validDate(s.coachFeedbackAt)?new Date(s.coachFeedbackAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'';
+  const dirty=feedbackText.trim()!==(s.coachFeedback||'').trim();
+  const can=!!feedbackText.trim()&&dirty&&!saving;
+  const left=500-feedbackText.length;
+  return(
+    <div data-testid="coach-feedback-box" style={{marginTop:6,padding:'16px 16px 18px',borderRadius:16,background:'linear-gradient(180deg,rgba(90,138,224,0.09),rgba(90,138,224,0.03))',border:'1px solid rgba(90,138,224,0.28)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:s.coachFeedback?12:8}}>
+        <div style={{fontSize:14,fontWeight:800,color:'#8FB4F5',display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:16}}>💬</span>Feedback pour l'athlète</div>
+        {s.coachFeedback&&<span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:999,background:'rgba(44,196,160,0.14)',color:T.good,border:'1px solid rgba(44,196,160,0.3)'}}>✓ Envoyé</span>}
+      </div>
+      {s.coachFeedback&&(
+        <div style={{marginBottom:14}}>
+          <div data-testid="coach-feedback-sent" style={{fontSize:15,lineHeight:1.65,color:'#E8E6EF',background:'rgba(255,255,255,0.045)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 12px 12px 0',padding:'14px 16px',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{s.coachFeedback}</div>
+          {sentAt&&<div style={{fontSize:11.5,color:T.textFaint,marginTop:6}}>Envoyé le {sentAt}</div>}
+        </div>
+      )}
+      <label style={{display:'block',fontSize:12,fontWeight:700,color:T.textDim,marginBottom:7}}>{s.coachFeedback?'Modifier le message':'Écrire un feedback'}</label>
+      <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Excellent travail ! Essaie +2,5 kg la prochaine fois sur le développé couché…" maxLength={500}
+        style={{width:'100%',minHeight:140,padding:'14px 16px',borderRadius:14,border:'1px solid rgba(90,138,224,0.35)',background:'rgba(10,14,24,0.55)',color:T.text,fontSize:15,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.65}}/>
+      <div style={{display:'flex',justifyContent:'flex-end',marginTop:5,fontSize:11.5,color:left<=40?T.warn:T.textFaint,fontVariantNumeric:'tabular-nums'}}>{feedbackText.length} / 500</div>
+      <button onClick={submitFeedback} disabled={!can} style={{marginTop:8,width:'100%',height:50,borderRadius:14,border:'none',background:saved?'rgba(44,196,160,0.2)':can?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:can?'#06101a':T.textFaint,fontSize:15,fontWeight:800,cursor:can?'pointer':'default',fontFamily:'inherit'}}>
+        {saved?'✓ Feedback envoyé':saving?'Envoi…':s.coachFeedback?'Mettre à jour le feedback':'Envoyer le feedback'}
+      </button>
+      {feedbackError&&<div role="alert" style={{marginTop:8,padding:'10px 12px',borderRadius:10,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:13,fontWeight:600,lineHeight:1.45}}>✗ {feedbackError}</div>}
+    </div>
+  );
+}
 function useSessionFeedback(sessionId,initial,onSaved){
   const[feedbackText,setFeedbackText]=React.useState(initial||'');
   const[saving,setSaving]=React.useState(false);
@@ -10536,6 +10591,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   const[calYear,setCalYear]=React.useState(now.getFullYear());
   const[calMonth,setCalMonth]=React.useState(now.getMonth());
   const[sel,setSel]=React.useState(null);
+  const[sessPick,setSessPick]=React.useState({}); // date → index de la séance affichée (plusieurs séances le même jour)
   const[moveFrom,setMoveFrom]=React.useState(null); // dateStr en cours de déplacement
   const[moveTarget,setMoveTarget]=React.useState('');
   const[moveBusy,setMoveBusy]=React.useState(false);
@@ -10580,7 +10636,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
       setMoveFrom(null);setMoveTarget('');setSel(toDate);
     }catch(e){
       if(e.status===409){
-        if(confirm('Une séance est déjà prévue ce jour-là. La remplacer ?')){await doMove(toDate,true);return;}
+        if(confirm('Une séance est déjà prévue ce jour-là. Échanger les deux séances (celle de ce jour passera à la date de départ) ?')){await doMove(toDate,true);return;}
       }else{
         setMoveErr(e.message==='no_session_on_date'?'Aucune séance à déplacer ce jour-là.':'Erreur lors du déplacement.');
       }
@@ -10607,7 +10663,9 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
   // sessions done: map dateStr → session
   const sessionsByDate=React.useMemo(()=>{
     const m={};
-    (sessions||[]).forEach(s=>{const d=s.date?ymdKey(new Date(s.date)):null;if(d)m[d]=s;});
+    // Plusieurs séances le même jour : on garde TOUTES, de la plus ancienne à la plus récente.
+    (sessions||[]).forEach(s=>{const d=s.date&&validDate(s.date)?ymdKey(new Date(s.date)):null;if(d)(m[d]=m[d]||[]).push(s);});
+    Object.values(m).forEach(l=>l.sort((a,b)=>new Date(a.date)-new Date(b.date)));
     return m;
   },[sessions]);
 
@@ -10676,7 +10734,8 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           const movedHere=movesByTarget[dateStr];
           const isMovedAway=mode!=='nutrition'&&!movedHere&&suppressedSources.has(dateStr);
           const hasProg=mode!=='nutrition'&&(movedHere?true:(programDayNames.has(dayName)&&!isMovedAway));
-          const sessDone=mode!=='nutrition'&&sessionsByDate[dateStr];
+          const sessList=mode!=='nutrition'?(sessionsByDate[dateStr]||[]):[];
+          const sessDone=sessList[0];
           const nutriOk=mode!=='sport'&&nutriDone[dateStr];
           const nutriPlanned=mode!=='sport'&&!nutriOk&&nutriPlannedOn(dateStr);
           const hasPlanned=mode==='sport'&&!sessDone&&!hasProg&&(plannedSessions?.[dateStr]||[]).length>0;
@@ -10696,7 +10755,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             selectable:canClick,
             bg,border,textColor:numColor,
             dots:[
-              ...(sessDone?[sessDone.deload?DELOAD_CAL:'#2CC4A0']:[]),
+              ...sessList.slice(0,3).map(x=>x.deload?DELOAD_CAL:'#2CC4A0'),
               ...(!sessDone&&hasProg?[movedHere?'#9090c4':'#BFA060']:[]),
               ...(hasPlanned?['#5A8AE0']:[]),
               ...(nutriOk&&mode!=='sport'?['#5A8AE0']:[]),
@@ -10712,7 +10771,9 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
         const isMovedAway=!movedHere&&suppressedSources.has(sel);
         const movedAwayTo=isMovedAway?Object.entries(movesByTarget).find(([,m])=>m.sourceDate===sel)?.[0]:null;
         const effectiveDayName=movedHere?movedHere.sourceDayName:dayName;
-        const sess=sessionsByDate[sel];
+        const sessList=sessionsByDate[sel]||[];
+        const sessIdx=Math.min(Math.max(0,sessPick[sel]||0),Math.max(0,sessList.length-1));
+        const sess=sessList[sessIdx];
         const nutriOk=nutriDone[sel];
         const hasProg=movedHere?true:(programDayNames.has(dayName)&&!isMovedAway);
         const plannedHere=mode==='sport'&&!sess&&!hasProg?(plannedSessions?.[sel]||[]):[];
@@ -10731,6 +10792,14 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
                   {sess&&sess.deload&&<div data-testid="cal-deload-badge" style={{fontSize:9,fontWeight:800,color:DELOAD_CAL,letterSpacing:0.3}}>🪶 Décharge</div>}
                 </div>
+                {sessList.length>1&&(
+                  <div data-testid="cal-sess-chips" style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                    {sessList.map((x,i)=>{const on=i===sessIdx;const t=validDate(x.date)?new Date(x.date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'';return(
+                      <button key={x.id||i} data-testid="cal-sess-chip" onClick={()=>setSessPick(p=>({...p,[sel]:i}))} style={{padding:'6px 10px',borderRadius:10,border:`1px solid ${on?(x.deload?DELOAD_CAL:'#2CC4A0'):'rgba(255,255,255,0.12)'}`,background:on?(x.deload?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.16)'):'rgba(255,255,255,0.03)',color:on?T.text:T.textDim,fontSize:11,fontWeight:700,cursor:'pointer',maxWidth:'100%',textAlign:'left',lineHeight:1.25}}>
+                        <span style={{opacity:0.7,marginRight:5}}>{i+1}/{sessList.length}</span>{x.name||'Séance'}{t?<span style={{opacity:0.6,fontWeight:600}}> · {t}</span>:null}
+                      </button>);})}
+                  </div>
+                )}
                 {sess?(
                   <div style={{display:'flex',alignItems:'center',gap:10}}>
                     <div style={{width:34,height:34,borderRadius:10,background:sess.deload?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check" size={16} stroke={sess.deload?DELOAD_CAL:T.good}/></div>
@@ -12540,20 +12609,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
           )}
 
           {/* Coach feedback */}
-          <div>
-            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Feedback coach</div>
-            {s.coachFeedback&&(
-              <div style={{padding:'10px 14px',borderRadius:12,background:'rgba(90,138,224,0.07)',border:'1px solid rgba(90,138,224,0.2)',fontSize:12,color:'#5A8AE0',lineHeight:1.5,marginBottom:10}}>
-                {s.coachFeedback}
-              </div>
-            )}
-            <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Excellent travail ! Essaie +2.5 kg la prochaine fois sur le développé couché..." maxLength={500}
-              style={{width:'100%',minHeight:80,padding:'10px 14px',borderRadius:12,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.05)',color:T.text,fontSize:13,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.5}}/>
-            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:8,width:'100%',height:44,borderRadius:12,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:14,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
-              {saved?'✓ Feedback envoyé':saving?'Envoi...':'Envoyer le feedback'}
-            </button>
-            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
-          </div>
+          <CoachFeedbackBox s={s} fb={{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}}/>
         </div>
       </div>
     </div>
@@ -12809,20 +12865,7 @@ function CoachSessionCard({s,athleteId,athleteName,athleteGender='',history,athl
           )}
 
           {/* Coach feedback */}
-          <div style={{marginTop:4}}>
-            <div style={{fontSize:9,color:T.textFaint,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',marginBottom:6}}>Feedback coach</div>
-            {s.coachFeedback&&!feedbackText&&(
-              <div style={{padding:'8px 10px',borderRadius:10,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)',fontSize:12,color:'#5A8AE0',lineHeight:1.4,marginBottom:8}}>
-                {s.coachFeedback}
-              </div>
-            )}
-            <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} placeholder="Ex : Beau travail sur les squats ! Essaie +2.5kg la prochaine fois..." maxLength={500}
-              style={{width:'100%',minHeight:72,padding:'8px 10px',borderRadius:10,border:'1px solid rgba(90,138,224,0.25)',background:'rgba(90,138,224,0.04)',color:T.text,fontSize:12,resize:'vertical',outline:'none',boxSizing:'border-box',fontFamily:'inherit',lineHeight:1.4}}/>
-            <button onClick={submitFeedback} disabled={saving||!feedbackText.trim()} style={{marginTop:6,width:'100%',height:36,borderRadius:10,border:'none',background:saved?'rgba(44,196,160,0.2)':feedbackText.trim()?'linear-gradient(135deg,#5A8AE0,#2CC4A0)':'rgba(255,255,255,0.06)',color:saved?T.good:feedbackText.trim()?'#000':T.textFaint,fontSize:12,fontWeight:700,cursor:saving||!feedbackText.trim()?'not-allowed':'pointer',transition:'background 0.2s,color 0.2s'}}>
-              {saved?'✓ Envoyé':saving?'Envoi...':'Envoyer le feedback'}
-            </button>
-            {feedbackError&&<div role="alert" style={{marginTop:6,padding:'8px 11px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.4)',color:'#FFB0B0',fontSize:11.5,fontWeight:600,lineHeight:1.4}}>✗ {feedbackError}</div>}
-          </div>
+          <CoachFeedbackBox s={s} fb={{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}}/>
         </div>
       )}
 
@@ -17657,7 +17700,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
         <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.6,lineHeight:1.1}}><HoloText>Tes Univers</HoloText></div>
         <div style={{fontSize:13,color:T.textDim,marginTop:8}}>Choisis ton mode d'entraînement</div>
       </div>
-      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!authUser?.fullAccess&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.08)',border:'1px solid rgba(184,80,112,0.25)',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={onShowPricing}>
           <span style={{fontSize:18}}>🔒</span>
           <div style={{flex:1}}>
@@ -17699,7 +17742,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           ⚙️ Gérer mon abonnement
         </button>
       )}
-      {authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!authUser?.fullAccess&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <button onClick={onShowPricing} style={{marginTop:16,width:'100%',height:44,borderRadius:13,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>
           🚀 Débloquer Prime Athl
         </button>
@@ -18987,7 +19030,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       if(wn){
         const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
         if(last&&last.coachFeedback){
-          setSessionCoachFeedback({sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:'',updates:[]});
+          setSessionCoachFeedback({sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:last.coachFeedbackBy||'',updates:[]});
         }
       }
     }
@@ -19049,7 +19092,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     const pend=pendingFeedbacks.find(f=>normSessionKey(f.sessionName)===wn);
     if(pend)return pend;
     const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-    return last&&last.coachFeedback?{sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:'',updates:[]}:null;
+    return last&&last.coachFeedback?{sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:last.coachFeedbackBy||'',updates:[]}:null;
   },[sessionActive,coachSessionTarget,sessionCoachFeedback,workout&&workout.name,pendingFeedbacks,history]);
   const ackCoachFeedback=async()=>{
     const sid=activeCoachFeedback&&activeCoachFeedback.sessionId;
@@ -19306,11 +19349,11 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             <div style={{position:'relative',background:'linear-gradient(180deg,#0f1826,#0a0f18)',border:'1px solid rgba(90,138,224,0.4)',borderRadius:'24px 24px 0 0',padding:'22px 20px calc(24px + env(safe-area-inset-bottom))',boxSizing:'border-box',maxHeight:'88vh',overflowY:'auto',animation:'celebrationPop 0.35s ease',boxShadow:'0 -10px 40px rgba(0,0,0,0.5)'}}>
               <div style={{width:40,height:4,borderRadius:2,background:'rgba(255,255,255,0.18)',margin:'0 auto 18px'}}/>
               <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:999,background:'rgba(90,138,224,0.15)',border:'1px solid rgba(90,138,224,0.4)',marginBottom:13}}>
-                <span style={{fontSize:10,fontWeight:800,color:'#8FB4F5',letterSpacing:0.5,textTransform:'uppercase'}}>💬 Feedback de {activeCoachFeedback.coachName||'ton coach'}</span>
+                <span style={{fontSize:10,fontWeight:800,color:'#8FB4F5',letterSpacing:0.5,textTransform:'uppercase'}}>💬 Feedback de {activeCoachFeedback.coachName||'Ton coach'}</span>
               </div>
               <div style={{fontFamily:"'Outfit',sans-serif",fontSize:21,fontWeight:800,marginBottom:4,color:'#fff'}}>{activeCoachFeedback.sessionName||'Ta dernière séance'}</div>
               {activeCoachFeedback.sessionDate&&<div style={{fontSize:11,color:T.textFaint,marginBottom:14}}>Séance du {new Date(activeCoachFeedback.sessionDate).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>}
-              <div style={{fontSize:14,lineHeight:1.6,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 12px 12px 0',padding:'14px 16px',marginBottom:activeCoachFeedback.updates&&activeCoachFeedback.updates.length?16:8,whiteSpace:'pre-wrap'}}>{activeCoachFeedback.feedback}</div>
+              <div style={{fontSize:16,lineHeight:1.7,color:'#E8E6EF',background:'rgba(255,255,255,0.04)',borderLeft:'3px solid #5A8AE0',borderRadius:'0 12px 12px 0',padding:'16px 18px',wordBreak:'break-word',marginBottom:activeCoachFeedback.updates&&activeCoachFeedback.updates.length?16:8,whiteSpace:'pre-wrap'}}>{activeCoachFeedback.feedback}</div>
               {/* Fusion : les charges montées par le coach (endpoint /overload) sont maintenant
                   affichées dans ce pop-up feedback, au lieu d'un pop-up séparé qui faisait doublon. */}
               {activeCoachFeedback.updates&&activeCoachFeedback.updates.length>0&&(<>
@@ -20260,8 +20303,8 @@ function LiveSessionsView({sessions,onStartWorkout}){
         </div>
         {s.coachFeedback&&(
           <div style={{padding:'12px 14px',borderRadius:14,background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.2)',marginBottom:16}}>
-            <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:4}}>Feedback coach</div>
-            <div style={{fontSize:13,color:T.text,lineHeight:1.5}}>{s.coachFeedback}</div>
+            <div style={{fontSize:11,color:'#8FB4F5',fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>💬 Feedback de {s.coachFeedbackBy||'Ton coach'}</div>
+            <div style={{fontSize:15,color:'#E8E6EF',lineHeight:1.65,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{s.coachFeedback}</div>
           </div>
         )}
         <div style={{fontSize:11,color:T.textFaint,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:8}}>Exercices</div>

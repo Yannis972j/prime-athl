@@ -24,9 +24,9 @@ before(async () => {
 after(async () => { if (browser) await browser.close(); if (srv) await srv.stop(); });
 
 test('séance faite un mardi où le lundi a été déplacé : intitulé et muscles = ceux de la séance faite', async () => {
-  // un mardi du mois courant (≤ 28 pour rester dans le mois), et le lundi qui précède
+  // un mardi du mois PRÉCÉDENT (toujours passé : le serveur refuse les séances faites futures), et le lundi qui précède
   const now = new Date();
-  let tue = new Date(now.getFullYear(), now.getMonth(), 8);
+  let tue = new Date(now.getFullYear(), now.getMonth() - 1, 8);
   while (tue.getDay() !== 2) tue.setDate(tue.getDate() + 1);
   const mon = new Date(tue); mon.setDate(tue.getDate() - 1);
   const mv = await api(srv.baseUrl, 'POST', `/api/coach/athletes/${athleteId}/schedule-moves`, { token: coach, body: { fromDate: ymd(mon), toDate: ymd(tue), force: true } });
@@ -49,6 +49,7 @@ test('séance faite un mardi où le lundi a été déplacé : intitulé et muscl
   const tryClick = async t => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: 2500 }); await pg.waitForTimeout(700); return true; } catch { return false; } };
   await tryClick('Laura');
   await tryClick('Séances');
+  await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(500);
   await pg.locator(`text=/^${tue.getDate()}$/`).first().click();
   await pg.waitForTimeout(500);
   const txt = await pg.evaluate(() => document.body.innerText);

@@ -20,6 +20,8 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { applyMove, cancelMove } from './schedule-moves.js';
+import { toValidDateMs, sessionDateISO, strictSessionDate, entryDateMs, validWeightKg, repairStoredDates } from './dates.js';
 import { sanitizePhrases, seedSwimPhrases } from './personal-mindset.js';
 import { shouldSendActivityNotif, activitySummary, tomorrowPlan, pickDailyMessage, postSessionSendAt, weeklyCadence, toneLimits, pickPostSessionMessage, POST_SESSION_CATCHUP_MS, eligibleForActivityNotifs, wantsEveningNudge } from './daily-activity.js';
 import { pgEnabled, pgInit, pgLoad, pgSave, pgBackup, pgListBackups, pgGetBackup, pgRotateBackups } from './db.js';
@@ -143,6 +145,15 @@ const PLAN_UNIVERSES = {
   coaching_complet:  ['explorer', 'ia', 'coach'],
 };
 
+// Prénom affiché pour un coach (feedbacks, notifs). Coach principal sans prénom → « Yannis » ;
+// autre coach sans prénom → « Ton coach » (T majuscule : c'est en début de libellé).
+function coachDisplayName(c) {
+  const fn = typeof c?.firstName === 'string' ? c.firstName.trim() : '';
+  if (fn) return fn;
+  if (c && (c.isMainCoach || c.email === MAIN_COACH_EMAIL)) return 'Yannis';
+  return 'Ton coach';
+}
+
 function userHasAccess(u, universe) {
   if (!u) return false;
   if (u.email === MAIN_COACH_EMAIL) return true;
@@ -251,7 +262,7 @@ async function ensureMainCoach() {
     main = {
       id, email: MAIN_COACH_EMAIL, passwordHash: hash,
       role: 'coach', coachId: null,
-      firstName: '', lastName: '', height: '', weight: '', objective: '',
+      firstName: 'Yannis', lastName: '', height: '', weight: '', objective: '',
       prSquat: '', prBench: '', prDeadlift: '',
       createdAt: Date.now(), status: 'active', isMainCoach: true,
       tokenVersion: 0,
@@ -269,6 +280,7 @@ async function ensureMainCoach() {
     main.role = 'coach';
     main.status = 'active';
     main.isMainCoach = true;
+    if (!String(main.firstName || '').trim()) main.firstName = 'Yannis';
     // Débloquer le verrou de tentatives à chaque boot
     main.loginFails = [];
     main.lockedUntil = null;
@@ -376,6 +388,23 @@ function migrateStaleFullAccessExpiries() {
   }
 }
 migrateStaleFullAccessExpiries();
+// Dates invalides déjà stockées (séances / pesées / photos) : elles faisaient planter l'appli (« Invalid time value »).
+try { const fixed = repairStoredDates(DATA); if (fixed) { console.log(`[migration] ${fixed} date(s) invalide(s) réparée(s)`); persist(); } } catch (e) { console.error('[migration dates]', e.message); }
+// Feedbacks en attente enregistrés avec le repli « Ton coach » : on remet le vrai prénom du coach.
+try {
+  let n = 0;
+  for (const u of Object.values(DATA.users)) {
+    const coach = u.coachId && DATA.users[u.coachId];
+    if (!coach) continue;
+    const name = coachDisplayName(coach);
+    if (name === 'Ton coach') continue;
+    for (const f of (Array.isArray(u.pendingCoachFeedbacks) ? u.pendingCoachFeedbacks : [])) {
+      if (f && (!f.coachName || f.coachName === 'Ton coach')) { f.coachName = name; n++; }
+    }
+    if (u.pendingCoachFeedback && (!u.pendingCoachFeedback.coachName || u.pendingCoachFeedback.coachName === 'Ton coach')) u.pendingCoachFeedback.coachName = name;
+  }
+  if (n) { console.log(`[migration] ${n} feedback(s) en attente : prénom du coach rétabli`); persist(); }
+} catch (e) { console.error('[migration feedback]', e.message); }
 // Citations de natation d'Inaya : posées une seule fois sur son compte (cf. personal-mindset.js). Après persist().
 {
   const r = seedSwimPhrases(DATA.users);
@@ -624,7 +653,7 @@ function sendAccessReminders() {
   const due = dueAccessReminders(DATA.users);
   for (const r of due) {
     const u = DATA.users[r.userId];
-    const coachName = (u.coachId && DATA.users[u.coachId]?.firstName) || 'Ton coach';
+    const coachName = coachDisplayName(u.coachId && DATA.users[u.coachId]);
     pushToUser(u.id, accessReminderPayload(r.palier, coachName));
     u.accessReminded = { ...(u.accessReminded || {}), [r.palier]: r.expiresAt };
   }
@@ -1020,11 +1049,11 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     persist();
 
     // Notify main coach of new pending request
-    let coachDisplayName = null;
+    let coachLabelName = null;
     if (!isMain) {
       const main = Object.values(DATA.users).find(x => x.isMainCoach && x.status === 'active');
       if (main) {
-        coachDisplayName = [main.firstName, main.lastName].filter(Boolean).join(' ') || main.email.split('@')[0];
+        coachLabelName = [main.firstName, main.lastName].filter(Boolean).join(' ') || main.email.split('@')[0];
         io.to('user:' + main.id).emit('pending-request', { user: profileOf(u) });
         const athleteName = [u.firstName, u.lastName].filter(Boolean).join(' ') || lowEmail.split('@')[0];
         sendCoachNewAthleteEmail(main.email, lowEmail, athleteName).catch(e => console.error('[email] coach notify error:', e.message));
@@ -1041,7 +1070,7 @@ app.post('/api/auth/signup', signupLimiter, async (req, res) => {
     if (status === 'pending') {
       return res.json({
         pending: true,
-        coachName: coachDisplayName,
+        coachName: coachLabelName,
         message: "Demande envoyée. En attente d'approbation du coach principal.",
       });
     }
@@ -1510,7 +1539,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
     pendingSessions: DATA.pendingSessions[u.id] || [],
@@ -1825,7 +1854,7 @@ function applyProgramToAthlete(athleteId, data, assignedBy, fileName) {
   // Auto-import (l'utilisateur importe son propre programme, cf. /api/my-program/scheduled) :
   // pas de notif "ton coach t'a assigné..." puisque c'est la même personne, ça n'aurait aucun sens.
   if (assignedBy !== athleteId) {
-    const coachName = DATA.users[assignedBy]?.firstName || 'Ton coach';
+    const coachName = coachDisplayName(DATA.users[assignedBy]);
     pushToUser(athleteId, { title: '💪 Nouveau programme', body: `${coachName} t'a assigné un nouveau programme d'entraînement`, url: '/Muscu.html' });
   }
   return ts;
@@ -1875,7 +1904,7 @@ app.put('/api/coach/program/:athleteId/scheduled', authRequired, coachOnly, (req
   }
   DATA.scheduledPrograms[req.params.athleteId] = { data, activateOn, assignedBy: req.user.id, scheduledAt: Date.now(), fileName: req.body?.fileName || '' };
   persist();
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   const dateLabel = new Date(ymdToLocal(activateOn)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
   pushToUser(req.params.athleteId, { title: '📅 Programme prévu', body: `${coachName} a programmé un nouveau programme pour le ${dateLabel}`, url: '/Muscu.html' });
   res.json({ ok: true, scheduled: true, activateOn });
@@ -1912,34 +1941,15 @@ app.post('/api/coach/athletes/:athleteId/schedule-moves', authRequired, coachOnl
   if (!DATA.scheduleMoves[req.params.athleteId]) DATA.scheduleMoves[req.params.athleteId] = {};
   const moves = DATA.scheduleMoves[req.params.athleteId];
 
-  // Résoudre l'occurrence source : une séance déjà déplacée vers fromDate, ou le jour naturel du programme.
-  let sourceDayName, sourceDate;
-  if (moves[fromDate]) {
-    sourceDayName = moves[fromDate].sourceDayName;
-    sourceDate = moves[fromDate].sourceDate;
-  } else {
-    sourceDayName = JS_TO_DAY_FR[new Date(fromDate + 'T12:00:00').getDay()];
-    sourceDate = fromDate;
-    if (!dayNames.has(sourceDayName)) return res.status(400).json({ error: 'no_session_on_date' });
-  }
-
-  // La date cible ne doit pas écraser une autre séance prévue sans confirmation explicite.
-  const targetDayName = JS_TO_DAY_FR[new Date(toDate + 'T12:00:00').getDay()];
-  const sourceDatesAlreadyMoved = new Set(Object.values(moves).map(m => m.sourceDate));
-  const targetHasMove = !!moves[toDate];
-  const targetHasNatural = dayNames.has(targetDayName) && !sourceDatesAlreadyMoved.has(toDate);
-  if ((targetHasMove || targetHasNatural) && !force) {
-    return res.status(409).json({ error: 'target_occupied' });
-  }
-
-  delete moves[fromDate];
-  moves[toDate] = { sourceDayName, sourceDate, movedAt: Date.now(), movedBy: req.user.id };
+  const r = applyMove(moves, { fromDate, toDate, force, dayNames, dayOf: ds => JS_TO_DAY_FR[new Date(ds + 'T12:00:00').getDay()], movedBy: req.user.id });
+  if (r.error === 'no_session_on_date') return res.status(400).json({ error: r.error });
+  if (r.error) return res.status(409).json({ error: r.error });
   persist();
 
   io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: moves });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   const fmtDate = ds => new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  pushToUser(req.params.athleteId, { title: '📅 Séance déplacée', body: `${coachName} a déplacé ta séance au ${fmtDate(toDate)}`, url: '/Muscu.html' });
+  pushToUser(req.params.athleteId, { title: '📅 Séance déplacée', body: r.swapped ? `${coachName} a échangé tes séances du ${fmtDate(fromDate)} et du ${fmtDate(toDate)}` : `${coachName} a déplacé ta séance au ${fmtDate(toDate)}`, url: '/Muscu.html' });
 
   res.json({ ok: true, scheduleMoves: moves });
 });
@@ -1948,8 +1958,8 @@ app.delete('/api/coach/athletes/:athleteId/schedule-moves/:date', authRequired, 
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
   const moves = DATA.scheduleMoves[req.params.athleteId] || {};
-  if (!moves[req.params.date]) return res.status(404).json({ error: 'not_found' });
-  delete moves[req.params.date];
+  const cr = cancelMove(moves, req.params.date);
+  if (cr.error) return res.status(404).json({ error: cr.error });
   persist();
   io.to('user:' + req.params.athleteId).emit('schedule-moves-updated', { scheduleMoves: moves });
   res.json({ ok: true, scheduleMoves: moves });
@@ -1993,7 +2003,7 @@ app.put('/api/coach/session-library/:athleteId', authRequired, coachOnly, (req, 
   DATA.sessionLibrary[req.params.athleteId] = { sessions, assignedBy: req.user.id, assignedAt: ts };
   persist();
   io.to('user:' + req.params.athleteId).emit('session-library-updated', { sessions, assignedAt: ts });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   pushToUser(req.params.athleteId, { title: '📚 Bibliothèque mise à jour', body: `${coachName} t'a partagé ${sessions.length} séance${sessions.length > 1 ? 's' : ''} dans ta bibliothèque`, url: '/Muscu.html' });
   res.json({ ok: true, assignedAt: ts, count: sessions.length });
 });
@@ -2136,7 +2146,7 @@ app.post('/api/coach/athletes/:athleteId/planned-sessions', authRequired, coachO
   DATA.plannedSessions[req.params.athleteId][date].push(session);
   persist();
   io.to('user:' + req.params.athleteId).emit('planned-sessions-updated', { plannedSessions: DATA.plannedSessions[req.params.athleteId] });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   const fmtDate = ds => new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   pushToUser(req.params.athleteId, { title: '📅 Nouvelle séance prévue', body: `${coachName} t'a planifié "${session.name || 'une séance'}" le ${fmtDate(date)}`, url: '/Muscu.html' });
   res.json({ ok: true, plannedSessions: DATA.plannedSessions[req.params.athleteId] });
@@ -2236,7 +2246,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
     // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
     // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
   res.json(list);
 });
 
@@ -2379,7 +2389,8 @@ app.post('/api/sessions', authRequired, accessActive, (req, res) => {
   });
   const session = {
     id, userId: req.user.id,
-    date: date || new Date().toISOString(),
+    date: sessionDateISO(date),
+    createdAt: Date.now(),
     name: safeName.slice(0, 100),
     totalVolume: safeVolume,
     exercises: safeExercises,
@@ -2552,7 +2563,8 @@ app.post('/api/coach/sessions/:sessionId/feedback', authRequired, coachOnly, (re
   if (!a || a.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   s.coachFeedback = typeof req.body.feedback === 'string' ? req.body.feedback.slice(0, 500) : '';
   s.coachFeedbackAt = Date.now();
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
+  s.coachFeedbackBy = coachName;
   // Feedback en attente sur l'athlète : affiché en pop-up dès son prochain accès à l'app, puis
   // acquitté (ack) et effacé. Sans ça, il restait enfoui dans une séance passée que l'athlète
   // n'ouvrait jamais.
@@ -2614,8 +2626,8 @@ app.patch('/api/coach/sessions/:sessionId', authRequired, coachOnly, (req, res) 
   if (req.body.date) {
     // Valide le format avant d'écraser — sinon une date malformée se propage telle quelle
     // jusqu'au lien de partage public (affiche "Invalid Date").
-    const d = new Date(req.body.date);
-    if (!isNaN(d)) s.date = req.body.date;
+    const ms = toValidDateMs(req.body.date);
+    if (ms !== null) s.date = new Date(ms).toISOString();
   }
   if (req.body.name) s.name = String(req.body.name).slice(0, 120);
   if (typeof req.body.notes === 'string') s.notes = req.body.notes.slice(0, 500);
@@ -2702,7 +2714,7 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
     DATA.sessions[sessionId].overloadApplied = true;
     DATA.sessions[sessionId].overloadUpdates = overloadRecap;
   }
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   persist();
   io.to('user:' + req.params.athleteId).emit('program-updated', { data: data || {}, assignedAt: prog ? prog.assignedAt : null, targets: a.exerciseTargets });
   const names = updates.map(u => u.name).filter(Boolean).slice(0, 3).join(', ');
@@ -2728,7 +2740,9 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   // ne pas dépendre uniquement du client pour ça).
   const safeName = typeof name === 'string' && name.trim() ? name : 'Séance';
   const id = 'cs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-  const safeDate = date && !isNaN(new Date(date)) ? date : new Date().toISOString();
+  const sd = strictSessionDate(date);
+  if (!sd.ok) return res.status(400).json({ error: sd.error });
+  const safeDate = sd.iso;
   const session = {
     id, userId: athlete.id,
     name: safeName.slice(0, 120),
@@ -2749,7 +2763,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   persist();
   io.to('user:' + athlete.id).emit('session-added', { session });
   io.to('user:' + req.user.id).emit('session-added', { session });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   const athleteName = athlete.firstName || 'L\'athlète';
   const fmtDate = ds => new Date(ds).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   // Notification enrichie : séance live = résumé volume + durée ; sinon message standard
@@ -3283,7 +3297,7 @@ app.delete('/api/coach/athletes/:id/nutrition/document', authRequired, coachOnly
 app.post('/api/coach/nutrition/:athleteId/notify', authRequired, coachOnly, (req, res) => {
   const a = DATA.users[req.params.athleteId];
   if (!a || a.coachId !== req.user.id) return res.status(404).json({ error: 'athlete_not_found' });
-  const coachName = DATA.users[req.user.id]?.firstName || 'Ton coach';
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
   pushToUser(a.id, { title: '🥗 Plan nutrition validé', body: `${coachName} a finalisé ton plan nutrition — consulte-le maintenant !`, url: '/Muscu.html' });
   res.json({ ok: true });
 });
@@ -3442,7 +3456,9 @@ app.get('/api/weight', authRequired, (req, res) => {
 app.post('/api/weight', authRequired, (req, res) => {
   const { weight, date } = req.body || {};
   if (!weight || isNaN(parseFloat(weight))) return res.status(400).json({ error: 'weight_required' });
-  const entry = { id: uid(), weight: parseFloat(weight), date: date || Date.now(), createdAt: Date.now() };
+  const wKg = validWeightKg(weight);
+  if (wKg === null) return res.status(400).json({ error: 'invalid_weight', detail: 'Poids entre 20 et 500 kg.' });
+  const entry = { id: uid(), weight: wKg, date: entryDateMs(date), createdAt: Date.now() };
   if (!DATA.weightLogs[req.user.id]) DATA.weightLogs[req.user.id] = [];
   DATA.weightLogs[req.user.id].push(entry);
   // Garder max 365 entrées de poids par user
@@ -3521,7 +3537,7 @@ app.post('/api/photos', authRequired, (req, res) => {
   if (DATA.progressPhotos[req.user.id].length >= MAX_PHOTOS_PER_USER) {
     return res.status(400).json({ error: 'photo_limit_reached', detail: `Maximum ${MAX_PHOTOS_PER_USER} photos` });
   }
-  const photo = { id: uid(), url: src, note: note || '', date: date || Date.now(), createdAt: Date.now() };
+  const photo = { id: uid(), url: src, note: note || '', date: entryDateMs(date), createdAt: Date.now() };
   DATA.progressPhotos[req.user.id].unshift(photo);
   persist();
   res.json({ ok: true, photo });
@@ -3559,7 +3575,7 @@ app.post('/api/coach/athletes/:id/photos', authRequired, coachOnly, (req, res) =
   if (DATA.progressPhotos[u.id].length >= MAX_PHOTOS_PER_USER) {
     return res.status(400).json({ error: 'photo_limit_reached', detail: `Maximum ${MAX_PHOTOS_PER_USER} photos` });
   }
-  const photo = { id: uid(), url: src, note: note || '', date: date || Date.now(), createdAt: Date.now(), isVideo: !!isVideo, addedByCoach: true };
+  const photo = { id: uid(), url: src, note: note || '', date: entryDateMs(date), createdAt: Date.now(), isVideo: !!isVideo, addedByCoach: true };
   DATA.progressPhotos[u.id].unshift(photo);
   persist();
   res.json({ ok: true, photo });
