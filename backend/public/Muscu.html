@@ -43,6 +43,22 @@
   .tab-content{animation:tabFadeIn 0.3s cubic-bezier(.16,1,.3,1);will-change:opacity,transform}
   @media (prefers-reduced-motion: reduce){*{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}}
   button,a{transition:transform 0.18s cubic-bezier(.16,1,.3,1),box-shadow 0.18s ease,background 0.2s ease,opacity 0.18s ease,border-color 0.2s ease}
+  /* ── Console cardio (SKIERG…) : instrument de précision, filets dorés, chiffres légers ── */
+  @keyframes cdRise{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+  .cd-panel{position:relative;padding:18px 16px 16px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.016));border:1px solid rgba(191,160,96,0.24);box-shadow:inset 0 1px 0 rgba(255,255,255,0.07),0 18px 40px -22px rgba(0,0,0,0.9)}
+  .cd-eyebrow{font-size:10px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:rgba(240,240,242,0.62)}
+  .cd-row{animation:cdRise .4s cubic-bezier(.16,1,.3,1) both}
+  .cd-input{width:100%;height:56px;box-sizing:border-box;padding:0 34px 0 14px;border-radius:15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);color:#2CC4A0;font-family:inherit;font-size:30px;font-weight:300;letter-spacing:-0.5px;text-align:center;font-variant-numeric:tabular-nums;outline:none;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}
+  .cd-input::placeholder{color:rgba(255,255,255,0.2)}
+  .cd-input:focus{border-color:rgba(191,160,96,0.85);background:rgba(191,160,96,0.07);box-shadow:0 0 0 4px rgba(191,160,96,0.12)}
+  .cd-chip{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:9px;font-size:10.5px;font-weight:800;font-variant-numeric:tabular-nums}
+  .cd-cta{position:relative;width:100%;min-height:60px;border:none;border-radius:18px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#15110a;background:linear-gradient(135deg,#E6CB86 0%,#CDAE69 45%,#A98B4A 100%);box-shadow:0 14px 30px -10px rgba(191,160,96,0.55),inset 0 1px 0 rgba(255,255,255,0.45)}
+  .cd-cta:disabled{opacity:.45;cursor:default;box-shadow:none}
+  .cd-cta:active:not(:disabled){transform:scale(.985)}
+  .cd-ghost{width:100%;height:48px;border-radius:15px;border:1px solid rgba(255,255,255,0.13);background:transparent;color:rgba(240,240,242,0.72);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+  .cd-ghost.done{border-color:rgba(44,196,160,0.35);color:#2CC4A0;background:rgba(44,196,160,0.07);cursor:default}
+  .cd-track{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,0.08)}
+  .cd-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#1FA588,#2CC4A0 60%,#8FDCC0);transition:width .5s cubic-bezier(.16,1,.3,1)}
   button:active{transform:scale(0.98)}
   button:hover:not(:disabled){opacity:0.92}
   :root{--shimmer-state:running}
@@ -1851,9 +1867,9 @@ const PrimeAudio=(()=>{
   };
 })();
 
-// Carte « Distance réalisée » d'un exercice cardio : une ligne par série (modifiable à tout moment, même
-// après validation) avec, SOUS CHAQUE SÉRIE, la distance de la dernière fois, l'écart et le cumul ; en bas le
-// cumul total comparé à la dernière fois — comme poids/reps en muscu.
+// Carte « Distance réalisée » d'un exercice cardio : un registre propre, une ligne par série (modifiable à tout
+// moment, même après validation) avec, SOUS CHAQUE SÉRIE, la distance de la dernière fois, l'écart et le cumul ;
+// en bas le cumul total et une jauge face à la dernière fois — comme poids/reps en muscu.
 function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
   const list=sets||[];
   const multi=list.length>1;
@@ -1867,31 +1883,51 @@ function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
   // Écart série par série : seulement si la dernière fois avait le même nombre de séries (sinon S1 1 300 m vs 400 m n'a aucun sens).
   const sameSets=lastPer.length>0&&lastPer.length===list.length;
   const colOf=d=>d>0?T.good:d<0?T.danger:T.textDim;
+  const chipBg=d=>d>0?'rgba(44,196,160,0.14)':d<0?'rgba(184,80,112,0.16)':'rgba(255,255,255,0.07)';
+  const curIdx=list.findIndex(x=>!x.done);
+  const gauge=delta!=null?Math.max(total,lastTotal):0;
   let run=0;
   return(
-    <div data-testid="cardio-distance" style={{padding:'12px 14px',borderRadius:14,background:'rgba(44,196,160,0.07)',border:'1px solid rgba(44,196,160,0.28)',textAlign:'left'}}>
-      <div style={{fontSize:9.5,color:'#fff',fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8}}>Distance réalisée</div>
-      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+    <div data-testid="cardio-distance" className="cd-panel" style={{textAlign:'left'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:6}}>
+        <div className="cd-eyebrow" style={{color:'#fff'}}>Distance réalisée</div>
+        <div style={{flex:1,height:1,background:'linear-gradient(90deg,rgba(191,160,96,0.45),rgba(191,160,96,0))'}}/>
+      </div>
+      <div>
         {list.map((s,i)=>{
           const v=setDistanceM(s);
           run+=v;
           const lm=lastPer[i]>0?lastPer[i]:0;
           const rd=sameSets&&v>0&&lm>0?v-lm:null;
+          const isCur=i===curIdx;
           return(
-            <div key={i} data-testid="cardio-set-row">
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                {multi&&<span style={{fontSize:10,color:T.textFaint,fontWeight:700,width:22,flexShrink:0}}>S{i+1}</span>}
-                <input type="text" inputMode="numeric" pattern="[0-9]*" aria-label={multi?`Distance série ${i+1} en mètres`:'Distance en mètres'}
+            <div key={i} data-testid="cardio-set-row" className="cd-row" style={{animationDelay:(i*60)+'ms',display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderTop:i?'1px solid rgba(255,255,255,0.06)':'none'}}>
+              {multi&&(
+                <div style={{width:30,height:30,boxSizing:'border-box',borderRadius:15,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,
+                  ...(s.done?{background:'rgba(44,196,160,0.14)',border:'1px solid rgba(44,196,160,0.5)',color:T.good}
+                    :isCur?{background:'linear-gradient(135deg,#E6CB86,#A98B4A)',color:'#15110a',boxShadow:'0 0 0 4px rgba(191,160,96,0.14)'}
+                    :{border:'1px solid rgba(255,255,255,0.16)',color:T.textFaint})}}>
+                  {s.done?<Icon name="check" size={13} stroke={T.good} strokeWidth={3}/>:'S'+(i+1)}
+                </div>
+              )}
+              <div style={{position:'relative',flex:1,minWidth:0}}>
+                <input className="cd-input" type="text" inputMode="numeric" pattern="[0-9]*" aria-label={multi?`Distance série ${i+1} en mètres`:'Distance en mètres'}
                   value={s.distance==null?'':String(s.distance)} placeholder={lm>0?String(lm):'0'}
-                  onChange={e=>onChange(i,e.target.value.replace(/[^0-9]/g,'').slice(0,6))}
-                  style={{flex:1,minWidth:0,height:44,borderRadius:10,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(0,0,0,0.25)',color:T.good,fontSize:22,fontWeight:800,textAlign:'center',fontVariantNumeric:'tabular-nums',outline:'none',fontFamily:'inherit'}}/>
-                <span style={{fontSize:13,color:T.textDim,fontWeight:700,width:16}}>m</span>
-                {s.done&&<Icon name="check" size={14} stroke={T.good} strokeWidth={3}/>}
+                  onChange={e=>onChange(i,e.target.value.replace(/[^0-9]/g,'').slice(0,6))}/>
+                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,fontWeight:600,color:T.textDim,pointerEvents:'none'}}>m</span>
               </div>
               {(last||(multi&&v>0))&&(
-                <div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:3,paddingLeft:multi?32:0,paddingRight:26,fontSize:10.5,color:T.textDim}}>
-                  <span data-testid="cardio-last-set" style={{display:'inline-flex',alignItems:'baseline',gap:6}}>{last?<><span style={{fontSize:9,color:T.good,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Dernière fois</span><span style={{fontSize:11,color:T.textDim,fontWeight:600}}>{lm>0?fmtDistanceM(lm):'—'}</span>{rd!=null&&rd!==0&&<b style={{color:colOf(rd)}}>{rd>0?'+':''}{fmtThousands(rd)}</b>}</>:null}</span>
-                  {multi&&v>0&&<span data-testid="cardio-run">Cumul : <b style={{color:T.good}}>{fmtDistanceM(run)}</b></span>}
+                <div style={{width:106,flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3,textAlign:'right'}}>
+                  {last&&(
+                    <span data-testid="cardio-last-set" style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+                      <span style={{fontSize:8.5,color:T.good,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Dernière fois</span>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:13,color:T.textDim,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lm>0?fmtDistanceM(lm):'—'}</span>
+                        {rd!=null&&rd!==0&&<span className="cd-chip" style={{color:colOf(rd),background:chipBg(rd)}}>{rd>0?'+':''}{fmtThousands(rd)}</span>}
+                      </span>
+                    </span>
+                  )}
+                  {multi&&v>0&&<span data-testid="cardio-run" style={{fontSize:10.5,color:T.textDim}}>Cumul : <b style={{color:T.good,fontWeight:700}}>{fmtDistanceM(run)}</b></span>}
                 </div>
               )}
             </div>
@@ -1899,25 +1935,37 @@ function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
         })}
       </div>
       {(onAdd||onRemove)&&(
-        <div style={{display:'flex',gap:8,marginTop:10}}>
-          {onAdd&&list.length<10&&<button type="button" data-testid="cardio-add-set" onClick={onAdd} style={{flex:1,height:34,borderRadius:10,border:'1px dashed rgba(44,196,160,0.45)',background:'rgba(44,196,160,0.06)',color:'#2CC4A0',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Ajouter une série</button>}
-          {onRemove&&list.length>1&&<button type="button" data-testid="cardio-del-set" onClick={onRemove} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>− Retirer la dernière</button>}
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          {onAdd&&list.length<10&&<button type="button" data-testid="cardio-add-set" onClick={onAdd} style={{flex:1,height:38,borderRadius:12,border:'1px dashed rgba(191,160,96,0.5)',background:'rgba(191,160,96,0.05)',color:'#CDAE69',fontSize:12.5,fontWeight:700,letterSpacing:0.2,cursor:'pointer'}}>+ Ajouter une série</button>}
+          {onRemove&&list.length>1&&<button type="button" data-testid="cardio-del-set" onClick={onRemove} style={{height:38,padding:'0 14px',borderRadius:12,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>− Retirer la dernière</button>}
         </div>
       )}
       {multi&&(
-        <div data-testid="cardio-cumul" style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:'rgba(0,0,0,0.25)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:10}}>
-          <div style={{fontSize:10,color:T.textFaint,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase'}}>Cumul</div>
+        <div data-testid="cardio-cumul" style={{marginTop:14,paddingTop:14,borderTop:'1px solid rgba(191,160,96,0.22)',display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:10}}>
+          <div className="cd-eyebrow">Cumul</div>
           <div style={{textAlign:'right'}}>
-            <div style={{fontSize:22,fontWeight:800,color:T.good,fontVariantNumeric:'tabular-nums'}}>{fmtDistanceM(total)}</div>
-            {lastTotal>0&&<div style={{display:'flex',alignItems:'baseline',justifyContent:'flex-end',gap:6}}><span style={{fontSize:9,color:T.good,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase'}}>Dernière fois</span><span style={{fontSize:11,color:T.textDim,fontWeight:600}}>{fmtDistanceM(lastTotal)}</span></div>}
+            <div style={{fontSize:40,fontWeight:300,lineHeight:1,letterSpacing:-1.2,color:total>0?T.good:'rgba(255,255,255,0.22)',fontVariantNumeric:'tabular-nums'}}>{fmtDistanceM(total)}</div>
+            {lastTotal>0&&<div style={{display:'flex',alignItems:'baseline',justifyContent:'flex-end',gap:6,marginTop:6}}><span style={{fontSize:8.5,color:T.good,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Dernière fois</span><span style={{fontSize:13,color:T.textDim,fontWeight:600}}>{fmtDistanceM(lastTotal)}</span></div>}
           </div>
         </div>
       )}
-      <div style={{marginTop:8,fontSize:11,lineHeight:1.4,color:delta==null?T.textFaint:colOf(delta),fontWeight:delta==null?500:700}}>
-        {delta!=null?`${delta>0?'↑ +':delta<0?'↓ ':'= '}${delta!==0?fmtDistanceM(Math.abs(delta)).replace(' m','')+' m':'même distance'} vs la dernière fois`
-          :lastTotal>0&&total>0&&!sameShape?`Total ${fmtDistanceM(total)} · pas de comparaison : le nombre de séries a changé.`
-          :lastTotal>0?'Note ta distance pour suivre ta progression.'
-          :'Ta distance du jour servira de repère pour la prochaine séance.'}
+      {gauge>0&&(
+        <div aria-hidden="true" style={{marginTop:14}}>
+          <div className="cd-track">
+            <div className="cd-fill" style={{width:Math.max(4,Math.round(total/gauge*100))+'%'}}/>
+            <div style={{position:'absolute',top:-4,left:`calc(${Math.round(lastTotal/gauge*100)}% - 1px)`,width:2,height:14,borderRadius:1,background:'#CDAE69'}}/>
+          </div>
+        </div>
+      )}
+      <div style={{marginTop:gauge>0?10:12,display:'flex',alignItems:'center',gap:8}}>
+        {delta!=null&&<span className="cd-chip" style={{height:22,padding:'0 10px',borderRadius:11,fontSize:11.5,color:colOf(delta),background:chipBg(delta)}}>
+          {`${delta>0?'↑ +':delta<0?'↓ ':'= '}${delta!==0?fmtDistanceM(Math.abs(delta)).replace(' m','')+' m':'même distance'} vs la dernière fois`}
+        </span>}
+        {delta==null&&<span style={{fontSize:11,lineHeight:1.4,color:T.textFaint}}>
+          {lastTotal>0&&total>0&&!sameShape?`Total ${fmtDistanceM(total)} · pas de comparaison : le nombre de séries a changé.`
+            :lastTotal>0?'Note ta distance pour suivre ta progression.'
+            :'Ta distance du jour servira de repère pour la prochaine séance.'}
+        </span>}
       </div>
     </div>
   );
@@ -2750,13 +2798,16 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           {/* Steppers poids + reps (gros) — édition de la série en cours */}
           {/* Cardio chronométré (SKIERG…) : durée + chrono avec 10 s de préparation, à la place de poids/reps */}
           {!allExDone&&ex.style==='CARDIO'&&ex.cardio&&(
-            <div style={{padding:'18px 14px',borderRadius:18,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.3)',textAlign:'center',marginBottom:24}}>
-              <div style={{fontSize:11,color:'#C89040',fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8}}>Cardio{totalSetsEx>1?` · série ${setNumber}/${totalSetsEx}`:''}</div>
-              <div style={{fontSize:34,fontWeight:800,color:'#fff',fontVariantNumeric:'tabular-nums'}}>{cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'—'}</div>
+            <div className="cd-panel" style={{textAlign:'center',marginBottom:16,padding:'22px 18px 18px'}}>
+              <div className="cd-eyebrow" style={{color:'#CDAE69'}}>Cardio{totalSetsEx>1?` · série ${setNumber}/${totalSetsEx}`:''}</div>
+              <div style={{fontSize:64,fontWeight:200,lineHeight:1.05,letterSpacing:-2,color:'#fff',fontVariantNumeric:'tabular-nums',margin:'10px 0 4px'}}>{cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'—'}</div>
               {cardioSeconds(ex.cardio.duree)>0&&setTimerSecs===0&&(
-                <button onClick={()=>startCardioTimer(cardioSeconds(ex.cardio.duree))} style={{marginTop:14,width:'100%',minHeight:54,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 22px rgba(44,196,160,0.3)'}}>
-                  ▶ Lancer le chrono
-                  <div style={{fontSize:10.5,fontWeight:700,opacity:0.75,letterSpacing:0.3,marginTop:1}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</div>
+                <button className="cd-cta" onClick={()=>startCardioTimer(cardioSeconds(ex.cardio.duree))} style={{marginTop:14}}>
+                  <span style={{display:'flex',alignItems:'center',gap:10,fontSize:16,fontWeight:800,letterSpacing:0.2}}>
+                    <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 1.4v13.2a.8.8 0 0 0 1.2.7l10.6-6.6a.8.8 0 0 0 0-1.4L2.2.7A.8.8 0 0 0 1 1.4z" fill="#15110a"/></svg>
+                    <span>Lancer le chrono</span>
+                  </span>
+                  <span style={{fontSize:10.5,fontWeight:700,opacity:0.7,letterSpacing:0.4}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</span>
                 </button>
               )}
             </div>
@@ -2821,14 +2872,14 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           {/* Note ressenti — petite case texte */}
           {!allExDone&&(
             <div style={{marginBottom:18}}>
-              <input value={set.note||''} onChange={e=>updSet(currentEx,nextSetIdx,{note:e.target.value})} placeholder="💬 Ressenti pendant la série (optionnel)" style={{width:'100%',height:38,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:13,color:T.text,fontSize:13,padding:'0 14px',outline:'none',fontFamily:'inherit',textAlign:'center'}}/>
+              <input value={set.note||''} onChange={e=>updSet(currentEx,nextSetIdx,{note:e.target.value})} placeholder="💬 Ressenti pendant la série (optionnel)" style={{width:'100%',boxSizing:'border-box',height:38,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:13,color:T.text,fontSize:13,padding:'0 14px',outline:'none',fontFamily:'inherit',textAlign:'center'}}/>
             </div>
           )}
 
           {/* Timer de série — boutons de durée prédéfinie (utile même pour un gainage : la
               durée cible proposée via "▶ Démarrer" peut être fausse/par défaut, l'athlète
               doit pouvoir la corriger manuellement) */}
-          {!allExDone&&setTimerSecs===0&&(
+          {!allExDone&&setTimerSecs===0&&!(ex.style==='CARDIO'&&ex.cardio)&&(
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,color:T.textFaint,fontWeight:700,letterSpacing:0.8,textTransform:'uppercase',textAlign:'center',marginBottom:8}}>⏱ Timer de série</div>
               <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap'}}>
@@ -3029,59 +3080,68 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
               })()}
 
 
-              {/* CARDIO : affichage spécial — pas de séries/poids */}
+              {/* CARDIO (SKIERG, rameur, tapis…) : console — progression des séries, durée, distances, chrono */}
               {ex.style==='CARDIO'&&ex.cardio&&(()=>{
-                const c=ex.cardio; const sc=STYLE_COLORS.CARDIO;
+                const c=ex.cardio;
                 const allDone=ex.sets.every(s=>s.done);
+                const nSets=ex.sets.length;
+                const curN=Math.min(nSets,Math.max(1,ex.sets.findIndex(s=>!s.done)+1));
+                const hasTimer=cardioSeconds(c.duree)>0;
+                const fld={border:'none',borderBottom:'1px dotted rgba(255,255,255,0.28)',background:'transparent',color:'#fff',fontSize:24,fontWeight:300,letterSpacing:-0.4,textAlign:'right',outline:'none',padding:'0 0 2px',fontFamily:'inherit',fontVariantNumeric:'tabular-nums'};
                 return(
-                  <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:8}}>
-                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                      {cardioHasVal(c.distance)&&<div style={{flex:1,minWidth:80,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
-                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Distance</div>
-                        <div style={{fontSize:20,fontWeight:700,color:T.text}}>{fixCardioVal(c.distance)}<span style={{fontSize:11,color:T.textDim,marginLeft:2}}>km</span></div>
-                      </div>}
-                      {/* Vitesse/inclinaison/durée modifiables (ex: ajuster le tapis en cours de
-                          séance) — toujours affichées dès que c'est un cardio, contrairement à la
-                          distance (lecture seule, un résultat plutôt qu'un réglage) : sinon la
-                          case disparaîtrait dès qu'on l'efface pour taper une nouvelle valeur.
-                          Soulignement en pointillés = signal visuel "modifiable, touche ici" —
-                          sans ça rien ne distinguait ces champs d'un simple texte affiché. Largeur
-                          élargie (44px→68px) : une plage comme "10-11" était tronquée dans la
-                          box précédente, trop étroite pour ce genre de valeur réelle. */}
-                      {cardioShowsSpeed(ex)&&<>
-                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
-                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Vitesse</div>
-                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center'}}>
-                          <FreeTextField value={fixCardioVal(c.vitesse)} placeholder="—" onCommit={v=>updCardio(currentEx,'vitesse',v)} style={{width:68,flexShrink:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
-                          <span style={{fontSize:11,color:T.textDim,marginLeft:2,flexShrink:0}}>km/h</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:8}}>
+                    {/* Bandeau : progression des séries à gauche, durée à droite */}
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,padding:'4px 2px 0'}}>
+                      <div style={{minWidth:0}}>
+                        <div className="cd-eyebrow">{allDone?'Terminé':nSets>1?`Série ${curN} / ${nSets}`:'Série unique'}</div>
+                        <div style={{display:'flex',gap:5,marginTop:8}}>
+                          {ex.sets.map((s,i)=>(
+                            <span key={i} style={{width:(!allDone&&i===curN-1)?24:8,height:6,borderRadius:3,transition:'all .3s cubic-bezier(.16,1,.3,1)',background:s.done?T.good:(i===curN-1?'#CDAE69':'rgba(255,255,255,0.14)')}}/>
+                          ))}
                         </div>
                       </div>
-                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
-                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Inclinaison</div>
-                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center'}}>
-                          <FreeTextField value={fixCardioVal(c.inclinaison)} placeholder="—" onCommit={v=>updCardio(currentEx,'inclinaison',v)} style={{width:68,flexShrink:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
-                          <span style={{fontSize:11,color:T.textDim,marginLeft:2,flexShrink:0}}>%</span>
-                        </div>
-                      </div>
-                      </>}
-                      <div style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:12,background:`${sc}14`,border:`1px solid ${sc}33`,textAlign:'center'}}>
-                        <div style={{fontSize:9,color:sc,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',marginBottom:2}}>Durée</div>
-                        <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{width:'100%',minWidth:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        <div className="cd-eyebrow">Durée</div>
+                        <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{...fld,width:88,marginTop:2}}/>
                       </div>
                     </div>
+                    {cardioHasVal(c.distance)&&(
+                      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11.5,color:T.textDim}}>
+                        <span className="cd-eyebrow">Objectif</span>
+                        <span style={{color:'#fff',fontWeight:600}}>{fixCardioVal(c.distance)} km</span>
+                      </div>
+                    )}
+                    {/* Vitesse / inclinaison : uniquement pour un tapis (réglables en cours de séance) */}
+                    {cardioShowsSpeed(ex)&&(
+                      <div style={{display:'flex',gap:12}}>
+                        {[{k:'vitesse',l:'Vitesse',u:'km/h'},{k:'inclinaison',l:'Inclinaison',u:'%'}].map(m=>(
+                          <div key={m.k} style={{flex:1,minWidth:0,padding:'10px 14px',borderRadius:16,background:'rgba(255,255,255,0.035)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                            <div className="cd-eyebrow">{m.l}</div>
+                            <div style={{display:'flex',alignItems:'baseline',gap:4,marginTop:2}}>
+                              <FreeTextField value={fixCardioVal(c[m.k])} placeholder="—" onCommit={v=>updCardio(currentEx,m.k,v)} style={{...fld,textAlign:'left',width:'100%',minWidth:0}}/>
+                              <span style={{fontSize:11,color:T.textDim,flexShrink:0}}>{m.u}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
-                    {!allDone&&cardioSeconds(c.duree)>0&&(
-                      <button onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0} style={{width:'100%',minHeight:54,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:1,boxShadow:'0 8px 22px rgba(44,196,160,0.3)'}}>
-                        <span>▶ Lancer le chrono · {cardioDureeLabel(c.duree)}{ex.sets.length>1?` · série ${ex.sets.findIndex(x=>!x.done)+1}/${ex.sets.length}`:''}</span>
-                        <span style={{fontSize:10.5,fontWeight:700,opacity:0.75,letterSpacing:0.3}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</span>
+                    {!allDone&&hasTimer&&(
+                      <button className="cd-cta" onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0}>
+                        <span style={{display:'flex',alignItems:'center',gap:10,fontSize:16,fontWeight:800,letterSpacing:0.2}}>
+                          <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 1.4v13.2a.8.8 0 0 0 1.2.7l10.6-6.6a.8.8 0 0 0 0-1.4L2.2.7A.8.8 0 0 0 1 1.4z" fill="#15110a"/></svg>
+                          <span>Lancer le chrono · {cardioDureeLabel(c.duree)}{nSets>1?` · série ${curN}/${nSets}`:''}</span>
+                        </span>
+                        <span style={{fontSize:10.5,fontWeight:700,opacity:0.7,letterSpacing:0.4}}>Départ après {CARDIO_PREP_SECONDS} s de préparation</span>
                       </button>
                     )}
-                    <button onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }} style={{width:'100%',height:46,borderRadius:13,border:'none',background:allDone?'rgba(255,255,255,0.06)':`linear-gradient(135deg,${sc},#BFA060)`,color:allDone?T.textDim:'#fff',fontSize:14,fontWeight:700,cursor:allDone?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                      {allDone?<><Icon name="check" size={16} stroke={T.textDim} strokeWidth={2.5}/> Cardio terminé</>:<><Icon name="check" size={16} stroke="#fff" strokeWidth={2.5}/> Marquer comme terminé</>}
+                    <button className={'cd-ghost'+(allDone?' done':'')} onClick={()=>{ if(!allDone) setExercises(prev=>prev.map((e,idx)=>idx!==currentEx?e:{...e,sets:e.sets.map(s=>({...s,done:true}))})); }}>
+                      {allDone?<><Icon name="check" size={16} stroke={T.good} strokeWidth={2.5}/> Cardio terminé</>:<><Icon name="check" size={16} stroke="currentColor" strokeWidth={2.5}/> Marquer comme terminé</>}
                     </button>
                   </div>
                 );
               })()}
+
 
               {/* set rows — design premium */}
               {ex.style!=='CARDIO'&&(<div style={{display:'flex',flexDirection:'column',gap:8}}>
