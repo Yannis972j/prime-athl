@@ -8,7 +8,9 @@ import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from '../test
 let srv, browser, coachTok, athleteId;
 const EMAIL = 'e2e-deload@test.local', PW = 'longenough1';
 const now = new Date();
-const dayStr = d => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+// Mois PRÉCÉDENT : toujours dans le passé (le serveur refuse les séances faites datées du futur).
+const pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+const dayStr = d => `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 const iso = d => `${dayStr(d)}T12:00:00.000Z`;
 const ex = (n) => ({ name: n, muscle: 'JAMBES', sets: [{ weight: 60, reps: 10, done: true }] });
 const CORAIL = 'rgb(242, 145, 107)';
@@ -43,6 +45,7 @@ test('athlète : la décharge est corail, les séances normales restent vertes, 
   await pg.waitForTimeout(3500);
   const click = async (t, to = 2500) => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: to }); await pg.waitForTimeout(700); return true; } catch { return false; } };
   for (const t of ['Passer', 'Plus tard', 'Coaching', 'Séances']) await click(t, 1500);
+  await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(500);
   await pg.waitForTimeout(800);
   const normal = await cellStyle(pg, 3), deload = await cellStyle(pg, 10), cycle = await cellStyle(pg, 14), normal2 = await cellStyle(pg, 17);
   assert.ok(normal && deload && cycle && normal2, 'cases du calendrier trouvées');
@@ -75,6 +78,7 @@ test('coach : même couleur dans le calendrier de l\'athlète, légende et badge
   await pg.waitForTimeout(800);
   try { await pg.getByText('Séances', { exact: true }).first().click({ timeout: 3000 }); } catch {}
   await pg.waitForTimeout(800);
+  await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(500);
   const normal = await cellStyle(pg, 3), deload = await cellStyle(pg, 10), cycle = await cellStyle(pg, 14);
   assert.equal(deload.color, CORAIL); assert.equal(cycle.color, CORAIL); assert.equal(normal.color, 'rgb(44, 196, 160)');
   assert.match(await pg.evaluate(() => document.body.innerText), /Décharge/, 'légende');

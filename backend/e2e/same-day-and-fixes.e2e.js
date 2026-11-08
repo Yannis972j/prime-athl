@@ -68,7 +68,7 @@ test('feedback : prénom « Yannis » (coach principal sans prénom), jamais « 
   const s = await api(srv.baseUrl, 'POST', `/api/coach/athletes/${ath}/sessions`, { token: coach, body: { name: 'FB', date: daysAgo(9).toISOString(), exercises: done('Squat', 60), totalVolume: 600 } });
   const id = s.body.session?.id || s.body.id;
   await api(srv.baseUrl, 'POST', `/api/coach/sessions/${id}/feedback`, { token: coach, body: { feedback: 'Super séance.\nContinue comme ça.' } });
-  const me = await api(srv.baseUrl, 'GET', '/api/me', { token: athToken });
+  const me = await api(srv.baseUrl, 'GET', '/api/program', { token: athToken });
   const pend = me.body.pendingCoachFeedbacks || (me.body.pendingCoachFeedback ? [me.body.pendingCoachFeedback] : []);
   assert.ok(pend.length, 'feedback en attente');
   assert.equal(pend[pend.length - 1].coachName, 'Yannis');
@@ -86,6 +86,8 @@ async function login(email, password, tz = 'America/Martinique') {
   const click = async (t, to = 2500) => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: to }); await pg.waitForTimeout(700); return true; } catch { return false; } };
   return { ctx, pg, errs, click };
 }
+// Pop-up de motivation (dès que l'athlète a plusieurs séances récentes) : on attend le bouton « Merci » puis on le clique.
+const thanks = async pg => { try { const b = pg.getByText(/^Merci/).first(); await b.waitFor({ timeout: 5000 }); await b.evaluate(el => el.click()); await pg.waitForTimeout(600); } catch (e) { console.log('THANKS', String(e).slice(0, 200)); } };
 const goToDate = async (pg, date) => {
   const want = new Date(date + 'T12:00:00');
   const diff = (today.getFullYear() - want.getFullYear()) * 12 + today.getMonth() - want.getMonth();
@@ -101,6 +103,7 @@ test('deux séances le même jour : visibles côté athlète ET côté coach', a
   }
   // Athlète
   const a = await login('sd@test.local', PW);
+  await thanks(a.pg); // pop-up de motivation (apparaît dès que l'athlète a plusieurs séances récentes)
   for (const t of ['Passer', 'Plus tard', 'Coaching', 'Séances']) await a.click(t, 1500);
   await goToDate(a.pg, day);
   assert.equal(await a.pg.locator('[data-testid="hist-sess-chip"]').count(), 2, 'deux puces côté athlète');
@@ -127,12 +130,13 @@ test('deux séances le même jour : visibles côté athlète ET côté coach', a
 
 test('bannière « Abonnement requis » : absente avec accès donné par le coach, présente sinon', async () => {
   const a = await login('sd@test.local', PW);
+  await thanks(a.pg);
   for (const t of ['Passer', 'Plus tard']) await a.click(t, 1500);
   await a.pg.waitForTimeout(500);
   assert.doesNotMatch(await a.pg.evaluate(() => document.body.innerText), /Abonnement requis|Débloquer Prime Athl/);
   await a.ctx.close();
   const f = await login('free@test.local', PW);
-  for (const t of ['Passer', 'Plus tard']) await f.click(t, 1500);
+  for (const t of ['Merci', 'Passer', 'Plus tard']) await f.click(t, 1500);
   const body = await f.pg.evaluate(() => document.body.innerText);
   if (SHOT) await f.pg.screenshot({ path: `${SHOT}/banner-free.png` });
   assert.match(body, /Abonnement requis/, 'sans accès : la bannière reste');
