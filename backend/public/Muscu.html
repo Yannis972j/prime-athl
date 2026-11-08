@@ -1853,11 +1853,14 @@ const PrimeAudio=(()=>{
 
 // Carte « Distance réalisée » d'un exercice cardio : une ligne par série (modifiable à tout moment, même
 // après validation), repère « dernière fois » en placeholder et écart en direct — comme poids/reps en muscu.
-function CardioDistanceCard({sets,last,onChange}){
+function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
   const total=cardioDistanceTotal(sets);
   const lastTotal=last?last.total:0;
   const multi=(sets||[]).length>1;
-  const delta=total>0&&lastTotal>0?total-lastTotal:null;
+  // Comparaison en direct seulement si même nombre de séries renseignées que la dernière fois (même règle que le récap).
+  const nFilled=(sets||[]).filter(x=>setDistanceM(x)>0).length;
+  const sameShape=!!last&&nFilled===(last.perSet||[]).filter(m=>m>0).length;
+  const delta=total>0&&lastTotal>0&&sameShape?total-lastTotal:null;
   const dc=delta==null?T.textDim:delta>0?T.good:delta<0?T.danger:T.textDim;
   return(
     <div data-testid="cardio-distance" style={{padding:'12px 14px',borderRadius:14,background:'rgba(44,196,160,0.07)',border:'1px solid rgba(44,196,160,0.28)',textAlign:'left'}}>
@@ -1878,8 +1881,15 @@ function CardioDistanceCard({sets,last,onChange}){
           </div>
         ))}
       </div>
+      {(onAdd||onRemove)&&(
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          {onAdd&&(sets||[]).length<10&&<button type="button" data-testid="cardio-add-set" onClick={onAdd} style={{flex:1,height:34,borderRadius:10,border:'1px dashed rgba(44,196,160,0.45)',background:'rgba(44,196,160,0.06)',color:'#2CC4A0',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Ajouter une série</button>}
+          {onRemove&&(sets||[]).length>1&&<button type="button" data-testid="cardio-del-set" onClick={onRemove} style={{height:34,padding:'0 12px',borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:600,cursor:'pointer'}}>− Retirer la dernière</button>}
+        </div>
+      )}
       <div style={{marginTop:8,fontSize:11,lineHeight:1.4,color:delta==null?T.textFaint:dc,fontWeight:delta==null?500:700}}>
         {delta!=null?`${delta>0?'↑ +':delta<0?'↓ ':'= '}${delta!==0?fmtDistanceM(Math.abs(delta)).replace(' m','')+' m':'même distance'} vs la dernière fois`
+          :lastTotal>0&&total>0&&!sameShape?`Total ${fmtDistanceM(total)} · pas de comparaison : le nombre de séries a changé.`
           :lastTotal>0?'Note ta distance pour suivre ta progression.'
           :'Ta distance du jour servira de repère pour la prochaine séance.'}
       </div>
@@ -2727,7 +2737,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           )}
           {ex.style==='CARDIO'&&ex.cardio&&(
             <div style={{marginBottom:24}}>
-              <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))}/>
+              <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
             </div>
           )}
           {!allExDone&&!(ex.style==='CARDIO'&&ex.cardio)&&(
@@ -3033,7 +3043,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <FreeTextField value={fixCardioVal(c.duree)} placeholder="—" onCommit={v=>updCardio(currentEx,'duree',v)} style={{width:'100%',minWidth:0,border:'none',borderBottom:'1px dashed rgba(255,255,255,0.3)',background:'transparent',color:T.text,fontSize:20,fontWeight:700,textAlign:'center',outline:'none',padding:'0 0 2px',fontFamily:'inherit'}}/>
                       </div>
                     </div>
-                    <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))}/>
+                    <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
                     {!allDone&&cardioSeconds(c.duree)>0&&(
                       <button onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0} style={{width:'100%',minHeight:54,borderRadius:14,border:'none',background:'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:'#0c0c12',fontSize:15,fontWeight:800,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:1,boxShadow:'0 8px 22px rgba(44,196,160,0.3)'}}>
                         <span>▶ Lancer le chrono · {cardioDureeLabel(c.duree)}{ex.sets.length>1?` · série ${ex.sets.findIndex(x=>!x.done)+1}/${ex.sets.length}`:''}</span>
@@ -6670,7 +6680,9 @@ function CompLoadLine({ex,isNew,good,down}){
     if(!(ex.curDist>0))return null;
     if(isNew||!(ex.prevDist>0))return <span>Distance : {fmtDistanceM(ex.curDist)}</span>;
     const dd=ex.curDist-ex.prevDist;
-    return <span>Distance : {fmtDistanceM(ex.prevDist)}→<b style={{color:dd>0?good:dd<0?down:neutral}}>{fmtDistanceM(ex.curDist)}</b>{dd!==0&&<span style={{color:dd>0?good:down}}> ({dd>0?'+':''}{fmtThousands(dd)})</span>}</span>;
+    // Séries différentes d'une fois sur l'autre : on montre les deux totaux, sans couleur ni jugement.
+    if(!ex.distComparable)return <span>Distance : {fmtDistanceM(ex.prevDist)}→{fmtDistanceM(ex.curDist)} <span style={{opacity:0.7}}>(séries différentes)</span></span>;
+    return <span>Distance : {fmtDistanceM(ex.prevDist)}→<b style={{color:ex.status==='up'?good:ex.status==='down'?down:neutral}}>{fmtDistanceM(ex.curDist)}</b>{dd!==0&&<span style={{color:ex.status==='up'?good:ex.status==='down'?down:neutral}}> ({dd>0?'+':''}{fmtThousands(dd)})</span>}</span>;
   }
   if(kind==='hold'){
     if(isNew)return ex.curHold>0?<span>Durée : {fmtHoldDuration(ex.curHold)}</span>:null;
@@ -6880,7 +6892,11 @@ function buildSessionComparison(target,history,extraRange){
     // Cardio : la progression se lit sur la DISTANCE réalisée (somme des séries) quand elle est saisie des
     // deux côtés ; sinon (pas de distance, ou première fois) rien à comparer → 'na', comme avant.
     const prevDist=cardio?cardioDistanceTotal(pSets):0;
-    if(cardio){kind='cardio';if(curDist>0&&prevDist>0){const d=cmp(curDist,prevDist);status=d>0?'up':d<0?'down':'same';isPR=d>0;}else status='na';}
+    // On ne juge que des séances de MÊME structure (même nombre de séries avec une distance) : 1 × 1 300 m contre
+    // 3 × 400 m n'est ni un progrès ni un recul. Tolérance ±2 % (un ergo n'est jamais exactement reproductible).
+    const nDist=sets=>sets.filter(x=>setDistanceM(x)>0).length;
+    const distComparable=cardio&&curDist>0&&prevDist>0&&nDist(curSets)===nDist(pSets);
+    if(cardio){kind='cardio';if(distComparable){status=curDist>=prevDist*1.02?'up':curDist<=prevDist*0.98?'down':'same';isPR=status==='up';}else status='na';}
     else if(assisted){
       kind='assisted';
       const a=avgAssist(curSets),b=avgAssist(pSets);
@@ -6896,7 +6912,7 @@ function buildSessionComparison(target,history,extraRange){
     else{status=vDelta>0?'up':vDelta<0?'down':'same';isPR=curMaxW>0&&wDelta>0;}
     if(isPR)prsCount++;
     if(status==='na')naCount++;else if(status==='up')upCount++;else if(status==='down')downCount++;else sameCount++;
-    pushRow({name:ex.name,status,kind,isPR,curDist,prevDist,dDelta:curDist-prevDist,curMaxW,prevMaxW,wDelta,curVol,prevVol,
+    pushRow({name:ex.name,status,kind,isPR,curDist,prevDist,dDelta:curDist-prevDist,distComparable:!!distComparable,curMaxW,prevMaxW,wDelta,curVol,prevVol,
       // Écart de volume en kg : uniquement pour la muscu chargée (sinon valeur trompeuse ou vide).
       vDelta:kind==='strength'?vDelta:0,
       curSets:curSets.length,prevSets:pSets.length,curTotalReps,prevTotalReps,curHold,prevHold,atCap,topReps:top,curE1RM,prevE1RM,e1Delta:curE1RM-prevE1RM,assisted});

@@ -65,6 +65,20 @@ test('récap : plus loin → ↑ + PR ; moins loin → ↓ ; identique → = ; s
   assert.equal(cmp(sk(0), sk(0)).exercises[0].status, 'na');
 });
 
+test('récap : tolérance ±2 % ; séries différentes d\'une fois sur l\'autre → aucun jugement', () => {
+  assert.equal(cmp(sk(1000), sk(1015)).exercises[0].status, 'same', '+1,5 % : stable');
+  assert.equal(cmp(sk(1000), sk(985)).exercises[0].status, 'same', '−1,5 % : stable');
+  assert.equal(cmp(sk(1000), sk(1020)).exercises[0].status, 'up');
+  assert.equal(cmp(sk(1000), sk(980)).exercises[0].status, 'down');
+  assert.equal(cmp(sk(1000), sk(1015)).exercises[0].isPR, false);
+  // 1 × 1 300 m puis 3 × 400 m : pas comparable (ni hausse, ni baisse) mais on garde les deux totaux
+  const c = cmp(sk(1300), sk(400, 400, 400));
+  assert.equal(c.exercises[0].status, 'na'); assert.equal(c.exercises[0].distComparable, false);
+  assert.equal(c.exercises[0].prevDist, 1300); assert.equal(c.exercises[0].curDist, 1200);
+  assert.equal(c.downCount, 0); assert.equal(c.totalExercises, 0);
+  assert.equal(cmp(sk(300, 300, 300), sk(310, 320, 330)).exercises[0].distComparable, true);
+});
+
 test('récap : plusieurs séries → somme comparée ; compteurs hausse/baisse alimentés', () => {
   const c = cmp(sk(300, 280, 260), sk(310, 300, 280));
   assert.equal(c.exercises[0].curDist, 890); assert.equal(c.exercises[0].prevDist, 840);
