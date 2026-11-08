@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { universeOverride, applyUniverseChange, cleanUniverseAccess } from './universe-access.js';
 import { validCatalogPriceCents } from './catalog-price.js';
 import { applyMove, cancelMove } from './schedule-moves.js';
 import { toValidDateMs, sessionDateISO, strictSessionDate, entryDateMs, validWeightKg, repairStoredDates } from './dates.js';
@@ -159,6 +160,10 @@ function userHasAccess(u, universe) {
   if (!u) return false;
   if (u.email === MAIN_COACH_EMAIL) return true;
   if (u.role === 'coach') return true;
+  // Choix explicite du coach (case cochée / décochée) : prioritaire sur tout le reste.
+  const ov = universeOverride(u, universe);
+  if (ov !== undefined) return ov;
+  if (universe === 'programmes') return true; // Catalogue : ouvert à tous sauf décision contraire du coach
   if (u.fullAccess) return true;
   if (u.stripeStatus === 'active' && u.stripePlan) {
     return (PLAN_UNIVERSES[u.stripePlan] || []).includes(universe);
@@ -732,6 +737,7 @@ const profileOf = u => u && {
   requestedRole: u.requestedRole || u.role || 'athlete',
   premium: !!u.premium,
   fullAccess: !!u.fullAccess,
+  universeAccess: cleanUniverseAccess(u.universeAccess),
   // Fenêtre d'accès à durée limitée fixée par le coach (null = illimité). Le client s'en sert
   // pour les rappels J-3/J-2/J-1 et pour l'écran de blocage une fois la date dépassée.
   accessExpiresAt: u.accessExpiresAt || null,
@@ -4111,7 +4117,7 @@ let SEANCES_CACHE = loadSeances();
 app.get('/api/seances', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
-  if (!u.premium && !u.fullAccess && !userHasAccess(u, 'coach')) return res.status(403).json({ error: 'premium_required' });
+  if (!u.premium && !userHasAccess(u, 'explorer')) return res.status(403).json({ error: 'premium_required' });
   const category = req.query.category;
   const list = category ? SEANCES_CACHE.filter(s => s.category === category) : SEANCES_CACHE;
   res.json(list);
@@ -4121,7 +4127,7 @@ app.get('/api/seances', authRequired, (req, res) => {
 app.get('/api/seances/random', authRequired, (req, res) => {
   const u = DATA.users[req.user.id];
   if (!u) return res.status(401).json({ error: 'not_found' });
-  if (!u.premium && !u.fullAccess && !userHasAccess(u, 'coach')) return res.status(403).json({ error: 'premium_required' });
+  if (!u.premium && !userHasAccess(u, 'explorer')) return res.status(403).json({ error: 'premium_required' });
   const category = req.query.category;
   const pool = SEANCES_CACHE.filter(s => s.random !== false && (!category || s.category === category));
   if (!pool.length) return res.status(404).json({ error: 'no_seance' });
@@ -4182,6 +4188,19 @@ app.post('/api/access/grant/:userId', authRequired, coachOnly, mainCoachOnly, (r
   persist();
   io.to('user:' + u.id).emit('full-access-updated', { fullAccess: u.fullAccess });
   res.json({ ok: true, fullAccess: u.fullAccess });
+});
+
+// Coach principal : cocher / décocher l'accès à UN univers (coach, ia, explorer, programmes) ou à tous
+// d'un coup ({ all: true|false }). Un choix explicite l'emporte sur l'accès complet / l'abonnement.
+app.post('/api/access/universes/:userId', authRequired, coachOnly, mainCoachOnly, (req, res) => {
+  const u = DATA.users[req.params.userId];
+  if (!u || u.role === 'coach') return res.status(404).json({ error: 'not_found' });
+  const next = applyUniverseChange(u.universeAccess, req.body);
+  if (!next) return res.status(400).json({ error: 'invalid_universe' });
+  u.universeAccess = next;
+  persist();
+  io.to('user:' + u.id).emit('universe-access-updated', { universeAccess: next });
+  res.json({ ok: true, universeAccess: next });
 });
 
 // ── Training Programs (Programmes d'entraînement) ───────────────────────────
@@ -4777,6 +4796,7 @@ app.get('/api/stripe/status', authRequired, (req, res) => {
     explorer: userHasAccess(u, 'explorer'),
     ia:       userHasAccess(u, 'ia'),
     coach:    userHasAccess(u, 'coach'),
+    programmes: userHasAccess(u, 'programmes'),
   };
   res.json({
     plan: u.stripePlan || null,
