@@ -44,7 +44,8 @@ async function openDay(offset = 0) {
   return { ctx, pg, click, errs, date: ymd(target) };
 }
 async function play(pg, click) {
-  await click('Démarrer la séance', 3000);
+  // Jour d'aujourd'hui : « Démarrer la séance » ; jour déjà passé : « Valider à cette date » (enregistrée à cette date).
+  if (!(await click('Démarrer la séance', 2500))) await click('Valider à cette date', 3000);
   await click("C'est parti", 1500);
   let idle = 0;
   for (let g = 0; g < 120 && idle < 8; g++) {
