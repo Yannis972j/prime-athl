@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { validCatalogPriceCents } from './catalog-price.js';
 import { applyMove, cancelMove } from './schedule-moves.js';
 import { toValidDateMs, sessionDateISO, strictSessionDate, entryDateMs, validWeightKg, repairStoredDates } from './dates.js';
 import { sanitizePhrases, seedSwimPhrases } from './personal-mindset.js';
@@ -4381,11 +4382,13 @@ app.post('/api/admin/training-programs', authRequired, mainCoachOnly, (req, res)
   const { name, shortDescription, description, coverImage, duration, price, level, category,
     objectives, sessionsPerWeek, sessionDuration, expectedResults, weeks } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name_required' });
+  const priceCents = validCatalogPriceCents(price);
+  if (priceCents === null) return res.status(400).json({ error: 'invalid_price', detail: 'Prix : gratuit, ou entre 9,99 € et 499 €.' });
   const id = uid();
   DATA.trainingPrograms[id] = {
     id, name, shortDescription: shortDescription || '', description: description || '',
     coverImage: coverImage || '', duration: duration || '1month',
-    price: parseInt(price) || 0, level: level || 'Débutant',
+    price: priceCents, level: level || 'Débutant',
     category: category || 'fullbody',
     objectives: objectives || '', sessionsPerWeek: parseInt(sessionsPerWeek) || 3,
     sessionDuration: sessionDuration || '60min', expectedResults: expectedResults || '',
@@ -4671,6 +4674,8 @@ app.post('/api/admin/training-programs/import', authRequired, mainCoachOnly, upl
       ? (parseInt(meta.frequency) || Math.ceil(allSessions / (durationMonths * 4)))
       : Math.ceil(allSessions / (durationMonths * 4));
 
+    const importPrice = validCatalogPriceCents(meta.price || 0);
+    if (importPrice === null) return res.status(400).json({ error: 'invalid_price', detail: 'Prix du fichier : gratuit, ou entre 9,99 € et 499 €.' });
     const id = uid();
     DATA.trainingPrograms[id] = {
       id,
@@ -4679,7 +4684,7 @@ app.post('/api/admin/training-programs/import', authRequired, mainCoachOnly, upl
       description: meta.description || '',
       coverImage: '',
       duration: durationKey,
-      price: meta.price || 0,
+      price: importPrice,
       level: meta.level || 'Intermédiaire',
       category: parseCategory(meta.category),
       objectives: meta.objectives || '',
@@ -4707,10 +4712,16 @@ app.put('/api/admin/training-programs/:id', authRequired, mainCoachOnly, (req, r
   const allowed = ['name', 'shortDescription', 'description', 'coverImage', 'duration', 'price',
     'level', 'category', 'objectives', 'sessionsPerWeek', 'sessionDuration', 'expectedResults',
     'published', 'weeks', 'emoji', 'frequency'];
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) prog[k] = req.body[k];
+  // Prix : validé seulement s'il CHANGE (un ancien programme hors bornes reste modifiable pour le reste).
+  let newPrice = null;
+  if (req.body.price !== undefined && (parseInt(req.body.price) || 0) !== (prog.price || 0)) {
+    newPrice = validCatalogPriceCents(req.body.price);
+    if (newPrice === null) return res.status(400).json({ error: 'invalid_price', detail: 'Prix : gratuit, ou entre 9,99 € et 499 €.' });
   }
-  if (req.body.price !== undefined) prog.price = parseInt(req.body.price) || 0;
+  for (const k of allowed) {
+    if (k !== 'price' && req.body[k] !== undefined) prog[k] = req.body[k];
+  }
+  if (newPrice !== null) prog.price = newPrice;
   if (req.body.sessionsPerWeek !== undefined) prog.sessionsPerWeek = parseInt(req.body.sessionsPerWeek) || 3;
   prog.updatedAt = Date.now();
   persist();
