@@ -633,6 +633,9 @@ function cardioSeconds(v) {
   if (m) return Math.round(parseFloat(m[1].replace(',', '.')) * 60);
   return 0;
 }
+// Couleur d'une séance de DÉCHARGE sur les calendriers (distincte du vert « fait », de l'or « prévu », du lavande « déplacée » et du bleu « planifiée »).
+const DELOAD_CAL = '#F2916B';
+const DELOAD_CAL_BG = 'rgba(242,145,107,0.1)', DELOAD_CAL_BORDER = '1px solid rgba(242,145,107,0.38)';
 const CARDIO_PREP_SECONDS = 10; // décompte « prépare-toi » avant le départ du chrono cardio
 const fmtClock = secs => Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
 // Distance RÉALISÉE d'un cardio (SKIERG, rameur…) : saisie par série, en MÈTRES, c'est le repère de
@@ -7515,6 +7518,13 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     return s;
   },[history]);
 
+  // Jours dont TOUTES les séances faites sont des décharges (une séance normale ce jour-là → couleur « fait »).
+  const deloadDates=React.useMemo(()=>{
+    const non=new Set(),all=new Set();
+    (history||[]).forEach(h=>{if(!h.date)return;const k=ymdKey(new Date(h.date));all.add(k);if(!h.deload)non.add(k);});
+    return new Set([...all].filter(k=>!non.has(k)));
+  },[history]);
+
   // Build calendar days for current month
   const calDays=React.useMemo(()=>buildCalDays(calYear,calMonth),[calYear,calMonth]);
 
@@ -8111,7 +8121,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
 
           {/* Legend */}
           <div style={{display:'flex',gap:14,marginBottom:10}}>
-            {[['#BFA060','Séance prévue'],['#2CC4A0','Séance faite'],['#5A8AE0','Planifiée']].map(([c,l])=>(
+            {[['#BFA060','Séance prévue'],['#2CC4A0','Séance faite'],...(deloadDates.size?[[DELOAD_CAL,'Décharge']]:[]),['#5A8AE0','Planifiée']].map(([c,l])=>(
               <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:10,color:T.textDim}}>
                 <div style={{width:7,height:7,borderRadius:4,background:c}}/>
                 {l}
@@ -8137,6 +8147,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               const effectiveDayName=movedHere?movedHere.sourceDayName:dayName;
               const hasWorkout=!!(daysForDate(dateStr)[effectiveDayName])&&!isMovedAway;
               const isDone=doneDates.has(dateStr);
+              const isDeloadDay=isDone&&deloadDates.has(dateStr);
               const hasPlanned=(planned[dateStr]||[]).length>0;
               const isToday=dateStr===todayStr;
               const isSel=selectedDay&&selectedDay.dateStr===dateStr;
@@ -8145,7 +8156,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
               let bg='rgba(255,255,255,0.03)';
               let border='1px solid rgba(255,255,255,0.06)';
               let color=T.textFaint;
-              if(isDone){bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';color='#2CC4A0';}
+              if(isDone){if(isDeloadDay){bg=DELOAD_CAL_BG;border=DELOAD_CAL_BORDER;color=DELOAD_CAL;}else{bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';color='#2CC4A0';}}
               else if(hasWorkout){bg=movedHere?'rgba(144,144,196,0.1)':'rgba(191,160,96,0.1)';border=movedHere?'1px solid rgba(144,144,196,0.35)':'1px solid rgba(191,160,96,0.3)';color=movedHere?'#9090c4':'#BFA060';}
               else if(hasPlanned){bg='rgba(90,138,224,0.1)';border='1px solid rgba(90,138,224,0.3)';color='#5A8AE0';}
               if(isToday)border='2px solid rgba(191,160,96,0.7)';
@@ -8164,7 +8175,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   style={{aspectRatio:'1',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:canSelect?'pointer':'default',background:bg,border,transition:'background 0.15s,border 0.15s',userSelect:'none',WebkitUserSelect:'none'}}>
                   <span style={{fontSize:12,fontWeight:600,color,opacity:isDragSrc?0.5:1}}>{d}</span>
                   <div style={{display:'flex',gap:2,marginTop:1}}>
-                    {(hasWorkout||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?'#2CC4A0':(movedHere?'#9090c4':'#BFA060')}}/>}
+                    {(hasWorkout||isDone)&&<div style={{width:4,height:4,borderRadius:2,background:isDone?(isDeloadDay?DELOAD_CAL:'#2CC4A0'):(movedHere?'#9090c4':'#BFA060')}}/>}
                     {hasPlanned&&<div style={{width:4,height:4,borderRadius:2,background:'#5A8AE0'}}/>}
                   </div>
                   {isDragOver&&<div style={{fontSize:8,color:'#2CC4A0',fontWeight:700,marginTop:2}}>+</div>}
@@ -8185,6 +8196,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const isFromScheduled=scheduledActivateOn&&scheduledSheetData&&selectedDay.dateStr>=scheduledActivateOn;
             const d=daysForDate(selectedDay.dateStr)[selectedDay.dayName];
             const isDone=doneDates.has(selectedDay.dateStr);
+            const isDeloadSel=isDone&&deloadDates.has(selectedDay.dateStr);
             // Cherche la séance dans l'historique pour ce jour (copie par drag ou séance faite)
             const histSession=(history||[]).find(h=>h.date&&ymdKey(new Date(h.date))===selectedDay.dateStr);
             const displayExercises=d?d.exercises.map(ex=>lightenExercise(applyDeload(ex),dayLightFor(selectedDay.dateStr))):(histSession?.exercises||null);
@@ -8212,7 +8224,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                     <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{displayName}</div>
                     {isFromScheduled&&d&&<div style={{fontSize:10,color:'#5A8AE0',fontWeight:700,marginTop:3}}>📅 Programme prévu</div>}
                   </div>
-                  <div style={{padding:'3px 10px',borderRadius:20,fontSize:10,fontWeight:700,background:isDone?'rgba(44,196,160,0.15)':'rgba(191,160,96,0.15)',color:isDone?'#2CC4A0':'#BFA060'}}>{isDone?'✓ Fait':'À faire'}</div>
+                  <div data-testid="day-status" style={{padding:'3px 10px',borderRadius:20,fontSize:10,fontWeight:700,background:isDone?(isDeloadSel?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.15)'):'rgba(191,160,96,0.15)',color:isDone?(isDeloadSel?DELOAD_CAL:'#2CC4A0'):'#BFA060'}}>{isDone?(isDeloadSel?'🪶 Fait · Décharge':'✓ Fait'):'À faire'}</div>
                 </div>
                 {displayExercises&&(
                   <>
@@ -9198,7 +9210,7 @@ function MonthCalendar({year,month,onPrevMonth,onNextMonth,selected,onSelectDay,
           if(isToday){border=info.todayBorder??'1px solid rgba(191,160,96,0.5)';boxShadow='0 0 0 2px rgba(191,160,96,0.35), 0 2px 8px rgba(0,0,0,0.3)';}
           if(isSel){bg=info.selBg??'rgba(191,160,96,0.2)';border=info.selBorder??'1px solid #BFA060';boxShadow='0 0 0 2px rgba(191,160,96,0.55), 0 4px 12px rgba(191,160,96,0.2)';}
           return(
-            <div key={i} onClick={()=>selectable&&onSelectDay(isSel?null:dateStr)} title={info.title}
+            <div key={i} data-cal-date={dateStr} onClick={()=>selectable&&onSelectDay(isSel?null:dateStr)} title={info.title}
               style={{aspectRatio:'1',borderRadius:12,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:selectable?'pointer':'default',background:bg,border,boxShadow,transition:'background 0.15s,border-color 0.15s,box-shadow 0.15s'}}>
               <span style={{fontSize:12.5,fontWeight:isToday||isSel?800:600,color:info.textColor??T.textFaint,lineHeight:1}}>{d}</span>
               {info.dots&&info.dots.length>0&&(
@@ -10651,7 +10663,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           </div>
         );
         const items=[];
-        if(mode!=='nutrition'){items.push(chip('#BFA060','Prévu'));items.push(chip('#2CC4A0','Fait'));if(mode==='sport')items.push(chip('#5A8AE0','Planifiée'));}
+        if(mode!=='nutrition'){items.push(chip('#BFA060','Prévu'));items.push(chip('#2CC4A0','Fait'));if((sessions||[]).some(x=>x&&x.deload))items.push(chip(DELOAD_CAL,'Décharge'));if(mode==='sport')items.push(chip('#5A8AE0','Planifiée'));}
         if(mode==='nutrition')items.push(chip('#BFA060','Planifié'));
         if(mode!=='sport')items.push(chip('#5A8AE0','Nutrition validée'));
         return <div style={{display:'flex',gap:7,marginBottom:12,flexWrap:'wrap'}}>{items}</div>;
@@ -10673,18 +10685,18 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
             if(nutriOk){bg='rgba(90,138,224,0.12)';border='1px solid rgba(90,138,224,0.35)';}
             else if(nutriPlanned){bg='rgba(191,160,96,0.08)';border='1px solid rgba(191,160,96,0.22)';}
           }else{
-            if(sessDone){bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';}
+            if(sessDone){if(sessDone.deload){bg=DELOAD_CAL_BG;border=DELOAD_CAL_BORDER;}else{bg='rgba(44,196,160,0.1)';border='1px solid rgba(44,196,160,0.3)';}}
             else if(hasProg){bg=movedHere?'rgba(144,144,196,0.1)':'rgba(191,160,96,0.08)';border=movedHere?'1px solid rgba(144,144,196,0.35)':'1px solid rgba(191,160,96,0.22)';}
             else if(hasPlanned){bg='rgba(90,138,224,0.08)';border='1px solid rgba(90,138,224,0.25)';}
             if(mode==='all'&&nutriOk&&!sessDone)border='1px solid rgba(90,138,224,0.25)';
           }
           const canClick=hasProg||sessDone||nutriOk||nutriPlanned||isMovedAway||hasPlanned;
-          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':nutriPlanned?'#BFA060':T.textFaint):(sessDone?'#2CC4A0':movedHere?'#9090c4':hasProg?'#BFA060':hasPlanned?'#5A8AE0':T.textFaint);
+          const numColor=mode==='nutrition'?(nutriOk?'#5A8AE0':nutriPlanned?'#BFA060':T.textFaint):(sessDone?(sessDone.deload?DELOAD_CAL:'#2CC4A0'):movedHere?'#9090c4':hasProg?'#BFA060':hasPlanned?'#5A8AE0':T.textFaint);
           return{
             selectable:canClick,
             bg,border,textColor:numColor,
             dots:[
-              ...(sessDone?['#2CC4A0']:[]),
+              ...(sessDone?[sessDone.deload?DELOAD_CAL:'#2CC4A0']:[]),
               ...(!sessDone&&hasProg?[movedHere?'#9090c4':'#BFA060']:[]),
               ...(hasPlanned?['#5A8AE0']:[]),
               ...(nutriOk&&mode!=='sport'?['#5A8AE0']:[]),
@@ -10713,16 +10725,17 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           <div style={{marginTop:8,padding:'12px 14px',borderRadius:14,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)'}}>
             <div style={{fontSize:11,color:T.textDim,fontWeight:600,textTransform:'capitalize',marginBottom:10}}>{dateLabel}</div>
             {mode!=='nutrition'&&(
-              <div style={{marginBottom:8,padding:'8px 10px',borderRadius:10,background:sess?'rgba(44,196,160,0.08)':hasProg?(movedHere?'rgba(144,144,196,0.08)':'rgba(191,160,96,0.06)'):plannedHere.length>0?'rgba(90,138,224,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?'rgba(44,196,160,0.25)':hasProg?(movedHere?'rgba(144,144,196,0.3)':'rgba(191,160,96,0.18)'):plannedHere.length>0?'rgba(90,138,224,0.25)':'rgba(255,255,255,0.06)'}`}}>
+              <div style={{marginBottom:8,padding:'8px 10px',borderRadius:10,background:sess?(sess.deload?'rgba(242,145,107,0.08)':'rgba(44,196,160,0.08)'):hasProg?(movedHere?'rgba(144,144,196,0.08)':'rgba(191,160,96,0.06)'):plannedHere.length>0?'rgba(90,138,224,0.06)':'rgba(255,255,255,0.02)',border:`1px solid ${sess?(sess.deload?'rgba(242,145,107,0.3)':'rgba(44,196,160,0.25)'):hasProg?(movedHere?'rgba(144,144,196,0.3)':'rgba(191,160,96,0.18)'):plannedHere.length>0?'rgba(90,138,224,0.25)':'rgba(255,255,255,0.06)'}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                   <div style={{fontSize:9,fontWeight:700,letterSpacing:0.4,textTransform:'uppercase',color:T.textFaint}}>Séance</div>
                   {movedHere&&<div style={{fontSize:9,fontWeight:700,color:'#9090c4'}}>🔄 Déplacée</div>}
+                  {sess&&sess.deload&&<div data-testid="cal-deload-badge" style={{fontSize:9,fontWeight:800,color:DELOAD_CAL,letterSpacing:0.3}}>🪶 Décharge</div>}
                 </div>
                 {sess?(
                   <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:34,height:34,borderRadius:10,background:'rgba(44,196,160,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check" size={16} stroke={T.good}/></div>
+                    <div style={{width:34,height:34,borderRadius:10,background:sess.deload?'rgba(242,145,107,0.16)':'rgba(44,196,160,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check" size={16} stroke={sess.deload?DELOAD_CAL:T.good}/></div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13.5,fontWeight:800,color:'#2CC4A0',lineHeight:1.25,wordBreak:'break-word'}}>{sess.name||effectiveDayName}</div>
+                      <div style={{fontSize:13.5,fontWeight:800,color:sess.deload?DELOAD_CAL:'#2CC4A0',lineHeight:1.25,wordBreak:'break-word'}}>{sess.name||effectiveDayName}</div>
                       <div style={{fontSize:10.5,color:T.textFaint,marginTop:2,display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
                         <span><b style={{color:T.textDim,fontWeight:700}}>{Math.round(sess.totalVolume||0).toLocaleString('fr-FR')}</b> kg</span>
                         <span>· {(sess.exercises||[]).length} exo{(sess.exercises||[]).length>1?'s':''}</span>
