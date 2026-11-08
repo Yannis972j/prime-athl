@@ -20,6 +20,7 @@ import multer from 'multer';
 import XLSX from 'xlsx';
 import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
+import { feedbackStats } from './athlete-activity.js';
 import { universeOverride, applyUniverseChange, cleanUniverseAccess } from './universe-access.js';
 import { validCatalogPriceCents } from './catalog-price.js';
 import { applyMove, cancelMove } from './schedule-moves.js';
@@ -1528,6 +1529,8 @@ app.get('/api/coach/athletes', authRequired, coachOnly, (req, res) => {
       ...libraryInfoOf(u.id),
       sessionCount: userSessions.length,
       lastSessionAt: lastSession ? lastSession.date : null,
+      // Onglets « Aujourd'hui » / « À commenter » de la liste coach.
+      ...feedbackStats(userSessions, { tz: MOTIVATION_TZ }),
     };
   });
   res.json({ athletes, total, page, limit, pages: Math.ceil(total / limit) });
