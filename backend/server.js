@@ -2264,7 +2264,7 @@ function sanitizeCoachExercise(e) {
       // comparatif entre séances de même nom) l'ignorent et affichent « 0 kg / 0 série » alors
       // que le volume total est correct. On honore un `done` déjà présent, sinon on le déduit des
       // données saisies ; une série totalement vide (placeholder) reste non faite.
-      const logged = s.done === true || (+s.reps || 0) > 0 || (+s.weight || 0) > 0 || repsL > 0 || repsR > 0;
+      const logged = s.done === true || (+s.reps || 0) > 0 || (+s.weight || 0) > 0 || repsL > 0 || repsR > 0 || (isCardio && (+s.distance || 0) > 0);
       return {
         weight: +s.weight || 0, reps: +s.reps || 0, rest: +s.rest || 0,
         // Unilatéral : G et D se renseignent sur la MÊME série (pas deux séries distinctes) —
@@ -2272,6 +2272,7 @@ function sanitizeCoachExercise(e) {
         // continuent de fonctionner sans rien changer ailleurs.
         ...(e.unilateral ? { repsL, repsR } : {}),
         ...(logged ? { done: true } : {}),
+        ...(isCardio && (+s.distance || 0) > 0 ? { distance: Math.max(0, Math.min(100000, Math.round(+s.distance) || 0)) } : {}),
         ...(s.note ? { note: String(s.note).slice(0, 200) } : {}),
       };
     }),
@@ -2353,6 +2354,8 @@ app.post('/api/sessions', authRequired, accessActive, (req, res) => {
         weight: Math.max(0, Math.min(1000, parseFloat(s.weight) || 0)),
         reps: Math.max(0, Math.min(200, parseInt(s.reps) || 0)),
         done: !!s.done,
+        // Cardio : distance RÉALISÉE (m) de la série — repère de progression (SKIERG, rameur…).
+        ...(style === 'CARDIO' && (+s.distance || 0) > 0 ? { distance: Math.max(0, Math.min(100000, Math.round(+s.distance) || 0)) } : {}),
         // Unilatéral : G et D se renseignent sur la MÊME série — reps ci-dessus reste la somme
         // des deux, pour que le volume/les stats existants continuent de fonctionner tels quels.
         ...(ex.unilateral ? { repsL: Math.max(0, Math.min(200, parseInt(s.repsL) || 0)), repsR: Math.max(0, Math.min(200, parseInt(s.repsR) || 0)) } : {}),
