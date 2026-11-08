@@ -1897,11 +1897,13 @@ const PrimeAudio=(()=>{
 // Carte « Distance réalisée » d'un exercice cardio : un registre propre, une ligne par série (modifiable à tout
 // moment, même après validation) avec, SOUS CHAQUE SÉRIE, la distance de la dernière fois, l'écart et le cumul ;
 // en bas le cumul total et une jauge face à la dernière fois — comme poids/reps en muscu.
-function CardioDistanceCard({sets,last,name,onChange,onAdd,onRemove}){
+function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
   const list=sets||[];
   // Règle de progression (SKIERG RESISTANCE) : objectif du jour tiré de la dernière fois + bilan en direct.
   const prog=isProgressiveCardio(name);
-  const goal=prog&&last?cardioProgression(last.perSet):null;
+  const base=prog&&last?cardioProgression(last.perSet):null;
+  // Objectif fixé par le coach (surcharge progressive +50 m validée dans le récap) : prioritaire sur le calcul automatique.
+  const goal=prog&&coachGoal>0?{...(base||{}),target:coachGoal,coach:true,ok:coachGoal>((base&&base.avg)||0)}:base;
   const now=prog?cardioProgression(list.map(setDistanceM)):null;
   const multi=list.length>1;
   const total=cardioDistanceTotal(list);
@@ -1933,14 +1935,14 @@ function CardioDistanceCard({sets,last,name,onChange,onAdd,onRemove}){
                 :<div style={{fontSize:14,fontWeight:700,color:'#fff',marginTop:5,lineHeight:1.35}}>Pose ta base aujourd'hui</div>}
             </div>
             {goal&&<div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:20,fontWeight:800,color:goal.ok?T.good:T.warn}}>{goal.ok?'+'+CARDIO_PROG_STEP_M+' m':'= moyenne'}</div>
-              <div style={{fontSize:10.5,color:T.textFaint,marginTop:1}}>{goal.ok?'tu progresses':'on consolide'}</div>
+              <div style={{fontSize:goal.coach?15:20,fontWeight:800,color:goal.ok?T.good:T.warn}}>{goal.coach?'Fixé par ton coach':goal.ok?'+'+CARDIO_PROG_STEP_M+' m':'= moyenne'}</div>
+              <div style={{fontSize:10.5,color:T.textFaint,marginTop:1}}>{goal.coach?(goal.avg>0?(goal.target>=goal.avg?'+':'')+(goal.target-goal.avg)+' m vs ta moyenne':'objectif personnalisé'):goal.ok?'tu progresses':'on consolide'}</div>
             </div>}
           </div>
           {goal?(
             <div data-testid="cardio-goal-why" style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(191,160,96,0.22)',fontSize:12,lineHeight:1.55,color:T.textDim}}>
-              Dernière fois : <b style={{color:'#fff'}}>{last.perSet.filter(x=>x>0).map(fmtThousands).join(' · ')}</b> → moyenne <b style={{color:'#fff',whiteSpace:'nowrap'}}>{fmtThousands(goal.avg)}&nbsp;m</b><br/>
-              {goal.n}<sup>e</sup> série à <b style={{color:goal.ok?T.good:T.warn}}>{goal.pct} %</b> de la 1<sup>re</sup> {goal.ok?'(≥ 95 % ✓) → moyenne + 50 m':'(< 95 %) → tiens ta moyenne avant de monter'}
+              {last&&goal.avg>0&&<>Dernière fois : <b style={{color:'#fff'}}>{last.perSet.filter(x=>x>0).map(fmtThousands).join(' · ')}</b> → moyenne <b style={{color:'#fff',whiteSpace:'nowrap'}}>{fmtThousands(goal.avg)}&nbsp;m</b><br/></>}
+              {goal.coach?<>Ton coach a validé <b style={{color:'#fff',whiteSpace:'nowrap'}}>{fmtThousands(goal.target)}&nbsp;m</b> par série pour cette séance.</>:<>{goal.n}<sup>e</sup> série à <b style={{color:goal.ok?T.good:T.warn}}>{goal.pct} %</b> de la 1<sup>re</sup> {goal.ok?'(≥ 95 % ✓) → moyenne + 50 m':'(< 95 %) → tiens ta moyenne avant de monter'}</>}
             </div>
           ):(
             <div style={{marginTop:8,fontSize:12,lineHeight:1.55,color:T.textDim}}>Fais tes séries : ta <b style={{color:'#fff'}}>moyenne</b> servira de base. La prochaine fois : <b style={{color:'#fff'}}>+50 m</b> par série si ta dernière série reste à au moins <b style={{color:'#fff'}}>95 %</b> de la 1<sup>re</sup>.</div>
@@ -2874,7 +2876,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           )}
           {ex.style==='CARDIO'&&ex.cardio&&(
             <div style={{marginBottom:24}}>
-              <CardioDistanceCard sets={ex.sets} name={ex.name} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
+              <CardioDistanceCard sets={ex.sets} name={ex.name} coachGoal={(targets&&targets[normExerciseName(ex.name)]&&targets[normExerciseName(ex.name)].distance)||0} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
             </div>
           )}
           {!allExDone&&!(ex.style==='CARDIO'&&ex.cardio)&&(
@@ -3185,7 +3187,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         ))}
                       </div>
                     )}
-                    <CardioDistanceCard sets={ex.sets} name={ex.name} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
+                    <CardioDistanceCard sets={ex.sets} name={ex.name} coachGoal={(targets&&targets[normExerciseName(ex.name)]&&targets[normExerciseName(ex.name)].distance)||0} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
                     {!allDone&&hasTimer&&(
                       <button className="cd-cta" onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0}>
                         <span style={{display:'flex',alignItems:'center',gap:10,fontSize:16,fontWeight:800,letterSpacing:0.2}}>
@@ -3539,7 +3541,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         <span style={{fontSize:12,fontWeight:600,color:'#fff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</span>
                         <span style={{fontSize:13,fontWeight:800,flexShrink:0}}>
                           {u.from>0&&<span style={{color:T.textFaint,textDecoration:'line-through',fontSize:11,marginRight:5}}>{u.from}</span>}
-                          <span style={{color:T.good}}>{u.to} kg</span>
+                          <span style={{color:T.good}}>{u.to} {u.unit==='m'?'m':'kg'}</span>
                         </span>
                       </div>
                     ))}
@@ -12260,6 +12262,44 @@ function fmtRestLabel(s){
   return s>=60?`${Math.floor(s/60)}min${s%60?' '+(s%60)+'s':''}`:`${s}s`;
 }
 
+// Récap coach d'un cardio à séries (SKIERG…) : une ligne par série avec barre de distance, total, moyenne,
+// et pour SKIERG RESISTANCE la règle de progression (dernière série ≥ 95 % de la 1re).
+function CardioSeriesTable({ex}){
+  const per=(ex.sets||[]).map(setDistanceM);
+  const filled=per.filter(x=>x>0);
+  if(!filled.length)return null;
+  const total=filled.reduce((a,b)=>a+b,0),max=Math.max(...per),avg=Math.round(total/filled.length);
+  const prog=isProgressiveCardio(ex.name)?cardioProgression(per):null;
+  return(
+    <div data-testid="coach-cardio-table" style={{padding:'4px 14px 12px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'4px 0 6px'}}>
+        <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.7,textTransform:'uppercase',color:T.textFaint}}>Distance par série</span>
+        {per.length>1&&<span style={{fontSize:9.5,color:T.textFaint}}>{per.length} séries</span>}
+      </div>
+      {per.map((d,i)=>{
+        const pct=prog&&i>0&&per[0]>0&&d>0?Math.round(d/per[0]*100):null;
+        return(
+          <div key={i} data-testid="coach-cardio-row" style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:i?'1px solid rgba(255,255,255,0.05)':'none'}}>
+            <span style={{width:26,height:26,borderRadius:13,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,background:'rgba(200,144,64,0.12)',color:'#C89040'}}>S{i+1}</span>
+            <div style={{flex:1,height:8,borderRadius:4,background:'rgba(255,255,255,0.06)',overflow:'hidden'}}><div style={{width:(max>0?Math.max(3,Math.round(d/max*100)):0)+'%',height:'100%',borderRadius:4,background:'linear-gradient(90deg,#BFA060,#E6CB86)'}}/></div>
+            <span style={{minWidth:64,textAlign:'right',fontSize:15,fontWeight:700,color:d>0?'#fff':T.textFaint,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{d>0?fmtThousands(d)+'\u00a0m':'—'}</span>
+            {pct!=null&&<span style={{width:42,textAlign:'right',fontSize:10.5,fontWeight:700,color:pct>=95?T.good:T.warn}}>{pct}%</span>}
+          </div>
+        );
+      })}
+      <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:8,borderTop:'1px solid rgba(191,160,96,0.22)',fontSize:12,color:T.textDim}}>
+        <span>Total <b data-testid="coach-cardio-total" style={{color:'#E6CB86',fontSize:14,whiteSpace:'nowrap'}}>{fmtThousands(total)}&nbsp;m</b></span>
+        {filled.length>1&&<span>Moyenne <b data-testid="coach-cardio-avg" style={{color:'#fff',fontSize:14,whiteSpace:'nowrap'}}>{fmtThousands(avg)}&nbsp;m</b></span>}
+      </div>
+      {prog&&(
+        <div data-testid="coach-cardio-rule" style={{marginTop:8,padding:'8px 10px',borderRadius:10,fontSize:11.5,lineHeight:1.5,color:T.textDim,background:prog.ok?'rgba(44,196,160,0.09)':'rgba(200,144,64,0.09)',border:`1px solid ${prog.ok?'rgba(44,196,160,0.3)':'rgba(200,144,64,0.3)'}`}}>
+          {prog.n}<sup>e</sup> série à <b style={{color:prog.ok?T.good:T.warn}}>{prog.pct} %</b> de la 1<sup>re</sup> {prog.ok?<>(≥ 95 % ✓) → il peut passer à <b style={{color:T.good,whiteSpace:'nowrap'}}>{fmtThousands(prog.target)}&nbsp;m</b> par série</>:<>(&lt; 95 %) → on consolide à <b style={{color:T.warn,whiteSpace:'nowrap'}}>{fmtThousands(prog.avg)}&nbsp;m</b> par série</>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
   const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
@@ -12292,6 +12332,11 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
   const readyCount=React.useMemo(()=>overloadExs.filter(e=>e.atCap).length,[overloadExs]);
   const[ovWeights,setOvWeights]=React.useState({});
   const[ovSkip,setOvSkip]=React.useState({});
+  // Surcharge progressive d'un cardio à séries (SKIERG RESISTANCE) : +50 m par série, validé par le coach.
+  const cardioProg=React.useMemo(()=>s.deload?[]:(s.exercises||[]).filter(e=>isProgressiveCardio(e.name)).map(e=>({name:e.name,prog:cardioProgression((e.sets||[]).map(setDistanceM))})).filter(x=>x.prog),[s]);
+  const[cdTarget,setCdTarget]=React.useState({});
+  const[cdSkip,setCdSkip]=React.useState({});
+  React.useEffect(()=>{const t={},k={};cardioProg.forEach(c=>{t[c.name]=c.prog.avg+CARDIO_PROG_STEP_M;k[c.name]=!c.prog.ok;});setCdTarget(t);setCdSkip(k);},[cardioProg]);
   const[ovSaving,setOvSaving]=React.useState(false);
   const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
   React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
@@ -12301,6 +12346,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
   const applyOverload=async()=>{
     // from:e.curMaxW → permet au pop-up athlète d'afficher "ancien → nouveau" (ex: 40 → 42,5 kg).
     const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name],from:e.curMaxW||0,assisted:!!e.assisted}));
+    cardioProg.filter(c=>!cdSkip[c.name]).forEach(c=>updates.push({name:c.name,distance:cdTarget[c.name]||c.prog.target,from:c.prog.avg}));
     if(!updates.length){setOvDone(true);return;}
     setOvSaving(true);
     try{
@@ -12372,7 +12418,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
         {/* Scrollable content */}
         <div style={{flex:1,overflowY:'auto',padding:'16px 20px 24px'}}>
           {/* ── RÉCAP DE FIN DE SÉANCE (comparaison vs dernière séance du même nom) ── */}
-          {tab==='recap'&&(comp||showVolCompare)&&(
+          {tab==='recap'&&(comp||showVolCompare||cardioProg.length>0)&&(
             <div style={{marginBottom:20,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(191,160,96,0.10), rgba(191,160,96,0.02) 70%)',border:'1px solid rgba(191,160,96,0.18)'}}>
               <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
               {/* Bilan */}
@@ -12469,7 +12515,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                 </div>
               )}
               {/* Surcharge progressive — le coach valide (ou ajuste) les montées de charge */}
-              {overloadExs.length>0&&(
+              {(overloadExs.length>0||cardioProg.length>0)&&(
                 <div style={{marginTop:12,padding:'13px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.32)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:ovDone?0:8}}>
                     <span style={{fontSize:15}}>⬆</span>
@@ -12510,6 +12556,34 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                                     <span style={{fontSize:9,color:T.textDim,fontWeight:600,marginLeft:2}}>kg</span>
                                   </div>
                                   <button onClick={()=>setOvW(e.name,w+1)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {cardioProg.map((c,i)=>{
+                        const skip=!!cdSkip[c.name];const t=cdTarget[c.name]??(c.prog.avg+CARDIO_PROG_STEP_M);
+                        const setT=v=>setCdTarget(x=>({...x,[c.name]:Math.max(10,Math.min(100000,Math.round(v/10)*10))}));
+                        return(
+                          <div key={'cd'+i} data-testid="ov-cardio" style={{padding:'9px 11px',borderRadius:11,background:skip?'rgba(255,255,255,0.02)':'rgba(167,139,250,0.06)',border:`1px solid ${skip?'rgba(255,255,255,0.07)':'rgba(167,139,250,0.22)'}`,opacity:skip?0.6:1}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:skip?0:8}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                  <span style={{fontSize:12.5,fontWeight:700,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{c.name}</span>
+                                  {c.prog.ok&&<span style={{fontSize:8,fontWeight:800,color:'#A78BFA',background:'rgba(167,139,250,0.16)',border:'1px solid rgba(167,139,250,0.35)',borderRadius:999,padding:'1px 6px',flexShrink:0}}>⬆ PRÊT</span>}
+                                </div>
+                                <div style={{fontSize:9.5,color:T.textFaint,marginTop:1}}>moyenne {fmtThousands(c.prog.avg)} m · {c.prog.n}<sup>e</sup> série à {c.prog.pct} % de la 1<sup>re</sup> {c.prog.ok?'(≥ 95 %)':'(< 95 % : règle non remplie)'}{skip?' · maintenu':''}</div>
+                              </div>
+                              <button data-testid="ov-cardio-toggle" onClick={()=>setCdSkip(k=>({...k,[c.name]:!skip}))} style={{fontSize:9.5,fontWeight:800,padding:'4px 9px',borderRadius:8,cursor:'pointer',border:`1px solid ${skip?'rgba(167,139,250,0.4)':'rgba(255,255,255,0.12)'}`,background:skip?'rgba(167,139,250,0.12)':'rgba(255,255,255,0.04)',color:skip?'#A78BFA':T.textDim,fontFamily:'inherit'}}>{skip?'Monter':'Garder'}</button>
+                            </div>
+                            {!skip&&(
+                              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{fontSize:10.5,color:T.textFaint}}>{fmtThousands(c.prog.avg)} m →</span>
+                                <div style={{display:'flex',alignItems:'center',marginLeft:'auto',border:'1px solid rgba(167,139,250,0.3)',borderRadius:9,overflow:'hidden',background:'rgba(167,139,250,0.05)'}}>
+                                  <button onClick={()=>setT(t-10)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>−</button>
+                                  <div data-testid="ov-cardio-target" style={{display:'flex',alignItems:'baseline',justifyContent:'center',minWidth:96,fontSize:14,fontWeight:800,color:'#A78BFA',whiteSpace:'nowrap'}}>{fmtThousands(t)}<span style={{fontSize:9,color:T.textDim,fontWeight:600,marginLeft:3}}>m / série</span></div>
+                                  <button onClick={()=>setT(t+10)} style={{width:30,height:32,border:'none',background:'transparent',color:'#A78BFA',fontSize:16,fontWeight:800,cursor:'pointer'}}>+</button>
                                 </div>
                               </div>
                             )}
@@ -12583,14 +12657,14 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                               </div>
                               {exVol>0&&<div style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(exVol).toLocaleString('fr-FR')} <span style={{fontSize:9,fontWeight:400,color:T.textFaint}}>kg</span></div>}
                             </div>
-                            {exType(e)==='cardio'?(
+                            {exType(e)==='cardio'?(<>
                               <div style={{padding:'8px 14px',display:'flex',gap:8,flexWrap:'wrap'}}>
                                 {cardioHasVal(e.cardio?.vitesse)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⚡ {fixCardioVal(e.cardio.vitesse)} km/h</div>}
                                 {cardioHasVal(e.cardio?.inclinaison)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📐 {fixCardioVal(e.cardio.inclinaison)}%</div>}
                                 {cardioHasVal(e.cardio?.duree)&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>⏱ {cardioDureeLabel(e.cardio.duree)}</div>}
-                                {cardioDistanceTotal(e.sets)>0&&<div style={{padding:'3px 9px',borderRadius:8,background:'rgba(200,144,64,0.1)',color:'#C89040',fontSize:11,fontWeight:700}}>📏 {fmtDistanceM(cardioDistanceTotal(e.sets))}</div>}
                               </div>
-                            ):(e.sets||[]).length>0&&(()=>{
+                              <CardioSeriesTable ex={e}/>
+                            </>):(e.sets||[]).length>0&&(()=>{
                               // Fourchette de reps prescrite par le coach (ex: "8-12") : sert à juger
                               // d'un coup d'œil si l'athlète a atteint le haut, s'il a stagné en bas,
                               // ou s'il a explosé la cible → décide de la prochaine montée de charge.
@@ -19463,7 +19537,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
                       <span style={{fontSize:13,fontWeight:600,color:'#fff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</span>
                       <span style={{fontSize:14,fontWeight:800,fontFamily:"'Outfit',sans-serif",flexShrink:0}}>
                         {u.from>0&&<span style={{color:T.textFaint,textDecoration:'line-through',fontSize:12,marginRight:5}}>{u.from}</span>}
-                        <span style={{color:T.good}}>{u.to} kg</span>
+                        <span style={{color:T.good}}>{u.to} {u.unit==='m'?'m':'kg'}</span>
                       </span>
                     </div>
                   ))}
