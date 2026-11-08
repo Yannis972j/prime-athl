@@ -8,7 +8,9 @@ import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from '../test
 let srv, browser, token;
 const EMAIL = 'e2e-light@test.local', PW = 'longenough1';
 const today = new Date();
-const TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayAgo = n => { const d = new Date(today); d.setDate(d.getDate() - n); return d; };
+const TODAY = ymd(today);
 
 before(async () => {
   srv = await startServer({ PORT: '3001' });
@@ -26,7 +28,7 @@ before(async () => {
 });
 after(async () => { if (browser) await browser.close(); if (srv) await srv.stop(); });
 
-async function openToday() {
+async function openDay(offset = 0) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 1000 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
   const errs = []; pg.on('pageerror', e => errs.push(String(e)));
@@ -35,9 +37,11 @@ async function openToday() {
   await pg.waitForTimeout(3500);
   const click = async (t, to = 2500) => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: to }); await pg.waitForTimeout(700); return true; } catch { return false; } };
   for (const t of ['Passer', 'Plus tard', 'Coaching', 'Séances']) await click(t, 1500);
-  await pg.locator(`[data-cal-date="${TODAY}"]`).click();
+  const target = dayAgo(offset);
+  if (target.getMonth() !== today.getMonth()) { await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(500); }
+  await pg.locator(`[data-cal-date="${ymd(target)}"]`).click();
   await pg.waitForTimeout(700);
-  return { ctx, pg, click, errs };
+  return { ctx, pg, click, errs, date: ymd(target) };
 }
 async function play(pg, click) {
   await click('Démarrer la séance', 3000);
@@ -60,15 +64,15 @@ async function play(pg, click) {
   await pg.waitForTimeout(3000);
 }
 
-for (const [label, expectReason] of [['Décharge semaine', undefined], ['Décharge séance', 'session'], ['Douleurs de cycle', 'menstrual']]) {
+// Un jour différent par type : un jour déjà « fait » ne propose plus les options d'allègement.
+for (const [label, expectReason, offset] of [['Décharge semaine', undefined, 0], ['Décharge séance', 'session', 1], ['Douleurs de cycle', 'menstrual', 2]]) {
   test(`« ${label} » : la séance est enregistrée comme décharge`, async () => {
     const before = (await api(srv.baseUrl, 'GET', '/api/sessions', { token })).body.length;
-    const { ctx, pg, click, errs } = await openToday();
+    const { ctx, pg, click, errs } = await openDay(offset);
     assert.ok(await click(label, 3000), 'option proposée : ' + label);
     await play(pg, click);
     const list = (await api(srv.baseUrl, 'GET', '/api/sessions', { token })).body;
     assert.equal(list.length, before + 1, 'une séance enregistrée');
-    const s = list.sort((a, b) => new Date(b.date) - new Date(a.date) || 0).find(x => !x.__seen);
     const mine = list.filter(x => x.deload && x.lightReason === expectReason);
     assert.ok(mine.length >= 1, `séance deload=true, lightReason=${expectReason} introuvable : ` + JSON.stringify(list.map(x => ({ d: x.deload, r: x.lightReason }))));
     assert.deepEqual(errs, []);
@@ -76,13 +80,19 @@ for (const [label, expectReason] of [['Décharge semaine', undefined], ['Déchar
   });
 }
 
-test('calendrier : le jour des trois décharges est en corail', async () => {
-  const { ctx, pg } = await openToday();
-  const c = await pg.evaluate(ds => { const el = document.querySelector(`[data-cal-date="${ds}"]`); return el && getComputedStyle(el.querySelector('span')).color; }, TODAY);
-  await pg.locator(`[data-cal-date="${TODAY}"]`).click(); // désélectionne pour voir la couleur
+test('calendrier : les trois jours de décharge (semaine, séance, cycle) sont en corail', async () => {
+  const { ctx, pg } = await openDay(0);
+  await pg.locator(`[data-cal-date="${TODAY}"]`).click(); // désélectionne pour voir la couleur d'état
   await pg.waitForTimeout(400);
-  const c2 = await pg.evaluate(ds => { const el = document.querySelector(`[data-cal-date="${ds}"]`); return el && getComputedStyle(el.querySelector('span')).color; }, TODAY);
-  assert.ok([c, c2].includes('rgb(242, 145, 107)'), 'corail : ' + c + ' / ' + c2);
+  const colorOf = ds => pg.evaluate(d => { const el = document.querySelector(`[data-cal-date="${d}"]`); return el && getComputedStyle(el.querySelector('span')).color; }, ds);
+  const checked = [];
+  for (const off of [0, 1, 2]) {
+    const d = dayAgo(off);
+    if (d.getMonth() !== today.getMonth()) continue; // autre mois : non visible sans changer de page
+    checked.push(off);
+    assert.equal(await colorOf(ymd(d)), 'rgb(242, 145, 107)', 'jour −' + off + ' en corail');
+  }
+  assert.ok(checked.length >= 1);
   if (process.env.SHOT_LIGHT) await pg.screenshot({ path: process.env.SHOT_LIGHT });
   await ctx.close();
 });
