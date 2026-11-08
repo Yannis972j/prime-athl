@@ -17198,13 +17198,18 @@ function TPAdminEditor({program,onBack,onStartWorkout}){
 
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
 
+  const[priceErr,setPriceErr]=React.useState('');
+  // Prix du catalogue : gratuit (0) ou entre 9,99 € et 499 € (même règle que le serveur).
+  const priceOk=p=>{const n=+p||0;return n===0||(n>=999&&n<=49900);};
   const save=async()=>{
+    if(!priceOk(form.price)){setPriceErr('Prix : laisse vide pour « Gratuit », sinon entre 9,99 € et 499 €.');return;}
+    setPriceErr('');
     setSaving(true);
     try{
       if(isNew){await apiCall('/api/admin/training-programs',{method:'POST',body:form});}
       else{await apiCall('/api/admin/training-programs/'+form.id,{method:'PUT',body:form});}
       onBack();
-    }catch(e){console.error(e);}
+    }catch(e){console.error(e);if(e&&e.message==='invalid_price')setPriceErr('Prix refusé : gratuit, ou entre 9,99 € et 499 €.');}
     setSaving(false);
   };
 
@@ -17341,7 +17346,8 @@ function TPAdminEditor({program,onBack,onStartWorkout}){
                 </div>
                 <div style={{flex:1}}>
                   <label style={LBL}>Prix (€)</label>
-                  <input type="number" step="0.01" min="0" value={form.price?+(form.price/100).toFixed(2):''} onChange={e=>set('price',Math.round((parseFloat(e.target.value)||0)*100))} style={INP} placeholder="Ex: 29.90"/>
+                  <input type="number" step="0.01" min="0" max="499" data-testid="catalog-price" value={form.price?+(form.price/100).toFixed(2):''} onChange={e=>{setPriceErr('');set('price',Math.round((parseFloat(e.target.value)||0)*100));}} style={{...INP,...(priceErr?{borderColor:'#B85070'}:{})}} placeholder="Gratuit, ou 9,99 – 499"/>
+                  {priceErr&&<div data-testid="catalog-price-err" role="alert" style={{fontSize:11.5,color:'#FFB0B0',marginTop:5,lineHeight:1.4}}>{priceErr}</div>}
                 </div>
               </div>
               <div style={{display:'flex',gap:10,marginBottom:14}}>
