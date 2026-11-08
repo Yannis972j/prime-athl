@@ -13748,6 +13748,50 @@ function CoachProfileField({label,value,onCommit,suffix,type='text'}){
 // Carte « Durée d'accès à l'application » (fiche athlète, côté coach). Le coach fixe un nombre
 // de jours à partir d'aujourd'hui ; l'athlète reçoit des rappels à J-3/J-2/J-1 puis est bloqué
 // une fois la date dépassée. « ∞ » = accès illimité (efface la date). onSave(nbJours) : 0 = ∞.
+// Accès par univers : une case par univers, effet immédiat (le serveur prévient l'athlète en temps réel).
+// L'état affiché est l'état RÉEL (accès complet / abonnement / choix du coach), pas seulement le choix explicite.
+function UniverseAccessCard({athlete,onChange}){
+  const UNI=[
+    {k:'coach',emoji:'👥',label:'Coaching',sub:'Programme assigné + nutrition',color:'#BFA060'},
+    {k:'ia',emoji:'🤖',label:'IA Programme',sub:'Programme généré par IA',color:'#8b8df0'},
+    {k:'explorer',emoji:'🧭',label:'Explorer',sub:'Séances prêtes à démarrer',color:'#14b8a6'},
+    {k:'programmes',emoji:'📋',label:'Catalogue',sub:'Programmes à acheter',color:'#E07020'},
+  ];
+  const[busy,setBusy]=React.useState(null);
+  const ath={...athlete,role:'athlete',email:''};
+  const on=k=>userHasAccessFE(ath,k);
+  const count=UNI.filter(u=>on(u.k)).length;
+  const run=async(key,body)=>{if(busy)return;setBusy(key);await onChange(body);setBusy(null);};
+  return(
+    <div data-testid="universe-access" style={{marginTop:8,padding:'12px 14px',borderRadius:14,background:'rgba(44,196,160,0.05)',border:'1px solid rgba(44,196,160,0.22)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
+        <div style={{fontSize:13,fontWeight:800,color:'#2CC4A0'}}>🔓 Univers accessibles</div>
+        <div data-testid="universe-count" style={{fontSize:11.5,fontWeight:700,color:T.textDim}}>{count}/4</div>
+      </div>
+      <div style={{fontSize:11,color:T.textFaint,marginBottom:10,lineHeight:1.45}}>Coche pour donner l'accès, décoche pour le retirer. Effet immédiat chez l'athlète.</div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {UNI.map(u=>{const v=on(u.k);const b=busy===u.k;return(
+          <button key={u.k} data-testid={'universe-'+u.k} aria-pressed={v} disabled={!!busy} onClick={()=>run(u.k,{universe:u.k,enabled:!v})}
+            style={{display:'flex',alignItems:'center',gap:12,width:'100%',minHeight:54,padding:'8px 12px',borderRadius:12,cursor:busy?'default':'pointer',textAlign:'left',fontFamily:'inherit',
+              background:v?u.color+'14':'rgba(255,255,255,0.025)',border:`1px solid ${v?u.color+'66':'rgba(255,255,255,0.09)'}`,opacity:busy&&!b?0.6:1,transition:'background .15s,border-color .15s'}}>
+            <span style={{width:26,height:26,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:900,
+              background:v?u.color:'transparent',border:`2px solid ${v?u.color:'rgba(255,255,255,0.25)'}`,color:'#0c0c12'}}>{b?'…':v?'✓':''}</span>
+            <span style={{fontSize:18,flexShrink:0}}>{u.emoji}</span>
+            <span style={{flex:1,minWidth:0}}>
+              <span style={{display:'block',fontSize:14,fontWeight:700,color:v?T.text:T.textDim}}>{u.label}</span>
+              <span style={{display:'block',fontSize:11,color:T.textFaint,marginTop:1}}>{u.sub}</span>
+            </span>
+            <span style={{fontSize:11,fontWeight:700,flexShrink:0,color:v?u.color:T.textFaint}}>{v?'Activé':'Verrouillé'}</span>
+          </button>);})}
+      </div>
+      <div style={{display:'flex',gap:8,marginTop:10}}>
+        <button data-testid="universe-all-on" disabled={!!busy||count===4} onClick={()=>run('all',{all:true})} style={{flex:1,height:38,borderRadius:10,border:'1px solid rgba(44,196,160,0.4)',background:'rgba(44,196,160,0.08)',color:'#2CC4A0',fontSize:12,fontWeight:700,cursor:'pointer',opacity:count===4?0.4:1,fontFamily:'inherit'}}>Tout cocher</button>
+        <button data-testid="universe-all-off" disabled={!!busy||count===0} onClick={()=>run('all',{all:false})} style={{flex:1,height:38,borderRadius:10,border:'1px solid rgba(255,255,255,0.14)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',opacity:count===0?0.4:1,fontFamily:'inherit'}}>Tout décocher</button>
+      </div>
+    </div>
+  );
+}
+
 function AthleteAccessCard({athlete,onSave}){
   const exp=athlete.accessExpiresAt?new Date(athlete.accessExpiresAt):null;
   const expValid=exp&&!isNaN(exp.getTime());
@@ -14328,7 +14372,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
               </div>
 
               {/* Accès & abonnement — regroupé dans un menu dépliant pour épurer la fiche */}
-              {isMain&&(()=>{const dl=a.accessExpiresAt?Math.ceil((new Date(a.accessExpiresAt).getTime()-Date.now())/86400000):null;const accSummary=a.fullAccess?'Accès complet actif':dl==null?'Durée illimitée':dl<=0?'⚠ Accès expiré':`${dl} j restant${dl>1?'s':''}`;return(
+              {isMain&&(()=>{const dl=a.accessExpiresAt?Math.ceil((new Date(a.accessExpiresAt).getTime()-Date.now())/86400000):null;const uniOn=['coach','ia','explorer','programmes'].filter(k=>userHasAccessFE({...a,role:'athlete',email:''},k)).length;const accSummary=dl!=null&&dl<=0?'⚠ Accès expiré':`${uniOn}/4 univers`+(dl==null?'':` · ${dl} j`);return(
                 <button onClick={()=>setShowAccess(s=>!s)} style={{width:'100%',marginTop:10,height:44,padding:'0 14px',borderRadius:12,border:'1px solid '+T.border,background:'rgba(255,255,255,0.03)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
                   <span style={{fontSize:12.5,fontWeight:700,color:T.text,display:'flex',alignItems:'center',gap:8}}>🔑 Accès &amp; abonnement</span>
                   <span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:11,fontWeight:600,color:dl!=null&&dl<=0?T.danger:T.textDim}}>{accSummary}</span><span style={{fontSize:12,color:T.textFaint}}>{showAccess?'▴':'▾'}</span></span>
@@ -14352,22 +14396,14 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                 </button>
               </div>}
 
-              {/* Accès complet à l'application (les 3 univers, hors Stripe) */}
-              {isMain&&<div style={{marginTop:8,padding:'10px 14px',borderRadius:12,background:'rgba(44,196,160,0.06)',border:'1px solid rgba(44,196,160,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-                <div>
-                  <div style={{fontSize:12,fontWeight:700,color:'#2CC4A0'}}>🔓 Accès complet à l'application</div>
-                  <div style={{fontSize:10,color:T.textFaint,marginTop:2}}>{a.fullAccess?'Actif — débloque les 3 univers (Coaching, IA, Explorer)':'Inactif — soumis à abonnement'}</div>
-                </div>
-                <button onClick={async()=>{
-                  try{
-                    await apiCall('/api/access/grant/'+a.id,{method:'POST',body:{enabled:!a.fullAccess}});
-                    load();reloadDetail(a.id);
-                    flash(a.fullAccess?'✓ Accès complet désactivé':'✓ Accès complet activé');
-                  }catch(e){flash('✗ '+(e.message||e));}
-                }} style={{height:30,padding:'0 14px',borderRadius:9,border:'none',background:a.fullAccess?'rgba(184,80,112,0.15)':'linear-gradient(135deg,#2CC4A0,#5A8AE0)',color:a.fullAccess?'#B85070':'#fff',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
-                  {a.fullAccess?'Révoquer':'Activer'}
-                </button>
-              </div>}
+              {/* Univers accessibles : cases à cocher (Coaching, IA Programme, Explorer, Catalogue) */}
+              {isMain&&<UniverseAccessCard athlete={a} onChange={async(body)=>{
+                try{
+                  await apiCall('/api/access/universes/'+a.id,{method:'POST',body});
+                  await reloadDetail(a.id);load();
+                  return true;
+                }catch(e){flash('✗ '+(e.message||e));return false;}
+              }}/>}
 
               {/* Durée d'accès à l'application (fenêtre limitée + rappels J-3/J-2/J-1) */}
               {isMain&&<AthleteAccessCard athlete={a} onSave={async(nbJours)=>{
@@ -17685,10 +17721,16 @@ function userHasAccessFE(u,universe){
   const CREATOR='yannisgym972@gmail.com';
   if(u.email===CREATOR)return true;
   if(u.role==='coach')return true;
+  // Choix explicite du coach (case cochée/décochée) : prioritaire (même règle que le serveur).
+  const ov=u.universeAccess&&typeof u.universeAccess[universe]==='boolean'?u.universeAccess[universe]:undefined;
+  if(ov!==undefined)return ov;
+  if(universe==='programmes')return true; // Catalogue ouvert à tous par défaut
   if(u.fullAccess)return true;
   if(u.stripeStatus==='active'&&u.stripePlan)return(PLAN_UNIVERSES_FE[u.stripePlan]||[]).includes(universe);
   return false;
 }
+// Les 3 univers payants sont tous débloqués ? (sert à masquer la bannière « Abonnement requis »)
+const allPaidUniversesFE=u=>['coach','ia','explorer'].every(k=>userHasAccessFE(u,k));
 function UniversePickerScreen({onSelect,authUser,onShowPricing}){
   const UNIVERSES=[
     {id:'coach',emoji:'👥',title:'Coaching',desc:'Programme assigné par ton coach + nutrition',
@@ -17707,7 +17749,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
         <div style={{fontSize:28,fontWeight:800,letterSpacing:-0.6,lineHeight:1.1}}><HoloText>Tes Univers</HoloText></div>
         <div style={{fontSize:13,color:T.textDim,marginTop:8}}>Choisis ton mode d'entraînement</div>
       </div>
-      {!authUser?.fullAccess&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!allPaidUniversesFE(authUser)&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <div style={{marginBottom:16,padding:'10px 14px',borderRadius:12,background:'rgba(184,80,112,0.08)',border:'1px solid rgba(184,80,112,0.25)',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={onShowPricing}>
           <span style={{fontSize:18}}>🔒</span>
           <div style={{flex:1}}>
@@ -17719,7 +17761,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
       )}
       <div style={{display:'flex',flexDirection:'column',gap:16}}>
         {UNIVERSES.map(u=>{
-          const hasAccess=u.plan===null?true:userHasAccessFE(authUser,u.id);
+          const hasAccess=userHasAccessFE(authUser,u.id);
           return(
             <button key={u.id} onClick={()=>hasAccess?onSelect(u.id):onShowPricing&&onShowPricing()} style={{
               width:'100%',padding:'22px 20px',borderRadius:24,
@@ -17735,7 +17777,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
               <div style={{width:60,height:60,borderRadius:20,background:hasAccess?u.grad:'rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:hasAccess?28:20,flexShrink:0,boxShadow:hasAccess?`0 8px 22px ${u.glow}`:'none'}}>{hasAccess?u.emoji:'🔒'}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:19,fontWeight:800,color:T.text,letterSpacing:-0.4,marginBottom:5}}>{u.title}</div>
-                <div style={{fontSize:13,color:T.textDim,lineHeight:1.45}}>{hasAccess?u.desc:`Plan ${u.plan} requis`}</div>
+                <div style={{fontSize:13,color:T.textDim,lineHeight:1.45}}>{hasAccess?u.desc:'Non activé — abonne-toi ou demande à ton coach'}</div>
               </div>
               <div style={{flexShrink:0,width:32,height:32,borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Icon name={hasAccess?'chevronRight':'lock'} size={16} stroke={T.textFaint}/>
@@ -17749,7 +17791,7 @@ function UniversePickerScreen({onSelect,authUser,onShowPricing}){
           ⚙️ Gérer mon abonnement
         </button>
       )}
-      {!authUser?.fullAccess&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
+      {!allPaidUniversesFE(authUser)&&authUser?.stripeStatus!=='active'&&authUser?.role!=='coach'&&authUser?.email!=='yannisgym972@gmail.com'&&(
         <button onClick={onShowPricing} style={{marginTop:16,width:'100%',height:44,borderRadius:13,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>
           🚀 Débloquer Prime Athl
         </button>
@@ -18891,6 +18933,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     },
     'full-access-updated':({fullAccess})=>{
       setUser(prev=>({...prev,fullAccess}));
+    },
+    'universe-access-updated':({universeAccess})=>{
+      setUser(prev=>({...prev,universeAccess:universeAccess||{}}));
     },
   });
 
