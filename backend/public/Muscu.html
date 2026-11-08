@@ -671,6 +671,20 @@ function lastCardioDistance(history, name) {
   }
   return null;
 }
+// Progression « SKIERG RESISTANCE » : la distance de chaque série compte. À la séance suivante :
+//  · moyenne = total / nombre de séries (200 · 200 · 200 → 600 / 3 = 200 m) ;
+//  · condition pour progresser : la DERNIÈRE série est à au moins 95 % de la 1re (pas de chute) ;
+//  · condition remplie → objectif = moyenne + 50 m par série ; sinon on consolide (objectif = moyenne).
+const CARDIO_PROG_STEP_M = 50, CARDIO_PROG_HOLD = 0.95;
+function isProgressiveCardio(name) { const n = normExerciseName(name); return /skierg/.test(n) && /resist/.test(n); }
+function cardioProgression(perSet) {
+  const v = (perSet || []).filter(x => x > 0);
+  if (v.length < 2) return null;
+  const avg = Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+  const ratio = v[v.length - 1] / v[0];
+  const ok = ratio >= CARDIO_PROG_HOLD - 1e-9;
+  return { n: v.length, avg, first: v[0], last: v[v.length - 1], ratio, pct: Math.round(ratio * 100), ok, target: ok ? avg + CARDIO_PROG_STEP_M : avg };
+}
 // Vitesse / inclinaison n'ont de sens que pour un tapis (ou si le programme les renseigne) : un
 // SKIERG, un rameur… n'affichent que la durée.
 function cardioShowsSpeed(ex) {
@@ -1883,8 +1897,12 @@ const PrimeAudio=(()=>{
 // Carte « Distance réalisée » d'un exercice cardio : un registre propre, une ligne par série (modifiable à tout
 // moment, même après validation) avec, SOUS CHAQUE SÉRIE, la distance de la dernière fois, l'écart et le cumul ;
 // en bas le cumul total et une jauge face à la dernière fois — comme poids/reps en muscu.
-function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
+function CardioDistanceCard({sets,last,name,onChange,onAdd,onRemove}){
   const list=sets||[];
+  // Règle de progression (SKIERG RESISTANCE) : objectif du jour tiré de la dernière fois + bilan en direct.
+  const prog=isProgressiveCardio(name);
+  const goal=prog&&last?cardioProgression(last.perSet):null;
+  const now=prog?cardioProgression(list.map(setDistanceM)):null;
   const multi=list.length>1;
   const total=cardioDistanceTotal(list);
   const lastTotal=last?last.total:0;
@@ -1906,6 +1924,29 @@ function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
         <div className="cd-eyebrow" style={{color:'#fff'}}>Distance réalisée</div>
         <div style={{flex:1,height:1,background:'linear-gradient(90deg,rgba(191,160,96,0.45),rgba(191,160,96,0))'}}/>
       </div>
+      {prog&&(
+        <div data-testid="cardio-goal" style={{margin:'6px 0 10px',padding:'14px 14px 12px',borderRadius:14,background:'linear-gradient(160deg,rgba(191,160,96,0.14),rgba(191,160,96,0.04))',border:'1px solid rgba(191,160,96,0.4)'}}>
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:10}}>
+            <div>
+              <div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.9,textTransform:'uppercase',color:'#CDAE69'}}>🎯 Objectif du jour</div>
+              {goal?<div data-testid="cardio-goal-target" style={{fontSize:34,fontWeight:300,lineHeight:1.1,letterSpacing:-1,color:'#fff',marginTop:4,fontVariantNumeric:'tabular-nums'}}>{fmtThousands(goal.target)}&nbsp;m<div style={{fontSize:12,fontWeight:600,letterSpacing:0,color:T.textDim,marginTop:2}}>par série</div></div>
+                :<div style={{fontSize:14,fontWeight:700,color:'#fff',marginTop:5,lineHeight:1.35}}>Pose ta base aujourd'hui</div>}
+            </div>
+            {goal&&<div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:20,fontWeight:800,color:goal.ok?T.good:T.warn}}>{goal.ok?'+'+CARDIO_PROG_STEP_M+' m':'= moyenne'}</div>
+              <div style={{fontSize:10.5,color:T.textFaint,marginTop:1}}>{goal.ok?'tu progresses':'on consolide'}</div>
+            </div>}
+          </div>
+          {goal?(
+            <div data-testid="cardio-goal-why" style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(191,160,96,0.22)',fontSize:12,lineHeight:1.55,color:T.textDim}}>
+              Dernière fois : <b style={{color:'#fff'}}>{last.perSet.filter(x=>x>0).map(fmtThousands).join(' · ')}</b> → moyenne <b style={{color:'#fff',whiteSpace:'nowrap'}}>{fmtThousands(goal.avg)}&nbsp;m</b><br/>
+              {goal.n}<sup>e</sup> série à <b style={{color:goal.ok?T.good:T.warn}}>{goal.pct} %</b> de la 1<sup>re</sup> {goal.ok?'(≥ 95 % ✓) → moyenne + 50 m':'(< 95 %) → tiens ta moyenne avant de monter'}
+            </div>
+          ):(
+            <div style={{marginTop:8,fontSize:12,lineHeight:1.55,color:T.textDim}}>Fais tes séries : ta <b style={{color:'#fff'}}>moyenne</b> servira de base. La prochaine fois : <b style={{color:'#fff'}}>+50 m</b> par série si ta dernière série reste à au moins <b style={{color:'#fff'}}>95 %</b> de la 1<sup>re</sup>.</div>
+          )}
+        </div>
+      )}
       <div>
         {list.map((s,i)=>{
           const v=setDistanceM(s);
@@ -1925,7 +1966,7 @@ function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
               )}
               <div style={{position:'relative',flex:1,minWidth:0}}>
                 <input className="cd-input" type="text" inputMode="numeric" pattern="[0-9]*" aria-label={multi?`Distance série ${i+1} en mètres`:'Distance en mètres'}
-                  value={s.distance==null?'':String(s.distance)} placeholder={lm>0?String(lm):'0'}
+                  value={s.distance==null?'':String(s.distance)} placeholder={goal?String(goal.target):lm>0?String(lm):'0'}
                   onChange={e=>onChange(i,e.target.value.replace(/[^0-9]/g,'').slice(0,6))}/>
                 <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,fontWeight:600,color:T.textDim,pointerEvents:'none'}}>m</span>
               </div>
@@ -1968,6 +2009,12 @@ function CardioDistanceCard({sets,last,onChange,onAdd,onRemove}){
             <div className="cd-fill" style={{width:Math.max(4,Math.round(total/gauge*100))+'%'}}/>
             <div style={{position:'absolute',top:-4,left:`calc(${Math.round(lastTotal/gauge*100)}% - 1px)`,width:2,height:14,borderRadius:1,background:'#CDAE69'}}/>
           </div>
+        </div>
+      )}
+      {prog&&now&&(
+        <div data-testid="cardio-live" style={{marginTop:12,padding:'10px 12px',borderRadius:12,background:now.ok?'rgba(44,196,160,0.09)':'rgba(200,144,64,0.09)',border:`1px solid ${now.ok?'rgba(44,196,160,0.35)':'rgba(200,144,64,0.35)'}`,fontSize:12,lineHeight:1.55,color:T.textDim}}>
+          Aujourd'hui : moyenne <b style={{color:'#fff',whiteSpace:'nowrap'}}>{fmtThousands(now.avg)}&nbsp;m</b>{goal&&<> · objectif <span style={{whiteSpace:'nowrap'}}>{fmtThousands(goal.target)}&nbsp;m</span> {now.avg>=goal.target?<b style={{color:T.good,whiteSpace:'nowrap'}}>✓ atteint</b>:<span>(encore <span style={{whiteSpace:'nowrap'}}>{fmtThousands(goal.target-now.avg)}&nbsp;m</span>)</span>}</>}<br/>
+          {now.n}<sup>e</sup> série à <b style={{color:now.ok?T.good:T.warn}}>{now.pct} %</b> de la 1<sup>re</sup> → <b style={{color:now.ok?T.good:T.warn}}>{now.ok?`prochain objectif : ${fmtThousands(now.target)}\u00a0m par série (+50\u00a0m)`:`pas de montée : prochain objectif ${fmtThousands(now.target)}\u00a0m`}</b>
         </div>
       )}
       <div style={{marginTop:gauge>0?10:12,display:'flex',alignItems:'center',gap:8}}>
@@ -2827,7 +2874,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
           )}
           {ex.style==='CARDIO'&&ex.cardio&&(
             <div style={{marginBottom:24}}>
-              <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
+              <CardioDistanceCard sets={ex.sets} name={ex.name} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
             </div>
           )}
           {!allExDone&&!(ex.style==='CARDIO'&&ex.cardio)&&(
@@ -3138,7 +3185,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                         ))}
                       </div>
                     )}
-                    <CardioDistanceCard sets={ex.sets} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
+                    <CardioDistanceCard sets={ex.sets} name={ex.name} last={lastCardioDistance(history,ex.name)} onChange={(si,v)=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:e.sets.map((x,j)=>j!==si?x:{...x,distance:v})}))} onAdd={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx?e:{...e,sets:[...e.sets,{weight:0,reps:0,done:e.sets.every(x=>x.done)}]}))} onRemove={()=>setExercises(prev=>prev.map((e,idx)=>idx!==safeIdx||e.sets.length<=1?e:{...e,sets:e.sets.slice(0,-1)}))}/>
                     {!allDone&&hasTimer&&(
                       <button className="cd-cta" onClick={()=>startCardioTimer(cardioSeconds(c.duree))} disabled={setTimerSecs>0}>
                         <span style={{display:'flex',alignItems:'center',gap:10,fontSize:16,fontWeight:800,letterSpacing:0.2}}>
