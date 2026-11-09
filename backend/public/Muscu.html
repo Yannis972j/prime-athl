@@ -8264,8 +8264,11 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
             const histList=(history||[]).filter(h=>h.date&&validDate(h.date)&&ymdKey(new Date(h.date))===selectedDay.dateStr).sort((a,b)=>new Date(a.date)-new Date(b.date));
             const histIdx=Math.min(Math.max(0,histPick[selectedDay.dateStr]||0),Math.max(0,histList.length-1));
             const histSession=histList[histIdx];
-            const displayExercises=d?d.exercises.map(ex=>lightenExercise(applyDeload(ex),dayLightFor(selectedDay.dateStr))):(histSession?.exercises||null);
-            const displayName=d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
+            // Plusieurs séances faites ce jour-là : on montre le CONTENU de celle choisie (puces), pas celui du
+            // programme du jour — sinon changer de puce ne change rien à ce qu'on lit.
+            const showHist=isDone&&histList.length>1&&!!histSession;
+            const displayExercises=showHist?(histSession.exercises||null):d?d.exercises.map(ex=>lightenExercise(applyDeload(ex),dayLightFor(selectedDay.dateStr))):(histSession?.exercises||null);
+            const displayName=showHist?(histSession.name||selectedDay.dayName):d?d.category||selectedDay.dayName:(histSession?.name||selectedDay.dayName);
             const dateLabel=new Date(selectedDay.dateStr+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
             // Jour déjà passé (avant aujourd'hui) → on propose de VALIDER la séance à cette date.
             const isPastDay=selectedDay.dateStr<ymdKey();
@@ -8320,7 +8323,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                                   {bi>0&&<span style={{fontSize:9,color:group.color,fontWeight:700}}>↓</span>}
                                   <div style={{flex:1,minWidth:0}}>
                                     <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
-                                    {group.style==='CLASSIQUE'&&<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'} reps</div>}
+                                    {group.style==='CLASSIQUE'&&(showHist&&ex.sets.some(x=>(x.weight||0)>0||(x.reps||0)>0)
+                                      ?<div data-testid="hist-sets" style={{fontSize:10.5,color:T.textDim,marginTop:2,lineHeight:1.5}}>{ex.sets.map(x=>`${x.weight>0?x.weight+' kg × ':''}${x.reps||0}`).join('  ·  ')}</div>
+                                      :<div style={{fontSize:10,color:T.textFaint,marginTop:1}}>{ex.sets.length} séries · {ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?'} reps</div>)}
                                   </div>
                                   {group.style!=='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{seriesLabel(ex,ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?')}</span>}
                                   {group.style==='CLASSIQUE'&&<span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>{seriesLabel(ex,ex.sets[0]?.targetStr||ex.sets[0]?.target||ex.sets[0]?.reps||'?')}</span>}
