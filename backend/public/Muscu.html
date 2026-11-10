@@ -986,6 +986,10 @@ function parseDureeSeconds(str) {
   return m ? parseInt(m[1]) : 0;
 }
 
+// Valeur d'erreur Excel (#VALUE!, #REF!, #N/A, #DIV/0!, #NAME?, #NUM!, #NULL!) — texte ou cellule de type erreur.
+function isExcelErrorValue(v) {
+  return typeof v === 'string' && /^#(VALUE!|REF!|N\/A|DIV\/0!|NAME\?|NUM!|NULL!)$/i.test(v.trim());
+}
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
   const categoryFallback = !!(opts && opts.categoryFallback);
@@ -1043,7 +1047,15 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
       wb.SheetNames.forEach(sheetName => {
         const ws = wb.Sheets[sheetName];
         if (!ws || !ws['!ref']) return;
-        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
+        // Cellules en ERREUR Excel (#VALUE!, #REF!…) : elles ne portent aucune donnée. Sans ce filtre,
+        // « #VALUE! » devenait la charge de l'exercice (ex: formule DECHARGE sur un poids tapé en texte).
+        // On les traite comme vides (la décharge retombe alors sur le calcul automatique à 60 %) et on prévient.
+        const errCells = [];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true}).map((r, ri) => r.map((v, ci) => {
+          if (isExcelErrorValue(v)) { errCells.push(XLSX.utils.encode_cell({r:ri, c:ci})); return ''; }
+          return v;
+        }));
+        if (errCells.length) warnings.push(`Feuille "${sheetName}" : ${errCells.length} cellule(s) en erreur Excel ignorée(s) (${errCells.slice(0, 5).join(', ')}${errCells.length > 5 ? '…' : ''}) — vérifie ces cellules dans le fichier ; la décharge est calculée automatiquement (60 %) pour ces lignes.`);
         if (!rows.length) return;
 
         let colJour=0, colStyle=1, colExercice=2, colMuscle=3, colCharge=4;
@@ -1108,7 +1120,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
           const cellText = (colIdx) => {
             const cell = ws[XLSX.utils.encode_cell({r:rowIdx, c:colIdx})];
-            if (!cell) return '';
+            if (!cell || cell.t === 'e' || isExcelErrorValue(cell.v)) return '';
             // Entier dans la plage des serials de date Excel (≈ 1982–2118) :
             // "4-5" tapé en Excel français → converti en "4 mai" → serial ~46146.
             // On reconstitue la notation "j-m" d'origine.
@@ -1897,10 +1909,42 @@ const PrimeAudio=(()=>{
 // Carte « Distance réalisée » d'un exercice cardio : un registre propre, une ligne par série (modifiable à tout
 // moment, même après validation) avec, SOUS CHAQUE SÉRIE, la distance de la dernière fois, l'écart et le cumul ;
 // en bas le cumul total et une jauge face à la dernière fois — comme poids/reps en muscu.
+// Unité de distance d'un cardio (m ou km) : choix retenu par exercice, sinon km pour tapis/course/marche/vélo, m ailleurs.
+// Les distances sont TOUJOURS stockées en mètres ; l'unité ne change que la saisie et l'affichage.
+function cardioUnitPref(name){
+  const k=normExerciseName(name);
+  try{const v=localStorage.getItem('pa_dist_unit:'+k);if(v==='km'||v==='m')return v;}catch{}
+  return /tapis|course|marche|footing|jogging|\brun|treadmill|velo|bike|rando|randonnee/.test(k)?'km':'m';
+}
+function fmtDistanceKm(m){return((m||0)/1000).toLocaleString('fr-FR',{maximumFractionDigits:3}).replace(/[\u202f\s]/g,'\u00a0')+'\u00a0km';}
+// Champ de distance : en m = chiffres seulement ; en km = décimales acceptées (« 2,5 » = 2 500 m), converties en mètres.
+function DistanceInput({km,value,onChange,placeholder,ariaLabel}){
+  const[draft,setDraft]=React.useState(null);
+  const meters=(()=>{const v=parseFloat(String(value==null?'':value).replace(',','.'));return v>0?v:0;})();
+  const shown=km?(draft!==null?draft:(meters>0?String(meters/1000).replace('.',','):'')):(value==null?'':String(value));
+  const handle=e=>{
+    const raw=e.target.value;
+    if(!km){onChange(raw.replace(/[^0-9]/g,'').slice(0,6));return;}
+    let t=raw.replace('.',',').replace(/[^0-9,]/g,'');
+    const parts=t.split(',');
+    t=parts.length>1?parts[0].slice(0,3)+','+parts.slice(1).join('').slice(0,3):parts[0].slice(0,3);
+    setDraft(t);
+    const n=parseFloat(t.replace(',','.'));
+    onChange(Number.isFinite(n)&&n>0?String(Math.min(100000,Math.round(n*1000))):'');
+  };
+  return <input className="cd-input" type="text" inputMode={km?'decimal':'numeric'} aria-label={ariaLabel} value={shown} placeholder={placeholder} onChange={handle} onBlur={()=>setDraft(null)}/>;
+}
 function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
   const list=sets||[];
+  // Unité de saisie/affichage : m ou km (retenue par exercice). Les données restent TOUJOURS en mètres.
+  const[unit,setUnitRaw]=React.useState(()=>cardioUnitPref(name));
+  const setUnit=u=>{setUnitRaw(u);try{localStorage.setItem('pa_dist_unit:'+normExerciseName(name),u);}catch{}};
   // Règle de progression (SKIERG RESISTANCE) : objectif du jour tiré de la dernière fois + bilan en direct.
   const prog=isProgressiveCardio(name);
+  const km=!prog&&unit==='km'; // la règle de progression SKIERG RESISTANCE reste en mètres
+  const fd=m=>km?fmtDistanceKm(m):fmtDistanceM(m);
+  const fdn=m=>km?(m/1000).toLocaleString('fr-FR',{maximumFractionDigits:3}):fmtThousands(m);
+  const ph=m=>km?String(m/1000).replace('.',','):String(m);
   const base=prog&&last?cardioProgression(last.perSet):null;
   // Objectif fixé par le coach (surcharge progressive +50 m validée dans le récap) : prioritaire sur le calcul automatique.
   const goal=prog&&coachGoal>0?{...(base||{}),target:coachGoal,coach:true,ok:coachGoal>((base&&base.avg)||0)}:base;
@@ -1925,6 +1969,14 @@ function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:6}}>
         <div className="cd-eyebrow" style={{color:'#fff'}}>Distance réalisée</div>
         <div style={{flex:1,height:1,background:'linear-gradient(90deg,rgba(191,160,96,0.45),rgba(191,160,96,0))'}}/>
+        {!prog&&(
+          <div role="group" aria-label="Unité de distance" data-testid="cardio-unit" style={{display:'flex',padding:2,borderRadius:10,background:'rgba(255,255,255,0.07)',flexShrink:0}}>
+            {['m','km'].map(u=>{const on=unit===u;return(
+              <button key={u} type="button" data-testid={'cardio-unit-'+u} aria-pressed={on} onClick={()=>setUnit(u)}
+                style={{minWidth:40,height:28,padding:'0 10px',borderRadius:8,border:'none',cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:800,letterSpacing:0.2,
+                  background:on?'linear-gradient(135deg,#E6CB86,#A98B4A)':'transparent',color:on?'#15110a':T.textDim}}>{u}</button>);})}
+          </div>
+        )}
       </div>
       {prog&&(
         <div data-testid="cardio-goal" style={{margin:'6px 0 10px',padding:'14px 14px 12px',borderRadius:14,background:'linear-gradient(160deg,rgba(191,160,96,0.14),rgba(191,160,96,0.04))',border:'1px solid rgba(191,160,96,0.4)'}}>
@@ -1967,10 +2019,9 @@ function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
                 </div>
               )}
               <div style={{position:'relative',flex:1,minWidth:0}}>
-                <input className="cd-input" type="text" inputMode="numeric" pattern="[0-9]*" aria-label={multi?`Distance série ${i+1} en mètres`:'Distance en mètres'}
-                  value={s.distance==null?'':String(s.distance)} placeholder={goal?String(goal.target):lm>0?String(lm):'0'}
-                  onChange={e=>onChange(i,e.target.value.replace(/[^0-9]/g,'').slice(0,6))}/>
-                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,fontWeight:600,color:T.textDim,pointerEvents:'none'}}>m</span>
+                <DistanceInput km={km} value={s.distance} onChange={v=>onChange(i,v)} placeholder={goal?ph(goal.target):lm>0?ph(lm):'0'}
+                  ariaLabel={`Distance${multi?' série '+(i+1):''} en ${km?'kilomètres':'mètres'}`}/>
+                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,fontWeight:600,color:T.textDim,pointerEvents:'none'}}>{km?'km':'m'}</span>
               </div>
               {(last||(multi&&v>0))&&(
                 <div style={{width:106,flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3,textAlign:'right'}}>
@@ -1978,12 +2029,12 @@ function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
                     <span data-testid="cardio-last-set" style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                       <span style={{fontSize:8.5,color:T.good,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Dernière fois</span>
                       <span style={{display:'inline-flex',alignItems:'center',gap:6}}>
-                        <span style={{fontSize:13,color:T.textDim,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lm>0?fmtDistanceM(lm):'—'}</span>
-                        {rd!=null&&rd!==0&&<span className="cd-chip" style={{color:colOf(rd),background:chipBg(rd)}}>{rd>0?'+':''}{fmtThousands(rd)}</span>}
+                        <span style={{fontSize:13,color:T.textDim,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{lm>0?fd(lm):'—'}</span>
+                        {rd!=null&&rd!==0&&<span className="cd-chip" style={{color:colOf(rd),background:chipBg(rd)}}>{rd>0?'+':''}{fdn(rd)}</span>}
                       </span>
                     </span>
                   )}
-                  {multi&&v>0&&<span data-testid="cardio-run" style={{fontSize:10.5,color:T.textDim}}>Cumul : <b style={{color:T.good,fontWeight:700}}>{fmtDistanceM(run)}</b></span>}
+                  {multi&&v>0&&<span data-testid="cardio-run" style={{fontSize:10.5,color:T.textDim}}>Cumul : <b style={{color:T.good,fontWeight:700}}>{fd(run)}</b></span>}
                 </div>
               )}
             </div>
@@ -2000,8 +2051,8 @@ function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
         <div data-testid="cardio-cumul" style={{marginTop:14,paddingTop:14,borderTop:'1px solid rgba(191,160,96,0.22)',display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:10}}>
           <div className="cd-eyebrow">Cumul</div>
           <div style={{textAlign:'right'}}>
-            <div style={{fontSize:40,fontWeight:300,lineHeight:1,letterSpacing:-1.2,color:total>0?T.good:'rgba(255,255,255,0.22)',fontVariantNumeric:'tabular-nums'}}>{fmtDistanceM(total)}</div>
-            {lastTotal>0&&<div style={{display:'flex',alignItems:'baseline',justifyContent:'flex-end',gap:6,marginTop:6}}><span style={{fontSize:8.5,color:T.good,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Dernière fois</span><span style={{fontSize:13,color:T.textDim,fontWeight:600}}>{fmtDistanceM(lastTotal)}</span></div>}
+            <div style={{fontSize:40,fontWeight:300,lineHeight:1,letterSpacing:-1.2,color:total>0?T.good:'rgba(255,255,255,0.22)',fontVariantNumeric:'tabular-nums'}}>{fd(total)}</div>
+            {lastTotal>0&&<div style={{display:'flex',alignItems:'baseline',justifyContent:'flex-end',gap:6,marginTop:6}}><span style={{fontSize:8.5,color:T.good,fontWeight:700,letterSpacing:0.6,textTransform:'uppercase'}}>Dernière fois</span><span style={{fontSize:13,color:T.textDim,fontWeight:600}}>{fd(lastTotal)}</span></div>}
           </div>
         </div>
       )}
@@ -2021,10 +2072,10 @@ function CardioDistanceCard({sets,last,name,coachGoal,onChange,onAdd,onRemove}){
       )}
       <div style={{marginTop:gauge>0?10:12,display:'flex',alignItems:'center',gap:8}}>
         {delta!=null&&<span className="cd-chip" style={{height:22,padding:'0 10px',borderRadius:11,fontSize:11.5,color:colOf(delta),background:chipBg(delta)}}>
-          {`${delta>0?'↑ +':delta<0?'↓ ':'= '}${delta!==0?fmtDistanceM(Math.abs(delta)).replace(' m','')+' m':'même distance'} vs la dernière fois`}
+          {`${delta>0?'↑ +':delta<0?'↓ ':'= '}${delta!==0?fd(Math.abs(delta)):'même distance'} vs la dernière fois`}
         </span>}
         {delta==null&&<span style={{fontSize:11,lineHeight:1.4,color:T.textFaint}}>
-          {lastTotal>0&&total>0&&!sameShape?`Total ${fmtDistanceM(total)} · pas de comparaison : le nombre de séries a changé.`
+          {lastTotal>0&&total>0&&!sameShape?`Total ${fd(total)} · pas de comparaison : le nombre de séries a changé.`
             :lastTotal>0?'Note ta distance pour suivre ta progression.'
             :'Ta distance du jour servira de repère pour la prochaine séance.'}
         </span>}
