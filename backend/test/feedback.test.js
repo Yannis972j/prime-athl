@@ -52,8 +52,9 @@ test('front : la popup ne s\'ouvre qu\'au démarrage d\'une séance du MÊME NOM
   assert.doesNotMatch(html, /if\(pendingCoachFeedback&&!coachSessionTarget\)/);
   // un feedback en attente reste accessible via une carte dans l'onglet Séances
   assert.match(html, /a commenté « \{f\.sessionName\} »/);
-  // rappel retrouvé dans l'historique quand la popup a déjà été lue
-  assert.match(html, /last&&last\.coachFeedback[\s\S]{0,200}setSessionCoachFeedback/);
+  // feedback déjà lu : retrouvé dans l'historique, il alimente le rappel dépliable ET rouvre le pop-up
+  // à chaque lancement de la même séance
+  assert.match(html, /last&&last\.coachFeedback[\s\S]{0,700}setSessionCoachFeedback\(fb\);\s*setActiveCoachFeedback\(fb\)/);
 });
 
 test('file d\'attente : un feedback par séance, un 2e feedback n\'écrase plus le 1er, ack ciblé', async () => {
