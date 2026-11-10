@@ -986,6 +986,10 @@ function parseDureeSeconds(str) {
   return m ? parseInt(m[1]) : 0;
 }
 
+// Valeur d'erreur Excel (#VALUE!, #REF!, #N/A, #DIV/0!, #NAME?, #NUM!, #NULL!) — texte ou cellule de type erreur.
+function isExcelErrorValue(v) {
+  return typeof v === 'string' && /^#(VALUE!|REF!|N\/A|DIV\/0!|NAME\?|NUM!|NULL!)$/i.test(v.trim());
+}
 // ── Excel import (format Yannis - programme de sport.xlsx) ──
 function parseYannisExcel(file, onSuccess, onError, opts) {
   const categoryFallback = !!(opts && opts.categoryFallback);
@@ -1043,7 +1047,15 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
       wb.SheetNames.forEach(sheetName => {
         const ws = wb.Sheets[sheetName];
         if (!ws || !ws['!ref']) return;
-        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
+        // Cellules en ERREUR Excel (#VALUE!, #REF!…) : elles ne portent aucune donnée. Sans ce filtre,
+        // « #VALUE! » devenait la charge de l'exercice (ex: formule DECHARGE sur un poids tapé en texte).
+        // On les traite comme vides (la décharge retombe alors sur le calcul automatique à 60 %) et on prévient.
+        const errCells = [];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true}).map((r, ri) => r.map((v, ci) => {
+          if (isExcelErrorValue(v)) { errCells.push(XLSX.utils.encode_cell({r:ri, c:ci})); return ''; }
+          return v;
+        }));
+        if (errCells.length) warnings.push(`Feuille "${sheetName}" : ${errCells.length} cellule(s) en erreur Excel ignorée(s) (${errCells.slice(0, 5).join(', ')}${errCells.length > 5 ? '…' : ''}) — vérifie ces cellules dans le fichier ; la décharge est calculée automatiquement (60 %) pour ces lignes.`);
         if (!rows.length) return;
 
         let colJour=0, colStyle=1, colExercice=2, colMuscle=3, colCharge=4;
@@ -1108,7 +1120,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
           const cellText = (colIdx) => {
             const cell = ws[XLSX.utils.encode_cell({r:rowIdx, c:colIdx})];
-            if (!cell) return '';
+            if (!cell || cell.t === 'e' || isExcelErrorValue(cell.v)) return '';
             // Entier dans la plage des serials de date Excel (≈ 1982–2118) :
             // "4-5" tapé en Excel français → converti en "4 mai" → serial ~46146.
             // On reconstitue la notation "j-m" d'origine.
