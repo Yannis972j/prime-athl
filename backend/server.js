@@ -1549,7 +1549,7 @@ app.get('/api/coach/athletes/:id', authRequired, coachOnly, (req, res) => {
     ...profileOf(u),
     program: p ? { data: p.data, assignedAt: p.assignedAt, fileName: p.fileName || '' } : null,
     scheduledProgram: sched ? { data: sched.data, activateOn: sched.activateOn, scheduledAt: sched.scheduledAt } : null,
-    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied })),
+    sessions: sessions.map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied, ...(Array.isArray(s.overloadUpdates) && s.overloadUpdates.length ? { overloadUpdates: s.overloadUpdates } : {}) })),
     scheduleMoves: DATA.scheduleMoves[u.id] || {},
     plannedSessions: DATA.plannedSessions[u.id] || {},
     pendingSessions: DATA.pendingSessions[u.id] || [],
@@ -2256,7 +2256,7 @@ app.get('/api/sessions', authRequired, (req, res) => {
     // deload / overloadApplied : drapeaux persistés côté serveur qu'il FAUT renvoyer, sinon le
     // récap relu depuis l'historique perd l'info « semaine de décharge » (et réaffiche une alerte
     // de recul au lieu du bandeau neutre), et la montée de charge déjà validée se re-propose.
-    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied }));
+    .map(s => ({ id: s.id, date: s.date, name: s.name, totalVolume: s.totalVolume, exercises: s.exercises || [], rpe: s.rpe, notes: s.notes, duration: s.duration, coachFeedback: s.coachFeedback, coachFeedbackAt: s.coachFeedbackAt, feedbackSkipped: !!s.feedbackSkipped, coachFeedbackBy: s.coachFeedbackBy || (s.coachFeedback ? coachDisplayName(DATA.users[DATA.users[s.userId]?.coachId]) : undefined), createdByCoach: !!s.createdByCoach, deload: !!s.deload, ...(s.lightReason ? { lightReason: s.lightReason } : {}), overloadApplied: !!s.overloadApplied, ...(Array.isArray(s.overloadUpdates) && s.overloadUpdates.length ? { overloadUpdates: s.overloadUpdates } : {}) }));
   res.json(list);
 });
 

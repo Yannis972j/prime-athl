@@ -19359,14 +19359,19 @@ function MainApp({authUser,onLogout,setUser,authToken}){
         showedFeedback=true;
       }
     }
-    // Feedback déjà lu (popup acquittée) : le rappel dépliable dans la séance reste disponible tant que le
+    // Feedback déjà lu : il ré-apparaît en pop-up à chaque lancement de la même séance, et le rappel dépliable reste disponible tant que le
     // coach a commenté la DERNIÈRE séance de ce nom — c'est la consigne pour celle qu'on démarre.
     if(!showedFeedback&&!coachSessionTarget){
       const wn=normSessionKey(w.name);
       if(wn){
         const last=(history||[]).filter(h=>h&&h.date&&normSessionKey(h.name)===wn).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
         if(last&&last.coachFeedback){
-          setSessionCoachFeedback({sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:last.coachFeedbackBy||'',updates:[]});
+          const fb={sessionId:last.id,sessionName:last.name,sessionDate:last.date,feedback:last.coachFeedback,coachName:last.coachFeedbackBy||'',updates:Array.isArray(last.overloadUpdates)?last.overloadUpdates:[]};
+          // Même séance relancée : le feedback déjà lu REVIENT en pop-up à chaque ouverture (c'est la consigne
+          // du coach pour cette séance) ; il reste aussi dans le rappel dépliable de l'écran de séance.
+          setSessionCoachFeedback(fb);
+          setActiveCoachFeedback(fb);setShowFeedbackRecap(false);
+          showedFeedback=true; // pas de 2e pop-up (motivation) par-dessus
         }
       }
     }
