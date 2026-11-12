@@ -5398,6 +5398,46 @@ function PushNotifToggle(){
   );
 }
 
+// ── Auto-réparation des notifications push ──
+// Cause de « je ne reçois plus rien » : quand le service de push répond 404/410 (réinstallation de la PWA,
+// appareil changé, abonnement expiré), le serveur marque l'appareil invalide et n'envoie plus. Le client,
+// lui, croyait être abonné (getSubscription() non nul) et renvoyait la même subscription morte à chaque
+// ouverture → aucune notification, aucun signal. Ici on compare avec l'état serveur et on recrée un
+// abonnement NEUF si besoin. Aucune demande de permission : uniquement si elle est déjà accordée.
+async function paPushRepair(){
+  try{
+    if(typeof Notification==='undefined'||!('serviceWorker' in navigator)||!('PushManager' in window))return'unsupported';
+    if(Notification.permission==='denied')return'denied';
+    if(Notification.permission!=='granted')return'off';
+    const{key}=await apiCall('/api/push/vapid-public-key');
+    if(!key)return'unsupported';
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    const st=await apiCall('/api/push/status');
+    const known=!!(sub&&(st.endpoints||[]).some(e=>sub.endpoint.indexOf(e)===0));
+    // Clé VAPID différente de celle de l'abonnement navigateur → abonnement inutilisable
+    let keyMismatch=false;
+    try{
+      const cur=sub&&sub.options&&sub.options.applicationServerKey;
+      if(cur){
+        const b64=btoa(String.fromCharCode.apply(null,new Uint8Array(cur))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        keyMismatch=b64!==String(key).replace(/=+$/,'');
+      }
+    }catch{}
+    if(sub&&known&&!keyMismatch)return'ok';
+    // Abonnement connu du navigateur mais marqué mort côté serveur (ou clé changée) → on le jette
+    const dead=!!sub&&(keyMismatch||(st.invalidated>0&&!known));
+    if(dead){try{await sub.unsubscribe();}catch{}sub=null;}
+    if(!sub){
+      const raw=atob(String(key).replace(/-/g,'+').replace(/_/g,'/'));
+      const vapidKey=new Uint8Array(raw.split('').map(c=>c.charCodeAt(0)));
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:vapidKey});
+    }
+    await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
+    return'repaired';
+  }catch(e){return'error';}
+}
+
 // ── Versions compactes pour le bloc Préférences du profil ──
 // Invitation à activer les notifications push (athlète). Jusqu'ici l'activation n'existait que dans
 // Profil → Notifications : la plupart des athlètes ne la trouvaient jamais, et ne recevaient donc AUCUNE
@@ -5483,8 +5523,8 @@ function ProfilePushRow(){
     navigator.serviceWorker.ready.then(async reg=>{
       const sub=await reg.pushManager.getSubscription();
       if(!sub){setStatus('off');return;}
-      try{const s=await apiCall('/api/push/status');if(!s.subscribed)await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});}catch(e){}
-      setStatus('on');
+      const r=await paPushRepair();
+      setStatus(r==='error'?'off':'on');
     }).catch(()=>setStatus('off'));
   },[]);
   const enable=async()=>{
@@ -18817,6 +18857,15 @@ function useGestureNav({tabIds, tab, setTab, onBack, canBack, onRefresh, canRefr
 function MainApp({authUser,onLogout,setUser,authToken}){
   const[,forceUpdate]=React.useReducer(n=>n+1,0);
   React.useEffect(()=>{_themeUpdate=forceUpdate;return()=>{_themeUpdate=null};},[]);
+  // Notifications push : répare un abonnement mort à l'ouverture et au retour sur l'app (coach ET athlète)
+  React.useEffect(()=>{
+    let last=0;
+    const run=()=>{const n=Date.now();if(n-last<60000)return;last=n;paPushRepair();};
+    run();
+    const onVis=()=>{if(document.visibilityState==='visible')run();};
+    document.addEventListener('visibilitychange',onVis);
+    return()=>document.removeEventListener('visibilitychange',onVis);
+  },[]);
   const[showOnboarding,setShowOnboarding]=React.useState(!authUser.onboardedAt&&authUser.role!=='coach');
   // Deep-link via ?action=...
   const CREATOR_EMAIL='yannisgym972@gmail.com';

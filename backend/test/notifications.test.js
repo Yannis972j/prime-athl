@@ -138,3 +138,17 @@ test('accès : texte de la notification', () => {
   assert.match(accessReminderPayload(2, 'Yannis').body, /Yannis peut le prolonger/);
   assert.equal(accessDaysLeft({ role: 'athlete', accessExpiresAt: inDays(2, 1) }, NOW), 3, 'arrondi au supérieur, comme le pop-up');
 });
+
+// ── auto-réparation des abonnements push morts (404/410) ──
+test('push : le client recrée un abonnement mort au lieu de renvoyer le même (coach inclus)', () => {
+  const html = fs.readFileSync(path.join(here, '../public/Muscu.html'), 'utf8');
+  assert.match(html, /async function paPushRepair\(\)/);
+  // compare avec l'état serveur, jette l'abonnement mort, en crée un neuf sans redemander la permission
+  assert.match(html, /st\.invalidated>0&&!known/);
+  assert.match(html, /sub\.unsubscribe\(\)/);
+  assert.doesNotMatch(html.match(/async function paPushRepair[\s\S]*?\n}\n/)[0], /requestPermission/);
+  // lancé au démarrage de l'app pour tous les rôles (pas seulement la carte athlète)
+  assert.match(html, /function MainApp[\s\S]{0,900}paPushRepair\(\)/);
+  // le réglage du profil n'affiche plus « Activées » sur la seule foi du navigateur
+  assert.match(html, /const r=await paPushRepair\(\);\s*setStatus\(r==='error'\?'off':'on'\)/);
+});
