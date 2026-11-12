@@ -4008,6 +4008,9 @@ app.post('/api/push/subscribe', authRequired, (req, res) => {
   const entry = DATA.pushSubscriptions[req.user.id];
   // Multi-appareil : ajouter la subscription sans écraser les autres
   if (entry?.devices) {
+    // Un nouvel abonnement remplace les appareils déjà marqués morts (404/410) : sinon ils s'accumulent
+    // et prennent des places sur les 5 appareils autorisés.
+    entry.devices = entry.devices.filter(d => !d.invalidatedAt || d.endpoint === subscription.endpoint);
     // Remplacer si même endpoint, sinon ajouter (max 5 appareils)
     const idx = entry.devices.findIndex(d => d.endpoint === subscription.endpoint);
     if (idx >= 0) entry.devices[idx] = subscription;
