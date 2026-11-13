@@ -3752,34 +3752,43 @@ const PUSH_BADGE = '/notif-badge.png';
 // au lieu de temporiser/regrouper comme avec l'urgence "normale" par défaut. TTL 4h → si l'appareil
 // est brièvement hors-ligne la notif est encore délivrée à la reconnexion, sans être périmée.
 const PUSH_OPTS = { TTL: 4 * 3600, urgency: 'high' };
-function pushToUser(userId, payload) {
-  if (!VAPID_PUBLIC_KEY) { console.log('[push] skip (no VAPID)', userId, payload.title); return; }
+// Envoie à tous les appareils de l'utilisateur et RENVOIE le résultat par appareil (utilisé par le bouton
+// « Tester » : sans ça le test annonçait « envoyé » dès la requête partie, sans jamais dire si la notification
+// avait réellement été acceptée par Apple/Google, ni pourquoi elle ne l'était pas).
+function sendPush(userId, payload) {
+  if (!VAPID_PUBLIC_KEY) { console.log('[push] skip (no VAPID)', userId, payload.title); return Promise.resolve({ skipped: 'no_vapid', results: [] }); }
   const entry = DATA.pushSubscriptions[userId];
-  if (!entry) { console.log('[push] skip (no sub)', userId, payload.title); return; }
+  if (!entry) { console.log('[push] skip (no sub)', userId, payload.title); return Promise.resolve({ skipped: 'no_sub', results: [] }); }
   // Support multi-appareils : entry = subscription OU { devices: [sub, ...] }
   const subs = entry.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry.invalidatedAt ? [] : [entry]);
-  if (!subs.length) { console.log('[push] skip (all invalidated)', userId); return; }
+  if (!subs.length) { console.log('[push] skip (all invalidated)', userId); return Promise.resolve({ skipped: 'all_invalidated', results: [] }); }
   const enriched = { icon: PUSH_ICON, badge: PUSH_BADGE, ...payload };
   const body = JSON.stringify(enriched);
-  for (const sub of subs) {
+  return Promise.all(subs.map(sub =>
     webpush.sendNotification(sub, body, PUSH_OPTS)
-      .then(() => console.log('[push] ✓ sent', userId, payload.title, sub.endpoint?.slice(0, 50)))
+      .then(r => {
+        console.log('[push] ✓ sent', userId, payload.title, sub.endpoint?.slice(0, 50));
+        return { endpoint: sub.endpoint?.slice(0, 50), ok: true, statusCode: r?.statusCode || 201 };
+      })
       .catch(e => {
         console.error('[push] ✗ error', userId, e.statusCode, e.message, sub.endpoint?.slice(0, 50));
         if (e.statusCode === 410 || e.statusCode === 404) {
           const fresh = DATA.pushSubscriptions[userId];
-          if (!fresh) return;
-          if (fresh.devices) {
-            const d = fresh.devices.find(d => d.endpoint === sub.endpoint);
-            if (d) { d.invalidatedAt = Date.now(); persist(); }
-          } else if (fresh.endpoint === sub.endpoint) {
-            DATA.pushSubscriptions[userId] = { ...fresh, invalidatedAt: Date.now() };
-            persist();
+          if (fresh) {
+            if (fresh.devices) {
+              const d = fresh.devices.find(d => d.endpoint === sub.endpoint);
+              if (d) { d.invalidatedAt = Date.now(); persist(); }
+            } else if (fresh.endpoint === sub.endpoint) {
+              DATA.pushSubscriptions[userId] = { ...fresh, invalidatedAt: Date.now() };
+              persist();
+            }
           }
         }
-      });
-  }
+        return { endpoint: sub.endpoint?.slice(0, 50), ok: false, statusCode: e.statusCode || 0, message: String(e.message || '').slice(0, 120) };
+      })
+  )).then(results => ({ results }));
 }
+function pushToUser(userId, payload) { sendPush(userId, payload); }
 
 // ── IA — Nutrition helpers ───────────────────────────
 const AI_MEAL_TEMPLATES = {
@@ -4041,13 +4050,20 @@ app.delete('/api/push/subscribe', authRequired, (req, res) => {
 });
 
 // ── Test push — envoie une vraie notif pour vérifier que la chaîne fonctionne ──
-app.post('/api/push/test', authRequired, (req, res) => {
-  if (!VAPID_PUBLIC_KEY) return res.json({ ok: false, reason: 'VAPID non configuré sur le serveur' });
+app.post('/api/push/test', authRequired, async (req, res) => {
+  if (!VAPID_PUBLIC_KEY) return res.json({ ok: false, reason: 'Notifications non configurées sur le serveur (clés VAPID absentes)' });
   const entry = DATA.pushSubscriptions[req.user.id];
   const subs = entry?.devices ? entry.devices.filter(d => !d.invalidatedAt) : (entry && !entry.invalidatedAt ? [entry] : []);
-  if (!subs.length) return res.json({ ok: false, reason: 'Aucun appareil enregistré — active les notifications dans ton profil' });
-  pushToUser(req.user.id, { title: '🔔 Test Prime Athl', body: 'Si tu vois ceci, les notifications fonctionnent !', url: '/Muscu.html' });
-  res.json({ ok: true, deviceCount: subs.length });
+  if (!subs.length) return res.json({ ok: false, reason: 'Aucun appareil enregistré ou appareil expiré — touche Off puis On', code: 'no_device' });
+  const out = await sendPush(req.user.id, { title: '🔔 Test Prime Athl', body: 'Si tu vois ceci, les notifications fonctionnent !', url: '/Muscu.html' });
+  const delivered = out.results.filter(r => r.ok).length;
+  if (delivered > 0) return res.json({ ok: true, deviceCount: subs.length, delivered });
+  const first = out.results[0] || {};
+  const sc = first.statusCode;
+  let reason = `Refusé par le service de notifications (${sc || 'erreur réseau'})`;
+  if (sc === 404 || sc === 410) reason = 'Appareil expiré — réparation automatique…';
+  else if (sc === 401 || sc === 403) reason = 'Clés VAPID du serveur refusées (clés modifiées ?) — touche Off puis On';
+  res.json({ ok: false, reason, code: sc === 404 || sc === 410 ? 'expired' : 'rejected', statusCode: sc || 0 });
 });
 
 // ── Alarme "repos terminé" ──────────────────────────

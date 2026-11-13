@@ -6,7 +6,10 @@ import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from '../test
 
 let srv, browser, coach, la, id;
 const PW = 'longenough1';
-const key = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+// Le navigateur du test tourne en America/Martinique (UTC-4) ; le runner CI en UTC. Les jours doivent donc être
+// calculés en heure de Martinique, sinon entre 00 h et 04 h UTC le « jour » du test ≠ celui de l'app (échec horaire).
+const mq = d => new Date(d.getTime() - 4 * 3600000); // lire ensuite avec les getters UTC
+const key = d => { const m = mq(d); return m.getUTCFullYear() + '-' + String(m.getUTCMonth() + 1).padStart(2, '0') + '-' + String(m.getUTCDate()).padStart(2, '0'); };
 const dayAgo = n => new Date(Date.now() - n * 86400000);
 const done = (n, w, r) => ({ name: n, muscle: 'JAMBES', sets: [{ weight: w, reps: r, done: true }, { weight: w, reps: r, done: true }] });
 const pex = n => ({ name: n, muscle: 'JAMBES', restSeconds: 5, sets: [{ weight: 60, reps: 10, target: '10' }] });
@@ -37,8 +40,8 @@ async function login(email, pw) {
   return { ctx, pg, errs };
 }
 const goDay = async (pg, d) => {
-  const now = new Date();
-  for (let i = 0; i < (now.getFullYear() - d.getFullYear()) * 12 + now.getMonth() - d.getMonth(); i++) { await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(300); }
+  const now = mq(new Date()), want = mq(d);
+  for (let i = 0; i < (now.getUTCFullYear() - want.getUTCFullYear()) * 12 + now.getUTCMonth() - want.getUTCMonth(); i++) { await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(300); }
   await pg.locator(`[data-cal-date="${key(d)}"]`).click(); await pg.waitForTimeout(800);
 };
 
