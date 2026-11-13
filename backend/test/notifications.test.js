@@ -152,3 +152,13 @@ test('push : le client recrée un abonnement mort au lieu de renvoyer le même (
   // le réglage du profil n'affiche plus « Activées » sur la seule foi du navigateur
   assert.match(html, /const r=await paPushRepair\(\);\s*setStatus\(r==='error'\?'off':'on'\)/);
 });
+
+test('push : le test attend le VRAI résultat d\'envoi et explique l\'échec (au lieu de « envoyé » à vide)', () => {
+  const srv = fs.readFileSync(path.join(here, '../server.js'), 'utf8');
+  const html = fs.readFileSync(path.join(here, '../public/Muscu.html'), 'utf8');
+  assert.match(srv, /function sendPush\(userId, payload\)/);
+  assert.match(srv, /app\.post\('\/api\/push\/test', authRequired, async/);
+  assert.match(srv, /await sendPush\(req\.user\.id/);
+  assert.match(html, /async function paPushTest\(\)/);
+  assert.equal((html.match(/setError\(await paPushTest\(\)\)/g) || []).length, 2, 'les deux boutons Tester');
+});

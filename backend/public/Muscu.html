@@ -5380,11 +5380,11 @@ function PushNotifToggle(){
            isOn?'Activées — tu recevras les alertes même app fermée':
            'Reçois les alertes (nouveau programme, message…)'}
         </div>
-        {error&&<div style={{fontSize:10,color:T.danger,marginTop:2}}>{error}</div>}
+        {error&&<div style={{fontSize:10,color:String(error).charAt(0)==='✓'?T.good:T.danger,marginTop:2}}>{error}</div>}
       </div>
       <div style={{display:'flex',gap:6,flexShrink:0}}>
         {isOn&&(
-          <button onClick={async()=>{setError(null);try{const r=await apiCall('/api/push/test',{method:'POST'});if(!r.ok)setError(r.reason||'Erreur test');else setError(null);}catch(e){setError(e.message);}}} style={{height:32,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.25)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+          <button onClick={async()=>{setError('Envoi…');setError(await paPushTest());}} style={{height:32,padding:'0 12px',borderRadius:9,border:'1px solid rgba(191,160,96,0.25)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:11,fontWeight:700,cursor:'pointer'}}>
             Tester
           </button>
         )}
@@ -5436,6 +5436,20 @@ async function paPushRepair(){
     await apiCall('/api/push/subscribe',{method:'POST',body:{subscription:sub.toJSON()}});
     return'repaired';
   }catch(e){return'error';}
+}
+
+// Test de notification : attend le VRAI résultat d'envoi. Si l'appareil est expiré (404/410) on le répare
+// puis on retente une fois, au lieu de laisser croire que tout va bien.
+async function paPushTest(){
+  try{
+    let r=await apiCall('/api/push/test',{method:'POST'});
+    if(!r.ok&&(r.code==='expired'||r.code==='no_device')){
+      const fix=await paPushRepair();
+      if(fix==='repaired'||fix==='ok')r=await apiCall('/api/push/test',{method:'POST'});
+    }
+    if(r.ok)return'✓ Notification envoyée ('+(r.delivered||1)+' appareil'+((r.delivered||1)>1?'s':'')+') — regarde ton téléphone';
+    return r.reason||'Échec du test';
+  }catch(e){return e.message||'Erreur test';}
 }
 
 // ── Versions compactes pour le bloc Préférences du profil ──
@@ -5569,13 +5583,13 @@ function ProfilePushRow(){
           <div>
             <span style={{fontSize:12,fontWeight:600,color:T.text}}>Notifications</span>
             {iosNeedsInstall&&<div style={{fontSize:9.5,color:T.textFaint,marginTop:2,lineHeight:1.4}}>Sur iPhone : <b style={{color:T.text}}>Partager</b> → <b style={{color:T.text}}>Sur l'écran d'accueil</b>, puis ouvre Prime Athl depuis l'icône. Les notifs s'activent de là (iOS 16.4+).</div>}
-            {error&&<div style={{fontSize:9,color:T.danger}}>{error}</div>}
+            {error&&<div style={{fontSize:9,color:String(error).charAt(0)==='✓'?T.good:T.danger}}>{error}</div>}
           </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <span style={{fontSize:10,color:isOn?T.good:T.textFaint,fontWeight:500}}>{label}</span>
           {isOn&&(
-            <button onClick={async()=>{setError(null);try{const r=await apiCall('/api/push/test',{method:'POST'});if(!r.ok)setError(r.reason||'Erreur');else setError(null);}catch(e){setError(e.message);}}} style={{height:26,padding:'0 8px',borderRadius:7,border:'1px solid rgba(191,160,96,0.2)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:9,fontWeight:700,cursor:'pointer'}}>
+            <button onClick={async()=>{setError('Envoi…');setError(await paPushTest());}} style={{height:26,padding:'0 8px',borderRadius:7,border:'1px solid rgba(191,160,96,0.2)',background:'rgba(191,160,96,0.08)',color:T.accent,fontSize:9,fontWeight:700,cursor:'pointer'}}>
               Tester
             </button>
           )}
