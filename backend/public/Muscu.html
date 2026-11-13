@@ -1055,8 +1055,9 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         if (!s || s === '_') return 0;
         const u = s.toUpperCase();
         if (u === 'PDC' || u === 'PC' || u === 'BW') return 0;
-        const m = s.match(/[\d.]+/);
-        return m ? parseFloat(m[0]) : 0;
+        // Virgule décimale française (« 12,5 » ou « 12,5-15 » → 12,5) ; avant, seule la partie entière (12) était lue.
+        const m = s.match(/\d+(?:[.,]\d+)?|\.\d+/);
+        return m ? parseFloat(m[0].replace(',', '.')) : 0;
       };
 
       const isHeaderRow = row => row.some(cell => {
@@ -1079,8 +1080,12 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
         // « #VALUE! » devenait la charge de l'exercice (ex: formule DECHARGE sur un poids tapé en texte).
         // On les traite comme vides (la décharge retombe alors sur le calcul automatique à 60 %) et on prévient.
         const errCells = [];
+        // Origine de la plage : sheet_to_json indexe depuis le 1er coin de la feuille (ex: "B1:M1000" quand le
+        // tableau commence en colonne B). Sans ce décalage, cellText() lisait la colonne VOISINE (les répétitions
+        // « 8-10 » devenaient le nombre de séries « 4 », le repos « 2' » retombait sur 90 s, le cardio décalé).
+        const rangeStart = XLSX.utils.decode_range(ws['!ref']).s;
         const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true}).map((r, ri) => r.map((v, ci) => {
-          if (isExcelErrorValue(v)) { errCells.push(XLSX.utils.encode_cell({r:ri, c:ci})); return ''; }
+          if (isExcelErrorValue(v)) { errCells.push(XLSX.utils.encode_cell({r:ri + rangeStart.r, c:ci + rangeStart.c})); return ''; }
           return v;
         }));
         if (errCells.length) warnings.push(`Feuille "${sheetName}" : ${errCells.length} cellule(s) en erreur Excel ignorée(s) (${errCells.slice(0, 5).join(', ')}${errCells.length > 5 ? '…' : ''}) — vérifie ces cellules dans le fichier ; la décharge est calculée automatiquement (60 %) pour ces lignes.`);
@@ -1147,7 +1152,7 @@ function parseYannisExcel(file, onSuccess, onError, opts) {
           // Lit le texte d'une cellule cardio en gérant les plages "4-5" auto-converties
           // en dates par Excel (serial 46146 = 4 mai → on reconstitue "4-5" en jour-mois).
           const cellText = (colIdx) => {
-            const cell = ws[XLSX.utils.encode_cell({r:rowIdx, c:colIdx})];
+            const cell = ws[XLSX.utils.encode_cell({r:rowIdx + rangeStart.r, c:colIdx + rangeStart.c})];
             if (!cell || cell.t === 'e' || isExcelErrorValue(cell.v)) return '';
             // Entier dans la plage des serials de date Excel (≈ 1982–2118) :
             // "4-5" tapé en Excel français → converti en "4 mai" → serial ~46146.
