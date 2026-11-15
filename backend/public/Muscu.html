@@ -11038,7 +11038,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   <>
                     <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName}{progData?.category?' · '+progData.category:''} — non effectué</div>
                     {progData.exercises?.slice(0,3).map((ex,i)=>(
-                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}</div>
+                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}{exWeightLabel(ex)&&<span style={{color:T.text,fontWeight:700}}> · {exWeightLabel(ex)}</span>}</div>
                     ))}
                     {(progData.exercises?.length||0)>3&&<div style={{fontSize:10,color:T.textFaint}}>+{progData.exercises.length-3} ex.</div>}
                   </>
@@ -11452,6 +11452,20 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
   );
 }
 
+// Charge PRÉVUE d'un exercice pour l'affichage coach (« 100 kg », « 12,5-15 kg », « Poids du corps »).
+// Source : la cellule Charge du programme (weightStr, fourchettes comprises), sinon le poids de la 1re série.
+// Vide pour le cardio et quand aucune charge n'est renseignée. Exercice assisté : on le précise (la charge est
+// alors une assistance — plus elle est haute, plus c'est facile).
+function exWeightLabel(ex) {
+  if (!ex || exType(ex) === 'cardio' || ex.holdSeconds > 0) return '';
+  const raw = String(ex.weightStr == null ? '' : ex.weightStr).trim();
+  const assist = isAssistedEx(ex) ? ' (assist.)' : '';
+  if (/^(pdc|pc|bw|poids du corps)$/i.test(raw)) return 'Poids du corps';
+  if (raw && /\d/.test(raw)) return raw.replace(/\s*kg\s*$/i, '') + ' kg' + assist;
+  const w = ex.sets && ex.sets[0] && +ex.sets[0].weight;
+  return w > 0 ? String(w).replace('.', ',') + ' kg' + assist : '';
+}
+
 // Voir : contenu prévu du jour (lecture seule), supersets/trisets et repos préservés.
 function CoachDayViewModal({dayName,dayData,onClose}){
   const exercises=dayData.exercises||[];
@@ -11490,7 +11504,12 @@ function CoachDayViewModal({dayName,dayData,onClose}){
                             {rest&&<span>⏳ {rest}</span>}
                           </div>
                         </div>
-                        {(nSets||reps)&&<div style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{nSets||'?'}{reps?' × '+reps:''}</div>}
+                        {(nSets||reps)&&(
+                          <div style={{flexShrink:0,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                            <div style={{fontSize:13,fontWeight:700,color:T.accent}}>{nSets||'?'}{reps?' × '+reps:''}</div>
+                            {exWeightLabel(e)&&<div data-testid="day-ex-weight" style={{fontSize:11.5,fontWeight:700,color:T.text,marginTop:2}}>{exWeightLabel(e)}</div>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
