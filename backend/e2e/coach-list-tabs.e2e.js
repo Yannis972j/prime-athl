@@ -8,7 +8,15 @@ let srv, browser, coach;
 const PW = 'longenough1';
 const SHOT = process.env.SHOT_DIR;
 const ex = [{ name: 'Squat', muscle: 'JAMBES', sets: [{ weight: 60, reps: 10, done: true }] }];
-const ago = h => new Date(Date.now() - h * 3600e3).toISOString();
+// Les séances « d'aujourd'hui » (h ≤ 3) doivent rester dans le jour de Martinique (UTC-4) même quand le test tourne
+// juste après minuit là-bas (04 h–06 h UTC sur la CI) : on les rapproche de maintenant en gardant leur ordre.
+// Les séances plus anciennes (30 h, 50 h…) sont toujours sur un jour précédent : inchangées.
+const sinceMidnightMq = () => { const now = Date.now(), m = new Date(now - 4 * 3600e3); return now - 4 * 3600e3 - Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate()); };
+const ago = h => {
+  let ms = h * 3600e3;
+  if (h <= 3) ms *= Math.min(1, Math.max(sinceMidnightMq() - 120e3, 30e3) / (2 * 3600e3));
+  return new Date(Date.now() - ms).toISOString();
+};
 
 before(async () => {
   srv = await startServer({ PORT: '3001' });
