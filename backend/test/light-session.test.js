@@ -11,7 +11,7 @@ import { startServer, api, MAIN_COACH_EMAIL, MAIN_COACH_PASSWORD } from './helpe
 
 const html = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/Muscu.html'), 'utf8');
 const slice = (startMarker, endMarker) => { const a = html.indexOf(startMarker); const b = html.indexOf(endMarker, a); assert.ok(a > 0 && b > a, startMarker); return html.slice(a, b); };
-const SRC = slice('const DELOAD_WEIGHT_PCT', '// Réglages d\'allègement');
+const SRC = slice('function isAssistedName', '// Réglages d\'allègement');
 const { lightenExercise } = new Function(SRC + '\nreturn { lightenExercise };')();
 
 const ex = () => ({ name: 'Squat', weightStr: '100', repsStr: '8', restSeconds: 120,
@@ -77,4 +77,43 @@ test('serveur : lightReason conservé (menstrual / session), ignoré si invalide
   assert.equal(byId(c.body.id).lightReason, undefined);
   assert.equal(byId(d.body.id).lightReason, undefined);
   assert.equal(byId(d.body.id).deload, false);
+});
+
+// ── exercices ASSISTÉS (Nordic curl, traction assistée) : plus de poids = plus facile ──
+const nordic = (w = 2.5, deload) => ({ name: 'Nordic Curl', weightStr: String(w), repsStr: '5-8', restSeconds: 90,
+  sets: [w, w, w].map(x => ({ weight: x, reps: 0 })), ...(deload ? { deload } : {}) });
+
+test('assisté : la décharge AUGMENTE l\'assistance (2,5 → 5 kg), séries −40 %, reps inchangées', () => {
+  const r = lightenExercise(nordic(), 'deload');
+  assert.equal(r.weightStr, '5');
+  assert.equal(r.sets[0].weight, 5);
+  assert.equal(r.sets.length, 2);           // 3 × 0,6 = 1,8 → 2
+  assert.equal(r.repsStr, '5-8');
+});
+
+test('assisté : toujours au moins +2,5 kg, même en douleurs de cycle (70 %)', () => {
+  const r = lightenExercise(nordic(), 'menstrual');
+  assert.ok(r.sets[0].weight > 2.5, 'assistance augmentée : ' + r.sets[0].weight);
+  assert.equal(r.sets[0].weight, 5);
+});
+
+test('assisté : une valeur de feuille qui BAISSE l\'assistance (« PDC ») est corrigée, séries/reps de la feuille gardés', () => {
+  const dl = { weightStr: 'PDC', repsStr: '5', restSeconds: 90, sets: [{ weight: 0, reps: 0 }, { weight: 0, reps: 0 }] };
+  const r = lightenExercise(nordic(2.5, dl), 'deload');
+  assert.equal(r.sets.length, 2);
+  assert.equal(r.repsStr, '5');
+  assert.equal(r.weightStr, '5', 'assistance recalculée vers le haut');
+  assert.equal(r.sets[0].weight, 5);
+});
+
+test('assisté : une valeur de feuille qui AUGMENTE l\'assistance est respectée telle quelle', () => {
+  const dl = { weightStr: '10', repsStr: '5', restSeconds: 90, sets: [{ weight: 10, reps: 0 }] };
+  const r = lightenExercise(nordic(2.5, dl), 'deload');
+  assert.equal(r.weightStr, '10');
+});
+
+test('non assisté : inchangé (60 % du poids, valeur de feuille respectée)', () => {
+  assert.equal(lightenExercise(ex(), 'deload').sets[0].weight, 60);
+  const dl = { weightStr: 'PDC', repsStr: '8', restSeconds: 90, sets: [{ weight: 0, reps: 0 }] };
+  assert.equal(lightenExercise({ name: 'Traction lestée', weightStr: '20', sets: [{ weight: 20 }], deload: dl }, 'deload').weightStr, 'PDC');
 });
