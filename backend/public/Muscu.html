@@ -15039,7 +15039,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                 const setsArr=ex.sets||[];
                                 const repsDisplay=isCardio?(cardioHasVal(ex.cardio.duree)?cardioDureeLabel(ex.cardio.duree):'—')
                                   :ex.holdSeconds>0?fmtHoldDuration(ex.holdSeconds)
-                                  :setsArr.length?(setsArr[0].reps||'?'):'?';
+                                  :setsArr.length?(ex.repsStr||setsArr[0].targetStr||setsArr[0].target||setsArr[0].reps||'?'):'?';
+                                const wLabel=exWeightLabel(ex);
                                 return(
                                   <div key={ii} style={{padding:'10px 12px',borderRadius:12,background:grouped?gc+'0c':'rgba(255,255,255,0.03)',border:'1px solid '+(grouped?gc+'2e':T.border)}}>
                                     <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -15049,7 +15050,8 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                         <div style={{fontSize:10,color:T.textFaint}}>{ex.muscle}{ex.posture?` · 📍 ${ex.posture}`:''}</div>
                                       </div>
                                       <div style={{textAlign:'right',flexShrink:0}}>
-                                        <div style={{fontSize:11,fontWeight:700,color:accent}}>{seriesLabel(ex,repsDisplay)}</div>
+                                        <div style={{fontSize:11,fontWeight:700,color:accent}}>{repsDisplay==='?'&&!isCardio?setsArr.length+' séries':seriesLabel(ex,repsDisplay)}</div>
+                                        {wLabel&&<div data-testid="biblio-ex-weight" style={{fontSize:12,fontWeight:800,color:T.text,marginTop:1}}>{wLabel}</div>}
                                         {ex.restSeconds>0&&<div style={{fontSize:10,color:T.textFaint}}>{ex.restSeconds}s repos</div>}
                                       </div>
                                     </div>
@@ -15065,7 +15067,7 @@ function CoachScreen({authToken,authUser,initialCoachView,initialProgramEditId,o
                                       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.05)'}}>
                                         {setsArr.map((st,si)=>(
                                           <div key={si} style={{fontSize:9,padding:'2px 7px',borderRadius:6,background:'rgba(255,255,255,0.05)',color:T.textDim}}>
-                                            S{si+1}: {st.weight||0}kg × {st.reps||'?'}
+                                            S{si+1}: {st.weight>0?st.weight+'kg':'PDC'}{(ex.repsStr||st.targetStr||st.target||st.reps)?' × '+(st.reps||ex.repsStr||st.targetStr||st.target):''}
                                           </div>
                                         ))}
                                       </div>
