@@ -769,7 +769,8 @@ function isUnilateralEx(ex) {
 }
 function isAssistedName(name) {
   const n = String(name || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return /ASSIST/.test(n);
+  // « Nordic curl / hamstring » : l'athlète se fait aider (poids = assistance, plus il est haut plus c'est facile).
+  return /ASSIST|NORDIC/.test(n);
 }
 function isAssistedEx(ex) {
   return !!(ex && (ex.assisted || isAssistedName(ex.name)));
@@ -798,11 +799,18 @@ const roundPlate = v => Math.round(v / 2.5) * 2.5;
 // ×60 %, arrondie à 2,5 kg. Séries −40 %. Reps/repos/cardio inchangés. "PDC"/vide reste tel quel.
 // On ne se base PAS sur une feuille DECHARGE importée (appariement par position peu fiable) ni sur
 // l'historique : le poids programme est la source directe, comme la feuille du coach.
+// EXERCICE ASSISTÉ (Nordic curl, traction assistée…) : le poids est une ASSISTANCE — plus il est haut, plus
+// c'est facile. Alléger = AUGMENTER l'assistance (÷ pourcentage, arrondi 2,5 kg, au moins +2,5 kg) ; réduire à
+// 60 % rendrait l'exercice plus dur. 0 (sans assistance) reste 0.
+const assistUp = (v, wPct) => (v > 0 ? Math.max(roundPlate(v / wPct), v + 2.5) : v);
+const parseKg = v => { const m = String(v == null ? '' : v).match(/\d+(?:[.,]\d+)?/); return m ? parseFloat(m[0].replace(',', '.')) : 0; };
 function computeDeload(ex, wPct = DELOAD_WEIGHT_PCT, sPct = DELOAD_SETS_PCT) {
+  const assisted = isAssistedEx(ex);
+  const scaleVal = v => (assisted ? assistUp(v, wPct) : roundPlate(v * wPct));
   const scaleWeight = str => {
     const s = String(str == null ? '' : str);
     if (!s || !/\d/.test(s)) return s;
-    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(roundPlate(parseFloat(m.replace(',', '.')) * wPct)));
+    return s.replace(/\d+(?:[.,]\d+)?/g, m => String(scaleVal(parseFloat(m.replace(',', '.')))));
   };
   const sets = ex.sets || [];
   const nDeload = Math.max(1, Math.round(sets.length * sPct));
@@ -812,7 +820,7 @@ function computeDeload(ex, wPct = DELOAD_WEIGHT_PCT, sPct = DELOAD_SETS_PCT) {
     restSeconds: ex.restSeconds,
     holdSeconds: ex.holdSeconds,
     cardio: ex.cardio,
-    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: roundPlate((s.weight || 0) * wPct) })),
+    sets: sets.slice(0, nDeload).map(s => ({ ...s, weight: scaleVal(s.weight || 0) })),
   };
 }
 // Séance allégée « douleurs menstruelles / endométriose » : déclenchée par l'athlète pour UNE séance.
@@ -821,15 +829,25 @@ const MENSTRUAL_WEIGHT_PCT = 0.7;
 const MENSTRUAL_SETS_PCT = 0.7;
 // Allège un exercice selon le mode : 'deload' (valeurs de la feuille DECHARGE si renseignées, sinon
 // 60 % / −40 %) ou 'menstrual' (70 % / −30 %). null → exercice inchangé.
+// Valeurs de décharge d'un exercice : la feuille DECHARGE (ex.deload) quand une charge y est renseignée, sinon le
+// calcul auto. Exercice ASSISTÉ : une valeur de feuille qui BAISSE l'assistance (ex. « PDC » à la place de 2,5 kg)
+// alourdirait la séance — on garde alors ses séries/reps mais l'assistance est recalculée vers le haut.
+function pickDeload(ex, wPct = DELOAD_WEIGHT_PCT, sPct = DELOAD_SETS_PCT) {
+  const dl = ex.deload;
+  const hasVal = dl && String(dl.weightStr == null ? '' : dl.weightStr).trim() !== '';
+  if (!hasVal) return computeDeload(ex, wPct, sPct);
+  if (!isAssistedEx(ex)) return dl;
+  const normalW = Math.max(parseKg(ex.weightStr), ...(ex.sets || []).map(s => +s.weight || 0));
+  if (parseKg(dl.weightStr) >= normalW) return dl;
+  const auto = computeDeload(ex, wPct, sPct);
+  const w = auto.sets[0] ? auto.sets[0].weight : 0;
+  return { ...dl, weightStr: auto.weightStr, sets: (dl.sets || []).map(s => ({ ...s, weight: w })) };
+}
 function lightenExercise(ex, mode) {
   if (!mode || !ex) return ex;
   let d;
   if (mode === 'menstrual') d = computeDeload(ex, MENSTRUAL_WEIGHT_PCT, MENSTRUAL_SETS_PCT);
-  else {
-    const dl = ex.deload;
-    const hasVal = dl && String(dl.weightStr == null ? '' : dl.weightStr).trim() !== '';
-    d = hasVal ? dl : computeDeload(ex);
-  }
+  else d = pickDeload(ex);
   return { ...ex, weightStr: d.weightStr, repsStr: d.repsStr, restSeconds: d.restSeconds, holdSeconds: d.holdSeconds, cardio: d.cardio, sets: d.sets };
 }
 // Réglages d'allègement façon « réglages iOS » : une carte, une ligne par option (pastille icône,
@@ -7762,9 +7780,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
     // les tractions, un poids gardé volontairement identique, une série en moins…). Repli sur le
     // calcul auto (60 % du poids normal, arrondi 2,5) UNIQUEMENT là où la feuille ne dit rien
     // (cellule vide) ou quand le programme n'a pas de feuille DECHARGE du tout.
-    const dl=ex.deload;
-    const hasVal=dl&&String(dl.weightStr==null?'':dl.weightStr).trim()!=='';
-    const d=hasVal?dl:computeDeload(ex);
+    const d=pickDeload(ex);
     return {...ex,weightStr:d.weightStr,repsStr:d.repsStr,restSeconds:d.restSeconds,holdSeconds:d.holdSeconds,cardio:d.cardio,sets:d.sets};
   };
 
@@ -11038,7 +11054,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   <>
                     <div style={{fontSize:12,color:movedHere?'#9090c4':'#BFA060',fontWeight:600,marginBottom:6}}>{effectiveDayName}{progData?.category?' · '+progData.category:''} — non effectué</div>
                     {progData.exercises?.slice(0,3).map((ex,i)=>(
-                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}</div>
+                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}{exWeightLabel(ex)&&<span style={{color:T.text,fontWeight:700}}> · {exWeightLabel(ex)}</span>}</div>
                     ))}
                     {(progData.exercises?.length||0)>3&&<div style={{fontSize:10,color:T.textFaint}}>+{progData.exercises.length-3} ex.</div>}
                   </>
@@ -11452,6 +11468,20 @@ function CoachProgramMirror({athleteData,athleteId,athleteName,history,onSession
   );
 }
 
+// Charge PRÉVUE d'un exercice pour l'affichage coach (« 100 kg », « 12,5-15 kg », « Poids du corps »).
+// Source : la cellule Charge du programme (weightStr, fourchettes comprises), sinon le poids de la 1re série.
+// Vide pour le cardio et quand aucune charge n'est renseignée. Exercice assisté : on le précise (la charge est
+// alors une assistance — plus elle est haute, plus c'est facile).
+function exWeightLabel(ex) {
+  if (!ex || exType(ex) === 'cardio' || ex.holdSeconds > 0) return '';
+  const raw = String(ex.weightStr == null ? '' : ex.weightStr).trim();
+  const assist = isAssistedEx(ex) ? ' (assist.)' : '';
+  if (/^(pdc|pc|bw|poids du corps)$/i.test(raw)) return 'Poids du corps';
+  if (raw && /\d/.test(raw)) return raw.replace(/\s*kg\s*$/i, '') + ' kg' + assist;
+  const w = ex.sets && ex.sets[0] && +ex.sets[0].weight;
+  return w > 0 ? String(w).replace('.', ',') + ' kg' + assist : '';
+}
+
 // Voir : contenu prévu du jour (lecture seule), supersets/trisets et repos préservés.
 function CoachDayViewModal({dayName,dayData,onClose}){
   const exercises=dayData.exercises||[];
@@ -11490,7 +11520,12 @@ function CoachDayViewModal({dayName,dayData,onClose}){
                             {rest&&<span>⏳ {rest}</span>}
                           </div>
                         </div>
-                        {(nSets||reps)&&<div style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{nSets||'?'}{reps?' × '+reps:''}</div>}
+                        {(nSets||reps)&&(
+                          <div style={{flexShrink:0,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                            <div style={{fontSize:13,fontWeight:700,color:T.accent}}>{nSets||'?'}{reps?' × '+reps:''}</div>
+                            {exWeightLabel(e)&&<div data-testid="day-ex-weight" style={{fontSize:11.5,fontWeight:700,color:T.text,marginTop:2}}>{exWeightLabel(e)}</div>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
