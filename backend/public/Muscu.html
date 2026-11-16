@@ -19003,12 +19003,14 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   React.useEffect(()=>{
     if(accessDaysLeft==null||accessDaysLeft<1||accessDaysLeft>3)return;
     const palier=accessDaysLeft;
-    const key='pa_access_ack_'+authUser.id+'_d'+palier;
+    // La clé inclut la DATE DE FIN : après une prolongation, le cycle suivant (nouvelle échéance) réaffiche J-3/J-2/J-1.
+    // Avant (palier seul), un athlète ayant déjà fermé « J-3 » une fois ne le revoyait plus jamais.
+    const key='pa_access_ack_'+authUser.id+'_'+String(profile.accessExpiresAt||'').slice(0,16)+'_d'+palier;
     try{if(localStorage.getItem(key))return;}catch{}
     const coach=computeCoachCtx(authUser);
     const msg=accessReminderMessage(palier,coach,authUser.firstName||'');
     setAccessPopup({...msg,daysLeft:palier,ackKey:key});
-  },[accessDaysLeft,authUser.id]);
+  },[accessDaysLeft,authUser.id,profile?.accessExpiresAt]);
   const ackAccessPopup=React.useCallback(goToCoach=>{
     setAccessPopup(p=>{if(p){try{localStorage.setItem(p.ackKey,ymdKey());}catch{}}return null;});
     if(goToCoach){setActiveUniverse(null);setTab('messages');}
