@@ -12598,18 +12598,42 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
   const[ovSaving,setOvSaving]=React.useState(false);
   const[ovDone,setOvDone]=React.useState(!!s.overloadApplied);
   React.useEffect(()=>{setOvDone(!!s.overloadApplied);},[s.id,s.overloadApplied]);
+  // Correction après validation : on peut rouvrir les montées déjà appliquées pour les modifier
+  // (le serveur écrase les charges — pas de double montée). ovApplied = ce qui a été appliqué.
+  const[ovEditing,setOvEditing]=React.useState(false);
+  const[ovApplied,setOvApplied]=React.useState(Array.isArray(s.overloadUpdates)?s.overloadUpdates:[]);
+  React.useEffect(()=>{setOvEditing(false);setOvApplied(Array.isArray(s.overloadUpdates)?s.overloadUpdates:[]);},[s.id,s.overloadUpdates]);
   React.useEffect(()=>{const initW={},initSkip={};overloadExs.forEach(e=>{initW[e.name]=e.assisted?Math.max(0,(e.curMaxW||0)-1):(e.curMaxW||0)+1;initSkip[e.name]=!e.atCap;});setOvWeights(initW);setOvSkip(initSkip);},[overloadExs]);
   // Pas d'arrondi à l'entier : la saisie manuelle doit garder les demi-plaques (ex: 92,5 kg).
   const setOvW=(name,val)=>setOvWeights(w=>({...w,[name]:Math.max(0,Math.min(500,Math.round(val*2)/2))}));
+  const startOvEdit=()=>{
+    const prev={};(ovApplied||[]).forEach(u=>{prev[u.name]=u;});
+    const w={},sk={};
+    overloadExs.forEach(e=>{const u=prev[e.name];w[e.name]=u&&u.to!=null?u.to:(e.assisted?Math.max(0,(e.curMaxW||0)-1):(e.curMaxW||0)+1);sk[e.name]=!u;});
+    setOvWeights(w);setOvSkip(sk);
+    const t={},k={};
+    cardioProg.forEach(c=>{const u=prev[c.name];t[c.name]=u&&u.unit==='m'?u.to:c.prog.avg+CARDIO_PROG_STEP_M;k[c.name]=!u;});
+    setCdTarget(t);setCdSkip(k);
+    setOvEditing(true);
+  };
   const applyOverload=async()=>{
     // from:e.curMaxW → permet au pop-up athlète d'afficher "ancien → nouveau" (ex: 40 → 42,5 kg).
     const updates=overloadExs.filter(e=>!ovSkip[e.name]).map(e=>({name:e.name,weight:ovWeights[e.name],from:e.curMaxW||0,assisted:!!e.assisted}));
     cardioProg.filter(c=>!cdSkip[c.name]).forEach(c=>updates.push({name:c.name,distance:cdTarget[c.name]||c.prog.target,from:c.prog.avg}));
-    if(!updates.length){setOvDone(true);return;}
+    // Correction : un exercice monté avant puis remis sur « Garder » revient à la charge faite (from).
+    if(ovEditing){
+      const sent=new Set(updates.map(u=>u.name));
+      (ovApplied||[]).forEach(u=>{
+        if(sent.has(u.name)||!(u.from>0))return;
+        updates.push(u.unit==='m'?{name:u.name,distance:u.from,from:u.from}:{name:u.name,weight:u.from,from:u.from,assisted:!!u.assisted});
+      });
+    }
+    if(!updates.length){setOvDone(true);setOvEditing(false);return;}
     setOvSaving(true);
     try{
-      await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates}});
-      setOvDone(true);
+      await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates,...(ovEditing?{correction:true}:{})}});
+      setOvApplied(updates.map(u=>u.distance?{name:u.name,from:u.from,to:u.distance,unit:'m'}:{name:u.name,from:u.from,to:u.weight,assisted:!!u.assisted}).filter(u=>!ovEditing||u.to!==u.from));
+      setOvDone(true);setOvEditing(false);
       onFeedbackSaved&&onFeedbackSaved();
     }catch(e){
       console.error('overload',e);
@@ -12775,15 +12799,29 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
               {/* Surcharge progressive — le coach valide (ou ajuste) les montées de charge */}
               {(overloadExs.length>0||cardioProg.length>0)&&(
                 <div style={{marginTop:12,padding:'13px 14px',borderRadius:14,background:'radial-gradient(ellipse 130% 90% at 50% 0%, rgba(167,139,250,0.14), rgba(167,139,250,0.02) 70%)',border:'1px solid rgba(167,139,250,0.32)'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:ovDone?0:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:(ovDone&&!ovEditing)?0:8}}>
                     <span style={{fontSize:15}}>⬆</span>
                     <span style={{fontSize:11.5,fontWeight:800,color:'#A78BFA',letterSpacing:0.3}}>Montée de charge — prochaine séance</span>
                   </div>
-                  {ovDone?(
-                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.good,fontWeight:600,lineHeight:1.4}}>
-                      <span style={{fontSize:15}}>✓</span><span>Montées appliquées — le poids est mis à jour pour la prochaine séance de {firstName}.</span>
+                  {(ovDone&&!ovEditing)?(
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.good,fontWeight:600,lineHeight:1.4}}>
+                        <span style={{fontSize:15}}>✓</span><span>Montées appliquées — le poids est mis à jour pour la prochaine séance de {firstName}.</span>
+                      </div>
+                      {(ovApplied||[]).length>0&&(
+                        <div data-testid="ov-applied" style={{marginTop:8,display:'flex',flexDirection:'column',gap:3}}>
+                          {ovApplied.map((u,i)=>(
+                            <div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,color:T.textDim}}>
+                              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{u.name}</span>
+                              <span style={{flexShrink:0,fontWeight:700,color:'#A78BFA'}}>{u.unit==='m'?`${fmtThousands(u.from)} → ${fmtThousands(u.to)} m`:`${String(u.from).replace('.',',')} → ${String(u.to).replace('.',',')} kg`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button data-testid="ov-edit" onClick={startOvEdit} style={{width:'100%',marginTop:10,height:38,borderRadius:10,border:'1px solid rgba(167,139,250,0.4)',background:'rgba(167,139,250,0.08)',color:'#A78BFA',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'inherit'}}>✏️ Modifier les charges</button>
                     </div>
                   ):(<>
+                    {ovEditing&&<div data-testid="ov-edit-hint" style={{fontSize:10.5,color:T.warn,lineHeight:1.5,marginBottom:10,padding:'7px 10px',borderRadius:9,background:'rgba(200,144,64,0.08)',border:'1px solid rgba(200,144,64,0.25)'}}>✏️ Correction : change les charges puis enregistre. Un exercice remis sur « Garder » revient à la charge faite en séance.</div>}
                     <div style={{fontSize:11,color:T.textDim,lineHeight:1.5,marginBottom:10}}>{readyCount>0?<>{readyCount} exercice{readyCount>1?'s':''} <b style={{color:'#A78BFA'}}>prêt{readyCount>1?'s':''}</b> (fourchette au max, pré-coché{readyCount>1?'s':''}). Tu peux monter n'importe quel exercice — c'est toi qui décides.</>:'Aucun exercice au plafond de la fourchette. Tu peux quand même monter la charge où tu le juges utile.'}</div>
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
                       {overloadExs.map((e,i)=>{
@@ -12856,7 +12894,8 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
                     <div style={{marginTop:12,padding:'9px 12px',borderRadius:10,background:'rgba(90,138,224,0.05)',border:'1px solid rgba(90,138,224,0.18)',fontSize:10.5,color:T.textDim,lineHeight:1.5}}>
                       💡 Ces charges seront automatiquement affichées à {firstName} avec ton <b style={{color:'#8FB4F5'}}>feedback</b> (ci-dessous) au lancement de sa prochaine séance.
                     </div>
-                    <button onClick={applyOverload} disabled={ovSaving} style={{width:'100%',marginTop:10,height:44,borderRadius:11,border:'none',background:ovSaving?'rgba(167,139,250,0.4)':'linear-gradient(135deg,#A78BFA,#7C5CD6)',color:'#0c0c12',fontSize:13,fontWeight:800,cursor:ovSaving?'default':'pointer'}}>{ovSaving?'Application…':'✓ Valider · mettre à jour la prochaine séance'}</button>
+                    <button onClick={applyOverload} disabled={ovSaving} style={{width:'100%',marginTop:10,height:44,borderRadius:11,border:'none',background:ovSaving?'rgba(167,139,250,0.4)':'linear-gradient(135deg,#A78BFA,#7C5CD6)',color:'#0c0c12',fontSize:13,fontWeight:800,cursor:ovSaving?'default':'pointer'}}>{ovSaving?'Application…':ovEditing?'✓ Enregistrer la correction':'✓ Valider · mettre à jour la prochaine séance'}</button>
+                    {ovEditing&&<button data-testid="ov-edit-cancel" onClick={()=>setOvEditing(false)} disabled={ovSaving} style={{width:'100%',marginTop:8,height:38,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Annuler</button>}
                   </>)}
                 </div>
               )}
