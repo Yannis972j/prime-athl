@@ -18,7 +18,7 @@ import webpush from 'web-push';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import XLSX from 'xlsx';
-import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor, staleFullAccessExpiries } from './access-reminders.js';
+import { dueAccessReminders, accessReminderPayload, isAccessExpiredFor } from './access-reminders.js';
 import { zonedParts, shouldSendMotivation, MOTIVATION_TZ, MOTIVATION_HOUR } from './motivation.js';
 import { feedbackStats, pendingFeedbackSessions } from './athlete-activity.js';
 import { universeOverride, applyUniverseChange, cleanUniverseAccess } from './universe-access.js';
@@ -382,19 +382,9 @@ function persist() {
   }
 }
 
-// Migration (idempotente) : l'accès complet ne dispense plus de la durée d'accès. Les athlètes en accès
-// complet dont la date de fin est DÉJÀ passée n'ont jamais été bloqués jusqu'ici ; on efface ces dates
-// périmées (accès illimité = ce qu'ils vivaient) pour ne bloquer personne au déploiement.
-// Appelée APRÈS la définition de persist() (qui dépend de variables `let` déclarées juste avant).
-function migrateStaleFullAccessExpiries() {
-  const stale = staleFullAccessExpiries(DATA.users);
-  for (const id of stale) DATA.users[id].accessExpiresAt = null;
-  if (stale.length) {
-    persist();
-    console.log(`[migration] ${stale.length} athlète(s) en accès complet avec une date de fin déjà dépassée : date effacée (accès illimité conservé)`);
-  }
-}
-migrateStaleFullAccessExpiries();
+// NB : il n'y a volontairement AUCUNE migration qui efface les dates de fin d'accès au démarrage.
+// Une ancienne migration le faisait à CHAQUE démarrage pour les athlètes en accès complet : après un
+// redémarrage / redéploiement, un accès arrivé à son terme redevenait illimité (plus aucun blocage).
 // Dates invalides déjà stockées (séances / pesées / photos) : elles faisaient planter l'appli (« Invalid time value »).
 try { const fixed = repairStoredDates(DATA); if (fixed) { console.log(`[migration] ${fixed} date(s) invalide(s) réparée(s)`); persist(); } } catch (e) { console.error('[migration dates]', e.message); }
 // Feedbacks en attente enregistrés avec le repli « Ton coach » : on remet le vrai prénom du coach.
