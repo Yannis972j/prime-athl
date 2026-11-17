@@ -47,17 +47,3 @@ export function isAccessExpiredFor(u, now = Date.now(), mainCoachEmail = '') {
   const t = new Date(u.accessExpiresAt).getTime();
   return !isNaN(t) && t <= now;
 }
-
-// Migration au démarrage : jusqu'ici l'accès complet exemptait de la durée, donc un athlète en accès
-// complet dont la date était DÉJÀ dépassée n'a jamais été bloqué. Maintenant que la durée s'applique
-// aussi à lui, on efface ces dates périmées (= accès illimité, ce qu'ils vivaient déjà) pour qu'aucun
-// athlète ne soit bloqué d'un coup au déploiement. Les dates FUTURES gardent leur effet.
-export function staleFullAccessExpiries(users, now = Date.now()) {
-  const ids = [];
-  for (const u of Object.values(users || {})) {
-    if (!u || u.role === 'coach' || !u.fullAccess || !u.accessExpiresAt) continue;
-    const t = new Date(u.accessExpiresAt).getTime();
-    if (!isNaN(t) && t <= now) ids.push(u.id);
-  }
-  return ids;
-}
