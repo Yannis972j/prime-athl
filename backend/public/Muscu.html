@@ -134,6 +134,20 @@ const THEMES={
     glassAccentA:'rgba(144,144,196,0.18)',glassAccentB:'rgba(20,20,28,0.6)',
     cardShadow:'0 1px 0 rgba(255,255,255,0.04) inset,0 20px 40px rgba(0,0,0,0.35)',
   },
+  // GTA VI — coucher de soleil Vice City : bleu-violet → magenta → orange (logo "VI")
+  gta6:{
+    bg:'#0a0614',bgRaise:'#160b27',border:'rgba(255,120,210,0.13)',
+    text:'#fbf1ff',textDim:'rgba(251,241,255,0.62)',textFaint:'rgba(251,241,255,0.34)',
+    accent:'#FF4FB8',accentSoft:'rgba(255,79,184,0.14)',accentBright:'#FF8AD2',
+    good:'#2EE6CB',warn:'#FFB347',danger:'#FF4D6D',
+    macroP:'#FF4FB8',macroC:'#6C7CFF',macroL:'#FFA33A',
+    radial:'radial-gradient(ellipse at 50% 115%,rgba(255,150,60,0.30) 0%,rgba(255,79,184,0.14) 32%,transparent 62%),radial-gradient(ellipse at 25% -5%,rgba(92,92,235,0.42) 0%,transparent 55%),#0a0614',
+    cardA:'rgba(30,14,52,0.92)',cardB:'rgba(16,8,32,0.94)',
+    cardAccentA:'rgba(255,79,184,0.14)',cardAccentB:'rgba(22,10,40,0.92)',
+    glassA:'rgba(34,16,58,0.78)',glassB:'rgba(18,9,34,0.80)',
+    glassAccentA:'rgba(255,79,184,0.20)',glassAccentB:'rgba(24,11,44,0.62)',
+    cardShadow:'0 1px 0 rgba(255,170,230,0.07) inset,0 20px 44px rgba(10,0,30,0.55),0 0 28px rgba(255,79,184,0.07)',
+  },
   light:{
     bg:'#f4f4f2',bgRaise:'#ffffff',border:'rgba(0,0,0,0.09)',
     text:'#0c0c14',textDim:'rgba(12,12,20,0.60)',textFaint:'rgba(12,12,20,0.38)',
@@ -153,6 +167,7 @@ function setAppTheme(name){
   Object.assign(T,THEMES[name]);
   localStorage.setItem('prime-theme',name);
   document.body.style.background=T.bg;
+  try{const m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',T.bg);}catch(e){}
   if(typeof _themeUpdate==='function')_themeUpdate(n=>n+1);
 }
 let T={...(THEMES[localStorage.getItem('prime-theme')]||THEMES.dark)};
@@ -18790,15 +18805,16 @@ function ThemePicker(){
   const swatches=[
     {name:'dark',  c1:'#0a0a0e',c2:'#BFA060',label:'Dark Prime'},
     {name:'luxe',  c1:'#0c0c10',c2:'#9090c4',label:'Luxe Gris'},
+    {name:'gta6',  c1:'#5C5CEB',c2:'#FF8A3D',via:'#FF4FB8',label:'GTA VI'},
     {name:'light', c1:'#f4f4f2',c2:'#0c0c14',label:'Blanc Noir'},
   ];
   function pick(name){setAppTheme(name);setCur(name);}
   return(
     <div style={{display:'flex',alignItems:'center',gap:6}}>
-      {swatches.map(({name,c1,c2,label})=>(
+      {swatches.map(({name,c1,c2,via,label})=>(
         <button key={name} onClick={()=>pick(name)} title={label} style={{
           width:18,height:18,borderRadius:'50%',
-          background:`linear-gradient(135deg,${c1} 40%,${c2})`,
+          background:via?`linear-gradient(160deg,${c1} 0%,${via} 50%,${c2} 100%)`:`linear-gradient(135deg,${c1} 40%,${c2})`,
           border:`2px solid ${cur===name?T.accent:'transparent'}`,
           cursor:'pointer',flexShrink:0,
           boxShadow:cur===name?`0 0 0 1px ${T.bg},0 0 0 3px ${T.accent}`:'none',
