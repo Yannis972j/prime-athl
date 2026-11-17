@@ -179,13 +179,23 @@ function userHasAccess(u, universe) {
 function isAccessExpired(u) {
   return isAccessExpiredFor(u, Date.now(), MAIN_COACH_EMAIL);
 }
-// Middleware : refuse l'écriture quand l'accès de l'athlète est expiré (défense côté serveur,
-// en plus du blocage UI). L'athlète garde la lecture de /api/me (pour afficher l'écran de fin).
-const accessActive = (req, res, next) => {
-  const u = DATA.users[req.user.id];
-  if (isAccessExpired(u)) return res.status(403).json({ error: 'access_expired' });
-  next();
-};
+// Accès expiré : l'athlète n'a plus accès qu'au Catalogue, à la messagerie et à son profil. Tout le reste
+// (Coaching, IA, Explorer, séances, stats…) est refusé par le serveur — pas seulement masqué à l'écran.
+// Liste d'autorisations (et non de refus) : une future route est bloquée par défaut. Appliquée dans
+// authRequired, donc à toutes les routes authentifiées ; coachs et coach principal sont exemptés.
+//  · me / auth         : profil, mot de passe, export, déconnexion
+//  · messages, my-coach: pouvoir écrire à son coach (c'est le seul but de l'écran « Accès expiré »)
+//  · push              : notifications
+//  · training-programs : le Catalogue (parcourir, acheter, suivre un programme acheté)
+//  · stripe            : se réabonner
+// + enregistrer une séance UNIQUEMENT si elle vient du Catalogue (fromTrainingProgram), sinon on
+//   ne pourrait pas suivre un programme acheté.
+const EXPIRED_ALLOWED = /^\/api\/(me|auth|messages|my-coach|push|training-programs|stripe)(\/|$)/;
+function expiredAccessAllows(req) {
+  const p = (req.originalUrl || req.url || '').split('?')[0];
+  if (EXPIRED_ALLOWED.test(p)) return true;
+  return req.method === 'POST' && p === '/api/sessions' && req.body?.fromTrainingProgram === true;
+}
 const VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
@@ -755,6 +765,7 @@ const authRequired = (req, res, next) => {
     // Vérifie que le token n'a pas été révoqué (logout ou changement de mot de passe)
     if ((req.user.tv ?? 0) !== (u.tokenVersion || 0)) return res.status(401).json({ error: 'token_revoked' });
     if (u.status === 'pending') return res.status(403).json({ error: 'pending_approval' });
+    if (isAccessExpired(u) && !expiredAccessAllows(req)) return res.status(403).json({ error: 'access_expired' });
     next();
   } catch { res.status(401).json({ error: 'bad_token' }); }
 };
@@ -2327,7 +2338,7 @@ function consumeExerciseTargets(userId, exercises) {
   return changed;
 }
 
-app.post('/api/sessions', authRequired, accessActive, (req, res) => {
+app.post('/api/sessions', authRequired, (req, res) => {
   const { date, name, totalVolume, exercises, rpe, notes, duration, deload } = req.body || {};
   // Idempotence : le client attache un clientId stable à la séance. Si le serveur a déjà créé une
   // séance avec ce clientId pour cet utilisateur, on renvoie l'existante sans en créer une 2e.
