@@ -39,6 +39,7 @@ test('J-3, J-2, J-1 : le pop-up s\'affiche à l\'ouverture ; accès illimité : 
   for (const [n, want] of [['a3', /Plus que 3 jours/i], ['a2', /Plus que 2 jours/i], ['a1', /Dernier jour/i]]) {
     const { c, pg } = await open(n + '@test.local');
     assert.match(String(await popupText(pg)), want, n);
+    assert.match(await pg.evaluate(() => document.body.innerText), /Ton objectif n'est pas encore atteint — ne lâche pas maintenant/, 'message « objectif pas encore atteint » : ' + n);
     await c.close();
   }
   const { c, pg } = await open('au@test.local');
