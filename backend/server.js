@@ -2697,6 +2697,9 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   const updates = allUpdates.filter(u => !(+u?.distance > 0));
   const sessionName = String(req.body?.sessionName || '');
   const sessionId = req.body?.sessionId ? String(req.body.sessionId) : '';
+  // Correction : le coach rouvre une montée déjà validée. Les charges sont ÉCRASÉES (valeur absolue,
+  // jamais cumulées) → pas de double montée ; un exo remis sur « Garder » revient à sa charge d'origine.
+  const isCorrection = req.body?.correction === true;
   if (!allUpdates.length) return res.status(400).json({ error: 'no_updates' });
   const norm = normExName;
   const wByName = {}, assistedByName = {};
@@ -2754,9 +2757,11 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   // faisait doublon avec le feedback — voir fusion #.
   const overloadRecap = updates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, +u.from || 0), to: wByName[norm(u.name)], assisted: !!u.assisted })).filter(u => u.name && u.to != null)
     .concat(distUpdates.map(u => ({ name: String(u.name || '').slice(0, 100), from: Math.max(0, Math.round(+u.from || 0)), to: Math.max(1, Math.min(100000, Math.round(+u.distance))), unit: 'm' })).filter(u => u.name));
+  // En correction, on retire du récap les exos revenus à leur charge d'origine (rien à annoncer).
+  const recapFinal = isCorrection ? overloadRecap.filter(u => u.to !== u.from) : overloadRecap;
   if (sessionId && DATA.sessions[sessionId] && DATA.sessions[sessionId].userId === req.params.athleteId) {
     DATA.sessions[sessionId].overloadApplied = true;
-    DATA.sessions[sessionId].overloadUpdates = overloadRecap;
+    DATA.sessions[sessionId].overloadUpdates = recapFinal;
   }
   const coachName = coachDisplayName(DATA.users[req.user.id]);
   persist();
@@ -2766,11 +2771,13 @@ app.post('/api/coach/athletes/:athleteId/overload', authRequired, coachOnly, (re
   const someAssisted = updates.some(u => u.assisted);
   if (!updates.length && distUpdates.length) {
     const d = distUpdates[0];
-    pushToUser(req.params.athleteId, { title: '⬆ Objectif augmenté', body: `${coachName} a fixé ton objectif : ${String(d.name || '').slice(0, 60)} ${Math.round(+d.distance)} m par série. Prêt pour ta prochaine séance !`, url: '/Muscu.html' });
+    pushToUser(req.params.athleteId, { title: isCorrection ? '✏️ Objectif corrigé' : '⬆ Objectif augmenté', body: `${coachName} ${isCorrection ? 'a corrigé' : 'a fixé'} ton objectif : ${String(d.name || '').slice(0, 60)} ${Math.round(+d.distance)} m par série. Prêt pour ta prochaine séance !`, url: '/Muscu.html' });
     return res.json({ ok: true, applied: applied.size, targets: targetsWritten, data: data || {} });
   }
-  const pushTitle = allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
-  const pushBody = allAssisted
+  const pushTitle = isCorrection ? '✏️ Charge corrigée' : allAssisted ? '⬇ Assistance réduite' : someAssisted ? '⬆⬇ Charges ajustées' : '⬆ Charge augmentée';
+  const pushBody = isCorrection
+    ? `${coachName} a corrigé la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
+    : allAssisted
     ? `${coachName} a réduit l'assistance${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`
     : `${coachName} a ajusté la charge${names ? ' : ' + names : ''}. Prêt pour ta prochaine séance !`;
   pushToUser(req.params.athleteId, { title: pushTitle, body: pushBody, url: '/Muscu.html' });
