@@ -6484,7 +6484,17 @@ function coachPreSessionMessage(coach,goals,firstName,seed){
 }
 // Rappel de fin d'accès (J-3 / J-2 / J-1) — ton qui monte, surnom pris en compte via le profil
 // coaching. Pousse à continuer ET à contacter le coach pour poursuivre l'aventure.
-function accessReminderMessage(daysLeft,coach,firstName){
+// Ligne ajoutée à chaque rappel de fin d'accès : l'objectif n'est pas encore atteint, ne pas lâcher.
+// (objectif de la fiche « Mes objectifs » repris s'il est renseigné ; sinon formule générale.)
+function accessGoalLine(objective){
+  const o=String(objective||'').trim();
+  return `🎯 Ton objectif${o?` (${o})`:''} n'est pas encore atteint — ne lâche pas maintenant.`;
+}
+function accessReminderMessage(daysLeft,coach,firstName,objective){
+  const m=accessReminderBase(daysLeft,coach,firstName);
+  return{...m,message:m.message+'\n\n'+accessGoalLine(objective)};
+}
+function accessReminderBase(daysLeft,coach,firstName){
   const who=coachName(coach,firstName);
   if(daysLeft>=3)return{tone:'mid',chip:'⏳ Plus que 3 jours d\'accès',title:`On ne lâche rien, ${who} 💪`,
     message:`Il te reste 3 jours d'accès à ton programme. Tu as lancé une vraie dynamique — ce serait bête de couper l'élan maintenant. Parle à ton coach pour continuer l'aventure.`};
@@ -19041,7 +19051,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     const key='pa_access_ack_'+authUser.id+'_'+String(profile.accessExpiresAt||'')+'_d'+palier;
     try{if(localStorage.getItem(key))return;}catch{}
     const coach=computeCoachCtx(authUser);
-    const msg=accessReminderMessage(palier,coach,authUser.firstName||'');
+    const msg=accessReminderMessage(palier,coach,authUser.firstName||'',(computeGoalsCtx(authUser)||{}).objective);
     setAccessPopup({...msg,daysLeft:palier,ackKey:key});
   },[accessDaysLeft,authUser.id,profile?.accessExpiresAt]);
   const ackAccessPopup=React.useCallback(goToCoach=>{
@@ -19769,7 +19779,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
               <span style={{fontSize:10,fontWeight:800,color:'#FF9EB8',letterSpacing:0.5,textTransform:'uppercase'}}>Accès expiré</span>
             </div>
             <div style={{fontFamily:"'Outfit',sans-serif",fontSize:23,fontWeight:800,color:'#fff',lineHeight:1.2,marginBottom:12,maxWidth:340}}>Ton accès est arrivé à son terme{profile.firstName?`, ${profile.firstName}`:''}</div>
-            <div style={{fontSize:14,lineHeight:1.65,color:'#E8E6EF',maxWidth:330,marginBottom:26}}>Tu as fait du bon travail — ne t'arrête pas en si bon chemin. Contacte ton coach pour prolonger ton accès et poursuivre l'aventure ensemble. 💪</div>
+            <div style={{fontSize:14,lineHeight:1.65,color:'#E8E6EF',maxWidth:330,marginBottom:26}}>Tu as fait du bon travail — ne t'arrête pas en si bon chemin. Contacte ton coach pour prolonger ton accès et poursuivre l'aventure ensemble. 💪<div style={{marginTop:12,fontWeight:700,color:'#FFD7A8'}}>{accessGoalLine((computeGoalsCtx(profile)||{}).objective)}</div></div>
             <button onClick={()=>{setActiveUniverse(null);setTab('messages');}} style={{width:'100%',maxWidth:320,height:54,borderRadius:16,border:'none',background:'linear-gradient(135deg,#E88A5A,#B85070)',color:'#0c0c12',fontFamily:"'Outfit',sans-serif",fontSize:15.5,fontWeight:800,cursor:'pointer'}}>💬 Contacter mon coach</button>
           </div>
         )}
