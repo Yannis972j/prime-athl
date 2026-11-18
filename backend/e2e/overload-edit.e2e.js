@@ -80,6 +80,8 @@ test('coach (UI) : « Modifier les charges » après validation, enregistrer la 
   await pg.getByText('Monter', { exact: true }).first().click(); await pg.waitForTimeout(300);
   await pg.getByText('Valider · mettre à jour', { exact: false }).first().click(); await pg.waitForTimeout(1500);
   assert.equal((await targets())['squat'].weight, 41);
+  // la fenêtre reste OUVERTE après la validation (avant : elle se refermait, la mise à jour « disparaissait »)
+  assert.equal(await pg.getByTestId('ov-edit').count(), 1, 'récap toujours ouvert avec « Modifier les charges »');
   await reopen();
   const applied = pg.getByTestId('ov-applied');
   await applied.waitFor();
