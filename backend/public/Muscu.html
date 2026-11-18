@@ -10982,7 +10982,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
           onClose={()=>setPlanSession(null)} onDone={()=>onSessionPlanned&&onSessionPlanned()}/>
       )}
       {viewSession&&ReactDOM.createPortal(
-        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} history={sessions} initialTab={viewSessionTab} repsRange={repsMaxMap} repsStrMap={repsStrMap} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}}/>,
+        <CoachSessionModal s={viewSession} athleteId={athleteId} athleteName={athleteName} athleteGender={athleteGender} history={sessions} initialTab={viewSessionTab} repsRange={repsMaxMap} repsStrMap={repsStrMap} onClose={()=>setViewSession(null)} onFeedbackSaved={()=>{setViewSession(null);onSessionPlanned&&onSessionPlanned();}} onRefresh={()=>{onSessionPlanned&&onSessionPlanned();}}/>,
         document.body
       )}
       {/* Assigner : envoyer la séance de ce jour à l'athlète (regroupé ici depuis l'ancienne liste). */}
@@ -12558,7 +12558,7 @@ function CardioSeriesTable({ex}){
   );
 }
 
-function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,initialTab,repsRange,repsStrMap}){
+function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,onRefresh,initialTab,repsRange,repsStrMap}){
   const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   // Mindset du récap au profil coaching/objectifs DE L'ATHLÈTE (si dispo) — mêmes phrases
@@ -12634,7 +12634,11 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
       await apiCall(`/api/coach/athletes/${athleteId}/overload`,{method:'POST',body:{sessionId:s.id,sessionName:s.name,updates,...(ovEditing?{correction:true}:{})}});
       setOvApplied(updates.map(u=>u.distance?{name:u.name,from:u.from,to:u.distance,unit:'m'}:{name:u.name,from:u.from,to:u.weight,assisted:!!u.assisted}).filter(u=>!ovEditing||u.to!==u.from));
       setOvDone(true);setOvEditing(false);
-      onFeedbackSaved&&onFeedbackSaved();
+      // Rafraîchir les données SANS fermer la fenêtre : onFeedbackSaved ferme le modal quand il est ouvert depuis le
+      // calendrier (voulu après l'envoi d'un feedback). Pour une montée de charge, la fenêtre refermée faisait
+      // « disparaître » la mise à jour avant que le coach voie « Montées appliquées » et le détail des charges.
+      const refresh=onRefresh||onFeedbackSaved;
+      refresh&&refresh();
     }catch(e){
       console.error('overload',e);
       // Message spécifique selon la vraie cause renvoyée par le serveur (e.message = code d'erreur),
