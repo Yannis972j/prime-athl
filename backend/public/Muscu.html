@@ -922,14 +922,39 @@ function gg(gender, masc, fem){ return gender === 'f' ? fem : masc; }
 // Messages de récap SPÉCIFIQUES à une séance de décharge : ton neutre/bienveillant, jamais
 // punitif — une baisse de charge en décharge est voulue, pas un recul à sanctionner.
 // (name, g) → g = sexe de l'athlète pour l'accord.
-const DELOAD_CONGRATS = [
-  (name,g) => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus ${gg(g,'fort','forte')}. C'est exactement ce qu'il fallait faire.`,
+// Félicitations de décharge : deux familles (semaine de décharge / séance de décharge isolée), tirées au sort et
+// figées par séance (seed). `name` = surnom du profil coaching si donné ; accords via gg(g, masculin, féminin).
+const DELOAD_WEEK_CONGRATS = [
   (name,g) => `Décharge validée, ${name}. L'objectif c'était de lever léger et de récupérer, pas de battre des records — mission accomplie.`,
+  (name,g) => `Décharge validée, ${name}. Lever léger, c'est aussi du travail : ton corps absorbe tout ce que tu as construit.`,
+  (name,g) => `Bien joué, ${name} : tu as respecté les charges allégées. C'est ça, la discipline des ${gg(g,'sportifs','sportives')} qui durent.`,
+  (name,g) => `Décharge terminée, ${name}. Tu repars ${gg(g,'frais','fraîche')}, avec de la marge pour la suite.`,
+];
+const DELOAD_SESSION_CONGRATS = [
+  (name,g) => `Séance de décharge bouclée, ${name}. Charges allégées comme prévu — tu laisses ton corps récupérer pour revenir plus ${gg(g,'fort','forte')}. C'est exactement ce qu'il fallait faire.`,
+  (name,g) => `Séance allégée bouclée, ${name}. Moins de charge aujourd'hui, plus d'élan demain.`,
+  (name,g) => `Propre et léger, ${name}. Une séance comme celle-ci protège tes articulations et prépare la suivante.`,
+  (name,g) => `Bravo ${name} : t'arrêter avant d'être ${gg(g,'cuit','cuite')}, c'est un choix de pro.`,
+  (name,g) => `Décharge validée, ${name}. Aujourd'hui tu n'as rien à prouver : tu prépares la suite.`,
 ];
 // Entrées mindset : string OU (g)=>string quand la phrase porte un accord. motivationQuote résout.
 const DELOAD_MINDSET = [
   "La décharge n'est pas du temps perdu : c'est là que le corps transforme le travail des semaines dures en muscle et en force. Léger, mais sérieux.",
   g => `Reculer d'un pas pour mieux sauter. Bientôt tu repars sur tes vrais poids, plus ${gg(g,'frais','fraîche')} et plus ${gg(g,'fort','forte')}.`,
+  "Le muscle grandit pendant la récupération, pas pendant l'effort. La décharge, c'est le moment où le travail se transforme en progrès.",
+  "Tes muscles s'adaptent vite, tes tendons et tes articulations plus lentement. La décharge leur laisse le temps de rattraper.",
+  "Un ressort qu'on ne relâche jamais finit par casser. La décharge relâche, pour mieux repartir.",
+  "La fatigue masque ta vraie force. Quand elle redescend, tu retrouves ton niveau, souvent un cran au-dessus.",
+  "Les athlètes qui durent ne s'entraînent pas toujours à fond : ils savent quand lever le pied.",
+  "Le but d'une décharge : repartir avec l'envie, pas avec des courbatures.",
+  "La régularité sur des mois bat l'intensité sur quelques semaines. La décharge protège cette régularité.",
+];
+// « Pourquoi une décharge ? » — une ligne d'explication sous le bandeau de décharge (athlète), tirée au sort par séance.
+const DELOAD_WHY = [
+  "Elle fait baisser la fatigue accumulée sans perdre ta forme.",
+  "Elle laisse tendons et articulations s'adapter à ce que les muscles ont déjà encaissé.",
+  "Elle limite les risques de blessure quand les charges montent.",
+  "Elle aide à passer les paliers où tu stagnes malgré l'effort.",
 ];
 // Séance allégée pour douleurs menstruelles / endométriose : ton doux, zéro jugement.
 const MENSTRUAL_CONGRATS = [
@@ -954,10 +979,12 @@ const POST_DELOAD_MINDSET = [
   "La reprise après décharge, ce n'est pas juste \"remettre les vrais poids\". C'est aussi remettre l'intensité, la concentration, l'ambition. Tu as récupéré pour ça.",
 ];
 // Bandeau de récap affiché à la place de l'alerte de régression quand la séance est une décharge.
-function DeloadRecapBanner({ coach, reason }) {
+function DeloadRecapBanner({ coach, reason, seed }) {
+  const why = (!coach && reason !== 'menstrual') ? DELOAD_WHY[hashStr(String(seed == null ? '' : seed) + '|why') % DELOAD_WHY.length] : null;
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 13px', borderRadius: 11, background: 'rgba(90,138,224,0.13)', border: '1px solid rgba(90,138,224,0.4)', marginBottom: 12 }}>
       <span style={{ fontSize: 17, flexShrink: 0 }}>{reason === 'menstrual' ? '🌸' : '🌊'}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 12.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>
         {reason === 'menstrual'
           ? (coach
@@ -970,6 +997,8 @@ function DeloadRecapBanner({ coach, reason }) {
           : coach
           ? <>Semaine de décharge — charges allégées comme prévu. <span style={{ color: '#8FB4F5' }}>RAS</span> : la baisse est planifiée, pas un recul. Comparaison de perf en pause.</>
           : <>Semaine de décharge — tes charges sont volontairement allégées. La baisse est <b>normale et voulue</b> : tu laisses ton corps récupérer pour revenir plus fort.</>}
+      </div>
+      {why && <div data-testid="deload-why" style={{ marginTop: 7, fontSize: 11.5, color: '#B7CDF5', lineHeight: 1.45 }}><b style={{ color: '#8FB4F5' }}>Pourquoi une décharge ?</b> {why}</div>}
       </div>
     </div>
   );
@@ -6561,7 +6590,7 @@ function congratsMessage(name,volumeVsPrev,comp,opts){
   const pick=arr=>arr[(seed!=null?hashStr(seed+'|congrats'):Math.floor(Math.random()*arr.length))%arr.length];
   // Séance de décharge : message neutre/bienveillant PRIORITAIRE — on ne compare pas, on ne pique pas.
   if(isDeload&&lightReason==='menstrual')return pick(MENSTRUAL_CONGRATS)(name,gender);
-  if(isDeload)return pick(DELOAD_CONGRATS)(name,gender);
+  if(isDeload)return pick(lightReason==='session'?DELOAD_SESSION_CONGRATS:DELOAD_WEEK_CONGRATS)(name,gender);
   // 1ère séance APRÈS une décharge : message de reprise, prime sur la comparaison (qui serait
   // faussement flatteuse : les vrais poids d'aujourd'hui vs les 60% de la semaine dernière = +40%).
   if(isPostDeload)return pick(POST_DELOAD_CONGRATS)(name,gender);
@@ -8061,7 +8090,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                 <div style={{marginBottom:18,padding:'14px 16px',borderRadius:16,background:'radial-gradient(ellipse 120% 80% at 50% 0%, rgba(var(--brand-rgb),0.10), rgba(var(--brand-rgb),0.02) 70%)',border:'1px solid rgba(var(--brand-rgb),0.18)'}}>
                   <div style={{fontSize:10,color:T.accent,fontWeight:800,letterSpacing:0.6,textTransform:'uppercase',marginBottom:8,opacity:0.85}}>🏁 Récap de séance</div>
                   <div style={{fontSize:13,color:T.text,lineHeight:1.5,marginBottom:12}}>{congratsMessage(profile?.firstName||'champion',histRecap.volumeVsPrev,histRecap.comp,{sessionName:viewHistSession.name,hasVolume:histRecap.hasVolume,seed:viewHistSession.date||viewHistSession.id,isDeload:histRecap.isDeload,lightReason:viewHistSession.lightReason,isPostDeload:histRecap.isPostDeload,gender:profile?.gender||'',coach:computeCoachCtx(profile)})}</div>
-                  {histRecap.isDeload&&<DeloadRecapBanner reason={viewHistSession.lightReason}/>}
+                  {histRecap.isDeload&&<DeloadRecapBanner reason={viewHistSession.lightReason} seed={viewHistSession.id||viewHistSession.date}/>}
                   {histRecap.isPostDeload&&<PostDeloadRecapBanner/>}
                   {histRecap.isRegression&&(
                     <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderRadius:11,background:'rgba(184,80,112,0.13)',border:'1px solid rgba(184,80,112,0.38)',marginBottom:12}}>
@@ -20028,7 +20057,7 @@ function MainApp({authUser,onLogout,setUser,authToken}){
             {/* Semaine de décharge : bandeau neutre, jamais l'alerte rouge de recul */}
             {isDeloadSession&&(
               <div style={{width:'100%',maxWidth:380,marginBottom:16,boxSizing:'border-box'}}>
-                <DeloadRecapBanner reason={_s?.lightReason}/>
+                <DeloadRecapBanner reason={_s?.lightReason} seed={_s?.id||_s?.date}/>
               </div>
             )}
             {/* Reprise après décharge — bandeau d'accueil (comparaison de perf en pause) */}
