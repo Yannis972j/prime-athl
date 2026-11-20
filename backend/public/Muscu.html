@@ -7161,6 +7161,55 @@ function FeedbackRecapSheet({recap,onClose}){
   ,document.body);
 }
 
+// Renommer une séance DÉJÀ FAITE. Le récap « Dernière fois » compare une séance à la dernière
+// séance du MÊME NOM (voir buildSessionComparison) : une séance importée ou saisie sous un autre
+// nom (« JOUR 1 », « Bas du corps ») n'était jamais retrouvée, donc pas de comparaison. Renommer
+// la séance pour reprendre exactement le nom de la précédente rétablit le lien.
+// `suggestions` = noms de séances déjà présents dans l'historique (liste de choix à la saisie).
+function SessionNameEditor({name,onSave,suggestions,titleStyle}){
+  const[editing,setEditing]=React.useState(false);
+  const[val,setVal]=React.useState(name||'');
+  const[busy,setBusy]=React.useState(false);
+  const[err,setErr]=React.useState('');
+  React.useEffect(()=>{if(!editing)setVal(name||'');},[name,editing]);
+  const listId=React.useMemo(()=>'sne-'+Math.random().toString(36).slice(2,8),[]);
+  const names=React.useMemo(()=>{
+    const seen=new Set(),out=[];
+    (suggestions||[]).forEach(n=>{const t=String(n||'').trim();const k=normExerciseName(t);if(t&&!seen.has(k)){seen.add(k);out.push(t);}});
+    return out.slice(0,60);
+  },[suggestions]);
+  const submit=async()=>{
+    if(busy)return;
+    const v=val.trim().replace(/\s+/g,' ').slice(0,120);
+    if(!v){setErr('Le nom ne peut pas être vide.');return;}
+    if(v===String(name||'').trim()){setEditing(false);setErr('');return;}
+    setBusy(true);setErr('');
+    try{await onSave(v);setEditing(false);}
+    catch(e){setErr('Impossible de renommer : '+((e&&e.message)||'erreur'));}
+    setBusy(false);
+  };
+  if(!editing)return(
+    <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
+      <div style={{...titleStyle,flex:1,minWidth:0}}>{name||'Séance'}</div>
+      <button type="button" data-testid="rename-session" aria-label="Renommer la séance" title="Renommer la séance" onClick={()=>{setVal(name||'');setErr('');setEditing(true);}} style={{width:30,height:30,borderRadius:9,border:'1px solid rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,marginTop:2}}>
+        <Icon name="edit" size={13} stroke={T.textDim}/>
+      </button>
+    </div>
+  );
+  return(
+    <div data-testid="rename-form">
+      <input data-testid="rename-input" value={val} maxLength={120} autoFocus list={listId} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();else if(e.key==='Escape'){setEditing(false);setErr('');}}} placeholder="Nom de la séance" style={{width:'100%',height:42,borderRadius:11,border:'1px solid rgba(var(--brand-rgb),0.45)',background:'rgba(255,255,255,0.05)',color:T.text,fontSize:15,fontWeight:700,padding:'0 12px',outline:'none',boxSizing:'border-box'}}/>
+      <datalist id={listId}>{names.map(n=><option key={n} value={n}/>)}</datalist>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        <button type="button" onClick={()=>{setEditing(false);setErr('');}} disabled={busy} style={{flex:1,height:36,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'transparent',color:T.textDim,fontSize:12,fontWeight:700,cursor:'pointer'}}>Annuler</button>
+        <button type="button" data-testid="rename-save" onClick={submit} disabled={busy||!val.trim()} style={{flex:2,height:36,borderRadius:10,border:'none',background:val.trim()?'linear-gradient(135deg,var(--brand),var(--brand2))':'rgba(255,255,255,0.06)',color:val.trim()?'#fff':T.textFaint,fontSize:12,fontWeight:800,cursor:busy?'wait':'pointer',opacity:busy?0.6:1}}>{busy?'Enregistrement…':'Renommer'}</button>
+      </div>
+      <div style={{fontSize:11,color:T.textFaint,lineHeight:1.45,marginTop:8}}>Le récap et le « Dernière fois » affiché sous chaque exercice se basent sur la dernière séance du <b style={{color:T.textDim}}>même nom</b> : reprends exactement le nom de la séance (programme ou précédente), choisis-le dans la liste.</div>
+      {err&&<div role="alert" style={{fontSize:12,color:T.danger,fontWeight:600,marginTop:6}}>✗ {err}</div>}
+    </div>
+  );
+}
+
 // `history` = toutes les séances de l'athlète ; `target` = la séance à analyser.
 // `extraRange` (optionnel) = map nom normalisé → haut de fourchette, issue du PROGRAMME.
 function buildSessionComparison(target,history,extraRange){
@@ -7634,6 +7683,13 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
   // au serveur seulement au clic "Enregistrer" ; annuler ou fermer le panneau l'abandonne sans
   // toucher à la séance réelle tant qu'on n'a pas validé.
   const[editingHist,setEditingHist]=React.useState(false);
+  // Noms des séances du programme : ce sont ceux que prend la séance au lancement (donc ceux que le
+  // « Dernière fois » par exercice recherche dans l'historique) — proposés en premier au renommage.
+  const programSessionNames=React.useMemo(()=>{
+    const out=[];
+    Object.values(importedPrograms||{}).forEach(sheet=>Object.entries(sheet||{}).forEach(([day,d])=>{if(d&&Array.isArray(d.exercises)&&d.exercises.length)out.push(sessionTitleFrom(d,day));}));
+    return out;
+  },[importedPrograms]);
   const[editHistExercises,setEditHistExercises]=React.useState(null);
   const[savingHistEdit,setSavingHistEdit]=React.useState(false);
   const startEditHist=()=>{setEditHistExercises(JSON.parse(JSON.stringify(viewHistSession.exercises||[])));setEditingHist(true);};
@@ -7956,7 +8012,9 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                 </div>
                 <button onClick={()=>setViewHistSession(null)} aria-label="Fermer" style={{width:34,height:34,borderRadius:17,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)',color:T.textDim,fontSize:17,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
               </div>
-              <div style={{fontSize:25,fontWeight:800,letterSpacing:-0.6,lineHeight:1.15,textWrap:'balance',overflowWrap:'anywhere'}}>{viewHistSession.name||'Séance'}</div>
+              {onUpdateSession&&!editingHist?(
+                <SessionNameEditor name={viewHistSession.name} suggestions={[...programSessionNames,...(history||[]).filter(h=>h&&h.id!==viewHistSession.id).map(h=>h.name)]} titleStyle={{fontSize:25,fontWeight:800,letterSpacing:-0.6,lineHeight:1.15,textWrap:'balance',overflowWrap:'anywhere'}} onSave={async n=>{const saved=await onUpdateSession(viewHistSession.id,{name:n});setViewHistSession(v=>v?{...v,...(saved||{name:n})}:v);}}/>
+              ):(<div style={{fontSize:25,fontWeight:800,letterSpacing:-0.6,lineHeight:1.15,textWrap:'balance',overflowWrap:'anywhere'}}>{viewHistSession.name||'Séance'}</div>)}
               <div style={{display:'flex',gap:8,marginTop:14}}>
                 {editingHist?(
                   <button onClick={cancelEditHist} style={{height:34,padding:'0 14px',borderRadius:12,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:6,whiteSpace:'nowrap',flex:1,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:T.textDim,cursor:'pointer'}}>
@@ -12587,7 +12645,13 @@ function CardioSeriesTable({ex}){
   );
 }
 
-function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,onRefresh,initialTab,repsRange,repsStrMap}){
+function CoachSessionModal({s:sProp,athleteId,athleteName,athleteGender='',athleteProfile=null,history,blockSources,onClose,onFeedbackSaved,onRefresh,initialTab,repsRange,repsStrMap}){
+  // Nom surchargé localement après un renommage : la séance (et donc la comparaison « Dernière fois »)
+  // se recalcule tout de suite, sans attendre que le parent recharge sa liste.
+  const[nameOv,setNameOv]=React.useState(null);
+  React.useEffect(()=>{setNameOv(null);},[sProp.id,sProp.name]);
+  const s=React.useMemo(()=>nameOv!=null?{...sProp,name:nameOv}:sProp,[sProp,nameOv]);
+  const renameSession=async n=>{await apiCall('/api/coach/sessions/'+s.id,{method:'PATCH',body:{name:n}});setNameOv(n);};
   const{feedbackText,setFeedbackText,saving,saved,feedbackError,submitFeedback}=useSessionFeedback(s.id,s.coachFeedback,onFeedbackSaved);
   const[tab,setTab]=React.useState(initialTab||'recap');
   // Mindset du récap au profil coaching/objectifs DE L'ATHLÈTE (si dispo) — mêmes phrases
@@ -12695,7 +12759,7 @@ function CoachSessionModal({s,athleteId,athleteName,athleteGender='',athleteProf
         <div style={{padding:'12px 20px 16px',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:17,fontWeight:700,marginBottom:4}}>{s.name||'Séance'}</div>
+              <div style={{marginBottom:4}}><SessionNameEditor name={s.name} suggestions={(history||[]).filter(h=>h&&h.id!==s.id).map(h=>h.name)} titleStyle={{fontSize:17,fontWeight:700}} onSave={renameSession}/></div>
               <div style={{fontSize:12,color:T.textDim}}>{s.date?new Date(s.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):''}</div>
             </div>
             <button onClick={onClose} style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.06)',color:T.textFaint,fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>×</button>
