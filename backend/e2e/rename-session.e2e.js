@@ -125,3 +125,61 @@ test('coach (UI) : renommer « JOUR 2 » en « HAUT DU CORPS » met le récap à
   assert.deepEqual(errs, []);
   await ctx.close();
 });
+
+// « Dernière fois » SOUS CHAQUE EXERCICE pendant la séance : il se base lui aussi sur les séances de
+// MÊME NOM que la séance lancée (workout.name). Une séance passée saisie sous un autre nom ne
+// donnait donc rien ; après renommage au nom de la séance du programme, l'exo affiche sa dernière perf.
+test('athlète (UI) : après renommage, « Dernière fois 80 kg × 10 reps » apparaît sous l\'exercice du même nom ; sans renommage, rien', async () => {
+  const mkAthlete = async (email, first) => {
+    await api(srv.baseUrl, 'POST', '/api/coach/create-athlete', { token: coach, body: { email, password: PW, firstName: first, lastName: 'Live' } });
+    const la = await api(srv.baseUrl, 'POST', '/api/auth/login', { body: { email, password: PW } });
+    const id = la.body.user.id;
+    await api(srv.baseUrl, 'POST', `/api/access/grant/${id}`, { token: coach, body: { enabled: true } });
+    const pex = n => ({ name: n, muscle: 'JAMBES', restSeconds: 60, sets: [{ weight: 60, reps: 10, target: '10' }] });
+    await api(srv.baseUrl, 'PUT', `/api/coach/program/${id}`, { token: coach, body: { data: { PROGRAMME: { LUNDI: { category: 'JAMBES', exercises: [pex('Squat')] } } }, fileName: 'p.xlsx' } });
+    const set = (w, r) => ({ weight: w, reps: r, done: false, target: r, targetStr: String(r) });
+    const lex = { name: 'Squat', muscle: 'JAMBES', style: 'CLASSIQUE', restSeconds: 5, sets: [set(60, 10)] };
+    await api(srv.baseUrl, 'PUT', `/api/coach/session-library/${id}`, { token: coach, body: { sessions: [{ id: 'lv1', name: 'E2E LIVE', sheetName: 'E2E', category: 'JAMBES', exercises: [lex] }] } });
+    await api(srv.baseUrl, 'POST', `/api/coach/athletes/${id}/sessions`, { token: coach, body: { name: 'JOUR 1', date: iso(10), exercises: [ex(80)], totalVolume: 800 } });
+    return { id, token: la.body.token };
+  };
+  const startAndRead = async email => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 1000 }, isMobile: true, hasTouch: true });
+    const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
+    await pg.goto(srv.baseUrl + '/Muscu.html');
+    await pg.fill('input[type=email]', email); await pg.fill('input[type=password]', PW); await pg.keyboard.press('Enter');
+    await pg.waitForTimeout(3500);
+    const click = async (t, to = 2500) => { try { await pg.getByText(t, { exact: false }).first().click({ timeout: to }); await pg.waitForTimeout(700); return true; } catch { return false; } };
+    for (const t of ['Passer', 'Plus tard', 'Coaching', 'Biblio', 'E2E LIVE', 'Commencer la séance', "C'est parti"]) await click(t, 1500);
+    await pg.waitForTimeout(800);
+    const txt = await pg.evaluate(() => document.body.innerText);
+    return { pg, ctx, txt };
+  };
+  // Témoin : « JOUR 1 » jamais renommée → aucune « Dernière fois » sous Squat
+  await mkAthlete('e2e-rename-ctl@test.local', 'Temoin');
+  const ctl = await startAndRead('e2e-rename-ctl@test.local');
+  assert.match(ctl.txt, /Squat/, 'séance lancée');
+  assert.doesNotMatch(ctl.txt, /Dernière fois/i, 'témoin : pas de référence tant que le nom diffère');
+  await ctl.ctx.close();
+  // Renommage : « JOUR 1 » → « E2E LIVE » (nom de la séance lancée), via l'UI du calendrier
+  const b = await mkAthlete('e2e-rename-b@test.local', 'Renomme');
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 1000 }, isMobile: true, hasTouch: true });
+  const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
+  await pg.goto(srv.baseUrl + '/Muscu.html');
+  await pg.fill('input[type=email]', 'e2e-rename-b@test.local'); await pg.fill('input[type=password]', PW); await pg.keyboard.press('Enter');
+  await pg.waitForTimeout(3500);
+  for (const t of ['Passer', 'Plus tard', 'Coaching', 'Séances']) { try { await pg.getByText(t, { exact: false }).first().click({ timeout: 1500 }); await pg.waitForTimeout(700); } catch {} }
+  await pg.getByText('‹', { exact: true }).first().click(); await pg.waitForTimeout(600);
+  await pg.locator(`[data-cal-date="${day(10)}"]`).click(); await pg.waitForTimeout(500);
+  await pg.getByText('Visionner séance', { exact: false }).first().click(); await pg.waitForTimeout(800);
+  await pg.getByTestId('rename-session').click();
+  await pg.getByTestId('rename-input').fill('E2E LIVE');
+  await pg.getByTestId('rename-save').click();
+  await pg.getByTestId('rename-session').waitFor(); await pg.waitForTimeout(500);
+  await ctx.close();
+  const live = await startAndRead('e2e-rename-b@test.local');
+  assert.match(live.txt, /Dernière fois/i, 'Dernière fois affiché sous l\'exercice après renommage');
+  assert.match(live.txt, /80\s*kg\s*×\s*10\s*reps/i, 'dernière perf du même exercice : 80 kg × 10 reps');
+  if (SHOT) await live.pg.screenshot({ path: `${SHOT}/rename-4-live-derniere-fois.png` });
+  await live.ctx.close();
+});
