@@ -818,6 +818,22 @@ function seriesCount(ex) { return ex && ex.sets ? ex.sets.length : 0; }
 function seriesLabel(ex, rep) {
   return seriesCount(ex) + '×' + rep + (isSideHoldEx(ex) ? '/côté' : '');
 }
+// Résumé « séries × effort » d'un exercice PRÉVU, pour toutes les listes de séances (coach, bibliothèque,
+// programme). Un cardio n'a pas de répétitions : on affiche sa DURÉE (« 30 min »), à défaut sa distance,
+// jamais « 1 × 10 » (10 = valeur par défaut de l'import, sans aucun sens pour un tapis).
+function plannedVolumeLabel(ex) {
+  if (!ex) return '';
+  const n = seriesCount(ex);
+  if (ex.style === 'CARDIO' || ex.groupType === 'cardio') {
+    const c = ex.cardio || {};
+    const effort = cardioHasVal(c.duree) ? cardioDureeLabel(c.duree)
+      : cardioHasVal(c.distance) ? fixCardioVal(c.distance) + ' km' : 'Cardio';
+    return (n > 1 ? n + '× ' : '') + effort;
+  }
+  if (ex.holdSeconds > 0) return seriesLabel(ex, fmtHoldDuration(ex.holdSeconds));
+  const reps = ex.repsStr || (ex.sets && ex.sets[0] && (ex.sets[0].targetStr || ex.sets[0].target)) || '';
+  return (n || '?') + (reps ? '×' + reps : '');
+}
 // ── Semaine de décharge (deload) : l'app calcule elle-même les valeurs allégées à partir des
 // valeurs normales du programme, sans dépendre d'une feuille "DECHARGE" dans l'Excel. Ajuste
 // simplement ces deux constantes pour changer l'intensité de la décharge.
@@ -3587,7 +3603,7 @@ function SessionScreen({workout,onUpdateWorkout,onClose,onFinish,onImportProgram
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
                         {chargeStr&&<div style={{fontSize:12,fontWeight:700,color:sc}}>{chargeStr}</div>}
-                        <div style={{fontSize:10,color:T.textFaint}}>{s.sets.length} séries · {s.repsStr||s.sets[0]?.target||'?'} reps</div>
+                        <div style={{fontSize:10,color:T.textFaint}}>{s.style==='CARDIO'?plannedVolumeLabel(s):<>{s.sets.length} séries · {s.repsStr||s.sets[0]?.target||'?'} reps</>}</div>
                       </div>
                       {sDone&&<Icon name="check" size={14} stroke={sc} strokeWidth={2.5}/>}
                     </button>
@@ -7968,7 +7984,7 @@ function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onS
                   </div>
                   {(d.exercises||[]).slice(0,4).map((ex,i)=>(
                     <div key={i} style={{fontSize:11,color:T.textDim,padding:'3px 0',borderTop:i>0?'1px solid rgba(255,255,255,0.04)':'none'}}>
-                      {ex.name} · {ex.sets.length}×{ex.repsStr||ex.sets[0]?.target}{ex.weightStr&&ex.weightStr!=='0'?` · ${ex.weightStr}kg`:''}
+                      {ex.name} · {plannedVolumeLabel(ex)}{ex.weightStr&&ex.weightStr!=='0'?` · ${ex.weightStr}kg`:''}
                     </div>
                   ))}
                   {(d.exercises||[]).length>4&&<div style={{fontSize:10,color:T.textFaint,marginTop:4}}>+{d.exercises.length-4} exercices</div>}
@@ -11183,7 +11199,7 @@ function AthleteCalendarSummary({sessions,program,nutriHistory,nutriPlan,mode='a
                   <>
                     <div style={{fontSize:12,color:movedHere?'#9090c4':T.brand,fontWeight:600,marginBottom:6}}>{effectiveDayName}{progData?.category?' · '+progData.category:''} — non effectué</div>
                     {progData.exercises?.slice(0,3).map((ex,i)=>(
-                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {ex.sets?.length}×{ex.sets?.[0]?.target||'?'}{exWeightLabel(ex)&&<span style={{color:T.text,fontWeight:700}}> · {exWeightLabel(ex)}</span>}</div>
+                      <div key={i} style={{fontSize:11,color:T.textDim,padding:'2px 0'}}>· {ex.name} — {plannedVolumeLabel(ex)}{exWeightLabel(ex)&&<span style={{color:T.text,fontWeight:700}}> · {exWeightLabel(ex)}</span>}</div>
                     ))}
                     {(progData.exercises?.length||0)>3&&<div style={{fontSize:10,color:T.textFaint}}>+{progData.exercises.length-3} ex.</div>}
                   </>
@@ -11636,9 +11652,10 @@ function CoachDayViewModal({dayName,dayData,onClose}){
                 <div key={gi} style={{borderRadius:14,border:isComplex?`1px solid ${ts.color}45`:'1px solid rgba(255,255,255,0.08)',background:isComplex?`${ts.color}0d`:'rgba(255,255,255,0.03)',overflow:'hidden'}}>
                   {isComplex&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:`${ts.color}18`,borderBottom:`1px solid ${ts.color}30`}}><span style={{fontSize:9,fontWeight:800,letterSpacing:0.5,textTransform:'uppercase',color:ts.color}}>{ts.label}</span><span style={{fontSize:9,color:T.textFaint}}>· {g.items.length} exercices</span></div>)}
                   {g.items.map((e,i)=>{
-                    const reps=e.repsStr||(e.sets&&e.sets[0]&&e.sets[0].target)||'';
-                    const nSets=(e.sets||[]).length;
-                    const rest=exType(e)!=='cardio'&&exRestSeconds(e)>0?fmtRestLabel(exRestSeconds(e)):'';
+                    const isCardioEx=exType(e)==='cardio'||e.style==='CARDIO';
+                    const volLabel=plannedVolumeLabel(e);
+                    const cardioC=isCardioEx?(e.cardio||{}):null;
+                    const rest=!isCardioEx&&exRestSeconds(e)>0?fmtRestLabel(exRestSeconds(e)):'';
                     return(
                       <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:i>0?`1px solid ${isComplex?ts.color+'25':'rgba(255,255,255,0.06)'}`:'none'}}>
                         {isComplex&&<div style={{width:18,height:18,borderRadius:9,background:`${ts.color}25`,color:ts.color,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{String.fromCharCode(65+i)}</div>}
@@ -11647,11 +11664,14 @@ function CoachDayViewModal({dayName,dayData,onClose}){
                           <div style={{fontSize:10,color:T.textFaint,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
                             {e.muscle&&<span>{e.muscle}</span>}
                             {rest&&<span>⏳ {rest}</span>}
+                            {cardioC&&cardioHasVal(cardioC.vitesse)&&<span>⚡ {fixCardioVal(cardioC.vitesse)} km/h</span>}
+                            {cardioC&&cardioHasVal(cardioC.inclinaison)&&<span>📐 {fixCardioVal(cardioC.inclinaison)}%</span>}
+                            {cardioC&&cardioHasVal(cardioC.duree)&&cardioHasVal(cardioC.distance)&&<span>📏 {fixCardioVal(cardioC.distance)} km</span>}
                           </div>
                         </div>
-                        {(nSets||reps)&&(
+                        {volLabel&&(
                           <div style={{flexShrink:0,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
-                            <div style={{fontSize:13,fontWeight:700,color:T.accent}}>{nSets||'?'}{reps?' × '+reps:''}</div>
+                            <div data-testid="day-ex-volume" style={{fontSize:13,fontWeight:700,color:T.accent}}>{volLabel}</div>
                             {exWeightLabel(e)&&<div data-testid="day-ex-weight" style={{fontSize:11.5,fontWeight:700,color:T.text,marginTop:2}}>{exWeightLabel(e)}</div>}
                           </div>
                         )}
@@ -16954,8 +16974,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
                                         <div style={{display:'flex',flexDirection:'column',gap:2}}>
                                           {(sess.exercises||[]).slice(0,5).map((ex,ei)=>{
                                             const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                                            const repsLabel=ex.repsStr||setsArr[0]?.targetStr||setsArr[0]?.target||'?';
-                                            return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}{ex.notes&&<span style={{color:T.textFaint}}> · {ex.notes.slice(0,30)}</span>}</div>;
+                                            return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {plannedVolumeLabel(ex)}{ex.notes&&<span style={{color:T.textFaint}}> · {ex.notes.slice(0,30)}</span>}</div>;
                                           })}
                                           {exCount>5&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-5} exercices</div>}
                                         </div>
@@ -16981,8 +17000,7 @@ function TPDetailScreen({programId,onBack,authUser,onPurchased}){
                                 <div style={{display:'flex',flexDirection:'column',gap:2}}>
                                   {(sess.exercises||[]).slice(0,5).map((ex,ei)=>{
                                     const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                                    const repsLabel=ex.repsStr||setsArr[0]?.targetStr||setsArr[0]?.target||'?';
-                                    return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{repsLabel}</div>;
+                                    return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {plannedVolumeLabel(ex)}</div>;
                                   })}
                                   {exCount>5&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-5} exercices</div>}
                                 </div>
@@ -17202,11 +17220,9 @@ function TPMyProgramView({programId,onBack,authUser,onStartWorkout}){
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:2,paddingLeft:32}}>
                         {(sess.exercises||[]).map((ex,ei)=>{
-                          const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                          const repsLabel=setsArr[0]?.targetStr||setsArr[0]?.target||setsArr[0]?.reps||'?';
                           return(
                             <div key={ei} style={{fontSize:11,color:T.textDim}}>
-                              {ex.name} — {setsArr.length}×{repsLabel}{ex.coachNotes?` 💡 ${ex.coachNotes}`:''}
+                              {ex.name} — {plannedVolumeLabel(ex)}{ex.coachNotes?` 💡 ${ex.coachNotes}`:''}
                             </div>
                           );
                         })}
@@ -17691,7 +17707,7 @@ function TPAdminImport({onBack}){
                               <div style={{display:'flex',flexDirection:'column',gap:1}}>
                                 {(sess.exercises||[]).slice(0,3).map((ex,ei)=>{
                                   const setsArr=Array.isArray(ex.sets)?ex.sets:[];
-                                  return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {setsArr.length}×{ex.repsStr||setsArr[0]?.targetStr||'?'}{ex.notes?' · '+ex.notes.slice(0,40):''}</div>;
+                                  return <div key={ei} style={{fontSize:11,color:T.textDim}}>• {ex.name} — {plannedVolumeLabel(ex)}{ex.notes?' · '+ex.notes.slice(0,40):''}</div>;
                                 })}
                                 {exCount>3&&<div style={{fontSize:10,color:T.textFaint}}>+{exCount-3} exercices</div>}
                               </div>
