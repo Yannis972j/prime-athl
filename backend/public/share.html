@@ -8,8 +8,24 @@
 <meta id="ogDesc" property="og:description" content="Découvre cette séance d'entraînement sur Prime Athl."/>
 <meta property="og:type" content="website"/>
 <link rel="icon" href="data:,"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/vendor/jspdf.umd.min.js"></script>
 <script src="/pdf-brand.js"></script>
+<script>
+// jsPDF et le module PDF (/pdf-brand.js) : copies locales d'abord, CDN en secours ; si l'un manque au moment du
+// clic (réseau capricieux, CDN bloqué), il est chargé à la demande au lieu d'afficher « PDF non disponible ».
+window.paEnsurePdf=function(){
+  var load=function(urls,ok){return new Promise(function(res,rej){var i=0;(function next(){if(i>=urls.length)return rej(new Error('load'));var s=document.createElement('script');s.src=urls[i++];s.onload=function(){ok()?res():(s.remove(),next());};s.onerror=function(){s.remove();next();};document.head.appendChild(s);})();});};
+  var fail=function(which){return function(){var e=new Error(which);e.which=which;throw e;};};
+  var jobs=[];
+  if(!(window.jspdf&&window.jspdf.jsPDF))jobs.push(load(['/vendor/jspdf.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'],function(){return !!(window.jspdf&&window.jspdf.jsPDF);}).catch(fail('jspdf')));
+  if(!window.PrimePDF)jobs.push(load(['/pdf-brand.js'],function(){return !!window.PrimePDF;}).catch(fail('module')));
+  return Promise.all(jobs);
+};
+window.paPdfError=function(e){
+  console.error('PDF:',e);
+  alert(e&&e.which==='jspdf'?'PDF indisponible : la bibliothèque PDF n\u2019a pas pu se charger. Vérifie ta connexion puis réessaie.':'PDF indisponible : une partie de l\u2019application n\u2019a pas pu se charger. Recharge la page puis réessaie.');
+};
+</script>
 <style>
   :root{
     --bg:#07070e; --bgRaise:#0f0f1c; --border:rgba(255,255,255,0.08);
@@ -310,8 +326,12 @@ function savePdfCompat(doc,filename){
 }
 
 function downloadPDF(session){
-  const {jsPDF}=window.jspdf||{};
-  if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
+  // jsPDF / pdf-brand.js manquants (réseau, CDN) : chargés à la demande avant de générer
+  window.paEnsurePdf().then(()=>downloadPDFReady(session)).catch(window.paPdfError);
+}
+
+function downloadPDFReady(session){
+  const {jsPDF}=window.jspdf;
   // Best-effort : compte le téléchargement côté serveur, ne bloque jamais la génération du PDF si ça échoue
   if(shareToken){try{fetch('/api/share/'+encodeURIComponent(shareToken)+'/pdf-download',{method:'POST'}).catch(()=>{});}catch(e){}}
   // Tout le corps de la génération (composition du PDF) n'était protégé par aucun try/catch —

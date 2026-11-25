@@ -1,6 +1,6 @@
 // Téléchargements PDF : séance (athlète), séance partagée (page publique, avec compteur), programme IA (jsPDF),
-// plan nutrition (fenêtre d'impression « Enregistrer en PDF »). jsPDF vient d'un CDN : en local sans réseau,
-// JSPDF_LOCAL=<chemin de jspdf.umd.min.js> le sert à la place.
+// plan nutrition (fenêtre d'impression « Enregistrer en PDF »). jsPDF est servi par /vendor (copie locale) avec le CDN
+// en secours ; JSPDF_LOCAL=<chemin> (facultatif) force une autre copie.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -112,5 +112,53 @@ test('plan nutrition : le bouton PDF ouvre la fenêtre d\'impression (« Enregis
   await popup.waitForFunction(() => window.__printed === true, null, { timeout: 5000 });
   const txt = await popup.evaluate(() => document.body.innerText);
   assert.match(txt, /Marie Test/); assert.match(txt, /Flocons d.avoine/);
+  await ctx.close();
+});
+
+const VENDOR = new URL('../public/vendor/jspdf.umd.min.js', import.meta.url).pathname;
+
+test('jsPDF absent au chargement (copie locale en panne) : chargé à la demande depuis le CDN, le PDF se télécharge', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, acceptDownloads: true });
+  await ctx.route(/\/vendor\/jspdf\.umd\.min\.js/, r => r.abort());
+  await ctx.route(/cdnjs\.cloudflare\.com\/.*jspdf\.umd\.min\.js/, r => r.fulfill({ path: VENDOR, contentType: 'application/javascript' }));
+  const sh = await api(srv.baseUrl, 'POST', `/api/sessions/${sid}/share`, { token: atok });
+  const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
+  let dialog = null; pg.on('dialog', d => { dialog = d.message(); d.dismiss(); });
+  await pg.goto(srv.baseUrl + sh.body.url);
+  await pg.locator('#pdfBtn').waitFor();
+  assert.equal(await pg.evaluate(() => !!(window.jspdf && window.jspdf.jsPDF)), false, 'jsPDF absent au départ');
+  const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 10000 }), pg.locator('#pdfBtn').click()]);
+  isPdf(await readDownload(dl));
+  assert.equal(dialog, null, 'aucune alerte : ' + dialog);
+  await ctx.close();
+});
+
+test('jsPDF introuvable partout : message clair (et non « réessaie dans un instant »)', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, acceptDownloads: true });
+  await ctx.route(/jspdf\.umd\.min\.js/, r => r.abort());
+  const sh = await api(srv.baseUrl, 'POST', `/api/sessions/${sid}/share`, { token: atok });
+  const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
+  let dialog = null; pg.on('dialog', d => { dialog = d.message(); d.dismiss(); });
+  await pg.goto(srv.baseUrl + sh.body.url);
+  await pg.locator('#pdfBtn').waitFor();
+  await pg.locator('#pdfBtn').click();
+  await pg.waitForTimeout(1500);
+  assert.match(dialog || '', /bibliothèque PDF.*connexion/);
+  await ctx.close();
+});
+
+test('module PDF absent au chargement (/pdf-brand.js en panne puis rétabli) : chargé à la demande', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, acceptDownloads: true });
+  let first = true;
+  await ctx.route(/\/pdf-brand\.js/, r => { if (first) { first = false; return r.abort(); } return r.continue(); });
+  const sh = await api(srv.baseUrl, 'POST', `/api/sessions/${sid}/share`, { token: atok });
+  const pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
+  let dialog = null; pg.on('dialog', d => { dialog = d.message(); d.dismiss(); });
+  await pg.goto(srv.baseUrl + sh.body.url);
+  await pg.locator('#pdfBtn').waitFor();
+  assert.equal(await pg.evaluate(() => !!window.PrimePDF), false, 'module absent au départ');
+  const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 10000 }), pg.locator('#pdfBtn').click()]);
+  isPdf(await readDownload(dl));
+  assert.equal(dialog, null, 'aucune alerte : ' + dialog);
   await ctx.close();
 });
