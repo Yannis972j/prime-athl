@@ -74,7 +74,9 @@
   }
   function card(doc, x, y, w, h, r, fillC, lineC) {
     fill(doc, fillC || C.card); stroke(doc, lineC || C.line); doc.setLineWidth(0.25);
+    opacity(doc, 0.82);   // translucide : le logo en filigrane reste visible derrière les cartes
     doc.roundedRect(x, y, w, h, r == null ? 2.5 : r, r == null ? 2.5 : r, 'FD');
+    opacity(doc, 1);
   }
   function pillW(doc, txt) { font(doc, 6.6, true); txt = clean(txt).toUpperCase(); return textW(doc, txt) + txt.length * 0.35 + 6; }
   function pillAt(doc, txt, xLeft, yMid, color) {
@@ -105,11 +107,11 @@
     [[118, 0, 210, 40], [136, 0, 210, 31], [158, 0, 210, 21]].forEach(function (l, k) { opacity(doc, 0.13 - k * 0.03); doc.line(l[0], l[1], l[2], l[3]); });
     opacity(doc, 1);
     for (i = 0; i < 40; i++) { fill(doc, mix(C.champ, C.copper, i / 39)); doc.rect(0, i * (H / 40), 1.6, H / 40 + 0.2, 'F'); }
-    // filigrane : le logo, très discret, en bas à droite (visible entre les cartes)
+    // filigrane : le logo, centré au milieu de la page (visible à travers les cartes, légèrement translucides)
     if (LOGO && LOGO.data) {
       var lw = 150, lh = lw * LOGO.h / LOGO.w;
-      opacity(doc, 0.035);
-      try { doc.addImage(LOGO.data, 'PNG', W - lw + 18, H - lh - 26, lw, lh); } catch (e) { /* facultatif */ }
+      opacity(doc, 0.085);
+      try { doc.addImage(LOGO.data, 'PNG', (W - lw) / 2, (H - lh) / 2, lw, lh); } catch (e) { /* facultatif */ }
       opacity(doc, 1);
     }
   }
@@ -235,7 +237,7 @@
       stroke(doc, C.line); doc.setLineWidth(0.2); doc.line(x0, yy + 5.2, x0 + uw, yy + 5.2);
       yy += 7;
       (ex.sets || []).forEach(function (s, i) {
-        if (i % 2 === 0) { fill(doc, C.card2); doc.rect(x0 - 1, yy - 0.2, uw + 2, rowH, 'F'); }
+        if (i % 2 === 0) { fill(doc, C.card2); opacity(doc, 0.7); doc.rect(x0 - 1, yy - 0.2, uw + 2, rowH, 'F'); opacity(doc, 1); }
         if (s.top) { fill(doc, C.copper); doc.rect(x0 - 1, yy - 0.2, 1, rowH, 'F'); }
         var base = yy + 4.5;
         font(doc, 9, true); ink(doc, C.copper); doc.text(String(i + 1), cxs[0], base, { align: 'center' });
