@@ -7430,7 +7430,7 @@ function exportAIProgramPDF(program){
     let doc;
     try{doc=window.PrimePDF.aiProgram(jsPDF,program||{});}
     catch(e){console.error('exportAIProgramPDF:',e);alert('Impossible de générer le PDF.');return;}
-    const fname=`programme-ia-${(program&&program.name||'programme').replace(/\s+/g,'-').toLowerCase()}.pdf`;
+    const fname=`programme-${(program&&program.name||'programme').replace(/\s+/g,'-').toLowerCase()}.pdf`;
     savePdfCompat(doc,fname);
   });
 }
