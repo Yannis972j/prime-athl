@@ -343,7 +343,7 @@ function downloadPDFInner(session,jsPDF){
   line(fmtDate(session.date),10,false,[140,140,160]);y+=2;rule();
 
   const stats=[];
-  if(session.totalVolume) stats.push(`Volume : ${Math.round(session.totalVolume).toLocaleString('fr-FR')} kg`);
+  if(session.totalVolume) stats.push(`Volume : ${Math.round(session.totalVolume).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g,' ')} kg`); // l'espace fine de fr-FR (U+202F) n'existe pas dans la police PDF : « 1 500 » sortait « 1 /500 »
   if(session.duration) stats.push(`Durée : ${session.duration} min`);
   if(stats.length){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(180,180,200);doc.text(stats.join('   ·   '),margin,y);y+=8;}
   rule();
@@ -398,7 +398,7 @@ function downloadPDFInner(session,jsPDF){
     const cols=[margin,margin+12,margin+38,margin+64];
     doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
     ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
-    doc.setDrawColor(40,40,55);doc.line(margin,y-1,W-margin,y-1);
+    y+=1;doc.setDrawColor(40,40,55);doc.line(margin,y-4.5,W-margin,y-4.5);
     (ex.sets||[]).forEach((s,si)=>{
       if(y>270) newPage();
       const vol=(s.weight||0)*(s.reps||0);
