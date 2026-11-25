@@ -26,5 +26,5 @@ test('charge prévue : kg, fourchette, poids du corps, assisté, rien pour le ca
 
 test('affichage : présent dans la fenêtre « Séance prévue » et la carte du jour', () => {
   assert.match(html, /data-testid="day-ex-weight"[^>]*>\{exWeightLabel\(e\)\}/);
-  assert.match(html, /\{ex\.sets\?\.\[0\]\?\.target\|\|'\?'\}\{exWeightLabel\(ex\)&&/);
+  assert.match(html, /\{plannedVolumeLabel\(ex\)\}\{exWeightLabel\(ex\)&&/);
 });
