@@ -225,6 +225,9 @@ let DATA = (() => {
 })();
 
 const USE_PG = pgEnabled();
+if (IS_PROD && !USE_PG && !DB_PATH.startsWith('/data')) {
+  console.error('[DATA] ⚠️ Production SANS Postgres ni disque persistant : les données sont stockées sur un disque éphémère et seront PERDUES au prochain déploiement. Définis DATABASE_URL (Postgres) dans les variables d\'environnement.');
+}
 if (USE_PG) {
   try {
     await pgInit();
@@ -345,6 +348,11 @@ seedCreoleFoods();
 let saveTimer = null;
 let pgSaveTimer = null;
 let saving = false;
+// État des dernières sauvegardes : une écriture qui échoue ne doit plus passer inaperçue (avant : simple console.error,
+// invisible pour le coach). Exposé par /api/admin/health et affiché dans Profil → Sauvegarde.
+const saveStatus = { localOkAt: null, pgOkAt: null, error: null, errorAt: null, errorCount: 0 };
+const noteSaveOk = kind => { saveStatus[kind + 'OkAt'] = Date.now(); if (saveStatus.error && saveStatus.error.kind === kind) { saveStatus.error = null; saveStatus.errorAt = null; } };
+const noteSaveError = (kind, e) => { saveStatus.errorCount++; saveStatus.errorAt = Date.now(); saveStatus.error = { kind, message: String((e && e.message) || e).slice(0, 160) }; };
 async function flushLocal() {
   // Une sauvegarde précédente est encore en cours (disque lent / DATA volumineux) : on
   // réessaie bientôt au lieu d'abandonner l'écriture, sinon ce snapshot de DATA n'est
@@ -356,7 +364,8 @@ async function flushLocal() {
     const tmp = DB_PATH + '.tmp';
     await fs.promises.writeFile(tmp, JSON.stringify(DATA));
     await fs.promises.rename(tmp, DB_PATH);
-  } catch (e) { console.error('persist error:', e); } finally { saving = false; }
+    noteSaveOk('local');
+  } catch (e) { console.error('persist error:', e); noteSaveError('local', e); } finally { saving = false; }
 }
 // Sous forte activité continue (plusieurs athlètes actifs en même temps, ex: séance de groupe),
 // chaque appel à persist() réarme le timer avant qu'il ait pu se déclencher — un debounce classique
@@ -377,7 +386,7 @@ function persist() {
   if (USE_PG) {
     if (pgSaveTimer) clearTimeout(pgSaveTimer);
     pgSaveTimer = setTimeout(() => {
-      pgSave(DATA).catch(e => console.error('[pg] save error:', e.message));
+      pgSave(DATA).then(() => noteSaveOk('pg')).catch(e => { console.error('[pg] save error:', e.message); noteSaveError('pg', e); });
     }, Math.max(0, Math.min(PG_DEBOUNCE_MS, MAX_DEBOUNCE_MS - elapsed)));
   }
 }
@@ -2781,6 +2790,13 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
   if (athlete.coachId !== req.user.id) return res.status(403).json({ error: 'forbidden' });
   const { name, date, exercises, totalVolume, duration, notes, deload } = req.body || {};
   if (!Array.isArray(exercises)) return res.status(400).json({ error: 'name_and_exercises_required' });
+  // Idempotence (comme POST /api/sessions) : le client attache un clientId stable à la séance ; si la 1re
+  // requête est bien arrivée mais que la réponse s'est perdue, les renvois ne créent pas de doublon.
+  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.slice(0, 64) : '';
+  if (clientId) {
+    const existing = Object.values(DATA.sessions).find(x => x.userId === athlete.id && x.clientId === clientId);
+    if (existing) return res.json({ ok: true, id: existing.id, duplicate: true });
+  }
   // Même filet que POST /api/sessions : un nom par défaut plutôt qu'un rejet silencieux (cf.
   // commentaire là-bas — le client le garde déjà côté CoachLiveSessionScreen, mais mieux vaut
   // ne pas dépendre uniquement du client pour ça).
@@ -2799,6 +2815,7 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     notes: notes ? String(notes).slice(0, 500) : '',
     createdByCoach: true,
     createdAt: Date.now(),
+    ...(clientId ? { clientId } : {}),
     // Séance de décharge : le récap ne pénalise pas la baisse volontaire (même drapeau que /api/sessions).
     ...(deload ? { deload: true } : {}),
     ...(deload && safeLightReason(req.body?.lightReason) ? { lightReason: safeLightReason(req.body?.lightReason) } : {}),
@@ -2902,6 +2919,9 @@ app.get('/api/admin/health', authRequired, coachOnly, mainCoachOnly, (req, res) 
     dbPath: DB_PATH,
     persistent: USE_PG || DB_PATH.startsWith('/data'),
     storage: USE_PG ? 'postgres' : (DB_PATH.startsWith('/data') ? 'render-disk' : 'ephemeral'),
+    // Dernières sauvegardes : date du dernier succès et dernière erreur éventuelle (null = tout va bien).
+    lastSaveOkAt: USE_PG ? saveStatus.pgOkAt : saveStatus.localOkAt,
+    saveError: saveStatus.error ? { ...saveStatus.error, at: saveStatus.errorAt, count: saveStatus.errorCount } : null,
     timestamp: Date.now(),
   });
 });
