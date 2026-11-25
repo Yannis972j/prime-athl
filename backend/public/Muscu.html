@@ -582,6 +582,36 @@ function apiCall(path,opts={}){
   });
 }
 
+// Dernier profil connu, gardé SEULEMENT pour ouvrir l'appli quand le serveur est injoignable (hors ligne, serveur
+// qui se réveille) : sans lui, toute coupure réseau renvoyait à l'écran de connexion alors que la session est valide.
+// Aucun jeton ici (il reste dans le cookie httpOnly) ; effacé à la déconnexion et à tout refus du serveur (401/403).
+const ME_KEY='pa_me_cache';
+const readMeCache=()=>{try{const v=JSON.parse(localStorage.getItem(ME_KEY)||'null');return v&&v.id?v:null;}catch{return null;}};
+const writeMeCache=u=>{try{if(u&&u.id)localStorage.setItem(ME_KEY,JSON.stringify(u));}catch{}};
+const clearMeCache=()=>{try{localStorage.removeItem(ME_KEY);}catch{}};
+// Le serveur a-t-il VRAIMENT refusé la session ? (401/403) — sinon c'est le réseau ou un serveur lent : on garde l'utilisateur.
+const sessionRefused=e=>!!e&&(e.status===401||e.status===403);
+
+// Envoi d'une séance « côté coach » : identifiant d'idempotence stable (le serveur dédoublonne dessus) + jusqu'à
+// 5 tentatives espacées (1,5 s / 3 s / 6 s / 10 s) pour traverser un blip réseau ou le réveil du serveur gratuit.
+// Les erreurs définitives (4xx sauf 408/429) ne sont pas retentées.
+function newClientId(){return window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10);}
+const isFinalHttpError=e=>!!(e&&e.status&&e.status<500&&e.status!==408&&e.status!==429);
+async function postCoachSession(athleteId,body,{retries=true}={}){
+  const payload={...body,clientId:body.clientId||newClientId()};
+  const BACKOFFS=retries?[1500,3000,6000,10000]:[];
+  let lastErr;
+  for(let i=0;i<=BACKOFFS.length;i++){
+    try{return await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:payload});}
+    catch(e){
+      lastErr=e;
+      if(isFinalHttpError(e))throw e;
+      if(i<BACKOFFS.length)await new Promise(res=>setTimeout(res,BACKOFFS[i]));
+    }
+  }
+  throw lastErr;
+}
+
 function useAuth(){
   const[state,setState]=React.useState({user:null,loading:true,error:null});
 
@@ -589,13 +619,26 @@ function useAuth(){
     // Le JWT ne vit plus que dans le cookie httpOnly : on ne peut pas savoir côté JS si une
     // session existe déjà, donc on vérifie systématiquement au chargement (le navigateur
     // renvoie le cookie automatiquement s'il est présent et valide).
-    apiCall('/api/me')
-      .then(user=>setState({user,loading:false,error:null}))
-      .catch(()=>setState({user:null,loading:false,error:null}));
+    let alive=true;
+    const check=()=>apiCall('/api/me')
+      .then(user=>{writeMeCache(user);if(alive)setState({user,loading:false,error:null});})
+      .catch(e=>{
+        if(!alive)return;
+        if(sessionRefused(e)){clearMeCache();setState({user:null,loading:false,error:null});return;}
+        // Réseau coupé / serveur qui se réveille (502-504) / toute autre erreur : on ouvre l'appli avec le dernier profil connu.
+        const cached=readMeCache();
+        setState({user:cached,loading:false,error:null});
+      });
+    check();
+    // Retour du réseau : on revérifie la session (si elle a expiré entre-temps, retour à la connexion).
+    const onOnline=()=>{apiCall('/api/me').then(user=>{writeMeCache(user);if(alive)setState(s=>({...s,user:s.user?{...s.user,...user}:user}));}).catch(e=>{if(alive&&sessionRefused(e)){clearMeCache();setState({user:null,loading:false,error:null});}});};
+    window.addEventListener('online',onOnline);
+    return()=>{alive=false;window.removeEventListener('online',onOnline);};
   },[]);
 
   const login=async(email,password)=>{
     const{user}=await apiCall('/api/auth/login',{method:'POST',body:{email,password}});
+    writeMeCache(user);
     setState({user,loading:false,error:null});
   };
 
@@ -610,10 +653,12 @@ function useAuth(){
       err.coachName=res.coachName;
       throw err;
     }
+    writeMeCache(res.user);
     setState({user:res.user,loading:false,error:null});
   };
 
   const logout=()=>{
+    clearMeCache();
     // Révoque le token côté serveur (tokenVersion++) ET efface le cookie httpOnly — sinon la
     // session restait valide 60 jours après un "déconnecte-toi" sur un poste partagé.
     apiCall('/api/auth/logout',{method:'POST'}).catch(()=>{});
@@ -5262,9 +5307,11 @@ function BackupRestoreCard(){
   // Mode de stockage réel du serveur ('postgres' | 'render-disk' | 'ephemeral') : le message
   // d'avertissement en dépend, au lieu d'alerter à tort sur « Render Free efface les données ».
   const[storage,setStorage]=React.useState(null);
+  // Dernière écriture en base qui a ÉCHOUÉ (null = tout va bien) : sans ça, une base injoignable ne se voyait nulle part.
+  const[saveError,setSaveError]=React.useState(null);
   React.useEffect(()=>{
     let alive=true;
-    apiCall('/api/admin/health').then(h=>{if(alive)setStorage(h&&h.storage?h.storage:'unknown');}).catch(()=>{if(alive)setStorage('unknown');});
+    apiCall('/api/admin/health').then(h=>{if(!alive)return;setStorage(h&&h.storage?h.storage:'unknown');setSaveError(h&&h.saveError||null);}).catch(()=>{if(alive)setStorage('unknown');});
     return()=>{alive=false;};
   },[]);
 
@@ -5306,6 +5353,11 @@ function BackupRestoreCard(){
     <div style={{marginBottom:10}}>
       <SectionHeader title="Sauvegarde des données" right={<span style={{fontSize:9,color:T.textFaint,fontWeight:600,letterSpacing:0.3}}>COACH PRINCIPAL</span>}/>
       <div style={{padding:12,borderRadius:12,background:'rgba(90,138,224,0.06)',border:'1px solid rgba(90,138,224,0.2)'}}>
+        {saveError&&(
+          <div data-testid="save-error" style={{fontSize:11,color:'#FFB0B0',marginBottom:10,lineHeight:1.5,padding:'8px 10px',borderRadius:9,background:'rgba(184,80,112,0.14)',border:'1px solid rgba(184,80,112,0.45)'}}>
+            🚨 La dernière sauvegarde {saveError.kind==='pg'?'en base de données':'sur le disque'} a échoué{saveError.at?' ('+new Date(saveError.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+')':''} : {saveError.message}. Télécharge une sauvegarde maintenant.
+          </div>
+        )}
         {storage==='ephemeral'?(
           <div style={{fontSize:11,color:'#FFB0B0',marginBottom:10,lineHeight:1.5,padding:'8px 10px',borderRadius:9,background:'rgba(184,80,112,0.12)',border:'1px solid rgba(184,80,112,0.35)'}}>
             ⚠️ Stockage temporaire : tes données seront EFFACÉES au prochain déploiement. Télécharge une sauvegarde avant chaque mise à jour, restaure-la ensuite.
@@ -13380,6 +13432,8 @@ function loadLiveFromStorage(){try{const d=localStorage.getItem(LIVE_STORAGE_KEY
 function clearLiveStorage(){try{localStorage.removeItem(LIVE_STORAGE_KEY);}catch(e){}}
 
 function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,editSession,resumeData}){
+  // Identifiant d'idempotence de CETTE séance live : un 2e appui sur « Enregistrer » après une réponse perdue ne crée pas de doublon.
+  const liveClientIdRef=React.useRef(newClientId());
   const uid=()=>Math.random().toString(36).slice(2);
 
   const catalog=React.useMemo(()=>{
@@ -13646,7 +13700,7 @@ function CoachLiveSessionScreen({athleteId,athleteName,detail,onSaved,onClose,ed
       if(editSession){
         await apiCall('/api/coach/sessions/'+editSession.id,{method:'PATCH',body:{name:p.name,exercises:p.exData,totalVolume:p.totalVolume,duration:editSession.duration||p.duration}});
       }else{
-        await apiCall('/api/coach/athletes/'+athleteId+'/sessions',{method:'POST',body:{name:p.name,date:new Date().toISOString(),exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration}});
+        await postCoachSession(athleteId,{name:p.name,date:new Date().toISOString(),exercises:p.exData,totalVolume:p.totalVolume,duration:p.duration,clientId:liveClientIdRef.current});
       }
       clearLiveStorage();
       onSaved('done');
@@ -16264,11 +16318,23 @@ function PricingScreen({onBack,currentUser}){
   );
 }
 
+// Bandeau discret quand le téléphone n'a plus de réseau (l'appli reste utilisable avec les dernières données).
+function OfflineBanner(){
+  const[off,setOff]=React.useState(typeof navigator!=='undefined'&&navigator.onLine===false);
+  React.useEffect(()=>{
+    const goOn=()=>setOff(false),goOff=()=>setOff(true);
+    window.addEventListener('online',goOn);window.addEventListener('offline',goOff);
+    return()=>{window.removeEventListener('online',goOn);window.removeEventListener('offline',goOff);};
+  },[]);
+  if(!off)return null;
+  return<div role="status" data-testid="offline-banner" style={{position:'fixed',top:0,left:0,right:0,zIndex:2000,padding:'calc(6px + env(safe-area-inset-top)) 12px 6px',textAlign:'center',fontSize:11,fontWeight:700,background:'rgba(184,80,112,0.94)',color:'#fff'}}>Hors ligne — certaines données peuvent ne pas être à jour</div>;
+}
+
 function App(){
   const auth=useAuth();
   if(auth.loading)return<Splash/>;
   if(!auth.user)return<AuthScreen onLogin={auth.login} onSignup={auth.signup}/>;
-  return<MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.user.id}/>;
+  return<><OfflineBanner/><MainApp key={auth.user.id} authUser={auth.user} onLogout={auth.logout} setUser={auth.setUser} authToken={auth.user.id}/></>;
 }
 
 // Onboarding modal pour la 1re connexion (apparait si user n'a pas encore d'onboardedAt)
@@ -19070,6 +19136,8 @@ function MainApp({authUser,onLogout,setUser,authToken}){
   // 500 ponctuel...) — sans ça, une séance validée pouvait disparaître silencieusement au
   // rechargement suivant (elle n'existait qu'en state React le temps de la session).
   const PENDING_SESSIONS_KEY='pa_pending_sessions_'+authUser.id;
+  // Séances jouées par le coach pour un athlète et pas encore envoyées (même principe, même vidage).
+  const PENDING_COACH_SESSIONS_KEY='pa_pending_coach_sessions_'+authUser.id;
   const[pendingSyncCount,setPendingSyncCount]=React.useState(0);
   const flushingRef=React.useRef(false);
   const flushPendingSessions=React.useCallback(async()=>{
@@ -19081,7 +19149,9 @@ function MainApp({authUser,onLogout,setUser,authToken}){
     try{
     let queue=[];
     try{queue=JSON.parse(localStorage.getItem(PENDING_SESSIONS_KEY)||'[]');}catch{}
-    if(!queue.length)return;
+    let coachQueue=[];
+    try{coachQueue=JSON.parse(localStorage.getItem(PENDING_COACH_SESSIONS_KEY)||'[]');}catch{}
+    if(!queue.length&&!coachQueue.length)return;
     const remaining=[];
     for(const snap of queue){
       try{
@@ -19090,9 +19160,17 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       }catch(e){remaining.push(snap);}
     }
     try{localStorage.setItem(PENDING_SESSIONS_KEY,JSON.stringify(remaining));}catch{}
-    setPendingSyncCount(remaining.length);
+    // Séances du coach pour ses athlètes : renvoyées avec le MÊME clientId (le serveur ignore un doublon) ;
+    // une erreur définitive (4xx : athlète supprimé, accès retiré…) abandonne la séance au lieu de boucler.
+    const coachRemaining=[];
+    for(const it of coachQueue){
+      try{await postCoachSession(it.athleteId,it.body,{retries:false});}
+      catch(e){if(!isFinalHttpError(e))coachRemaining.push(it);else console.error('coach session abandonnée',e);}
+    }
+    try{localStorage.setItem(PENDING_COACH_SESSIONS_KEY,JSON.stringify(coachRemaining));}catch{}
+    setPendingSyncCount(remaining.length+coachRemaining.length);
     }finally{flushingRef.current=false;}
-  },[PENDING_SESSIONS_KEY]);
+  },[PENDING_SESSIONS_KEY,PENDING_COACH_SESSIONS_KEY]);
   React.useEffect(()=>{
     flushPendingSessions();
     window.addEventListener('online',flushPendingSessions);
@@ -19615,9 +19693,23 @@ function MainApp({authUser,onLogout,setUser,authToken}){
       setCongratsCoach(tgt.athleteProfile?computeCoachCtx(tgt.athleteProfile):null);
       setCongratsGoals(tgt.athleteProfile?computeGoalsCtx(tgt.athleteProfile):null);
       setCoachSessionTarget(null);
+      const coachBody={name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload,clientId:newClientId()};
       try{
-        await apiCall('/api/coach/athletes/'+tgt.athleteId+'/sessions',{method:'POST',body:{name:snapshot.name,date:snapshot.date,exercises:snapshot.exercises,totalVolume:snapshot.totalVolume,duration:snapshot.duration,notes:snapshot.notes||'',deload:!!snapshot.deload}});
-      }catch(e){console.error('coach session save',e);alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
+        await postCoachSession(tgt.athleteId,coachBody);
+      }catch(e){
+        console.error('coach session save',e);
+        if(isFinalHttpError(e)){alert("Impossible d'enregistrer la séance pour l'athlète : "+(e.message||'erreur')+".");}
+        else{
+          // Réseau coupé / serveur qui dort : la séance est gardée sur le téléphone et renvoyée toute seule (même file que l'athlète).
+          try{
+            const q=JSON.parse(localStorage.getItem(PENDING_COACH_SESSIONS_KEY)||'[]');
+            q.push({athleteId:tgt.athleteId,body:coachBody});
+            localStorage.setItem(PENDING_COACH_SESSIONS_KEY,JSON.stringify(q));
+            setPendingSyncCount(n=>n+1);
+            alert("Pas de réseau : la séance de "+(tgt.athleteName||"l'athlète")+" est gardée sur ton téléphone et sera envoyée dès que la connexion revient.");
+          }catch{alert("Impossible d'enregistrer la séance pour l'athlète. Réessaie.");}
+        }
+      }
       return;
     }
     // Clé d'idempotence : stable pour CETTE séance, réutilisée par tous les renvois (retries +

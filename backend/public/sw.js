@@ -1,5 +1,5 @@
 // Prime Athl — Service Worker
-const CACHE = 'prime-athl-v13'; // v13 : offline fallback + bug fixes
+const CACHE = 'prime-athl-v14'; // v14 : l'appli (Muscu.html) démarre aussi sans réseau
 
 // ── Keep-alive : ping le serveur toutes les 10min pour éviter le cold start Render ──
 const PING_INTERVAL = 10 * 60 * 1000;
@@ -17,10 +17,18 @@ function schedulePing() {
 // ci-dessous ne revalide jamais, et la clé de cache inclut même le ?t=token donc chaque lien
 // distinct se met en cache séparément).
 const STATIC = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/notif-badge.png'];
+// share.html : jamais en cache (une page par lien partagé, jeton dans l'URL).
+// Muscu.html : réseau d'abord (toujours la dernière version quand on est en ligne), mais la dernière version
+// reçue est gardée pour pouvoir OUVRIR l'appli sans réseau (salle de sport en sous-sol, métro…).
 const NEVER_CACHE_SUFFIXES = ['/Muscu.html', '/share.html'];
+const OFFLINE_APP = '/Muscu.html';
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(async c => {
+    await c.addAll(STATIC);
+    // L'appli elle-même : mise de côté dès l'installation (échec toléré : elle sera mise en cache à la prochaine visite).
+    try { await c.add(new Request(OFFLINE_APP, { cache: 'reload' })); } catch (e) { /* hors ligne à l'installation */ }
+  }).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -34,6 +42,13 @@ self.addEventListener('fetch', e => {
   // Muscu.html / share.html : toujours réseau (jamais cache) pour avoir la dernière version.
   // On compare le pathname seul (pas l'URL complète) pour ignorer le ?t=token de share.html.
   const path = new URL(e.request.url).pathname;
+  if (path === OFFLINE_APP && e.request.method === 'GET') {
+    e.respondWith(fetch(e.request).then(res => {
+      if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(OFFLINE_APP, clone)); }
+      return res;
+    }).catch(() => caches.match(OFFLINE_APP).then(c => c || new Response('Hors ligne — reconnecte-toi pour accéder à Prime Athl.', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }))));
+    return;
+  }
   if (NEVER_CACHE_SUFFIXES.some(s => path === s)) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request).then(c => c || new Response('Hors ligne — reconnecte-toi pour accéder à Prime Athl.', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } }))));
     return;
