@@ -99,8 +99,24 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
 <script src="/vendor/xlsx.full.min.js" onerror="this.onerror=null;this.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';"></script>
 <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/vendor/jspdf.umd.min.js"></script>
 <script src="/pdf-brand.js"></script>
+<script>
+// jsPDF et le module PDF (/pdf-brand.js) : copies locales d'abord, CDN en secours ; si l'un manque au moment du
+// clic (réseau capricieux, CDN bloqué), il est chargé à la demande au lieu d'afficher « PDF non disponible ».
+window.paEnsurePdf=function(){
+  var load=function(urls,ok){return new Promise(function(res,rej){var i=0;(function next(){if(i>=urls.length)return rej(new Error('load'));var s=document.createElement('script');s.src=urls[i++];s.onload=function(){ok()?res():(s.remove(),next());};s.onerror=function(){s.remove();next();};document.head.appendChild(s);})();});};
+  var fail=function(which){return function(){var e=new Error(which);e.which=which;throw e;};};
+  var jobs=[];
+  if(!(window.jspdf&&window.jspdf.jsPDF))jobs.push(load(['/vendor/jspdf.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'],function(){return !!(window.jspdf&&window.jspdf.jsPDF);}).catch(fail('jspdf')));
+  if(!window.PrimePDF)jobs.push(load(['/pdf-brand.js'],function(){return !!window.PrimePDF;}).catch(fail('module')));
+  return Promise.all(jobs);
+};
+window.paPdfError=function(e){
+  console.error('PDF:',e);
+  alert(e&&e.which==='jspdf'?'PDF indisponible : la bibliothèque PDF n\u2019a pas pu se charger. Vérifie ta connexion puis réessaie.':'PDF indisponible : une partie de l\u2019application n\u2019a pas pu se charger. Recharge la page puis réessaie.');
+};
+</script>
 <script type="text/babel">
 
 // ── shared ──────────────────────────────────────────────
@@ -7408,10 +7424,10 @@ function savePdfCompat(doc,filename){
 }
 
 function exportSessionPDF(session){
-  const {jsPDF}=window.jspdf||{};
-  if(!jsPDF||!window.PrimePDF){alert('PDF non disponible, réessaie dans un instant.');return;}
   // Mise en page, charte et logo : public/pdf-brand.js (partagé avec la page de partage).
-  window.PrimePDF.whenReady(()=>{
+  window.paEnsurePdf().then(()=>{
+   const {jsPDF}=window.jspdf;
+   window.PrimePDF.whenReady(()=>{
     let doc;
     try{
       doc=window.PrimePDF.session(jsPDF,session,{groupExercisesByType,exType,cardioHasVal,fixCardioVal,cardioDuree:cardioDureeLabel,fmtHoldDuration,cardioDistanceTotal,fmtDistanceM});
@@ -7419,20 +7435,22 @@ function exportSessionPDF(session){
     const d=new Date(session.date);
     const fname=`seance-${(session.name||'session').replace(/\s+/g,'-').toLowerCase()}${isNaN(d)?'':'-'+d.toISOString().slice(0,10)}.pdf`;
     savePdfCompat(doc,fname);
-  });
+   });
+  }).catch(window.paPdfError);
 }
 
 // ── Export PDF programme musculation généré par IA ───────────────────────────
 function exportAIProgramPDF(program){
-  const {jsPDF}=window.jspdf||{};
-  if(!jsPDF||!window.PrimePDF){alert('PDF non disponible, réessaie dans un instant.');return;}
-  window.PrimePDF.whenReady(()=>{
+  window.paEnsurePdf().then(()=>{
+   const {jsPDF}=window.jspdf;
+   window.PrimePDF.whenReady(()=>{
     let doc;
     try{doc=window.PrimePDF.aiProgram(jsPDF,program||{});}
     catch(e){console.error('exportAIProgramPDF:',e);alert('Impossible de générer le PDF.');return;}
     const fname=`programme-${(program&&program.name||'programme').replace(/\s+/g,'-').toLowerCase()}.pdf`;
     savePdfCompat(doc,fname);
-  });
+   });
+  }).catch(window.paPdfError);
 }
 
 function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession,onUpdateSession}){
