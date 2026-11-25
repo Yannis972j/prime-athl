@@ -24,8 +24,8 @@ async function readDownload(dl) {
 }
 // Nom de fichier : Chromium headless sans locale UTF-8 renomme tout nom NON ASCII en « download » (même avec un
 // <a download="épaules.pdf"> natif) — ce n'est pas l'app ; on ne contrôle donc le nom que pour un nom ASCII.
-// jsPDF écrit les textes en clair dans le PDF : « 1 500 kg » (et non « 1 /500 », l'espace fine fr-FR étant absente de la police).
-const contenu = d => { assert.match(d.text, /Volume : 1[ \xa0]500 kg/, 'volume lisible'); assert.match(d.text, /Dur[\xe9e]e : 30 min/, 'durée du cardio'); assert.doesNotMatch(d.text, /1 ?\/500/); };
+// jsPDF écrit les textes en clair dans le PDF : « 1 500 » (et non « 1 /500 », l'espace fine fr-FR étant absente de la police).
+const contenu = d => { assert.match(d.text, /\(1 500\) Tj/, 'volume lisible'); assert.match(d.text, /\(30 min\) Tj/, 'durée du cardio'); assert.doesNotMatch(d.text, /1 ?\/500/); assert.match(d.text, /\/Subtype \/Image/, 'logo Prime Athlète intégré'); };
 const isPdf = (d, { name = true } = {}) => { if (name) assert.match(d.name, /\.pdf$/i); assert.equal(d.head, '%PDF-'); assert.match(d.tail, /%%EOF/); assert.ok(d.size > 1500, 'PDF non vide (' + d.size + ' o)'); };
 
 before(async () => {

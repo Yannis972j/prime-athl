@@ -100,6 +100,7 @@
 <script src="/vendor/xlsx.full.min.js" onerror="this.onerror=null;this.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';"></script>
 <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/pdf-brand.js"></script>
 <script type="text/babel">
 
 // ── shared ──────────────────────────────────────────────
@@ -7408,203 +7409,30 @@ function savePdfCompat(doc,filename){
 
 function exportSessionPDF(session){
   const {jsPDF}=window.jspdf||{};
-  if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
-  const doc=new jsPDF({unit:'mm',format:'a4'});
-  const W=210,margin=16,col=W-margin*2;
-  let y=20;
-  const line=(txt,size=11,bold=false,color=[255,255,255])=>{
-    doc.setFontSize(size);doc.setFont('helvetica',bold?'bold':'normal');
-    doc.setTextColor(...color);doc.text(txt,margin,y);y+=size*0.45+2;
-  };
-  const rule=(alpha=30)=>{doc.setDrawColor(alpha,alpha,alpha);doc.line(margin,y,W-margin,y);y+=4;};
-
-  // Fond noir
-  doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');
-
-  // Titre
-  doc.setFontSize(20);doc.setFont('helvetica','bold');
-  doc.setTextColor(191,160,96);doc.text(session.name||'Séance',margin,y);y+=10;
-
-  // Date
-  const d=new Date(session.date);
-  const dateStr=d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  line(dateStr,10,false,[140,140,160]);y+=2;rule();
-
-  // Stats
-  const stats=[];
-  if(session.totalVolume)stats.push(`Volume : ${Math.round(session.totalVolume).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g,' ')} kg`); // l'espace fine de fr-FR (U+202F) n'existe pas dans la police PDF : « 1 500 » sortait « 1 /500 »
-  if(session.duration)stats.push(`Durée : ${session.duration} min`);
-  if(session.rpe)stats.push(`RPE : ${session.rpe}/10`);
-  if(stats.length){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(180,180,200);doc.text(stats.join('   ·   '),margin,y);y+=8;}
-
-  rule();
-
-  // Exercices — regroupés par superset/tri-set/circuit abdos, comme en séance live. Deux
-  // systèmes de tag coexistent selon l'origine de la séance (ex.groupType+groupId pour les
-  // séances live coach, ex.style pour les séances importées Excel / propres à l'athlète) —
-  // exType()/groupExercisesByType() les unifient (mêmes helpers que le détail de séance in-app).
-  const STYLE_LABELS={superset:'SUPERSET',triset:'TRI-SET',abdos:'CIRCUIT ABDOS'};
-  const STYLE_RGB={superset:[90,138,224],triset:[160,96,208],abdos:[44,196,160]};
-  let exNum=0;
-  groupExercisesByType(session.exercises||[]).forEach(group=>{
-    if(STYLE_LABELS[group.type]){
-      // Seuil abaissé (250 au lieu de 265) pour réserver la place du 1er exercice du groupe —
-      // sinon le libellé "SUPERSET"/etc. peut se retrouver seul en bas d'une page.
-      if(y>250){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...STYLE_RGB[group.type]);
-      // Pas d'emoji ici : la police standard de jsPDF (WinAnsi) ne les encode pas et les
-      // affiche en blanc/garbage dans le PDF final.
-      doc.text(`${STYLE_LABELS[group.type]} · enchaîné sans repos`,margin,y);y+=6;
-    }
-    group.items.forEach((ex,gi)=>{
-      exNum++;
-      if(y>265){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      // Nom exo
-      doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(191,160,96);
-      doc.text(`${gi>0?'- ':''}${exNum}. ${ex.name}`,margin,y);
-      if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
-      y+=7;
-      // Cardio (tapis, vélo...) : pas de poids/reps, on affiche plutôt vitesse/inclinaison/durée.
-      // Testé sur exType() seul (pas ex.cardio) : un exercice tagué CARDIO mais sans mesure
-      // saisie doit quand même afficher le badge CARDIO + "—", pas retomber sur le tableau
-      // poids/reps classique (qui afficherait "0 kg × 0 reps", trompeur pour du cardio).
-      if(exType(ex)==='cardio'){
-        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(200,144,64);
-        doc.text('CARDIO',margin,y);y+=5.5;
-        const c=ex.cardio||{};
-        const parts=[];
-        if(cardioHasVal(c.vitesse))parts.push(`Vitesse : ${fixCardioVal(c.vitesse)} km/h`);
-        if(cardioHasVal(c.inclinaison))parts.push(`Inclinaison : ${fixCardioVal(c.inclinaison)}%`);
-        if(cardioHasVal(c.duree))parts.push(`Durée : ${cardioDureeLabel(c.duree)}`);
-        if(cardioHasVal(c.distance))parts.push(`Distance : ${fixCardioVal(c.distance)} km`);
-        if(cardioDistanceTotal(ex.sets)>0)parts.push(`Réalisé : ${fmtDistanceM(cardioDistanceTotal(ex.sets))}`);
-        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-        doc.text(parts.length?parts.join('   ·   '):'—',margin,y);y+=8;
-        return;
-      }
-      // Gainage/planche : pas de reps, une durée de tenue à la place
-      if(ex.holdSeconds>0){
-        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(90,138,224);
-        doc.text('GAINAGE',margin,y);y+=5.5;
-        const nSets=(ex.sets||[]).length||1;
-        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-        doc.text(`${nSets} série${nSets>1?'s':''} × ${fmtHoldDuration(ex.holdSeconds)} tenues`,margin,y);y+=7;
-        if(ex.restSeconds>0){
-          doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
-          doc.text(`Repos : ${ex.restSeconds}s`,margin,y);y+=5;
-        }
-        y+=3;
-        return;
-      }
-      // En-tête tableau — vérif de débordement manquante ici auparavant : l'en-tête pouvait
-      // s'imprimer seul en bas de page pendant que les séries partaient sur la page suivante.
-      if(y>260){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      const cols=[margin,margin+12,margin+38,margin+64,margin+95];
-      doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(100,100,120);
-      ['#','Poids','Reps','Volume'].forEach((h,i)=>doc.text(h,cols[i],y));y+=5;
-      y+=1;doc.setDrawColor(40,40,55);doc.line(margin,y-4.5,W-margin,y-4.5);
-      // Séries
-      (ex.sets||[]).forEach((s,si)=>{
-        if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-        const vol=(s.weight||0)*(s.reps||0);
-        doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-        doc.text(String(si+1),cols[0],y);
-        doc.text(`${s.weight||0} kg`,cols[1],y);
-        doc.text(`${s.reps||0} reps`,cols[2],y);
-        doc.text(`${vol} kg`,cols[3],y);
-        y+=5.5;
-        if(s.note){
-          if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-          doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
-          doc.text(`Note : ${s.note}`,cols[1],y);
-          y+=5;
-        }
-      });
-      if(ex.restSeconds>0){
-        if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-        doc.setFontSize(8);doc.setFont('helvetica','italic');doc.setTextColor(140,140,160);
-        doc.text(`Repos : ${ex.restSeconds}s`,cols[0],y);y+=5;
-      }
-      y+=4;
-    });
+  if(!jsPDF||!window.PrimePDF){alert('PDF non disponible, réessaie dans un instant.');return;}
+  // Mise en page, charte et logo : public/pdf-brand.js (partagé avec la page de partage).
+  window.PrimePDF.whenReady(()=>{
+    let doc;
+    try{
+      doc=window.PrimePDF.session(jsPDF,session,{groupExercisesByType,exType,cardioHasVal,fixCardioVal,cardioDuree:cardioDureeLabel,fmtHoldDuration,cardioDistanceTotal,fmtDistanceM});
+    }catch(e){console.error('exportSessionPDF:',e);alert('Impossible de générer le PDF.');return;}
+    const d=new Date(session.date);
+    const fname=`seance-${(session.name||'session').replace(/\s+/g,'-').toLowerCase()}${isNaN(d)?'':'-'+d.toISOString().slice(0,10)}.pdf`;
+    savePdfCompat(doc,fname);
   });
-
-  // Notes / feedback — texte replié (pas de débordement horizontal) et vérif de page avant
-  // chaque ligne (le texte pouvait sinon être écrit hors de la page et silencieusement perdu)
-  const wrappedBlock=(label,text,color)=>{
-    if(y>270){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-    y+=2;line(label,9,true,color);
-    const wrapped=doc.splitTextToSize(String(text),W-margin*2);
-    wrapped.forEach(l=>{
-      if(y>290){doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;}
-      line(l,9,false,[200,200,220]);
-    });
-    y+=2;
-  };
-  if(session.notes)wrappedBlock('Mon ressenti',session.notes,[160,130,80]);
-  if(session.coachFeedback)wrappedBlock('Feedback coach',session.coachFeedback,[90,138,224]);
-
-  // Footer
-  doc.setFontSize(8);doc.setTextColor(60,60,80);doc.text('Prime Athl',W/2,290,{align:'center'});
-
-  const fname=`seance-${(session.name||'session').replace(/\s+/g,'-').toLowerCase()}-${d.toISOString().slice(0,10)}.pdf`;
-  savePdfCompat(doc,fname);
 }
 
 // ── Export PDF programme musculation généré par IA ───────────────────────────
 function exportAIProgramPDF(program){
   const {jsPDF}=window.jspdf||{};
-  if(!jsPDF){alert('PDF non disponible, réessaie dans un instant.');return;}
-  const doc=new jsPDF({unit:'mm',format:'a4'});
-  const W=210,margin=16;
-  let y=20;
-  const newPage=()=>{doc.addPage();doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');y=20;};
-
-  doc.setFillColor(14,14,20);doc.rect(0,0,W,297,'F');
-
-  // Titre
-  doc.setFontSize(20);doc.setFont('helvetica','bold');
-  doc.setTextColor(165,180,252);doc.text(program.name||'Programme IA',margin,y);y+=9;
-
-  // Sous-titre (groupes musculaires + date)
-  const dateStr=new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
-  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(140,140,160);
-  doc.text([program.muscles,`Programme généré par IA · ${dateStr}`].filter(Boolean).join('  ·  '),margin,y);y+=8;
-  doc.setDrawColor(30,30,30);doc.line(margin,y,W-margin,y);y+=8;
-
-  // Conseil général
-  if(program.tip){
-    doc.setFontSize(9.5);doc.setFont('helvetica','italic');doc.setTextColor(196,181,253);
-    const wrapped=doc.splitTextToSize(`Conseil : ${program.tip}`,W-margin*2);
-    doc.text(wrapped,margin,y);y+=wrapped.length*4.3+5;
-  }
-
-  // Exercices
-  (program.exercises||[]).forEach((ex,ei)=>{
-    if(y>262)newPage();
-    doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(165,180,252);
-    doc.text(`${ei+1}. ${ex.name||'Exercice'}`,margin,y);
-    if(ex.muscle){doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(120,120,140);doc.text(ex.muscle,W-margin,y,{align:'right'});}
-    y+=6.5;
-    doc.setFontSize(10.5);doc.setFont('helvetica','normal');doc.setTextColor(220,220,230);
-    doc.text(`${ex.sets||3} séries  ×  ${ex.reps||'-'} reps`,margin,y);
-    doc.setTextColor(160,160,185);doc.text(`Repos : ${ex.rest||'60s'}`,W-margin,y,{align:'right'});
-    y+=6;
-    if(ex.tip){
-      doc.setFontSize(9);doc.setFont('helvetica','italic');doc.setTextColor(150,150,175);
-      const wrapped=doc.splitTextToSize(ex.tip,W-margin*2);
-      doc.text(wrapped,margin,y);y+=wrapped.length*4+2;
-    }
-    y+=2;
-    doc.setDrawColor(35,35,50);doc.line(margin,y,W-margin,y);y+=6;
+  if(!jsPDF||!window.PrimePDF){alert('PDF non disponible, réessaie dans un instant.');return;}
+  window.PrimePDF.whenReady(()=>{
+    let doc;
+    try{doc=window.PrimePDF.aiProgram(jsPDF,program||{});}
+    catch(e){console.error('exportAIProgramPDF:',e);alert('Impossible de générer le PDF.');return;}
+    const fname=`programme-ia-${(program&&program.name||'programme').replace(/\s+/g,'-').toLowerCase()}.pdf`;
+    savePdfCompat(doc,fname);
   });
-
-  // Pied de page
-  doc.setFontSize(8);doc.setTextColor(60,60,80);
-  doc.text('Prime Athl · Programme généré par IA — à adapter avec ton coach',W/2,290,{align:'center'});
-
-  const fname=`programme-ia-${(program.name||'programme').replace(/\s+/g,'-').toLowerCase()}.pdf`;
-  savePdfCompat(doc,fname);
 }
 
 function HomeScreen({workout,importedPrograms,onImportPrograms,scheduleMoves,onStartWorkout,onEdit,onResume,onEditDay,profile,programMeta,onRefresh,refreshing,history,onRefreshHistory,onDeleteSession,onUpdateSession}){
