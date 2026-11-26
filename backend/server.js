@@ -200,7 +200,7 @@ const FRONTEND_CANDIDATES = [
 const FRONTEND         = FRONTEND_CANDIDATES.find(p => fs.existsSync(p)) || FRONTEND_CANDIDATES[0];
 
 // ── DB en mémoire : Postgres = source de vérité, fichier local = cache de secours ──
-const DEFAULT_DB = { users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, pendingSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
+const DEFAULT_DB = { broadcasts: {}, users: {}, programs: {}, sessions: {}, invites: {}, nutritionPrograms: {}, nutritionLogs: {}, weightLogs: {}, messages: {}, messageReads: {}, progressPhotos: {}, pushSubscriptions: {}, savedPrograms: {}, premiumCodes: {}, freeFoodLogs: {}, customFoods: {}, sessionLibrary: {}, myLibrary: {}, plannedSessions: {}, pendingSessions: {}, trainingPrograms: {}, userPurchasedPrograms: {}, scheduleMoves: {}, sharedSessions: {}, scheduledPrograms: {} };
 
 // Reconstruit un objet DATA complet à partir d'un backup, en dérivant la liste des clés
 // de DEFAULT_DB (source unique de vérité) plutôt que de les recopier à la main à chaque
@@ -2844,6 +2844,102 @@ app.post('/api/coach/athletes/:id/sessions', authRequired, coachOnly, (req, res)
     pushToUser(req.user.id, { title: '🔴 Séance Live terminée !', body: `${athleteName} a terminé sa séance "${session.name}"`, url: '/Muscu.html' });
   }
   res.json({ ok: true, id });
+});
+
+// ── Annonces groupées du coach ───────────────────────
+// Le coach écrit UN message : tous ses athlètes le reçoivent d'un coup, en pop-up dans l'appli (à l'ouverture, ou en direct
+// s'ils sont connectés) et/ou en notification push sur leur téléphone. Chaque athlète acquitte le pop-up une seule fois ;
+// le coach voit combien l'ont lu. Destinataires = les athlètes actuels du coach (pas ceux qui arrivent après l'envoi).
+const broadcastLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id ? 'bc:' + req.user.id : 'bc:' + ipKeyGenerator(req.ip),
+  message: { error: 'too_many_requests', detail: 'Trop d\'annonces envoyées. Réessaie dans une heure.' },
+});
+const BROADCAST_TITLE_MAX = 60;
+const BROADCAST_BODY_MAX = 600;
+const BROADCAST_POPUP_TTL_MS = 30 * 24 * 60 * 60 * 1000;   // un pop-up non lu n'est plus proposé au bout de 30 jours
+const BROADCAST_KEEP_PER_COACH = 100;
+const broadcastRecipients = (coachId) => Object.values(DATA.users)
+  .filter(u => u.role === 'athlete' && u.coachId === coachId && u.status !== 'pending')
+  .map(u => u.id);
+
+app.post('/api/coach/broadcasts', authRequired, coachOnly, broadcastLimiter, async (req, res) => {
+  const title = String(req.body?.title ?? '').trim();
+  const message = String(req.body?.message ?? '').trim();
+  if (!title) return res.status(400).json({ error: 'title_required', detail: 'Ajoute un titre.' });
+  if (title.length > BROADCAST_TITLE_MAX) return res.status(400).json({ error: 'title_too_long', detail: `Titre : ${BROADCAST_TITLE_MAX} caractères maximum.` });
+  if (!message) return res.status(400).json({ error: 'message_required', detail: 'Écris un message.' });
+  if (message.length > BROADCAST_BODY_MAX) return res.status(400).json({ error: 'message_too_long', detail: `Message : ${BROADCAST_BODY_MAX} caractères maximum.` });
+  const popup = req.body?.popup !== false;
+  const push = req.body?.push !== false;
+  if (!popup && !push) return res.status(400).json({ error: 'nothing_to_send', detail: 'Choisis au moins le pop-up ou la notification.' });
+  // Idempotence : un renvoi (double appui, réponse perdue) ne renvoie pas l'annonce une 2e fois à tout le monde.
+  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.slice(0, 64) : '';
+  if (clientId) {
+    const dup = Object.values(DATA.broadcasts).find(b => b.coachId === req.user.id && b.clientId === clientId);
+    if (dup) return res.json({ ok: true, duplicate: true, id: dup.id, recipients: dup.recipients.length, popup: dup.popup, push: dup.pushResult || null, pushAvailable: !!VAPID_PUBLIC_KEY });
+  }
+  const recipients = broadcastRecipients(req.user.id);
+  if (!recipients.length) return res.status(400).json({ error: 'no_athletes', detail: 'Tu n\'as aucun athlète à qui envoyer cette annonce.' });
+  const id = 'bc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const b = { id, coachId: req.user.id, ...(clientId ? { clientId } : {}), title, message, popup, push, createdAt: Date.now(), recipients, seenBy: {}, pushResult: null };
+  DATA.broadcasts[id] = b;
+  // Garde les 100 dernières annonces de ce coach (la base est un seul document en mémoire).
+  const mine = Object.values(DATA.broadcasts).filter(x => x.coachId === req.user.id).sort((a, c) => c.createdAt - a.createdAt);
+  mine.slice(BROADCAST_KEEP_PER_COACH).forEach(x => { delete DATA.broadcasts[x.id]; });
+  persist();
+  const coachName = coachDisplayName(DATA.users[req.user.id]);
+  // En direct : les athlètes connectés reçoivent l'annonce tout de suite (les autres la verront à l'ouverture de l'appli).
+  for (const uid of recipients) io.to('user:' + uid).emit('broadcast', { id, title, popup, coachName });
+  let pushResult = null;
+  if (push) {
+    const outcomes = await Promise.all(recipients.map(uid =>
+      sendPush(uid, { title, body: message.length > 180 ? message.slice(0, 177) + '…' : message, url: '/Muscu.html', tag: 'broadcast-' + id })
+        .catch(() => ({ results: [] }))));
+    let sent = 0, noDevice = 0, failed = 0;
+    for (const o of outcomes) {
+      if (o.skipped) noDevice++;
+      else if ((o.results || []).some(x => x.ok)) sent++;
+      else failed++;
+    }
+    pushResult = { sent, noDevice, failed };
+    b.pushResult = pushResult;
+    persist();
+  }
+  res.json({ ok: true, id, recipients: recipients.length, popup, push: pushResult, pushAvailable: !!VAPID_PUBLIC_KEY });
+});
+
+app.get('/api/coach/broadcasts', authRequired, coachOnly, (req, res) => {
+  const list = Object.values(DATA.broadcasts)
+    .filter(b => b.coachId === req.user.id)
+    .sort((a, c) => c.createdAt - a.createdAt)
+    .slice(0, 20)
+    .map(b => ({ id: b.id, title: b.title, message: b.message, createdAt: b.createdAt, popup: b.popup, push: b.push,
+      recipients: b.recipients.length, seen: Object.keys(b.seenBy || {}).length, pushResult: b.pushResult || null }));
+  res.json({ broadcasts: list, athleteCount: broadcastRecipients(req.user.id).length, pushAvailable: !!VAPID_PUBLIC_KEY });
+});
+
+// Athlète : pop-ups d'annonces pas encore acquittés (les plus anciens d'abord).
+app.get('/api/broadcasts/pending', authRequired, (req, res) => {
+  const now = Date.now();
+  const list = Object.values(DATA.broadcasts)
+    .filter(b => b.popup && b.recipients.includes(req.user.id) && !(b.seenBy && b.seenBy[req.user.id]) && now - b.createdAt < BROADCAST_POPUP_TTL_MS)
+    .sort((a, c) => a.createdAt - c.createdAt)
+    .slice(0, 10)
+    .map(b => ({ id: b.id, title: b.title, message: b.message, createdAt: b.createdAt, coachName: coachDisplayName(DATA.users[b.coachId]) }));
+  res.json(list);
+});
+
+app.post('/api/broadcasts/:id/seen', authRequired, (req, res) => {
+  const b = Object.hasOwn(DATA.broadcasts, req.params.id) ? DATA.broadcasts[req.params.id] : null;
+  if (!b || !b.recipients.includes(req.user.id)) return res.status(404).json({ error: 'not_found' });
+  if (!b.seenBy) b.seenBy = {};
+  if (!b.seenBy[req.user.id]) {
+    b.seenBy[req.user.id] = Date.now();
+    persist();
+    io.to('user:' + b.coachId).emit('broadcast-seen', { id: b.id, seen: Object.keys(b.seenBy).length });
+  }
+  res.json({ ok: true });
 });
 
 // ── Test email (main coach only) ────────────────────
