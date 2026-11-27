@@ -2273,7 +2273,7 @@ function sanitizeCoachExercise(e) {
   const style = VALID_EX_STYLES.includes(e.style) ? e.style : undefined;
   const isCardio = e.groupType === 'cardio' || style === 'CARDIO';
   return {
-    name: e.name || '', muscle: e.muscle || '',
+    name: String(e.name || '').trim().slice(0, 120), muscle: e.muscle || '',
     brand: e.brand ? String(e.brand).slice(0, 60) : '',
     groupId: e.groupId ? String(e.groupId).slice(0, 40) : '',
     groupType: ['classic', 'superset', 'triset', 'cardio'].includes(e.groupType) ? e.groupType : 'classic',

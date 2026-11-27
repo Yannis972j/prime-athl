@@ -11592,7 +11592,7 @@ function CoachDayViewModal({dayName,dayData,onClose}){
 // exercices → toute la structure (supersets, repos, style, cardio) est préservée ; on ne PATCH
 // que sur clic "Enregistrer". Ne touche pas le programme (template).
 function CoachEditSessionModal({session,athleteName,onClose,onDone}){
-  const[exos,setExos]=React.useState(()=>JSON.parse(JSON.stringify(session.exercises||[])));
+  const[exos,setExos]=React.useState(()=>JSON.parse(JSON.stringify(session.exercises||[])).map(e=>({...e,_orig:e.name||''})));
   const[sending,setSending]=React.useState(false);
   const[msg,setMsg]=React.useState('');
   const totalVol=exos.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
@@ -11600,7 +11600,9 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
   const save=async()=>{
     if(sending)return;
     // On retire les exercices ajoutés sans nom (formulaire laissé vide) et le drapeau _new.
-    const clean=exos.filter(e=>(e.name||'').trim()).map(({_new,...e})=>e);
+    // Un exercice existant dont on a vidé le nom ne doit pas disparaître en silence : on bloque.
+    if(exos.some(e=>!e._new&&!(e.name||'').trim())){setMsg('✗ Un exercice n\'a plus de nom — saisis-le ou supprime-le (🗑).');return;}
+    const clean=exos.filter(e=>(e.name||'').trim()).map(({_new,_orig,...e})=>({...e,name:e.name.trim()}));
     if(!session?.id)return;
     setSending(true);setMsg('');
     const cleanVol=clean.reduce((t,e)=>t+(e.sets||[]).reduce((s,x)=>s+(x.weight||0)*(x.reps||0),0),0);
@@ -11645,7 +11647,12 @@ function CoachEditSessionModal({session,athleteName,onClose,onDone}){
                         <input value={ex.muscle} onChange={e=>updEx({muscle:e.target.value})} placeholder="Muscle (optionnel)"
                           style={{width:'100%',padding:'5px 10px',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.03)',color:T.textDim,fontSize:11,outline:'none',boxSizing:'border-box',marginTop:5}}/>
                       </>):(<>
-                        <div style={{fontSize:14,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ex.name}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <input data-testid="edit-ex-name" aria-label="Nom de l'exercice" value={ex.name} maxLength={120} onChange={e=>updEx({name:e.target.value})}
+                            style={{flex:1,minWidth:0,padding:'4px 8px',borderRadius:8,border:'1px solid '+(ex.name.trim()?'rgba(255,255,255,0.1)':'rgba(184,80,112,0.6)'),background:'rgba(255,255,255,0.04)',color:T.text,fontSize:14,fontWeight:700,outline:'none',boxSizing:'border-box'}}/>
+                          <span aria-hidden="true" style={{fontSize:12,color:T.textFaint}}>✎</span>
+                        </div>
+                        {ex._orig!=null&&ex.name.trim()&&ex.name.trim()!==ex._orig.trim()&&<div data-testid="edit-ex-renamed" style={{fontSize:10,color:T.good,fontWeight:600,marginTop:3}}>Renommé · avant : {ex._orig}</div>}
                         {ex.muscle&&<div style={{fontSize:10,color:T.textFaint,fontWeight:600,marginTop:1}}>{ex.muscle}</div>}
                       </>)}
                     </div>
